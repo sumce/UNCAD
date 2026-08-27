@@ -42,6 +42,9 @@ namespace UNCAD.Infra
         public const string FillTableRow = "UNC_FILL_TABLE_ROW"; // Table 起始行（1 基）
         public const string FillTextHeight = "UNC_FILL_TEXT_HEIGHT"; // 写入单元格文字高度，默认 500
         public const string FillBridge = "UNC_FILL_BRIDGE";      // 图框块 BRIDGE_FRAME_INFO 内容（空=不写）
+
+        // 设备信息提交（UNC_SUBMIT）
+        public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 首次选择后记住输出文件夹
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";

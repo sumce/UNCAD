@@ -54,6 +54,7 @@ namespace UNCAD.UI
         private readonly TextBox _fillTblRow = new TextBox { Width = 60 };
         private readonly TextBox _fillTextHeight = new TextBox { Width = 60 };
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
+        private readonly TextBox _submitFolder = new TextBox { Width = 310 };
 
         public UnifiedSettingsForm(int tabIndex)
         {
@@ -132,6 +133,7 @@ namespace UNCAD.UI
             _fillTextHeight.Text = Settings.GetDouble(ConfigKeys.FillTextHeight, TableFillFormatter.DefaultTextHeight)
                 .ToString("0.##", CultureInfo.InvariantCulture);
             _fillBridge.Text = Settings.Get(ConfigKeys.FillBridge, "");
+            _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
         }
 
         // ---------- 保存（含数据校验） ----------
@@ -175,6 +177,7 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillTextHeight, Pos(_fillTextHeight, TableFillFormatter.DefaultTextHeight)
                 .ToString("0.##", CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
+            Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
         }
 
         /// <summary>解析数值：失败或非法时返回默认值。</summary>
@@ -257,13 +260,39 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(5);
+            var g = Grid(6);
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
             g.Controls.Add(Lbl("固定清单 Excel(空=同文件):"), 0, 1); g.Controls.Add(PathPicker(_fillCatalog), 1, 1);
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 2); g.Controls.Add(_fillTblRow, 1, 2);
             g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
             g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 4); g.Controls.Add(_fillBridge, 1, 4);
-            return Page("Excel 填充", g);
+            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 5); g.Controls.Add(FolderPicker(_submitFolder), 1, 5);
+            return Page("Excel 数据", g);
+        }
+
+        private Control FolderPicker(TextBox target)
+        {
+            var button = new Button { Text = "浏览...", Width = 66, Height = 26 };
+            button.Click += (sender, args) =>
+            {
+                using (var dialog = new FolderBrowserDialog
+                {
+                    Description = "选择 UNC_SUBMIT 提交表文件夹",
+                    ShowNewFolderButton = true,
+                    SelectedPath = Directory.Exists(target.Text.Trim()) ? target.Text.Trim() : ""
+                })
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
+                }
+            };
+            var panel = new FlowLayoutPanel
+            {
+                AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Margin = new Padding(0)
+            };
+            panel.Controls.Add(target);
+            panel.Controls.Add(button);
+            return panel;
         }
 
         private Control PathPicker(TextBox target)

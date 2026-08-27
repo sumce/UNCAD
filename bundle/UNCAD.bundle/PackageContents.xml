@@ -2,15 +2,15 @@
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
-    Description="UNC_FILL 自动填充 / 电缆桥架线管统计 / 标注与绘图工具"
-    AppVersion="1.1.0"
+    Description="UNC_FILL 填充 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
+    AppVersion="1.2.0"
     ProductType="Application"
     ProductCode="{D801105A-CD8A-4892-AEE6-74723785BCD6}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
   <Components>
     <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.1" SeriesMax="R24.1" />
     <ComponentEntry AppName="UNCAD"
-                    AppDescription="UNCAD AutoCAD 2022 自动填充、统计和标注命令集"
+                    AppDescription="UNCAD AutoCAD 2022 填充、提交、统计和标注命令集"
                     ModuleName="./UNCAD.dll"
                     LoadOnAutoCADStartup="True"
                     LoadOnCommandInvocation="True" />

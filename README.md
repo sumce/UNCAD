@@ -11,6 +11,8 @@
 | --- | --- | --- |
 | `UNC_SET` | —（新增） | **统一配置中心**：一个页面管全部功能配置 |
 | `UNC_FILL` | —（新增） | 按机台/设备回路填充清单表、图框和上下游属性块 |
+| `UNC_SUBMIT` | —（新增） | 读取框选的填充信息并新增或覆盖 XLSX 提交记录 |
+| `UNC_ABOUT` | —（新增） | 查看版本、构建时间、授权状态、所有权和联系方式 |
 | `UNC_CONDUIT` | —（新增） | 生成紫色偏移线管及固定 2000mm 标注 |
 | `UNC_STAT` | UNADD | 统计汇总 → 图纸 MTEXT |
 | `UNC_STAT_EX` | UNADDX | 统计汇总 → **Excel 报表**（NPOI） |
@@ -35,7 +37,7 @@
 ## 构建
 
 - **VS 2026**：打开 `UNCAD.sln` 直接生成（F5 会启动 AutoCAD 2022 并附加调试器）。
-- **命令行**：`.\build.ps1`（等价 `dotnet build UNCAD.slnx`）。
+- **命令行**：`.\build.ps1`（等价 `dotnet build UNCAD.slnx`）。依赖已还原时可用 `.\build.ps1 -NoRestore` 快速刷新 Bundle。
 - AutoCAD 不在默认路径时：`dotnet build UNCAD.sln -p:AutoCADDir="你的 AutoCAD 目录"`。
 
 ## 加载与调试
@@ -71,6 +73,14 @@ UNC_FILL 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 - Sheet1 按表头名称绑定字段，允许调整列顺序；缺失或重复必需字段会中止并报告具体字段。
 - 当前固定模板的规格列表头为空时，仍兼容第 6 列；建议后续将该表头明确命名为“规格”。
 
+## UNC_SUBMIT 提交记录
+
+- 框选 UNC_FILL 已填充的图框、设备块、上下游块及清单表后执行 `UNC_SUBMIT`。
+- 第一次提交选择文件夹，之后自动更新该目录下的 `UNCAD_Submissions.xlsx`。
+- 输出机台ID、设备名称、盘柜类型、电缆、FR、配电详情、软管直径、上下游轴位及时间。
+- “机台ID + 设备名称”相同会清理旧重复行，保留首次提交时间并更新最新数据和更新时间。
+- 可在 `UNC_SET → Excel 数据` 中修改提交文件夹。
+
 ## 设置持久化
 
 所有配置**通过统一配置中心 `UNC_SET` 修改**（页签：线段/桥架/拱桥/统计），底层存注册表（键名与 LISP 版一致，位置：`HKCU\Software\Autodesk\AutoCAD\...\Variables`）：
@@ -85,6 +95,7 @@ UNC_FILL 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 | `UNC_FILL_EXCEL` | 每次重读的机台数据 Excel | 空 |
 | `UNC_FILL_CATALOG_EXCEL` | 固定 BOQ 清单 Excel（空=同机台文件） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 表格文字高度 | 1 / 500 |
+| `UNC_SUBMIT_FOLDER` | UNC_SUBMIT 自动提交记录文件夹 | 空（首次提交时选择） |
 
 ## 移植差异说明
 

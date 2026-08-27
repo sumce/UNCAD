@@ -12,6 +12,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
+        {
+            AboutInfo info = AboutInfo.Current();
+            Assert.Equal("1.2.0.0", info.Version);
+            Assert.NotEqual("未知", info.BuildTime);
+            Assert.Equal("2026-08-27", info.UpdatedOn);
+            Assert.Contains("正式版", info.Authorization);
+            Assert.Equal("UNSIAO.Ltd", Branding.Developer);
+        }
+
+        [Fact]
+        public void SubmitFolder_HasIndependentPersistentKey()
+        {
+            Assert.Equal("UNC_SUBMIT_FOLDER", ConfigKeys.SubmitFolder);
+            Assert.NotEqual(ConfigKeys.FillExcelPath, ConfigKeys.SubmitFolder);
+        }
+
+        [Fact]
         public void FillCatalogPath_IsIndependentFromMutableMachineSource()
         {
             Assert.NotEqual(ConfigKeys.FillExcelPath, ConfigKeys.FillCatalogPath);

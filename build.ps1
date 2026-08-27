@@ -1,13 +1,19 @@
 param(
     [string]$Configuration = "Debug",
     [string]$AutoCADDir = "D:\Program Files\Autodesk\AutoCAD 2022",
-    [switch]$SkipBundle
+    [switch]$SkipBundle,
+    [switch]$NoRestore
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-dotnet build "$root\UNCAD.slnx" -c $Configuration -p:AutoCADDir="$AutoCADDir"
+$buildArgs = @(
+    "build", "$root\UNCAD.slnx", "-c", $Configuration,
+    "-p:AutoCADDir=$AutoCADDir"
+)
+if ($NoRestore) { $buildArgs += "--no-restore" }
+& dotnet $buildArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $dll = "$root\src\UNCAD\bin\$Configuration\net48\UNCAD.dll"
