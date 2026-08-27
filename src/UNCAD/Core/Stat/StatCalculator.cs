@@ -35,6 +35,14 @@ namespace UNCAD.Core.Stat
         public List<ConduitStat> Conduits { get; } = new List<ConduitStat>();
     }
 
+    public sealed class StatCalculationOptions
+    {
+        public double MmPerGrid { get; set; } = 250.0;
+        public bool IncludeCable { get; set; } = true;
+        public bool IncludeBridge { get; set; } = true;
+        public bool IncludeConduit { get; set; } = true;
+    }
+
     /// <summary>
     /// UNADD 统计引擎（纯 C#，可单测）：
     /// 输入清理后的文本行 → 输出汇总报表行。
@@ -42,7 +50,13 @@ namespace UNCAD.Core.Stat
     public static class StatCalculator
     {
         public static CableStatResult Calculate(IEnumerable<string> lines, double mmPerGrid)
+            => Calculate(lines, new StatCalculationOptions { MmPerGrid = mmPerGrid });
+
+        public static CableStatResult Calculate(IEnumerable<string> lines,
+            StatCalculationOptions options)
         {
+            options = options ?? new StatCalculationOptions();
+            double mmPerGrid = options.MmPerGrid > 0 ? options.MmPerGrid : 250.0;
             var result = new CableStatResult();
             var bridgeMap = new Dictionary<string, BridgeStat>(StringComparer.Ordinal);
             var conduitMap = new Dictionary<string, ConduitStat>(StringComparer.Ordinal);
@@ -51,7 +65,8 @@ namespace UNCAD.Core.Stat
             {
                 string s = (source ?? "").Trim();
                 // 条件 A：电缆长度
-                double? mm = TextParser.ExtractCableLength(s);
+                double? mm = options.IncludeCable
+                    ? TextParser.ExtractCableLength(s) : null;
                 if (mm.HasValue && mm.Value > 0)
                 {
                     double m = mm.Value / 1000.0;
@@ -60,28 +75,24 @@ namespace UNCAD.Core.Stat
                     continue;
                 }
 
-                // 条件 B：桥架标注 —— "桥架"开头 + 规格 + 数字格结尾（整行匹配）
-                // 如 "桥架400*100 10格" / "桥架200*100 13.5格"；其他文字一律不算
-                if (s.StartsWith("桥架", StringComparison.Ordinal)
-                    && s.EndsWith("格", StringComparison.Ordinal))
+                // 条件 B：桥架标注必须整行命中，不允许“共用”等前后缀或中间备注。
+                if (options.IncludeBridge
+                    && TextParser.TryExtractBridgeLabel(s, out string spec, out double grids))
                 {
-                    double? cnt = TextParser.ExtractGridCount(s);
-                    string spec = TextParser.ExtractBridgeSpec(s);
-                    if (cnt.HasValue && cnt.Value > 0 && spec != null)
+                    if (!bridgeMap.TryGetValue(spec, out var entry))
                     {
-                        if (!bridgeMap.TryGetValue(spec, out var entry))
-                        {
-                            entry = new BridgeStat { Spec = spec, MmPerGrid = mmPerGrid };
-                            bridgeMap[spec] = entry;
-                            result.Bridges.Add(entry);
-                        }
-                        entry.Grids.Add(cnt.Value);
+                        entry = new BridgeStat { Spec = spec, MmPerGrid = mmPerGrid };
+                        bridgeMap[spec] = entry;
+                        result.Bridges.Add(entry);
                     }
+                    entry.Grids.Add(grids);
                 }
 
                 // 条件 C：线管标注，如“⌀20线管 2000mm”，按管径聚合实际长度
-                string conduitSpec = TextParser.ExtractConduitSpec(s);
-                double? conduitLength = TextParser.ExtractConduitLength(s);
+                string conduitSpec = options.IncludeConduit
+                    ? TextParser.ExtractConduitSpec(s) : null;
+                double? conduitLength = options.IncludeConduit
+                    ? TextParser.ExtractConduitLength(s) : null;
                 if (conduitSpec != null && conduitLength.HasValue && conduitLength.Value > 0)
                 {
                     if (!conduitMap.TryGetValue(conduitSpec, out var conduit))

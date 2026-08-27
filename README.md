@@ -94,6 +94,13 @@ UNC_FILL 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 - “机台ID + 设备名称”相同时同时替换汇总和清单明细，保留首次提交时间；旧版Excel会自动追加新列，不删除已有记录。
 - 可在 `UNC_SET → Excel 数据` 中修改提交文件夹。
 
+## 统计匹配规则
+
+- `TEXT`按单个文字实体统计；`MTEXT`按 `\P` 拆分后逐行统计，两种来源可在 `UNC_SET → 统计汇总` 分别开关。
+- 电缆、桥架和线管类别可分别开关，默认全部开启。
+- 电缆严格格式：`2000mm`；桥架严格格式：`桥架200*100 12格`；线管严格格式：`Φ20线管 2000mm`。
+- 每行必须完整匹配，不接受 `(共用)`、`共用`、前后备注或中间附加文字。桥架只支持 `*`、`x`、`X` 作为规格分隔符。
+
 ## 设置持久化
 
 所有配置**通过统一配置中心 `UNC_SET` 修改**（页签：线段/桥架/拱桥/统计），底层存注册表（键名与 LISP 版一致，位置：`HKCU\Software\Autodesk\AutoCAD\...\Variables`）：
@@ -104,7 +111,9 @@ UNC_FILL 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 | `UNQ_TEXT` / `UNQ_HEIGHT` / `UNQ_LINE_OFF` / `UNQ_TEXT_OFF` / `UNQ_SIDE` | 规格 / 高度 / 红线偏移(0=默认15贴线) / 文字偏移(0=贴线) / 侧(1上 0下) | 桥架200*100 10格 / 180 / 0 / 0 / 1 |
 | `UNR_DIAMETER` | UNR 拱桥直径 | 300 |
 | `UNC_STYLE_NAME` / `UNC_STYLE_FONT` / `UNC_STYLE_BIGFONT` / `UNC_STYLE_WIDTH` | 文字样式：样式名 / 字体文件 / 大字体(空=TTF) / 宽高比 | UNC-标注 / msyh.ttf / (空) / 0.8 |
-| `UNADD_HEIGHT` | UNADD 输出文字高度 | 180 |
+| `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |
+| `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` | 单行文字 / 多行文字参与统计 | 1 / 1 |
+| `UNADD_CABLE_ENABLED` / `UNADD_BRIDGE_ENABLED` / `UNADD_CONDUIT_ENABLED` | 电缆 / 桥架 / 线管参与统计 | 1 / 1 / 1 |
 | `UNC_FILL_EXCEL` | 每次重读的机台数据 Excel | 空 |
 | `UNC_FILL_CATALOG_EXCEL` | 固定 BOQ 清单 Excel（空=同机台文件） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 表格文字高度 | 1 / 500 |
@@ -114,7 +123,7 @@ UNC_FILL 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 
 - **修复** LISP 版 `unl.lsp` 的 U 撤销 bug（原 `entmake ENTDEL` 无效，现直接删除实体）。
 - 配置由 DCL 改为 **统一配置中心**（`UNC_SET`，WinForms 页签式）。
-- 业务逻辑与正则规则与 LISP 版一致（`src/UNCAD/Core/` 有对照注释）。
+- 核心业务逻辑保留LISP兼容行为；统计文字改为可配置来源和严格整行匹配，避免备注文字误计。
 - 交互绘制命令 UNC_LINE 行为同 AutoCAD L 命令：回车结束、U 撤销上一段、ESC 全部清除；UNC_TRAY 为选中线段批量生成。
 - 每段独立事务立即提交（点一下生成一段）；撤销按段进行。
 

@@ -42,6 +42,7 @@ namespace UNCAD.Features.Fill
         public static CableStatResult CalculateStats(CadContext ctx, ObjectId[] textIds,
             double mmPerGrid)
         {
+            StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             var lines = new List<string>();
             if (textIds != null && textIds.Length > 0)
             {
@@ -50,13 +51,16 @@ namespace UNCAD.Features.Fill
                     foreach (ObjectId id in textIds)
                     {
                         var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
-                        if (entity is DBText text) lines.Add(text.TextString);
-                        else if (entity is MText mtext)
+                        if (settings.IncludeText && entity is DBText text)
+                            lines.Add(text.TextString);
+                        else if (settings.IncludeMText && entity is MText mtext)
                             lines.AddRange(TextParser.SplitMTextLines(mtext.Contents));
                     }
                 }
             }
-            return StatCalculator.Calculate(lines.ConvertAll(TextParser.CleanMText), mmPerGrid);
+            settings.Calculation.MmPerGrid = mmPerGrid;
+            return StatCalculator.Calculate(
+                lines.ConvertAll(TextParser.CleanMText), settings.Calculation);
         }
 
         private static FillSelection Split(CadContext ctx, ObjectId[] ids)

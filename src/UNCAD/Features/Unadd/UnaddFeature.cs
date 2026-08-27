@@ -81,8 +81,24 @@ namespace UNCAD.Features.Unadd
         /// <summary>选择文字并统计（UNADD/UNADDX 共用；取消返回 null）。</summary>
         private CableStatResult CollectAndCalculate(CadContext ctx)
         {
-            var ids = SelectionService.PickFirstOrPrompt(ctx, "请框选需要统计的单行文字/多行文字: ",
-                new TypedValue(0, "TEXT,MTEXT"));
+            StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
+            if (settings.SelectionFilter.Length == 0)
+            {
+                ctx.Write("\n[UNC_STAT] TEXT和MTEXT来源均已关闭，请先在配置中心开启。");
+                return null;
+            }
+            if (!settings.Calculation.IncludeCable && !settings.Calculation.IncludeBridge
+                && !settings.Calculation.IncludeConduit)
+            {
+                ctx.Write("\n[UNC_STAT] 电缆、桥架和线管统计均已关闭，请先在配置中心开启。");
+                return null;
+            }
+            ConfigPrinter.Print(ctx, CommandIds.Statistics,
+                ("文字来源", SourceLabel(settings)),
+                ("统计类别", CategoryLabel(settings.Calculation)),
+                ("桥架每格", TextFormatter.FormatNum(settings.Calculation.MmPerGrid) + " mm"));
+            var ids = SelectionService.PickFirstOrPrompt(ctx, "请框选需要统计的文字: ",
+                new TypedValue(0, settings.SelectionFilter));
             if (ids == null) return null;
 
             var rawLines = new List<string>();
@@ -91,15 +107,31 @@ namespace UNCAD.Features.Unadd
                 foreach (var id in ids)
                 {
                     var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (ent is DBText t) rawLines.Add(t.TextString);
-                    else if (ent is MText mt) rawLines.AddRange(TextParser.SplitMTextLines(mt.Contents));
+                    if (settings.IncludeText && ent is DBText t)
+                        rawLines.Add(t.TextString);
+                    else if (settings.IncludeMText && ent is MText mt)
+                        rawLines.AddRange(TextParser.SplitMTextLines(mt.Contents));
                 }
                 tr.Commit();
             }
 
             var cleaned = rawLines.Select(TextParser.CleanMText).ToList();
-            double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
-            return StatCalculator.Calculate(cleaned, mmPerGrid);
+            return StatCalculator.Calculate(cleaned, settings.Calculation);
+        }
+
+        private static string SourceLabel(StatisticsSettingsSnapshot settings)
+        {
+            if (settings.IncludeText && settings.IncludeMText) return "TEXT + MTEXT";
+            return settings.IncludeText ? "TEXT" : "MTEXT";
+        }
+
+        private static string CategoryLabel(StatCalculationOptions options)
+        {
+            var values = new List<string>();
+            if (options.IncludeCable) values.Add("电缆");
+            if (options.IncludeBridge) values.Add("桥架");
+            if (options.IncludeConduit) values.Add("线管");
+            return string.Join(" + ", values);
         }
 
         private void ExportExcel(CadContext ctx, CableStatResult stat)

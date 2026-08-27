@@ -13,6 +13,21 @@ namespace UNCAD.Infra
         public static string Get(string name, string defaultValue) => Store.Get(name, defaultValue);
         public static void Set(string name, string value) => Store.Set(name, value);
 
+        public static bool GetBool(string name, bool defaultValue)
+        {
+            string value = Store.Get(name, null);
+            if (string.IsNullOrWhiteSpace(value)) return defaultValue;
+            string normalized = value.Trim();
+            if (normalized == "1" || normalized.Equals("true",
+                System.StringComparison.OrdinalIgnoreCase)) return true;
+            if (normalized == "0" || normalized.Equals("false",
+                System.StringComparison.OrdinalIgnoreCase)) return false;
+            return defaultValue;
+        }
+
+        public static void SetBool(string name, bool value)
+            => Store.Set(name, value ? "1" : "0");
+
         /// <summary>数值读取：解析失败或 &lt;= 0 时返回默认值（与 LISP 版行为一致）。</summary>
         public static double GetDouble(string name, double defaultValue)
         {

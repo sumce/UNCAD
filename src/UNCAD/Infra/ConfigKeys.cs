@@ -29,6 +29,11 @@ namespace UNCAD.Infra
         // 统计汇总（UNC_STAT）
         public const string UnaddHeight = "UNADD_HEIGHT";
         public const string UnaddMmPerGrid = "UNADD_MM_PER_GRID";
+        public const string UnaddTextEnabled = "UNADD_TEXT_ENABLED";
+        public const string UnaddMTextEnabled = "UNADD_MTEXT_ENABLED";
+        public const string UnaddCableEnabled = "UNADD_CABLE_ENABLED";
+        public const string UnaddBridgeEnabled = "UNADD_BRIDGE_ENABLED";
+        public const string UnaddConduitEnabled = "UNADD_CONDUIT_ENABLED";
 
         // 文字样式（所有生成文字共用）
         public const string StyleName = "UNC_STYLE_NAME";

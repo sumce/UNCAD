@@ -26,28 +26,30 @@ namespace UNCAD.Tests
         }
 
         [Theory]
-        [InlineData("桥架200*100 10格", 10.0)]
-        [InlineData("桥架200*100 13.5格", 13.5)]
-        [InlineData("12.5格", 12.5)]
-        [InlineData("格数 3 格", 3.0)]
-        [InlineData("10格 备注", null)]         // 格必须在文字结尾
-        [InlineData("没有格数", null)]
-        public void ExtractGridCount_MustEndWithGrid(string input, double? expected)
-        {
-            Assert.Equal(expected, TextParser.ExtractGridCount(input));
-        }
-
-        [Theory]
         [InlineData("桥架200*100 10格", "桥架200*100")]
         [InlineData("桥架 300 x 150 5格", "桥架300*150")]
         [InlineData("桥架300X150 5格", "桥架300*150")]
         [InlineData("桥架300X150 10格", "桥架300*150")]
         [InlineData("安装桥架400*100 10格", null)] // 必须以"桥架"开头
+        [InlineData("(共用)桥架200*100 12格", null)]
+        [InlineData("桥架200*100 共用 12格", null)]
+        [InlineData("桥架200*100 12格 备注", null)]
+        [InlineData("桥架200×100 12格", null)]
+        [InlineData("桥架200*10012格", null)]
         [InlineData("只有桥架两字", null)]         // 无规格尺寸不算
         [InlineData("普通文字", null)]
-        public void ExtractBridgeSpec_RequiresLeadingBridgeWord(string input, string expected)
+        public void ExtractBridgeSpec_RequiresStrictWholeLine(string input, string expected)
         {
             Assert.Equal(expected, TextParser.ExtractBridgeSpec(input));
+        }
+
+        [Fact]
+        public void TryExtractBridgeLabel_ReturnsNormalizedSpecAndGridCount()
+        {
+            Assert.True(TextParser.TryExtractBridgeLabel("桥架 300 x 150 12.5格",
+                out string spec, out double grids));
+            Assert.Equal("桥架300*150", spec);
+            Assert.Equal(12.5, grids);
         }
 
         [Theory]

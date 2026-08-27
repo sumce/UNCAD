@@ -100,6 +100,37 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Calculate_RejectsBridgePrefixAndEmbeddedNotes()
+        {
+            var result = StatCalculator.Calculate(new[]
+            {
+                "(共用)桥架200*100 12格",
+                "桥架200*100 共用 12格",
+                "桥架200*100 12格 备注"
+            }, 250.0);
+
+            Assert.Empty(result.Bridges);
+        }
+
+        [Fact]
+        public void Calculate_HonorsIndependentCategorySwitches()
+        {
+            var result = StatCalculator.Calculate(new[]
+            {
+                "2000mm", "桥架200*100 4格", "⌀20线管 3000mm"
+            }, new StatCalculationOptions
+            {
+                MmPerGrid = 250.0, IncludeCable = false,
+                IncludeBridge = true, IncludeConduit = false
+            });
+
+            Assert.Equal(0, result.CableSum);
+            Assert.Single(result.Bridges);
+            Assert.Equal(1.0, result.Bridges[0].TotalM);
+            Assert.Empty(result.Conduits);
+        }
+
+        [Fact]
         public void BuildReport_ContainsConduitFormula()
         {
             var report = StatCalculator.BuildReport(new[]

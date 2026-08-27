@@ -7,7 +7,7 @@ namespace UNCAD.Core.Text
 {
     /// <summary>
     /// 文本解析（纯 C#，无 AutoCAD 依赖，可单元测试）。
-    /// 规则与 LISP 版逐字对应，后续如需调整规则只改这里。
+    /// 统计文字的严格整行解析规则；后续规则调整集中在这里。
     /// </summary>
     public static class TextParser
     {
@@ -16,6 +16,9 @@ namespace UNCAD.Core.Text
         private static readonly Regex MTextCodeRegex = new Regex(
             @"\\f[^;]+;|\\A[0-2];|\\[a-zA-HJ-Z0-9]+|[{}]",
             RegexOptions.Compiled);
+        private static readonly Regex BridgeLabelRegex = new Regex(
+            @"^桥架\s*([0-9]+)\s*[\*xX]\s*([0-9]+)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static string CleanMText(string s)
         {
@@ -54,29 +57,26 @@ namespace UNCAD.Core.Text
             return null;
         }
 
-        /// <summary>桥架格数：数字(可带小数)+格，且必须在文字结尾（如 10格 / 13.5格）。</summary>
-        public static double? ExtractGridCount(string s)
+        /// <summary>
+        /// 桥架标注必须整行符合“桥架宽*高 格数格”；不允许前缀、后缀或中间备注。
+        /// </summary>
+        public static bool TryExtractBridgeLabel(string s, out string spec, out double grids)
         {
-            var m = Regex.Match(s ?? "", @"([0-9]+\.?[0-9]*)\s*格$", RegexOptions.IgnoreCase);
-            if (m.Success && m.Groups[1].Success)
-                return double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-            return null;
+            Match match = BridgeLabelRegex.Match((s ?? "").Trim());
+            if (!match.Success)
+            {
+                spec = null;
+                grids = 0;
+                return false;
+            }
+            spec = "桥架" + match.Groups[1].Value + "*" + match.Groups[2].Value;
+            grids = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+            return grids > 0;
         }
 
-        /// <summary>
-        /// 桥架规格："桥架"开头 + 数字*数字（如 桥架200*100 / 桥架 300 x 150）。
-        /// 不以"桥架"开头（如"安装桥架…"）或没有规格尺寸的一律不算。
-        /// </summary>
         public static string ExtractBridgeSpec(string s)
         {
-            var m = Regex.Match(s ?? "", @"^桥架\s*([0-9]+\s*[\*xX]\s*[0-9]+)", RegexOptions.IgnoreCase);
-            if (m.Success && m.Groups[1].Success)
-            {
-                string spec = Regex.Replace(m.Groups[1].Value, @"\s+", "")
-                    .Replace("x", "*").Replace("X", "*");
-                return "桥架" + spec;
-            }
-            return null;
+            return TryExtractBridgeLabel(s, out string spec, out _) ? spec : null;
         }
 
         /// <summary>

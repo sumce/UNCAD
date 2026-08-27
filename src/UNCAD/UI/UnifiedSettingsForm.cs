@@ -39,8 +39,14 @@ namespace UNCAD.UI
         private readonly TextBox _unrDia = new TextBox { Width = 80 };
 
         // 统计汇总
-        private readonly TextBox _statHgt = new TextBox { Width = 80 };
-        private readonly TextBox _statMm = new TextBox { Width = 80 };
+        private readonly CheckBox _statText = new CheckBox { Text = "单行文字 (TEXT)", AutoSize = true };
+        private readonly CheckBox _statMText = new CheckBox { Text = "多行文字 (MTEXT)", AutoSize = true };
+        private readonly CheckBox _statCable = new CheckBox { Text = "电缆长度", AutoSize = true };
+        private readonly CheckBox _statBridge = new CheckBox { Text = "桥架长度", AutoSize = true };
+        private readonly CheckBox _statConduit = new CheckBox { Text = "线管长度", AutoSize = true };
+        private readonly NumericUpDown _statHgt = NumberBox(180m, 1m, 100000m);
+        private readonly NumericUpDown _statMm = NumberBox(250m, 1m, 100000m);
+        private readonly ToolTip _toolTips = new ToolTip();
 
         // 文字样式
         private readonly TextBox _styleName = new TextBox { Width = 140 };
@@ -63,9 +69,10 @@ namespace UNCAD.UI
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new System.Drawing.Size(620, 320);
+            ClientSize = new System.Drawing.Size(680, 400);
 
             _conduitDia.Items.AddRange(new object[] { "20", "25", "32" });
+            ConfigureStatisticsToolTips();
             LoadValues();
 
             _tabs.TabPages.Add(BuildUnlTab());
@@ -117,8 +124,13 @@ namespace UNCAD.UI
 
             _unrDia.Text = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0).ToString("0.##", CultureInfo.InvariantCulture);
 
-            _statHgt.Text = Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0).ToString("0.##", CultureInfo.InvariantCulture);
-            _statMm.Text = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0).ToString("0.##", CultureInfo.InvariantCulture);
+            SetNumber(_statHgt, Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0));
+            SetNumber(_statMm, Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0));
+            _statText.Checked = Settings.GetBool(ConfigKeys.UnaddTextEnabled, true);
+            _statMText.Checked = Settings.GetBool(ConfigKeys.UnaddMTextEnabled, true);
+            _statCable.Checked = Settings.GetBool(ConfigKeys.UnaddCableEnabled, true);
+            _statBridge.Checked = Settings.GetBool(ConfigKeys.UnaddBridgeEnabled, true);
+            _statConduit.Checked = Settings.GetBool(ConfigKeys.UnaddConduitEnabled, true);
 
             // 文字样式
             _styleName.Text = Settings.Get(ConfigKeys.StyleName, "UNC-标注");
@@ -160,8 +172,15 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.UnrDiameter, Pos(_unrDia, 300.0).ToString("0.##", CultureInfo.InvariantCulture));
 
             // 统计
-            Settings.Set(ConfigKeys.UnaddHeight, Pos(_statHgt, 180.0).ToString("0.##", CultureInfo.InvariantCulture));
-            Settings.Set(ConfigKeys.UnaddMmPerGrid, Pos(_statMm, 250.0).ToString("0.##", CultureInfo.InvariantCulture));
+            Settings.Set(ConfigKeys.UnaddHeight, ((double)_statHgt.Value)
+                .ToString("0.##", CultureInfo.InvariantCulture));
+            Settings.Set(ConfigKeys.UnaddMmPerGrid, ((double)_statMm.Value)
+                .ToString("0.##", CultureInfo.InvariantCulture));
+            Settings.SetBool(ConfigKeys.UnaddTextEnabled, _statText.Checked);
+            Settings.SetBool(ConfigKeys.UnaddMTextEnabled, _statMText.Checked);
+            Settings.SetBool(ConfigKeys.UnaddCableEnabled, _statCable.Checked);
+            Settings.SetBool(ConfigKeys.UnaddBridgeEnabled, _statBridge.Checked);
+            Settings.SetBool(ConfigKeys.UnaddConduitEnabled, _statConduit.Checked);
 
             // 文字样式
             Settings.Set(ConfigKeys.StyleName, _styleName.Text.Trim());
@@ -178,6 +197,35 @@ namespace UNCAD.UI
                 .ToString("0.##", CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
+        }
+
+        private void ConfigureStatisticsToolTips()
+        {
+            _toolTips.ShowAlways = true;
+            _toolTips.SetToolTip(_statText, "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
+            _toolTips.SetToolTip(_statMText, "读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
+            _toolTips.SetToolTip(_statCable, "严格格式示例：2000mm；不允许前后缀或备注。");
+            _toolTips.SetToolTip(_statBridge, "严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。");
+            _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
+            _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
+        }
+
+        private static NumericUpDown NumberBox(decimal value, decimal minimum, decimal maximum)
+        {
+            return new NumericUpDown
+            {
+                Width = 100, DecimalPlaces = 2, Increment = 1m,
+                Minimum = minimum, Maximum = maximum, Value = value,
+                ThousandsSeparator = true
+            };
+        }
+
+        private static void SetNumber(NumericUpDown box, double value)
+        {
+            decimal converted;
+            try { converted = Convert.ToDecimal(value); }
+            catch { converted = box.Minimum; }
+            box.Value = Math.Min(box.Maximum, Math.Max(box.Minimum, converted));
         }
 
         /// <summary>解析数值：失败或非法时返回默认值。</summary>
@@ -242,10 +290,40 @@ namespace UNCAD.UI
 
         private TabPage BuildStatTab()
         {
-            var g = Grid(2);
-            g.Controls.Add(Lbl("输出文字高度:"), 0, 0); g.Controls.Add(_statHgt, 1, 0);
-            g.Controls.Add(Lbl("每格长度(mm):"), 0, 1); g.Controls.Add(_statMm, 1, 1);
-            return Page("统计汇总", g);
+            var source = new FlowLayoutPanel
+            {
+                AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Padding = new Padding(8, 4, 8, 4)
+            };
+            source.Controls.Add(_statText);
+            source.Controls.Add(_statMText);
+
+            var categories = new FlowLayoutPanel
+            {
+                AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Padding = new Padding(8, 4, 8, 4)
+            };
+            categories.Controls.Add(_statCable);
+            categories.Controls.Add(_statBridge);
+            categories.Controls.Add(_statConduit);
+
+            var output = Grid(2);
+            output.Padding = new Padding(8, 4, 8, 4);
+            output.Controls.Add(Lbl("输出文字高度:"), 0, 0);
+            output.Controls.Add(_statHgt, 1, 0);
+            output.Controls.Add(Lbl("桥架每格长度 (mm):"), 0, 1);
+            output.Controls.Add(_statMm, 1, 1);
+
+            var stack = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, AutoScroll = true,
+                FlowDirection = FlowDirection.TopDown, WrapContents = false,
+                Padding = new Padding(12, 10, 12, 10)
+            };
+            stack.Controls.Add(Group("文字来源", source));
+            stack.Controls.Add(Group("统计类别", categories));
+            stack.Controls.Add(Group("换算与输出", output));
+            return Page("统计汇总", stack);
         }
 
         private TabPage BuildStyleTab()
@@ -321,6 +399,24 @@ namespace UNCAD.UI
             panel.Controls.Add(target);
             panel.Controls.Add(button);
             return panel;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _toolTips.Dispose();
+            base.Dispose(disposing);
+        }
+
+        private static GroupBox Group(string title, Control content)
+        {
+            var group = new GroupBox
+            {
+                Text = title, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                MinimumSize = new System.Drawing.Size(620, 0), Padding = new Padding(8)
+            };
+            content.Location = new System.Drawing.Point(8, 20);
+            group.Controls.Add(content);
+            return group;
         }
 
         private static Label Lbl(string t) => new Label { Text = t, TextAlign = System.Drawing.ContentAlignment.MiddleRight, AutoSize = true };
