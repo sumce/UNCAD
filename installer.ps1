@@ -152,7 +152,6 @@ function Install-Bundle {
         Write-SetupLog "Restart AutoCAD 2022 and open the UNCAD Ribbon tab." Green
     }
     catch {
-        Write-SetupLog ("Installation failed: " + $_.Exception.Message) Red
         if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
         if ($newPlaced -and (Test-Path $destination)) {
             Remove-Item $destination -Recurse -Force -ErrorAction SilentlyContinue

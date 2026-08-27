@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Input;
 using Autodesk.Windows;
@@ -12,9 +11,6 @@ namespace UNCAD.UI
         public const string TabId = "UNCAD.Ribbon.Tab";
         public const string TabTitle = "UNCAD · UNSIAO Work™";
         private static readonly ICommand CommandHandler = new CadRibbonCommandHandler();
-        private static readonly HashSet<string> QuickCommands = new HashSet<string>(
-            new[] { "UNC_FILL", "UNC_SUBMIT", "UNC_SET", "UNC_ABOUT" },
-            StringComparer.OrdinalIgnoreCase);
         private static bool _eventsAttached;
         private static bool _idleAttached;
         private static bool _building;
@@ -75,16 +71,9 @@ namespace UNCAD.UI
 
             var tab = new RibbonTab { Id = TabId, Title = TabTitle };
             tab.Panels.Add(BuildQuickPanel());
-            foreach (var group in FeatureRegistry.Features.GroupBy(f => f.RibbonPanel))
-            {
-                var panel = new RibbonPanelSource { Title = group.Key };
-                foreach (var feature in group)
-                {
-                    foreach (string command in feature.Commands.Where(c => !QuickCommands.Contains(c)))
-                        panel.Items.Add(CreateButton(command, command, feature.Description));
-                }
-                if (panel.Items.Count > 0) tab.Panels.Add(new RibbonPanel { Source = panel });
-            }
+            tab.Panels.Add(BuildAnnotationPanel());
+            tab.Panels.Add(BuildDrawingPanel());
+            tab.Panels.Add(BuildStatisticsPanel());
             ribbon.Tabs.Add(tab);
             Log.Info("Ribbon registered: " + TabTitle);
             return true;
@@ -93,22 +82,87 @@ namespace UNCAD.UI
         private static RibbonPanel BuildQuickPanel()
         {
             var panel = new RibbonPanelSource { Title = "UNSIAO Work™" };
-            panel.Items.Add(CreateButton("填充", "UNC_FILL", "按机台和回路填充图纸"));
-            panel.Items.Add(CreateButton("提交", "UNC_SUBMIT", "读取图纸信息并更新提交记录"));
-            panel.Items.Add(CreateButton("设置", "UNC_SET", "打开 UNCAD 配置中心"));
-            panel.Items.Add(CreateButton("关于", "UNC_ABOUT", "查看版本、授权和联系方式"));
+            panel.Items.Add(CreateButton("清单填充", "UNC_FILL", "根据机台和回路数据自动填充图纸清单"));
+            panel.Items.Add(CreateButton("提交记录", "UNC_SUBMIT", "读取当前图纸信息并更新 Excel 提交记录"));
+            panel.Items.Add(CreateButton("配置中心", "UNC_SET", "集中设置数据源、文字和绘图参数"));
+            panel.Items.Add(CreateButton("关于", "UNC_ABOUT", "查看版本、授权状态和联系方式"));
             return new RibbonPanel { Source = panel };
         }
 
-        private static RibbonButton CreateButton(string text, string command, string tooltip)
+        private static RibbonPanel BuildAnnotationPanel()
+        {
+            var panel = new RibbonPanelSource { Title = "标注" };
+            panel.Items.Add(CreateButton("绘制线管", "UNC_CONDUIT", "按当前配置生成线管和直径标注"));
+            panel.Items.Add(CreateMenuButton("线管规格", "UNC_CONDUIT", "选择常用线管直径",
+                new MenuEntry("直径 20", "UNC_CONDUIT20", "使用 20 mm 线管规格"),
+                new MenuEntry("直径 25", "UNC_CONDUIT25", "使用 25 mm 线管规格"),
+                new MenuEntry("直径 32", "UNC_CONDUIT32", "使用 32 mm 线管规格")));
+            panel.Items.Add(CreateButton("桥架标注", "UNC_TRAY", "选择线段并生成桥架规格标注"));
+            panel.Items.Add(CreateMenuButton("桥架规格", "UNC_TRAY", "选择常用桥架规格",
+                new MenuEntry("桥架 100", "UNC_TRAY100", "使用 100 mm 桥架规格"),
+                new MenuEntry("桥架 200", "UNC_TRAY200", "使用 200 mm 桥架规格"),
+                new MenuEntry("桥架 400", "UNC_TRAY400", "使用 400 mm 桥架规格")));
+            panel.Items.Add(CreateMenuButton("标注设置", "UNC_SET", "调整线管和桥架标注参数",
+                new MenuEntry("线管设置", "UNC_CONDUIT_SET", "设置线管高度、偏移和方向"),
+                new MenuEntry("桥架设置", "UNC_TRAY_SET", "设置桥架规格、文字和偏移")));
+            return new RibbonPanel { Source = panel };
+        }
+
+        private static RibbonPanel BuildDrawingPanel()
+        {
+            var panel = new RibbonPanelSource { Title = "绘制" };
+            panel.Items.Add(CreateButton("连续画线", "UNC_LINE", "连续绘制线段并自动生成长度文字"));
+            panel.Items.Add(CreateButton("拱桥开洞", "UNC_ARCH", "在线段交叉位置生成拱桥开洞"));
+            panel.Items.Add(CreateMenuButton("绘制设置", "UNC_SET", "调整画线和拱桥参数",
+                new MenuEntry("画线设置", "UNC_LINE_SET", "设置线段文字、高度和位置"),
+                new MenuEntry("开洞设置", "UNC_ARCH_SET", "设置拱桥开洞直径")));
+            return new RibbonPanel { Source = panel };
+        }
+
+        private static RibbonPanel BuildStatisticsPanel()
+        {
+            var panel = new RibbonPanelSource { Title = "统计" };
+            panel.Items.Add(CreateButton("图纸统计", "UNC_STAT", "统计所选对象并在图纸中生成汇总文字"));
+            panel.Items.Add(CreateButton("Excel 报表", "UNC_STAT_EX", "统计所选对象并导出 Excel 报表"));
+            return new RibbonPanel { Source = panel };
+        }
+
+        private static RibbonButton CreateButton(
+            string text, string command, string tooltip, RibbonItemSize size = RibbonItemSize.Large)
         {
             return new RibbonButton
             {
                 Text = text, ShowText = true, ShowImage = true, CommandParameter = command,
-                CommandHandler = CommandHandler, Size = RibbonItemSize.Large, ToolTip = tooltip,
+                CommandHandler = CommandHandler, Size = size, ToolTip = tooltip,
                 Image = RibbonIconFactory.Create(command, 16),
                 LargeImage = RibbonIconFactory.Create(command, 32)
             };
+        }
+
+        private static RibbonMenuButton CreateMenuButton(
+            string text, string iconCommand, string tooltip, params MenuEntry[] entries)
+        {
+            var menu = new RibbonMenuButton
+            {
+                Text = text, ShowText = true, ShowImage = true, Size = RibbonItemSize.Large,
+                ToolTip = tooltip, IsSplit = false, IsSynchronizedWithCurrentItem = false,
+                Image = RibbonIconFactory.Create(iconCommand, 16),
+                LargeImage = RibbonIconFactory.Create(iconCommand, 32)
+            };
+            foreach (MenuEntry entry in entries)
+                menu.Items.Add(CreateButton(entry.Text, entry.Command, entry.Tooltip, RibbonItemSize.Standard));
+            return menu;
+        }
+
+        private sealed class MenuEntry
+        {
+            public MenuEntry(string text, string command, string tooltip)
+            {
+                Text = text; Command = command; Tooltip = tooltip;
+            }
+            public string Text { get; }
+            public string Command { get; }
+            public string Tooltip { get; }
         }
 
         private sealed class CadRibbonCommandHandler : ICommand

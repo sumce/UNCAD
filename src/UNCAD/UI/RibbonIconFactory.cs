@@ -63,8 +63,15 @@ namespace UNCAD.UI
         {
             if (string.Equals(command, "UNC_FILL", StringComparison.OrdinalIgnoreCase)) return "fill";
             if (string.Equals(command, "UNC_SUBMIT", StringComparison.OrdinalIgnoreCase)) return "submit";
-            if (string.Equals(command, "UNC_SET", StringComparison.OrdinalIgnoreCase)) return "settings";
+            if (string.Equals(command, "UNC_SET", StringComparison.OrdinalIgnoreCase) ||
+                command.EndsWith("_SET", StringComparison.OrdinalIgnoreCase)) return "settings";
             if (string.Equals(command, "UNC_ABOUT", StringComparison.OrdinalIgnoreCase)) return "about";
+            if (command.StartsWith("UNC_CONDUIT", StringComparison.OrdinalIgnoreCase)) return "conduit";
+            if (command.StartsWith("UNC_TRAY", StringComparison.OrdinalIgnoreCase)) return "tray";
+            if (command.StartsWith("UNC_LINE", StringComparison.OrdinalIgnoreCase)) return "line";
+            if (command.StartsWith("UNC_ARCH", StringComparison.OrdinalIgnoreCase)) return "arch";
+            if (string.Equals(command, "UNC_STAT_EX", StringComparison.OrdinalIgnoreCase)) return "excel";
+            if (command.StartsWith("UNC_STAT", StringComparison.OrdinalIgnoreCase)) return "stat";
             return "tool";
         }
 
@@ -74,6 +81,12 @@ namespace UNCAD.UI
             if (icon == "submit") return Color.FromRgb(37, 139, 98);
             if (icon == "settings") return Color.FromRgb(210, 139, 39);
             if (icon == "about") return Color.FromRgb(78, 114, 165);
+            if (icon == "conduit") return Color.FromRgb(34, 148, 172);
+            if (icon == "tray") return Color.FromRgb(192, 85, 70);
+            if (icon == "line") return Color.FromRgb(197, 150, 45);
+            if (icon == "arch") return Color.FromRgb(68, 139, 104);
+            if (icon == "stat") return Color.FromRgb(92, 120, 176);
+            if (icon == "excel") return Color.FromRgb(44, 128, 87);
             return Color.FromRgb(100, 112, 125);
         }
     }
