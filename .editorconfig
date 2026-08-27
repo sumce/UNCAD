@@ -1,0 +1,31 @@
+# UNCAD 项目统一编码规范
+root = true
+
+# 所有文件
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+dotnet_sort_system_directives_first = true
+csharp_using_directive_placement = outside_namespace:warning
+
+# ---- .NET 分析器（CA）----
+# 防御性 catch：注册表/系统变量/日志失败不中断插件（有意为之）
+dotnet_diagnostic.CA1031.severity = none
+# 无异步代码
+dotnet_diagnostic.CA2007.severity = none
+# 内部工具，消息不做本地化
+dotnet_diagnostic.CA1303.severity = none
+# 集合属性/数组：内部工具不做防御性拷贝
+dotnet_diagnostic.CA2227.severity = none
+dotnet_diagnostic.CA1002.severity = none
+dotnet_diagnostic.CA1819.severity = none
+# AutoCAD 回调场景不做 null 前置检查
+dotnet_diagnostic.CA1062.severity = none
+# 文化敏感格式：提示级别（代码已统一 InvariantCulture）
+dotnet_diagnostic.CA1305.severity = suggestion

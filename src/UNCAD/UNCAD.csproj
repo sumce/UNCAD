@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>13</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>8.0</AnalysisLevel>
+    <RootNamespace>UNCAD</RootNamespace>
+    <AssemblyName>UNCAD</AssemblyName>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
+
+    <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
+    <AssemblyDescription>UNADD / UNL / UNQ / UNR 命令的 C# 实现（原 AutoLISP 版本移植）</AssemblyDescription>
+    <AssemblyCompany>UNSIAO Work™ | 云邵出品</AssemblyCompany>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+
+    <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->
+    <StartAction>Program</StartAction>
+    <StartProgram>$(AutoCADDir)\acad.exe</StartProgram>
+    <StartWorkingDirectory>$(AutoCADDir)</StartWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="AcMgd">
+      <HintPath>$(AutoCADDir)\AcMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AdWindows">
+      <HintPath>$(AutoCADDir)\AdWindows.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NPOI" Version="2.5.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ribbon (Autodesk.Windows) 依赖 WPF -->
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="System.Xaml" />
+  </ItemGroup>
+
+  <Target Name="CheckAutoCADReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(AutoCADDir)\AcMgd.dll')"
+           Text="未找到 AutoCAD 2022 .NET API（$(AutoCADDir)\AcMgd.dll）。请安装 AutoCAD 2022，或用 -p:AutoCADDir=... 指定路径。" />
+  </Target>
+
+</Project>

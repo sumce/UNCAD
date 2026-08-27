@@ -1,0 +1,82 @@
+using Autodesk.AutoCAD.Runtime;
+using UNCAD.Cad;
+using UNCAD.Core.Contracts;
+using UNCAD.Core.Text;
+using UNCAD.Features.ConfigCenter;
+using UNCAD.Infra;
+
+namespace UNCAD.Features.Conduit
+{
+    /// <summary>线管标注：生成紫色原生偏移曲线和按实际曲线长度计算的规格文字。</summary>
+    [Feature("conduit", "线管标注",
+        RibbonPanel = "标注",
+        Commands = "UNC_CONDUIT;UNC_CONDUIT20;UNC_CONDUIT25;UNC_CONDUIT32;UNC_CONDUIT_SET",
+        Description = "选中线段生成紫色线管及按实际长度计算的规格文字")]
+    public class ConduitFeature : CommandBase
+    {
+        [CommandMethod("UNC_CONDUIT", CommandFlags.UsePickSet)]
+        public void UncadConduit() => Run(null);
+
+        [CommandMethod("UNC_CONDUIT20", CommandFlags.UsePickSet)]
+        public void UncadConduit20() => Run("20");
+
+        [CommandMethod("UNC_CONDUIT25", CommandFlags.UsePickSet)]
+        public void UncadConduit25() => Run("25");
+
+        [CommandMethod("UNC_CONDUIT32", CommandFlags.UsePickSet)]
+        public void UncadConduit32() => Run("32");
+
+        [CommandMethod("UNC_CONDUIT_SET")]
+        public void UncadConduitSet() => SettingsFeature.Show(2);
+
+        protected override void Execute(CadContext ctx) => Execute(ctx, null);
+
+        protected override void Execute(CadContext ctx, object state)
+        {
+            string diameter = NormalizeDiameter(state as string
+                ?? Settings.Get(ConfigKeys.ConduitDiameter, "20"));
+            double hgt = Settings.GetDouble(ConfigKeys.ConduitHeight, 180.0);
+            double lineOff = Settings.GetDouble(ConfigKeys.ConduitLineOff, 15.0);
+            double textOff = Settings.GetDouble(ConfigKeys.ConduitTextOff, 0.0);
+            string side = Settings.Get(ConfigKeys.ConduitSide, "1");
+
+            var ids = SelectionService.PickCurvesWithOffset(ctx,
+                "请选择线管基准线或 [设置紫线距离(D)]: ",
+                "\n请输入紫线距基线距离", ref lineOff, value =>
+                    Settings.Set(ConfigKeys.ConduitLineOff, value.ToString("0.##",
+                        System.Globalization.CultureInfo.InvariantCulture)));
+            if (ids == null || ids.Length == 0)
+            {
+                ctx.Write("\n[UNC_CONDUIT] 未选择线段，已取消。");
+                return;
+            }
+
+            ConfigPrinter.Print(ctx, "UNC_CONDUIT",
+                ("管径", "⌀" + diameter),
+                ("高度", TextFormatter.FormatNum(hgt)),
+                ("紫线偏移", TextFormatter.FormatNum(lineOff)),
+                ("文字偏移", TextFormatter.FormatNum(textOff)),
+                ("侧", side == "0" ? "下方" : "上方"));
+
+            int count = ParallelCurveAnnotator.Add(ctx, ids, new ParallelAnnotationOptions
+            {
+                CurveOffset = lineOff,
+                TextOffset = textOff,
+                TextHeight = hgt,
+                Above = side != "0",
+                ColorIndex = 6,
+                LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
+            });
+
+            SelectionService.ClearPickFirst(ctx);
+            ctx.Write("\n[UNC_CONDUIT] 已生成 " + count + " 条 ⌀" + diameter + " 线管标注。");
+        }
+
+        private static string NormalizeDiameter(string value)
+        {
+            string d = (value ?? "20").Trim()
+                .Replace("⌀", "").Replace("Ø", "").Replace("Φ", "").Replace("线管", "");
+            return d == "25" || d == "32" ? d : "20";
+        }
+    }
+}

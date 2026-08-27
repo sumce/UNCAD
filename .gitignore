@@ -1,0 +1,52 @@
+# .NET build outputs
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+
+# IDE and user state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+_ReSharper*/
+*.DotSettings.user
+
+# Generated bundle binaries (keep PackageContents.xml)
+bundle/UNCAD.bundle/*.dll
+
+# Local diagnostics and sensitive input data
+tmp/
+data.xlsx
+*.log
+
+# Python helper caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# AutoCAD drawings and transient files
+*.dwg
+*.dxf
+*.bak
+*.sv$
+*.ac$
+*.dwl
+*.dwl2
+!tests/Fixtures/**/*.dwg
+!tests/Fixtures/**/*.dxf
+
+# Excel fixtures/data are opt-in
+*.xlsx
+!tests/Fixtures/**/*.xlsx
+
+# OS files
+Thumbs.db
+.DS_Store
