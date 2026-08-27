@@ -1,5 +1,6 @@
 using System;
 using Autodesk.AutoCAD.Geometry;
+using UNCAD.Core.Geometry;
 
 namespace UNCAD.Cad
 {
@@ -51,16 +52,16 @@ namespace UNCAD.Cad
         /// </summary>
         public static bool ArcNeedReverse(Point3d c, Point3d bp1, Point3d bp2, double radius)
         {
-            var c2d = new Point3d(c.X, c.Y, 0);
-            var bp12d = new Point3d(bp1.X, bp1.Y, 0);
-            var bp22d = new Point3d(bp2.X, bp2.Y, 0);
+            return SemicircleGeometry.NeedReverse(c.X, c.Y,
+                bp1.X, bp1.Y, bp2.X, bp2.Y, radius);
+        }
 
-            Point3d mid1 = Polar(c2d, Angle(c2d, bp12d) + Math.PI / 2, radius);
-            Point3d mid2 = Polar(c2d, Angle(c2d, bp22d) + Math.PI / 2, radius);
-
-            if (Math.Abs(mid1.Y - mid2.Y) < 1e-9)
-                return mid1.X <= mid2.X;
-            return mid1.Y < mid2.Y;
+        /// <summary>返回AutoCAD Arc构造函数需要的逆时针起止角，圆心与端点位于WCS XY平面。</summary>
+        public static void SemicircleAngles(Point3d center, Point3d bp1, Point3d bp2,
+            double radius, out double startAngle, out double endAngle)
+        {
+            SemicircleGeometry.Angles(center.X, center.Y,
+                bp1.X, bp1.Y, bp2.X, bp2.Y, radius, out startAngle, out endAngle);
         }
     }
 }

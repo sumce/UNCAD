@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.Geometry;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 
@@ -67,103 +68,103 @@ namespace UNCAD.Features.Unr
             double diameter0 = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
             ConfigPrinter.Print(ctx, CommandIds.Arch, ("直径", TextFormatter.FormatNum(diameter0)));
 
-            object oldCmdEcho = null, oldOsmode = null;
-            try { oldCmdEcho = Application.GetSystemVariable("CMDECHO"); }
-            catch (System.Exception ex) { Log.Warn("读取 CMDECHO 失败: " + ex.Message); }
-            try { oldOsmode = Application.GetSystemVariable("OSMODE"); }
-            catch (System.Exception ex) { Log.Warn("读取 OSMODE 失败: " + ex.Message); }
-            try { Application.SetSystemVariable("CMDECHO", (short)0); }
-            catch (System.Exception ex) { Log.Warn("设置 CMDECHO 失败: " + ex.Message); }
-
             ed.WriteMessage("\n>> 进入连续开洞模式 (按 ESC 或空格键退出)...");
-            try
+            while (true)
             {
-                while (true)
+                var eopts = new PromptEntityOptions("\n点击直线直接开洞: ")
                 {
-                    var eopts = new PromptEntityOptions("\n点击直线直接开洞: ")
+                    AllowNone = true
+                };
+                eopts.SetRejectMessage("\n[警告] 仅支持 LINE 直线，已跳过。");
+                eopts.AddAllowedClass(typeof(Line), false);
+
+                PromptEntityResult sel;
+                try
+                {
+                    sel = ed.GetEntity(eopts);
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == ErrorStatus.UserBreak)
+                {
+                    break;
+                }
+                if (sel.Status == PromptStatus.None) break;
+                if (sel.Status != PromptStatus.OK) break;
+
+                using (var tr = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    var line = tr.GetObject(sel.ObjectId, OpenMode.ForRead) as Line;
+                    if (line == null)
                     {
-                        AllowNone = true
-                    };
-                    eopts.SetRejectMessage("\n[警告] 仅支持 LINE 直线，已跳过。");
-                    eopts.AddAllowedClass(typeof(Line), false);
-
-                    PromptEntityResult sel;
-                    try
-                    {
-                        sel = ed.GetEntity(eopts);
-                    }
-                    catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == ErrorStatus.UserBreak)
-                    {
-                        break;
-                    }
-                    if (sel.Status == PromptStatus.None) break;
-                    if (sel.Status != PromptStatus.OK) break;
-
-                    using (var tr = ctx.Db.TransactionManager.StartTransaction())
-                    {
-                        var line = tr.GetObject(sel.ObjectId, OpenMode.ForRead) as Line;
-                        if (line == null)
-                        {
-                            ed.WriteMessage("\n[警告] 仅支持 LINE 直线，已跳过。");
-                            tr.Commit();
-                            continue;
-                        }
-
-                        double diameter = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
-                        double R = diameter / 2.0;
-                        double totalLen = line.Length;
-                        Point3d closest = line.GetClosestPointTo(sel.PickedPoint, false);
-                        double distC = line.GetDistAtPoint(closest);
-
-                        // 边界安全检查
-                        if (distC < R || (totalLen - distC) < R)
-                        {
-                            ed.WriteMessage("\n[警告] 位置太靠近端点，已跳过。");
-                            tr.Commit();
-                            continue;
-                        }
-
-                        Point3d bp1 = line.GetPointAtDist(Math.Max(0.0, distC - R));
-                        Point3d bp2 = line.GetPointAtDist(Math.Min(totalLen, distC + R));
-
-                        // 智能判断上半边（合并到 GeoMath，与 LISP 启发式一致）
-                        bool reverse = GeoMath.ArcNeedReverse(closest, bp1, bp2, R);
-
+                        ed.WriteMessage("\n[警告] 仅支持 LINE 直线，已跳过。");
                         tr.Commit();
-
-                        // 临时关闭捕捉，执行 ARC + BREAK（命令级，与 LISP 行为一致）
-                        try { Application.SetSystemVariable("OSMODE", (short)0); }
-                        catch (System.Exception ex) { Log.Warn("关闭 OSMODE 失败: " + ex.Message); }
-                        try
-                        {
-                            var c2d = new Point3d(closest.X, closest.Y, 0);
-                            Point3d start = reverse ? bp2 : bp1;
-                            Point3d end = reverse ? bp1 : bp2;
-                            ed.Command("\\_.ARC", "\\_C", c2d, start, end);
-                            ed.Command("\\_.BREAK", sel.ObjectId, bp1, bp2);
-                        }
-                        finally
-                        {
-                            if (oldOsmode != null)
-                            {
-                                try { Application.SetSystemVariable("OSMODE", oldOsmode); }
-                                catch (System.Exception ex) { Log.Warn("恢复 OSMODE 失败: " + ex.Message); }
-                            }
-                        }
+                        continue;
                     }
-                }
-            }
-            finally
-            {
-                if (oldCmdEcho != null)
-                {
-                    try { Application.SetSystemVariable("CMDECHO", oldCmdEcho); }
-                    catch (System.Exception ex) { Log.Warn("恢复 CMDECHO 失败: " + ex.Message); }
-                }
-                if (oldOsmode != null)
-                {
-                    try { Application.SetSystemVariable("OSMODE", oldOsmode); }
-                    catch (System.Exception ex) { Log.Warn("恢复 OSMODE 失败: " + ex.Message); }
+
+                    double diameter = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
+                    double R = diameter / 2.0;
+                    double totalLen = line.Length;
+                    const double geometryTolerance = 1e-7;
+                    if (diameter <= geometryTolerance || double.IsNaN(diameter)
+                        || double.IsInfinity(diameter)
+                        || totalLen <= diameter + geometryTolerance)
+                    {
+                        ed.WriteMessage("\n[警告] 直线长度必须大于洞口直径，已跳过。");
+                        tr.Commit();
+                        continue;
+                    }
+                    Point3d closest = line.GetClosestPointTo(sel.PickedPoint, false);
+                    double distC = line.GetDistAtPoint(closest);
+
+                    // 边界安全检查
+                    if (!SemicircleGeometry.CanSplit(
+                        totalLen, diameter, distC, geometryTolerance))
+                    {
+                        ed.WriteMessage("\n[警告] 位置太靠近端点，已跳过。");
+                        tr.Commit();
+                        continue;
+                    }
+
+                    Point3d bp1 = line.GetPointAtDist(Math.Max(0.0, distC - R));
+                    Point3d bp2 = line.GetPointAtDist(Math.Min(totalLen, distC + R));
+
+                    if (Math.Abs(line.StartPoint.Z - line.EndPoint.Z) > 1e-7)
+                    {
+                        ed.WriteMessage("\n[警告] 仅支持位于同一XY平面的二维直线，已跳过。");
+                        tr.Commit();
+                        continue;
+                    }
+
+                    GeoMath.SemicircleAngles(closest, bp1, bp2, R,
+                        out double startAngle, out double endAngle);
+                    Point3d originalEnd = line.EndPoint;
+                    var second = line.Clone() as Line;
+                    if (second == null)
+                    {
+                        ed.WriteMessage("\n[警告] 无法复制目标直线，已跳过。");
+                        tr.Commit();
+                        continue;
+                    }
+
+                    line.UpgradeOpen();
+                    line.EndPoint = bp1;
+                    second.StartPoint = bp2;
+                    second.EndPoint = originalEnd;
+                    var arc = new Arc(closest, Vector3d.ZAxis, R, startAngle, endAngle);
+                    arc.SetPropertiesFrom(line);
+
+                    var owner = tr.GetObject(line.OwnerId, OpenMode.ForWrite)
+                        as BlockTableRecord;
+                    if (owner == null)
+                    {
+                        second.Dispose();
+                        arc.Dispose();
+                        throw new InvalidOperationException("无法写入直线所在空间。");
+                    }
+                    owner.AppendEntity(second);
+                    tr.AddNewlyCreatedDBObject(second, true);
+                    owner.AppendEntity(arc);
+                    tr.AddNewlyCreatedDBObject(arc, true);
+                    tr.Commit();
                 }
             }
             ed.WriteMessage("\n已退出连续开洞模式。");
