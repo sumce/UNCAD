@@ -141,10 +141,10 @@ namespace UNCAD.UI
             };
         }
 
-        private static RibbonMenuButton CreateMenuButton(
+        private static RibbonSplitButton CreateMenuButton(
             string text, string iconCommand, string tooltip, params MenuEntry[] entries)
         {
-            var menu = new RibbonMenuButton
+            var menu = new RibbonSplitButton
             {
                 Text = text, ShowText = true, ShowImage = true, Size = RibbonItemSize.Large,
                 ToolTip = tooltip, IsSplit = false, IsSynchronizedWithCurrentItem = false,
@@ -152,14 +152,7 @@ namespace UNCAD.UI
                 LargeImage = RibbonIconFactory.Create(iconCommand, 32)
             };
             foreach (MenuEntry entry in entries)
-            {
-                menu.Items.Add(new RibbonMenuItem
-                {
-                    Text = entry.Text, ShowText = true, ShowImage = true,
-                    CommandParameter = entry.Command, CommandHandler = CommandHandler,
-                    ToolTip = entry.Tooltip, Image = RibbonIconFactory.Create(entry.Command, 16)
-                });
-            }
+                menu.Items.Add(CreateButton(entry.Text, entry.Command, entry.Tooltip, RibbonItemSize.Standard));
             return menu;
         }
 
