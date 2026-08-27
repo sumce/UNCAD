@@ -58,6 +58,7 @@ namespace UNCAD.UI
         private readonly TextBox _fillExcel = new TextBox { Width = 310 };
         private readonly TextBox _fillCatalog = new TextBox { Width = 310 };
         private readonly TextBox _fillTblRow = new TextBox { Width = 60 };
+        private readonly NumericUpDown _fillClearRows = IntegerBox(11m, 1m, 100m);
         private readonly TextBox _fillTextHeight = new TextBox { Width = 60 };
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
@@ -142,6 +143,7 @@ namespace UNCAD.UI
             _fillExcel.Text = Settings.Get(ConfigKeys.FillExcelPath, "");
             _fillCatalog.Text = Settings.Get(ConfigKeys.FillCatalogPath, "");
             _fillTblRow.Text = ((int)Settings.GetDouble(ConfigKeys.FillTableRow, 1.0)).ToString();
+            SetNumber(_fillClearRows, Settings.GetDouble(ConfigKeys.FillClearRows, 11.0));
             _fillTextHeight.Text = Settings.GetDouble(ConfigKeys.FillTextHeight, TableFillFormatter.DefaultTextHeight)
                 .ToString("0.##", CultureInfo.InvariantCulture);
             _fillBridge.Text = Settings.Get(ConfigKeys.FillBridge, "");
@@ -193,6 +195,7 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillExcelPath, _fillExcel.Text.Trim());
             Settings.Set(ConfigKeys.FillCatalogPath, _fillCatalog.Text.Trim());
             Settings.Set(ConfigKeys.FillTableRow, Pos(_fillTblRow, 1.0).ToString("0", CultureInfo.InvariantCulture));
+            Settings.Set(ConfigKeys.FillClearRows, ((int)_fillClearRows.Value).ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillTextHeight, Pos(_fillTextHeight, TableFillFormatter.DefaultTextHeight)
                 .ToString("0.##", CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
@@ -208,6 +211,13 @@ namespace UNCAD.UI
             _toolTips.SetToolTip(_statBridge, "严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。");
             _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
+        }
+
+        private static NumericUpDown IntegerBox(decimal value, decimal minimum, decimal maximum)
+        {
+            NumericUpDown box = NumberBox(value, minimum, maximum);
+            box.DecimalPlaces = 0;
+            return box;
         }
 
         private static NumericUpDown NumberBox(decimal value, decimal minimum, decimal maximum)
@@ -348,13 +358,14 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(6);
+            var g = Grid(7);
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
             g.Controls.Add(Lbl("固定清单 Excel(空=同文件):"), 0, 1); g.Controls.Add(PathPicker(_fillCatalog), 1, 1);
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 2); g.Controls.Add(_fillTblRow, 1, 2);
-            g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
-            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 4); g.Controls.Add(_fillBridge, 1, 4);
-            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 5); g.Controls.Add(FolderPicker(_submitFolder), 1, 5);
+            g.Controls.Add(Lbl("每次清空数据行数:"), 0, 3); g.Controls.Add(_fillClearRows, 1, 3);
+            g.Controls.Add(Lbl("表格文字高度:"), 0, 4); g.Controls.Add(_fillTextHeight, 1, 4);
+            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
+            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
             return Page("Excel 数据", g);
         }
 

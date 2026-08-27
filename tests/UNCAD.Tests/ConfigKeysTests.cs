@@ -15,7 +15,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("1.3.2.0", info.Version);
+            Assert.Equal("1.4.0.0", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal("2026-08-27", info.UpdatedOn);
             Assert.Contains("正式版", info.Authorization);
@@ -34,6 +34,13 @@ namespace UNCAD.Tests
         {
             Assert.NotEqual(ConfigKeys.FillExcelPath, ConfigKeys.FillCatalogPath);
             Assert.Equal("UNC_FILL_CATALOG_EXCEL", ConfigKeys.FillCatalogPath);
+        }
+
+        [Fact]
+        public void FillClearRange_HasIndependentPersistentKey()
+        {
+            Assert.Equal("UNC_FILL_CLEAR_ROWS", ConfigKeys.FillClearRows);
+            Assert.NotEqual(ConfigKeys.FillTableRow, ConfigKeys.FillClearRows);
         }
 
         [Fact]

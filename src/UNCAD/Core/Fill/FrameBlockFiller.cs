@@ -72,8 +72,10 @@ namespace UNCAD.Core.Fill
             string cable = (row.Cable ?? "").Trim();
             if (stat != null && stat.CableSum > 0)
             {
-                string formula = TextFormatter.Join(stat.CableFormatted, "+")
-                    + "=" + TextFormatter.FormatNum(stat.CableSum) + "M";
+                string total = TextFormatter.FormatNum(stat.CableSum);
+                string formula = stat.CableFormatted.Count > 1
+                    ? TextFormatter.Join(stat.CableFormatted, "+") + "=" + total + "M"
+                    : total + "M";
                 d[TagCable] = cable.Length > 0
                     ? cable + "mm²: " + formula
                     : formula;

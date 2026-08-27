@@ -80,6 +80,8 @@ namespace UNCAD.Features.Fill
 
             string bridgeInfo = Settings.Get(ConfigKeys.FillBridge, "");
             int startRow = (int)Settings.GetDouble(ConfigKeys.FillTableRow, 1.0);
+            int clearRowCount = (int)Settings.GetDouble(ConfigKeys.FillClearRows,
+                TableClearPolicy.DefaultRows);
             double textHeight = Settings.GetDouble(ConfigKeys.FillTextHeight,
                 TableFillFormatter.DefaultTextHeight);
             if (textHeight <= 0) textHeight = TableFillFormatter.DefaultTextHeight;
@@ -97,13 +99,34 @@ namespace UNCAD.Features.Fill
             }
             ctx.Write("\n[UNC_FILL] 已选择: " + picked.MachineId + " " + picked.CircuitName);
 
-            List<TableFillRow> tableRows = TableFillPlanner.Build(picked, listItems, statistics);
+            List<TableFillRow> defaultRows = TableFillPlanner.Build(picked, listItems, statistics);
+            string defaultCableMeters = defaultRows.Find(row =>
+                row.Category == TableFillCategory.Cable)?.Quantity ?? "";
+            if (defaultCableMeters.Length == 0 && statistics.CableSum > 0)
+                defaultCableMeters = TextFormatter.FormatNum(statistics.CableSum);
+            FillReviewData review = FillReviewData.Create(picked, defaultRows);
+            if (review.CableMeters.Length == 0) review.CableMeters = defaultCableMeters;
+            using (var form = new FillReviewForm(review))
+            {
+                if (form.ShowDialog(new WindowWrapper(
+                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
+                    != DialogResult.OK) return;
+                review = form.Data;
+            }
+            picked = review.Machine;
+            List<TableFillRow> tableRows = review.SelectedRows();
+            string reviewedCableMeters = review.CableMeters ?? "";
+            if (!string.Equals(defaultCableMeters, reviewedCableMeters,
+                StringComparison.OrdinalIgnoreCase))
+                ApplyCableLengthOverride(statistics, reviewedCableMeters);
+
             ConfigPrinter.Print(ctx, CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
             int filled = CadTableFillWriter.Fill(ctx, selection.TableIds, startRow,
-                tableRows, textHeight);
+                clearRowCount, tableRows, textHeight);
+            if (filled < 0) return;
             FillWriteResult frameResult = CadBlockAttributeWriter.FillFrame(ctx,
                 selection.FrameBlockIds, picked, bridgeInfo, statistics);
             FillWriteResult deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx,
@@ -126,6 +149,20 @@ namespace UNCAD.Features.Fill
                 + " 项；设备动态块更新 " + deviceResult.Blocks + " 个；上游信息 "
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
+        }
+
+        private static void ApplyCableLengthOverride(CableStatResult statistics, string value)
+        {
+            string text = (value ?? "").Trim();
+            double meters;
+            bool parsed = double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out meters)
+                || double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.CurrentCulture, out meters);
+            statistics.CableFormatted.Clear();
+            statistics.CableSum = parsed && meters > 0 ? meters : 0;
+            if (statistics.CableSum > 0)
+                statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
         }
 
         private static string ResolveMachineWorkbookPath(CadContext ctx)

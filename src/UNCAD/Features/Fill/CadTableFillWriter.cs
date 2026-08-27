@@ -10,8 +10,9 @@ namespace UNCAD.Features.Fill
     internal static class CadTableFillWriter
     {
         public static int Fill(CadContext ctx, ObjectId[] tableIds, int startRow,
-            List<TableFillRow> plannedRows, double textHeight)
+            int clearRowCount, List<TableFillRow> plannedRows, double textHeight)
         {
+            plannedRows = plannedRows ?? new List<TableFillRow>();
             int filled = 0;
             using (var tr = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -21,32 +22,41 @@ namespace UNCAD.Features.Fill
                     if (table == null) continue;
                     if (table.Rows.Count < 2 || table.Columns.Count < 6)
                     {
-                        ctx.Write("\n[UNC_FILL] 已跳过格式不兼容的表格：至少需要表头和 1 个数据行、共 6 列。");
-                        continue;
+                        ctx.Write("\n[UNC_FILL] 表格格式不兼容：至少需要表头和 1 个数据行、共 6 列，本次未写入。");
+                        return -1;
                     }
                     table.UpgradeOpen();
                     double[] rowHeights = CaptureRowHeights(table);
                     double[] columnWidths = CaptureColumnWidths(table);
 
                     int row = FirstDataRow(table) + (Math.Max(1, startRow) - 1);
-                    if (row < 0 || row >= table.Rows.Count) continue;
+                    if (row < 0 || row >= table.Rows.Count)
+                    {
+                        ctx.Write("\n[UNC_FILL] 配置的起始数据行超出表格范围，本次未写入。");
+                        return -1;
+                    }
                     int guard = 0;
                     while (row < table.Rows.Count && IsHeaderLike(table, row) && guard++ < 8)
                         row++;
-                    if (row >= table.Rows.Count || plannedRows == null
-                        || plannedRows.Count == 0) continue;
-                    int available = table.Rows.Count - row;
-                    if (plannedRows.Count > available)
+                    if (row >= table.Rows.Count)
                     {
-                        ctx.Write("\n[UNC_FILL] 表格数据行不足：需要 " + plannedRows.Count
-                            + " 行，当前仅剩 " + available + " 行，未写入该表格。");
-                        continue;
+                        ctx.Write("\n[UNC_FILL] 起始位置之后没有可写入的数据行，本次未写入。");
+                        return -1;
+                    }
+                    int available = table.Rows.Count - row;
+                    int rowsToClear = TableClearPolicy.ResolveRows(available, clearRowCount);
+                    if (!TableClearPolicy.CanFit(plannedRows.Count, rowsToClear))
+                    {
+                        ctx.Write("\n[UNC_FILL] 勾选清单超过模板清除范围：需要 " + plannedRows.Count
+                            + " 行，当前配置清除 " + rowsToClear
+                            + " 行。请减少勾选或在配置中心增大清除行数。");
+                        return -1;
                     }
 
                     table.SuppressRegenerateTable(true);
                     try
                     {
-                        for (int clearRow = row; clearRow < table.Rows.Count; clearRow++)
+                        for (int clearRow = row; clearRow < row + rowsToClear; clearRow++)
                             for (int column = 1; column <= 5; column++)
                                 SetCellTextPreservingFormat(table, clearRow, column, "");
 

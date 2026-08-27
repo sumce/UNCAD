@@ -54,6 +54,37 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Fact]
+        public void ExcelTab_HasConfigurableTemplateClearRange()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new UnifiedSettingsForm(6))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+                        TabControl tabs = Find<TabControl>(form);
+                        Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
+                        List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
+                        NumericUpDown clearRows = Assert.Single(numbers);
+                        Assert.Equal(0, clearRows.DecimalPlaces);
+                        Assert.Equal(1m, clearRows.Minimum);
+                        Assert.Equal(100m, clearRows.Maximum);
+                        Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                            label => label.Text == "每次清空数据行数:");
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
         private static T Find<T>(Control root) where T : Control
         {
             List<T> matches = FindAll<T>(root);

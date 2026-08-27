@@ -17,6 +17,8 @@ namespace UNCAD.Core.Submission
             @"[⌀ØΦφ]\s*([0-9]+(?:\.[0-9]+)?)", RegexOptions.Compiled);
         private static readonly Regex MillimeterValue = new Regex(
             @"([0-9]+(?:\.[0-9]+)?)\s*mm", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex CableModelInDescription = new Regex(
+            @"名称\s*[:：]\s*(.+?)mm(?:²|2)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex EqualsMeters = new Regex(
             @"=\s*([0-9]+(?:\.[0-9]+)?)\s*[mM](?:\b|$)", RegexOptions.Compiled);
         private static readonly Regex MeterValue = new Regex(
@@ -46,16 +48,24 @@ namespace UNCAD.Core.Submission
             string cableInfo = Unique(source, FrameBlockFiller.TagCable);
             string bridgeInfo = Unique(source, FrameBlockFiller.TagBridge);
             string conduitInfo = Unique(source, FrameBlockFiller.TagConduit);
-            string cable = ExtractCableModel(cableInfo);
+            bool hasCableRows = HasTableRows(source, IsCableRow);
+            bool hasBridgeRows = HasTableRows(source, IsBridgeRow);
+            bool hasConduitRows = HasTableRows(source, IsRigidConduitRow);
+            string tableCable = ExtractTableCableModel(source);
+            string cable = tableCable.Length > 0 ? tableCable : ExtractCableModel(cableInfo);
 
             string flexibleDiameter = ExtractTableDiameter(source, IsFlexibleConduitRow);
             string flexibleMeters = TableMeters(source, IsFlexibleConduitRow);
-            string cableMeters = PreferMeters(ParseInfoMeters(cableInfo),
-                ParseMeters(TableMeters(source, IsCableRow)));
-            string bridgeMeters = PreferMeters(ParseInfoMeters(bridgeInfo),
-                ParseMeters(TableMeters(source, IsBridgeRow)));
-            string conduitMeters = PreferMeters(ParseInfoMeters(conduitInfo),
-                ParseMeters(TableMeters(source, IsRigidConduitRow)));
+            string cableMeters = hasCableRows ? TableMeters(source, IsCableRow)
+                : FormatMeters(ParseInfoMeters(cableInfo));
+            string bridgeMeters = hasBridgeRows ? TableMeters(source, IsBridgeRow)
+                : FormatMeters(ParseInfoMeters(bridgeInfo));
+            string conduitMeters = hasConduitRows ? TableMeters(source, IsRigidConduitRow)
+                : FormatMeters(ParseInfoMeters(conduitInfo));
+            string currentBridgeInfo = hasBridgeRows
+                ? BuildTableInfo(source, IsBridgeRow) : bridgeInfo;
+            string currentConduitInfo = hasConduitRows
+                ? BuildTableInfo(source, IsRigidConduitRow) : conduitInfo;
 
             return new SubmissionRecord
             {
@@ -70,9 +80,9 @@ namespace UNCAD.Core.Submission
                 Diameter = flexibleDiameter.Length > 0
                     ? flexibleDiameter : ExtractDiameter(conduitInfo),
                 FlexibleConduitMeters = flexibleMeters,
-                BridgeInfo = bridgeInfo,
+                BridgeInfo = currentBridgeInfo,
                 BridgeMeters = bridgeMeters,
-                ConduitInfo = conduitInfo,
+                ConduitInfo = currentConduitInfo,
                 ConduitMeters = conduitMeters,
                 DownstreamAxis = Unique(source, ConnectionBlockFiller.TagDownstreamAxis),
                 UpstreamAxis = Unique(source, ConnectionBlockFiller.TagUpstreamAxis),
@@ -88,6 +98,32 @@ namespace UNCAD.Core.Submission
             return CableSuffix.Replace(cable.Trim(), "");
         }
 
+        private static string ExtractTableCableModel(SubmissionSourceData source)
+        {
+            foreach (List<string> row in source.TableRows.Where(IsCableRow))
+            {
+                string description = Cell(row, 2);
+                Match match = CableModelInDescription.Match(description);
+                if (match.Success) return match.Groups[1].Value.Trim();
+                if (LooksLikeDirectCableModel(description))
+                    return NormalizeTableText(description);
+                string name = Cell(row, 1);
+                if (CodeStarts(row, "1.") && LooksLikeDirectCableModel(name)) return name;
+            }
+            return "";
+        }
+
+        private static bool LooksLikeDirectCableModel(string value)
+        {
+            string text = (value ?? "").Trim();
+            return text.Length > 0 && text.Length <= 80
+                && text.IndexOf("电缆", StringComparison.OrdinalIgnoreCase) < 0
+                && text.IndexOf(@"\P", StringComparison.OrdinalIgnoreCase) < 0
+                && (Regex.IsMatch(text, "[A-Za-z].*[0-9]|[0-9].*[A-Za-z]")
+                    || text.IndexOf('*') >= 0
+                    || (text.IndexOf('-') >= 0 && Regex.IsMatch(text, "[A-Za-z]")));
+        }
+
         private static string ExtractTableDiameter(SubmissionSourceData source,
             Func<List<string>, bool> predicate)
         {
@@ -100,6 +136,26 @@ namespace UNCAD.Core.Submission
                 if (millimeter.Success) return millimeter.Groups[1].Value;
             }
             return "";
+        }
+
+        private static bool HasTableRows(SubmissionSourceData source,
+            Func<List<string>, bool> predicate)
+            => source.TableRows.Any(predicate);
+
+        private static string BuildTableInfo(SubmissionSourceData source,
+            Func<List<string>, bool> predicate)
+        {
+            var values = new List<string>();
+            foreach (List<string> row in source.TableRows.Where(predicate))
+            {
+                string name = Cell(row, 1);
+                if (name.Length == 0) name = NormalizeTableText(Cell(row, 2));
+                string quantity = Cell(row, 4);
+                string unit = Cell(row, 3);
+                values.Add((name + (quantity.Length > 0
+                    ? " " + quantity + (unit.Length > 0 ? unit : "M") : "")).Trim());
+            }
+            return string.Join("; ", values);
         }
 
         private static string TableMeters(SubmissionSourceData source,
@@ -142,9 +198,6 @@ namespace UNCAD.Core.Submission
             return double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture,
                 out double current) ? current : 0;
         }
-
-        private static string PreferMeters(double primary, double fallback)
-            => FormatMeters(primary > 0 ? primary : fallback);
 
         private static string FormatMeters(double value)
             => value > 0 ? TextFormatter.FormatNum(value) : "";
@@ -189,17 +242,21 @@ namespace UNCAD.Core.Submission
         }
 
         private static bool IsCableRow(List<string> row)
-            => RowContains(row, "电缆");
+            => CodeStarts(row, "1.") || RowContains(row, "电缆");
 
         private static bool IsBridgeRow(List<string> row)
-            => RowContains(row, "桥架");
+            => CodeStarts(row, "2.") || RowContains(row, "桥架");
 
         private static bool IsFlexibleConduitRow(List<string> row)
-            => RowContains(row, "软管") || RowContains(row, "波纹管");
+            => CodeStarts(row, "3.8") || ((CodeStarts(row, "3.") || RowContains(row, "管"))
+                && (RowContains(row, "软管") || RowContains(row, "波纹管")));
 
         private static bool IsRigidConduitRow(List<string> row)
-            => (RowContains(row, "线管") || RowContains(row, "穿线管"))
-                && !IsFlexibleConduitRow(row);
+            => (CodeStarts(row, "3.") || RowContains(row, "线管")
+                || RowContains(row, "穿线管")) && !IsFlexibleConduitRow(row);
+
+        private static bool CodeStarts(List<string> row, string prefix)
+            => Cell(row, 5).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
 
         private static bool RowContains(List<string> row, string value)
             => row.Any(cell => Contains(cell, value));

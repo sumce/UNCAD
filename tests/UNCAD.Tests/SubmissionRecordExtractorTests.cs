@@ -85,6 +85,42 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Extract_DoesNotMistakeGenericCableCatalogTextForModel()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddAttribute(FrameBlockFiller.TagCable, "ZB-YJVR-3*2.5mm²: 5M");
+            source.AddTableRow("1", "多芯电缆 XLPE", @"电缆第一行\P电缆第二行", "M", "5", "1.1");
+
+            Assert.Equal("ZB-YJVR-3*2.5", SubmissionRecordExtractor.Extract(source).Cable);
+        }
+
+        [Fact]
+        public void Extract_PrefersCurrentEditedTableValuesOverOldFrameAttributes()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddAttribute(FrameBlockFiller.TagCable, "OLD-CABLEmm²: 2+3=5M");
+            source.AddAttribute(FrameBlockFiller.TagBridge, "旧桥架 4M");
+            source.AddAttribute(FrameBlockFiller.TagConduit, "旧线管 6M");
+            source.AddTableRow("1", "自定义供电线", "NEW-CABLE", "M", "18.5", "1.9");
+            source.AddTableRow("2", "用户修改托盘", "任意特征", "M", "7.25", "2.9");
+            source.AddTableRow("3", "用户修改钢管", "任意特征", "M", "9", "3.9");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("NEW-CABLE", record.Cable);
+            Assert.Equal("18.5", record.CableMeters);
+            Assert.Equal("7.25", record.BridgeMeters);
+            Assert.Contains("用户修改托盘", record.BridgeInfo);
+            Assert.Equal("9", record.ConduitMeters);
+            Assert.Contains("用户修改钢管", record.ConduitInfo);
+            Assert.Equal(3, record.Materials.Count);
+        }
+
+        [Fact]
         public void Extract_RejectsMultipleDifferentDevices()
         {
             var source = new SubmissionSourceData();
