@@ -104,8 +104,10 @@ namespace UNCAD.UI
         {
             return new RibbonButton
             {
-                Text = text, ShowText = true, CommandParameter = command,
-                CommandHandler = CommandHandler, Size = RibbonItemSize.Large, ToolTip = tooltip
+                Text = text, ShowText = true, ShowImage = true, CommandParameter = command,
+                CommandHandler = CommandHandler, Size = RibbonItemSize.Large, ToolTip = tooltip,
+                Image = RibbonIconFactory.Create(command, 16),
+                LargeImage = RibbonIconFactory.Create(command, 32)
             };
         }
 
@@ -115,15 +117,22 @@ namespace UNCAD.UI
 
             public bool CanExecute(object parameter)
                 => Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
-                    .MdiActiveDocument != null && !string.IsNullOrWhiteSpace(Convert.ToString(parameter));
+                    .MdiActiveDocument != null && ResolveCommand(parameter).Length > 0;
 
             public void Execute(object parameter)
             {
-                string command = (Convert.ToString(parameter) ?? "").Trim();
+                string command = ResolveCommand(parameter);
                 if (command.Length == 0) return;
                 Autodesk.AutoCAD.ApplicationServices.Document document =
                     Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager.MdiActiveDocument;
                 document?.SendStringToExecute(command + " ", true, false, true);
+            }
+
+            private static string ResolveCommand(object parameter)
+            {
+                object value = parameter is RibbonButton button
+                    ? button.CommandParameter : parameter;
+                return (Convert.ToString(value) ?? "").Trim();
             }
         }
     }
