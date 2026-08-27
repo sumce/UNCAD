@@ -14,6 +14,7 @@ namespace UNCAD.UI
         private static bool _eventsAttached;
         private static bool _idleAttached;
         private static bool _building;
+        private static DateTime _retryAfterUtc;
 
         public static void Build()
         {
@@ -43,7 +44,7 @@ namespace UNCAD.UI
 
         private static void TryBuildSafely()
         {
-            if (_building) return;
+            if (_building || DateTime.UtcNow < _retryAfterUtc) return;
             try
             {
                 _building = true;
@@ -56,6 +57,7 @@ namespace UNCAD.UI
             }
             catch (Exception ex)
             {
+                _retryAfterUtc = DateTime.UtcNow.AddSeconds(2);
                 Log.Error("Ribbon registration failed", ex);
                 Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
                     .MdiActiveDocument?.Editor.WriteMessage("\n[Ribbon] " + ex.Message);
@@ -150,7 +152,14 @@ namespace UNCAD.UI
                 LargeImage = RibbonIconFactory.Create(iconCommand, 32)
             };
             foreach (MenuEntry entry in entries)
-                menu.Items.Add(CreateButton(entry.Text, entry.Command, entry.Tooltip, RibbonItemSize.Standard));
+            {
+                menu.Items.Add(new RibbonMenuItem
+                {
+                    Text = entry.Text, ShowText = true, ShowImage = true,
+                    CommandParameter = entry.Command, CommandHandler = CommandHandler,
+                    ToolTip = entry.Tooltip, Image = RibbonIconFactory.Create(entry.Command, 16)
+                });
+            }
             return menu;
         }
 
@@ -184,8 +193,9 @@ namespace UNCAD.UI
 
             private static string ResolveCommand(object parameter)
             {
-                object value = parameter is RibbonButton button
-                    ? button.CommandParameter : parameter;
+                object value = parameter;
+                if (parameter is RibbonButton button) value = button.CommandParameter;
+                else if (parameter is RibbonMenuItem menuItem) value = menuItem.CommandParameter;
                 return (Convert.ToString(value) ?? "").Trim();
             }
         }
