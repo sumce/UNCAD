@@ -14,7 +14,7 @@ namespace UNCAD.Core.Fill
     ///   CABLE_INFO         电缆型号mm²: 分段长度求和公式=总长度
     ///   BRIDGE_FRAME_INFO  UNC_STAT 桥架规格 + 总长度（无统计结果时回退配置）
     ///   CONDUIT_INFO       各管径线管总长度，多个用中文逗号分隔
-    /// 只写有值且非空的标签，避免覆盖已有内容。
+    /// 可选统计标签始终返回；无数据时写空字符串，避免保留上一次填充内容。
     /// </summary>
     public static class FrameBlockFiller
     {
@@ -78,7 +78,7 @@ namespace UNCAD.Core.Fill
                     ? cable + "mm²: " + formula
                     : formula;
             }
-            else if (cable.Length > 0)
+            else
             {
                 d[TagCable] = cable;
             }
@@ -88,16 +88,15 @@ namespace UNCAD.Core.Fill
                 d[TagBridge] = string.Join("; ", stat.Bridges.Select(b =>
                     b.Spec + " " + TextFormatter.FormatNum(b.TotalM) + "M"));
             }
-            else if (!string.IsNullOrWhiteSpace(bridgeInfo))
+            else
             {
-                d[TagBridge] = bridgeInfo.Trim();
+                d[TagBridge] = (bridgeInfo ?? "").Trim();
             }
 
-            if (stat != null && stat.Conduits.Count > 0)
-            {
-                d[TagConduit] = string.Join("，", stat.Conduits.Select(c =>
-                    c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"));
-            }
+            d[TagConduit] = stat != null && stat.Conduits.Count > 0
+                ? string.Join("，", stat.Conduits.Select(c =>
+                    c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"))
+                : "";
 
             return d;
         }

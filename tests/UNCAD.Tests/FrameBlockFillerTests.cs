@@ -63,8 +63,8 @@ namespace UNCAD.Tests
             Assert.Equal("MDAPT01-泵1", v[FrameBlockFiller.TagDevice]);
             Assert.Equal("MDAPT01-POWER", v[FrameBlockFiller.TagPower]);
             Assert.Equal("ZB-YJV-3*70+1*35", v[FrameBlockFiller.TagCable]);
-            Assert.False(v.ContainsKey(FrameBlockFiller.TagBridge));
-            Assert.False(v.ContainsKey(FrameBlockFiller.TagConduit));
+            Assert.Equal("", v[FrameBlockFiller.TagBridge]);
+            Assert.Equal("", v[FrameBlockFiller.TagConduit]);
         }
 
         [Fact]
@@ -75,12 +75,12 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BuildValues_SkipsEmptyCable()
+        public void BuildValues_ClearsEmptyCable()
         {
             var row = Row();
             row.Cable = "  ";
             var v = FrameBlockFiller.BuildValues(row, "");
-            Assert.False(v.ContainsKey(FrameBlockFiller.TagCable));
+            Assert.Equal("", v[FrameBlockFiller.TagCable]);
         }
 
         [Fact]

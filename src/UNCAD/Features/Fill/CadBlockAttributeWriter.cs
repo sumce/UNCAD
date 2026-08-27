@@ -149,6 +149,18 @@ namespace UNCAD.Features.Fill
                             || !values.TryGetValue(attribute.Tag, out string newValue)) continue;
                         attribute.UpgradeOpen();
                         attribute.TextString = newValue;
+                        if (attribute.IsMTextAttribute)
+                        {
+                            using (MText mtext = attribute.MTextAttribute)
+                            {
+                                if (mtext != null)
+                                {
+                                    mtext.Contents = newValue;
+                                    attribute.MTextAttribute = mtext;
+                                }
+                            }
+                            attribute.UpdateMTextAttribute();
+                        }
                         attribute.AdjustAlignment(ctx.Db);
                         attributes++;
                         touched = true;

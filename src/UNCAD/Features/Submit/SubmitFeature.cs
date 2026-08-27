@@ -57,6 +57,12 @@ namespace UNCAD.Features.Submit
             string summary = "机台ID: " + record.MachineId
                 + "\n设备名称: " + record.DeviceName
                 + "\n盘柜类型: " + record.PanelType
+                + "\n电缆: " + Display(record.Cable) + " / " + Meters(record.CableMeters)
+                + "\n软管: " + (record.Diameter.Length > 0 ? "Φ" + record.Diameter : "无")
+                + " / " + Meters(record.FlexibleConduitMeters)
+                + "\n桥架: " + Meters(record.BridgeMeters)
+                + "\n线管: " + Meters(record.ConduitMeters)
+                + "\n清单明细: " + record.Materials.Count + " 项"
                 + "\n\n提交到:\n" + path;
             if (MessageBox.Show(new WindowWrapper(AcApplication.MainWindow.Handle), summary,
                 "确认提交", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
@@ -82,6 +88,12 @@ namespace UNCAD.Features.Submit
                 Log.Error("UNC_SUBMIT write failed", ex);
             }
         }
+
+        private static string Display(string value)
+            => string.IsNullOrWhiteSpace(value) ? "无" : value.Trim();
+
+        private static string Meters(string value)
+            => string.IsNullOrWhiteSpace(value) ? "无" : value.Trim() + " 米";
 
         private static SubmissionSourceData ReadSelection(CadContext ctx, ObjectId[] ids)
         {
@@ -129,18 +141,17 @@ namespace UNCAD.Features.Submit
         {
             for (int row = 0; row < table.Rows.Count; row++)
             {
+                var values = new string[table.Columns.Count];
                 for (int column = 0; column < table.Columns.Count; column++)
                 {
-                    try
-                    {
-                        string value = table.Cells[row, column].TextString ?? "";
-                        if (!string.IsNullOrWhiteSpace(value)) source.TableValues.Add(value.Trim());
-                    }
+                    try { values[column] = table.Cells[row, column].TextString ?? ""; }
                     catch (System.Exception ex)
                     {
+                        values[column] = "";
                         Log.Warn("UNC_SUBMIT read table cell failed: " + ex.Message);
                     }
                 }
+                source.AddTableRow(values);
             }
         }
     }

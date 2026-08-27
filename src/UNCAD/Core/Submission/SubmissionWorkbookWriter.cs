@@ -13,10 +13,19 @@ namespace UNCAD.Core.Submission
     {
         public const string DefaultFileName = "UNCAD_Submissions.xlsx";
         public const string SheetName = "提交记录";
+        public const string DetailSheetName = "清单明细";
         public static readonly string[] Headers =
         {
-            "机台ID", "设备名称", "盘柜类型", "电缆型号", "FR", "配电详情",
-            "软管直径", "下游轴位", "上游轴位", "提交时间", "更新时间"
+            "机台ID", "设备名称", "盘柜类型",
+            "电缆型号", "电缆米数", "FR", "配电详情",
+            "软管直径", "软管米数",
+            "桥架信息", "桥架米数", "线管信息", "线管米数",
+            "下游轴位", "上游轴位", "提交时间", "更新时间"
+        };
+        public static readonly string[] DetailHeaders =
+        {
+            "机台ID", "设备名称", "序号", "材料名称", "特征描述",
+            "单位", "数量", "项目编码", "提交时间", "更新时间"
         };
 
         public static SubmissionWriteResult Upsert(string filePath, SubmissionRecord record,
@@ -41,7 +50,11 @@ namespace UNCAD.Core.Submission
             {
                 workbook = LoadOrCreate(fullPath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.CreateSheet(SheetName);
-                Dictionary<string, int> columns = EnsureHeader(workbook, sheet);
+                Dictionary<string, int> columns = EnsureHeader(workbook, sheet, Headers);
+                ISheet detailSheet = workbook.GetSheet(DetailSheetName)
+                    ?? workbook.CreateSheet(DetailSheetName);
+                Dictionary<string, int> detailColumns = EnsureHeader(
+                    workbook, detailSheet, DetailHeaders);
                 var duplicateRows = new List<int>();
                 string originalSubmitted = "";
                 for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
@@ -53,6 +66,9 @@ namespace UNCAD.Core.Submission
                     if (originalSubmitted.Length == 0 && value.Length > 0) originalSubmitted = value;
                 }
                 for (int i = duplicateRows.Count - 1; i >= 0; i--) RemoveRow(sheet, duplicateRows[i]);
+                for (int rowIndex = detailSheet.LastRowNum; rowIndex >= 1; rowIndex--)
+                    if (SameKey(detailSheet.GetRow(rowIndex), detailColumns, record))
+                        RemoveRow(detailSheet, rowIndex);
 
                 string now = submittedNow.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
                 string submitted = originalSubmitted.Length > 0 ? originalSubmitted : now;
@@ -61,14 +77,37 @@ namespace UNCAD.Core.Submission
                 Set(target, columns, "设备名称", record.DeviceName);
                 Set(target, columns, "盘柜类型", record.PanelType);
                 Set(target, columns, "电缆型号", record.Cable);
+                Set(target, columns, "电缆米数", record.CableMeters);
                 Set(target, columns, "FR", record.Fr);
                 Set(target, columns, "配电详情", record.Detail);
                 Set(target, columns, "软管直径", record.Diameter);
+                Set(target, columns, "软管米数", record.FlexibleConduitMeters);
+                Set(target, columns, "桥架信息", record.BridgeInfo);
+                Set(target, columns, "桥架米数", record.BridgeMeters);
+                Set(target, columns, "线管信息", record.ConduitInfo);
+                Set(target, columns, "线管米数", record.ConduitMeters);
                 Set(target, columns, "下游轴位", record.DownstreamAxis);
                 Set(target, columns, "上游轴位", record.UpstreamAxis);
                 Set(target, columns, "提交时间", submitted);
                 Set(target, columns, "更新时间", now);
+
+                foreach (SubmissionMaterial material in record.Materials
+                    ?? new List<SubmissionMaterial>())
+                {
+                    IRow detail = detailSheet.CreateRow(Math.Max(1, detailSheet.LastRowNum + 1));
+                    Set(detail, detailColumns, "机台ID", record.MachineId);
+                    Set(detail, detailColumns, "设备名称", record.DeviceName);
+                    Set(detail, detailColumns, "序号", material.Number);
+                    Set(detail, detailColumns, "材料名称", material.Name);
+                    Set(detail, detailColumns, "特征描述", material.Description);
+                    Set(detail, detailColumns, "单位", material.Unit);
+                    Set(detail, detailColumns, "数量", material.Quantity);
+                    Set(detail, detailColumns, "项目编码", material.Code);
+                    Set(detail, detailColumns, "提交时间", submitted);
+                    Set(detail, detailColumns, "更新时间", now);
+                }
                 ApplyWidths(sheet, columns);
+                ApplyWidths(detailSheet, detailColumns);
 
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     workbook.Write(stream);
@@ -126,17 +165,18 @@ namespace UNCAD.Core.Submission
                 FileShare.ReadWrite | FileShare.Delete)) return new XSSFWorkbook(stream);
         }
 
-        private static Dictionary<string, int> EnsureHeader(IWorkbook workbook, ISheet sheet)
+        private static Dictionary<string, int> EnsureHeader(IWorkbook workbook, ISheet sheet,
+            string[] expectedHeaders)
         {
             IRow header = sheet.GetRow(0);
             if (header == null || header.LastCellNum <= 0)
             {
                 header = sheet.CreateRow(0);
                 ICellStyle style = HeaderStyle(workbook);
-                for (int i = 0; i < Headers.Length; i++)
+                for (int i = 0; i < expectedHeaders.Length; i++)
                 {
                     ICell cell = header.CreateCell(i);
-                    cell.SetCellValue(Headers[i]);
+                    cell.SetCellValue(expectedHeaders[i]);
                     cell.CellStyle = style;
                 }
             }
@@ -149,9 +189,19 @@ namespace UNCAD.Core.Submission
                     throw new InvalidDataException("提交表存在重复表头: " + value);
                 result[value] = column;
             }
-            string[] missing = Headers.Where(h => !result.ContainsKey(h)).ToArray();
+            string[] missing = expectedHeaders.Where(h => !result.ContainsKey(h)).ToArray();
             if (missing.Length > 0)
-                throw new InvalidDataException("提交表缺少字段: " + string.Join("、", missing));
+            {
+                ICellStyle style = HeaderStyle(workbook);
+                int column = Math.Max(0, (int)header.LastCellNum);
+                foreach (string name in missing)
+                {
+                    ICell cell = header.CreateCell(column);
+                    cell.SetCellValue(name);
+                    cell.CellStyle = style;
+                    result[name] = column++;
+                }
+            }
             return result;
         }
 
@@ -188,7 +238,9 @@ namespace UNCAD.Core.Submission
         {
             foreach (KeyValuePair<string, int> column in columns)
             {
-                int width = column.Key == "FR" || column.Key == "配电详情" || column.Key == "电缆型号"
+                int width = column.Key == "FR" || column.Key == "配电详情"
+                    || column.Key == "电缆型号" || column.Key == "特征描述"
+                    || column.Key.EndsWith("信息", StringComparison.Ordinal)
                     ? 30 : column.Key.EndsWith("时间", StringComparison.Ordinal) ? 20 : 16;
                 sheet.SetColumnWidth(column.Value, width * 256);
             }
