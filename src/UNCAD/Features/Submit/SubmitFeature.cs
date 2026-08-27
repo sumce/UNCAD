@@ -13,11 +13,11 @@ using UNCAD.UI;
 namespace UNCAD.Features.Submit
 {
     [Feature("submit", "提交设备信息",
-        RibbonPanel = "数据", Commands = "UNC_SUBMIT",
+        Commands = CommandIds.Submit,
         Description = "读取框选的 UNC_FILL 信息并更新提交记录 Excel")]
     public sealed class SubmitFeature : CommandBase
     {
-        [CommandMethod("UNC_SUBMIT", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Submit, CommandFlags.UsePickSet)]
         public void UncadSubmit() => Run();
 
         protected override void Execute(CadContext ctx)

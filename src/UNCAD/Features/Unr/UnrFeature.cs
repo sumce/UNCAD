@@ -13,14 +13,11 @@ namespace UNCAD.Features.Unr
 {
     /// <summary>UNR / OPUNR：连续在直线上开半圆拱桥洞。</summary>
     [Feature("unr", "拱桥开洞",
-        RibbonPanel = "绘制",
-        Commands = "UNC_ARCH;UNC_ARCH_SET",
+        Commands = CommandIds.ArchFeatureCommands,
         Description = "在直线上连续开半圆拱桥洞")]
     public class UnrFeature : CommandBase
     {
-        private const string DiameterKey = "UNR_DIAMETER";
-
-        [CommandMethod("UNC_ARCH_SET")]
+        [CommandMethod(CommandIds.ArchSettings)]
         public void UncadArchSet()
         {
             Guard(() =>
@@ -29,7 +26,7 @@ namespace UNCAD.Features.Unr
                 if (doc == null) return;
                 var ed = doc.Editor;
 
-                double oldDia = Settings.GetDouble(DiameterKey, 300.0);
+                double oldDia = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
                 var opts = new PromptDistanceOptions(
                     "\n请输入新的拱桥直径 <" + TextFormatter.FormatNum(oldDia) + ">: ")
                 {
@@ -41,7 +38,7 @@ namespace UNCAD.Features.Unr
                 var res = ed.GetDistance(opts);
                 if (res.Status == PromptStatus.OK && res.Value > 0)
                 {
-                    Settings.Set(DiameterKey,
+                    Settings.Set(ConfigKeys.UnrDiameter,
                         res.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
                     ed.WriteMessage("\n拱桥直径已设置为: " + TextFormatter.FormatNum(res.Value));
                 }
@@ -53,22 +50,22 @@ namespace UNCAD.Features.Unr
         }
 
         // 规范命令：UNC_ARCH / UNC_ARCH_SET
-        [CommandMethod("UNC_ARCH")]
+        [CommandMethod(CommandIds.Arch)]
         public void UncadArch() => Run();
 
         // 旧名兼容（后续版本可删除）
-        [CommandMethod("UNR")]
+        [CommandMethod(CommandIds.LegacyArch)]
         public void Unr() => UncadArch();
 
-        [CommandMethod("OPUNR")]
+        [CommandMethod(CommandIds.LegacyArchSettings)]
         public void OpUnr() => UncadArchSet();
 
         protected override void Execute(CadContext ctx)
         {
             var ed = ctx.Ed;
 
-            double diameter0 = Settings.GetDouble(DiameterKey, 300.0);
-            ConfigPrinter.Print(ctx, "UNC_ARCH", ("直径", TextFormatter.FormatNum(diameter0)));
+            double diameter0 = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
+            ConfigPrinter.Print(ctx, CommandIds.Arch, ("直径", TextFormatter.FormatNum(diameter0)));
 
             object oldCmdEcho = null, oldOsmode = null;
             try { oldCmdEcho = Application.GetSystemVariable("CMDECHO"); }
@@ -112,7 +109,7 @@ namespace UNCAD.Features.Unr
                             continue;
                         }
 
-                        double diameter = Settings.GetDouble(DiameterKey, 300.0);
+                        double diameter = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
                         double R = diameter / 2.0;
                         double totalLen = line.Length;
                         Point3d closest = line.GetClosestPointTo(sel.PickedPoint, false);

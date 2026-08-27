@@ -19,27 +19,23 @@ namespace UNCAD.Features.Unadd
     /// UNADDX：同统计，导出 Excel 报表（NPOI）。
     /// </summary>
     [Feature("unadd", "文字统计汇总",
-        RibbonPanel = "统计",
-        Commands = "UNC_STAT;UNC_STAT_EX",
+        Commands = CommandIds.StatisticsFeatureCommands,
         Description = "框选 TEXT/MTEXT，统计电缆、桥架和线管长度（UNADD 输出图纸，UNADDX 导出 Excel）")]
     public class UnaddFeature : CommandBase
     {
-        private const string HeightKey = "UNADD_HEIGHT";
-        private const string MmPerGridKey = "UNADD_MM_PER_GRID";
-
         // 规范命令：UNC_STAT（图纸汇总）/ UNC_STAT_EX（Excel 导出）
         // 通过 Run(state) 传参，避免命令类共享可变实例字段
-        [CommandMethod("UNC_STAT", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Statistics, CommandFlags.UsePickSet)]
         public void UncadStat() => Run(false);
 
-        [CommandMethod("UNC_STAT_EX", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.StatisticsExcel, CommandFlags.UsePickSet)]
         public void UncadStatEx() => Run(true);
 
         // 旧名兼容（后续版本可删除）
-        [CommandMethod("UNADD", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.LegacyStatistics, CommandFlags.UsePickSet)]
         public void Unadd() => UncadStat();
 
-        [CommandMethod("UNADDX", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.LegacyStatisticsExcel, CommandFlags.UsePickSet)]
         public void UnaddX() => UncadStatEx();
 
         protected override void Execute(CadContext ctx) => Execute(ctx, false);
@@ -60,7 +56,7 @@ namespace UNCAD.Features.Unadd
                 var pr = ctx.Ed.GetPoint(pp);
                 if (pr.Status != PromptStatus.OK) return;
 
-                double hgt = Settings.GetDouble(HeightKey, 180.0);
+                double hgt = Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0);
 
                 using (var tr = ctx.Db.TransactionManager.StartTransaction())
                 {
@@ -102,7 +98,7 @@ namespace UNCAD.Features.Unadd
             }
 
             var cleaned = rawLines.Select(TextParser.CleanMText).ToList();
-            double mmPerGrid = Settings.GetDouble(MmPerGridKey, 250.0);
+            double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
             return StatCalculator.Calculate(cleaned, mmPerGrid);
         }
 

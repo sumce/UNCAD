@@ -9,30 +9,29 @@ namespace UNCAD.Features.Unq
 {
     /// <summary>桥架标注：生成红色原生偏移曲线和规格文字。</summary>
     [Feature("unq", "桥架标注",
-        RibbonPanel = "标注",
-        Commands = "UNC_TRAY;UNC_TRAY100;UNC_TRAY200;UNC_TRAY400;UNC_TRAY_SET",
+        Commands = CommandIds.TrayFeatureCommands,
         Description = "选中线段生成桥架标注（红色桥架线+规格文字）")]
     public class UnqFeature : CommandBase
     {
-        [CommandMethod("UNC_TRAY", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Tray, CommandFlags.UsePickSet)]
         public void UncadTray() => Run(null);
 
-        [CommandMethod("UNC_TRAY_SET")]
+        [CommandMethod(CommandIds.TraySettings)]
         public void UncadTraySet() => SettingsFeature.Show(1);
 
-        [CommandMethod("UNC_TRAY100", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Tray100, CommandFlags.UsePickSet)]
         public void UncadTray100() => Run("桥架100*100 10格");
 
-        [CommandMethod("UNC_TRAY200", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Tray200, CommandFlags.UsePickSet)]
         public void UncadTray200() => Run("桥架200*100 10格");
 
-        [CommandMethod("UNC_TRAY400", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Tray400, CommandFlags.UsePickSet)]
         public void UncadTray400() => Run("桥架400*100 10格");
 
-        [CommandMethod("UNQ1", CommandFlags.UsePickSet)] public void Unq1() => UncadTray100();
-        [CommandMethod("UNQ2", CommandFlags.UsePickSet)] public void Unq2() => UncadTray200();
-        [CommandMethod("UNQ4", CommandFlags.UsePickSet)] public void Unq4() => UncadTray400();
-        [CommandMethod("OPUNQ")] public void OpUnq() => UncadTraySet();
+        [CommandMethod(CommandIds.LegacyTray100, CommandFlags.UsePickSet)] public void Unq1() => UncadTray100();
+        [CommandMethod(CommandIds.LegacyTray200, CommandFlags.UsePickSet)] public void Unq2() => UncadTray200();
+        [CommandMethod(CommandIds.LegacyTray400, CommandFlags.UsePickSet)] public void Unq4() => UncadTray400();
+        [CommandMethod(CommandIds.LegacyTraySettings)] public void OpUnq() => UncadTraySet();
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);
 

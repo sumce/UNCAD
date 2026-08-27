@@ -15,25 +15,24 @@ namespace UNCAD.Features.Unl
     /// UNC_LINE_SET：打开统一配置中心（线段页签）。
     /// </summary>
     [Feature("unl", "带标注线段",
-        RibbonPanel = "绘制",
-        Commands = "UNC_LINE;UNC_LINE_SET",
+        Commands = CommandIds.LineFeatureCommands,
         Description = "同 L 命令画线，每段中心靠边立即生成占位文字")]
     public class UnlFeature : CommandBase
     {
         // ===== 规范命令 =====
 
-        [CommandMethod("UNC_LINE")]
+        [CommandMethod(CommandIds.Line)]
         public void UncadLine() => Run();
 
-        [CommandMethod("UNC_LINE_SET")]
+        [CommandMethod(CommandIds.LineSettings)]
         public void UncadLineSet() => SettingsFeature.Show(0);
 
         // ===== 旧名兼容（后续版本可删除） =====
 
-        [CommandMethod("UNL")]
+        [CommandMethod(CommandIds.LegacyLine)]
         public void Unl() => UncadLine();
 
-        [CommandMethod("OPUNL")]
+        [CommandMethod(CommandIds.LegacyLineSettings)]
         public void OpUnl() => UncadLineSet();
 
         // ===== 主逻辑 =====

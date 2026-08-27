@@ -17,13 +17,12 @@ namespace UNCAD.Infra
         public string Id => Attr.Id;
         public string DisplayName => Attr.DisplayName;
         public string Description => Attr.Description;
-        public string RibbonPanel => Attr.RibbonPanel ?? "工具";
         public string[] Commands => (Attr.Commands ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
     }
 
     /// <summary>
-    /// 功能注册表：启动时扫描程序集中带 [Feature] 特性的类。
-    /// RibbonBuilder 与 Bootstrap 都从这里取元数据，新增功能零改动。
+    /// 功能目录：启动时扫描程序集中带 [Feature] 特性的类。
+    /// Bootstrap 使用它输出诊断命令清单；Ribbon 任务布局由 RibbonCatalog 管理。
     /// </summary>
     public static class FeatureRegistry
     {

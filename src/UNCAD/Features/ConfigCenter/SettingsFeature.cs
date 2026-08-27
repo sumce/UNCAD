@@ -1,7 +1,9 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Runtime;
+using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.UI;
+using UNCAD.Infra;
 
 namespace UNCAD.Features.ConfigCenter
 {
@@ -10,16 +12,14 @@ namespace UNCAD.Features.ConfigCenter
     /// 各功能 SET 命令通过 Show(tabIndex) 打开对应页签。
     /// </summary>
     [Feature("settings", "配置中心",
-        RibbonPanel = "设置",
-        Commands = "UNC_SET",
+        Commands = CommandIds.Settings,
         Description = "统一配置所有功能")]
-    public class SettingsFeature
+    public sealed class SettingsFeature : CommandBase
     {
-        [CommandMethod("UNC_SET")]
-        public void UncadSet()
-        {
-            Show(0);
-        }
+        [CommandMethod(CommandIds.Settings)]
+        public void UncadSet() => Run();
+
+        protected override void Execute(CadContext ctx) => Show(0);
 
         /// <summary>打开配置中心；返回是否点了确定（已保存）。</summary>
         internal static bool Show(int tabIndex)
@@ -38,7 +38,9 @@ namespace UNCAD.Features.ConfigCenter
             }
             catch (System.Exception ex)
             {
-                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[UNC_SET] 配置保存失败: " + ex.Message);
+                Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
+                    "\n[UNC_SET] 配置保存失败: " + ex.Message);
+                Log.Error("UNC_SET failed", ex);
                 return false;
             }
         }

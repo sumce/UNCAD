@@ -22,7 +22,7 @@
 | `UNC_ARCH` | UNR | 拱桥开洞 |
 | `*_SET` | 对应 OP* | 打开统一配置中心对应页签（UNC_SET） |
 
-> 旧命令保留为**兼容别名**（后续版本可删）；Ribbon 按钮只显示新命令。
+> 旧命令保留为**兼容别名**；Ribbon 使用中文任务名称，规格和设置集中在下拉菜单，不显示命令字符串。
 
 ## 命令命名规范
 
@@ -127,16 +127,16 @@ UNCAD/
 ├─ bundle/UNCAD.bundle/        ← 用户分发包（PackageContents.xml + UNCAD.dll）
 └─ src/UNCAD/
    ├─ UNCAD.csproj             (net48 / x64 / 引用 AutoCAD 2022 DLL + AdWindows)
-   ├─ Bootstrap.cs             (启动：Feature 扫描 + Ribbon 构建)
+   ├─ Bootstrap.cs             (启动诊断 + Ribbon 注册)
    ├─ Core/                    (纯 C# 可单测：解析 / 统计引擎 / 契约)
    ├─ Cad/                     (AutoCAD 适配：CommandBase / CadContext / 实体工厂 / 选择集)
-   ├─ Infra/                   (配置存储 / 日志 / Feature 注册表)
-   ├─ Ui/                      (Ribbon 自动生成)
+   ├─ Infra/                   (CommandIds / 配置 / 日志 / Feature 元数据)
+   ├─ Ui/                      (RibbonCatalog 任务布局 + Autodesk 渲染器)
    └─ Features/                (每个功能一个目录：Unadd / Unl / Unq / Unr)
 ```
 
-**扩展新功能**：新建 `Features/MyFeature/` 目录 + 一个 `[Feature]` 特性标注，
-命令自动注册、Ribbon 按钮自动出现，无需改任何现有文件（详见 ARCHITECTURE.md 第 4 节）。
+**扩展新功能**：在 `CommandIds` 声明命令，在 `Features/MyFeature/` 实现功能，
+再按用户任务将入口加入 `RibbonCatalog`；详见 ARCHITECTURE.md 第 4 节。
 
 ## 多版本扩展（预留）
 

@@ -1,4 +1,4 @@
-# UNCAD 插件架构设计（v2）
+# UNCAD 插件架构设计（v3）
 
 > 定位：面向后续大量功能扩展的 AutoCAD .NET 插件框架。
 > 业务域：电气设计出图（桥架 / 电缆 / 开洞 / 标注 / 统计）。
@@ -8,7 +8,7 @@
 
 | 目标 | 含义 |
 | --- | --- |
-| 可扩展 | 新增一个功能 = 新建一个 Feature 目录 + 一个特性标注，命令与 Ribbon 按钮自动出现 |
+| 可扩展 | 新增功能使用 Feature 元数据、CommandIds 命令目录和 RibbonCatalog 任务布局 |
 | 可测试 | 业务逻辑（解析/统计/校验）与 AutoCAD API 解耦，纯 C# 可单测 |
 | 一致体验 | 所有命令共用同一套事务/撤销/错误处理模板，交互风格统一 |
 | 分层清晰 | Core（纯逻辑）→ Cad（AutoCAD 适配）→ Feature（业务功能）→ UI（界面） |
@@ -35,21 +35,25 @@
 
 ## 3. 核心机制
 
-### 3.1 Feature 注册（扩展的钥匙）
+### 3.1 命令目录、Feature 元数据与 Ribbon 布局
 
-每个功能用 `[Feature]` 特性声明元数据，`FeatureRegistry` 启动时扫描程序集自动注册：
+三个机制各自只有一个明确职责：
+
+- `CommandIds`：命令字符串的唯一来源，供 `CommandMethod`、`Feature` 和 Ribbon 动作共同引用；
+- `[Feature]` / `FeatureRegistry`：维护功能和规范命令清单，供启动诊断与后续扩展查询；
+- `RibbonCatalog`：纯 C# 的任务化界面描述，显式组织主按钮、规格菜单和设置菜单。
 
 ```csharp
 [Feature("unl", "带标注线段",
-    RibbonPanel = "绘制",
-    Commands = "UNL;OPUNL",
+    Commands = CommandIds.LineFeatureCommands,
     Description = "连续绘制带标注线段，U 撤销上一段")]
 public class UnlFeature : CommandBase { ... }
 ```
 
-- **命令**：类内 `[CommandMethod]` 方法，与 LISP 时代同名，老用户习惯不变；
-- **Ribbon**：`RibbonBuilder` 读注册表 → 自动生成 "UNCAD" 标签页 + 按 `RibbonPanel` 分组的按钮——**新功能零手工 UI 代码**；
-- **配置**：配置键集中在 Feature 内声明，后续由配置中心统一生成设置表单。
+- **命令**：AutoCAD 仍由类内 `[CommandMethod]` 注册；规范名和兼容名都引用 `CommandIds`；
+- **Ribbon**：`RibbonBuilder` 只把 `RibbonCatalog` 渲染为 Autodesk 控件，不包含业务布局；
+- **配置**：键名集中在 `ConfigKeys`，配置中心统一读写；Feature 只消费配置；
+- **测试**：纯目录测试检查标签、命令、菜单完整性，STA 冒烟测试实际构造 Autodesk Ribbon 控件。
 
 ### 3.2 CommandBase（命令模板）
 
@@ -90,13 +94,14 @@ public class UnlFeature : CommandBase { ... }
 
 `ILogger` + `Log` 静态门面：命令错误写入 `%APPDATA%\UNCAD\logs\uncad.log`，为批量处理/图纸检查的审计做准备。
 
-## 4. 新增一个功能的 5 步（扩展指南）
+## 4. 新增一个功能的 6 步（扩展指南）
 
-1. `src/UNCAD/Features/MyFeature/` 新建目录；
-2. 写 `MyFeature.cs`：继承 `CommandBase`，加 `[Feature]` 特性（命令名、面板分组、描述）；
-3. `[CommandMethod] ... => Run()` + 重写 `Execute(CadContext ctx)`；
-4. 纯业务逻辑放 `Core/`（可测），AutoCAD 交互用 `Cad/` 工具（选择集/实体工厂）；
-5. 构建 → Ribbon 自动出现按钮，命令行自动注册命令。**无需改任何现有文件。**
+1. 在 `CommandIds` 增加规范命令常量；
+2. 在 `src/UNCAD/Features/MyFeature/` 新建功能目录；
+3. 写 `MyFeature.cs`：继承 `CommandBase`，用 `[Feature]` 声明功能和命令清单；
+4. 用 `[CommandMethod(CommandIds.X)] => Run()` 注册命令并实现 `Execute(CadContext ctx)`；
+5. 纯业务逻辑放 `Core/`，AutoCAD 适配放 `Cad/` 或功能目录内的 `Cad*` 协作者；
+6. 按用户任务把入口加入 `RibbonCatalog`，补充目录测试和必要的功能测试。
 
 ## 5. 未来模块设计蓝图
 
@@ -135,7 +140,7 @@ public interface IInspectionRule
 
 ```
 src/UNCAD/
-├─ Bootstrap.cs               # IExtensionApplication：注册表扫描 + Ribbon 构建
+├─ Bootstrap.cs               # IExtensionApplication：启动诊断 + Ribbon 注册
 ├─ Core/                      # 纯 C#，可单测
 │  ├─ Contracts/              # ISettingsStore / ILogger / FeatureAttribute
 │  ├─ Text/                   # TextParser / TextFormatter
@@ -147,11 +152,13 @@ src/UNCAD/
 │  ├─ SelectionService.cs     # 选择集封装（PickFirst/过滤）
 │  └─ GeoMath.cs              # 极坐标/角度/中点
 ├─ Infra/
-│  ├─ FeatureRegistry.cs      # [Feature] 扫描注册表
+│  ├─ CommandIds.cs           # 规范命令与兼容命令的唯一来源
+│  ├─ FeatureRegistry.cs      # [Feature] 元数据和诊断命令清单
 │  ├─ Settings.cs             # 配置门面（注册表实现，键名兼容 LISP）
 │  └─ Log.cs                  # 日志门面（文件 + 命令行）
 ├─ Ui/
-│  ├─ RibbonBuilder.cs        # 从注册表自动构建 Ribbon
+│  ├─ RibbonDefinition.cs     # 纯 C# 任务布局（可单测）
+│  ├─ RibbonBuilder.cs        # RibbonCatalog → Autodesk 控件
 │  └─ WindowWrapper.cs
 └─ Features/                  # 每个功能一个目录
    ├─ Unadd/  Unl/  Unq/  Unr/
@@ -165,5 +172,6 @@ src/UNCAD/
 | 单事务 = 一个撤销步 | AutoCAD 2022 无公开撤销标记 API（已反射确认），事务分组是标准机制 |
 | 静态门面（Settings/Log）而非 DI 容器 | AutoCAD 插件进程单例、无多态需求，静态门面简单可靠；接口保留供未来测试注入 |
 | Core 层零 AutoCAD 依赖 | 统计/解析/校验可脱离 AutoCAD 单测，回归成本低 |
+| Ribbon 使用任务目录而非逐命令自动生成 | 规格和设置属于菜单选项，避免向用户暴露命令名 |
 | Ribbon 按钮用 CommandParameter 触发命令 | 官方推荐方式，按钮零代码绑定命令 |
 | 保留命令名与 LISP 版一致 | 老用户习惯零迁移成本 |

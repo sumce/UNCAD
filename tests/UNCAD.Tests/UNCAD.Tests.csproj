@@ -8,6 +8,7 @@
     <RootNamespace>UNCAD.Tests</RootNamespace>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>8.0</AnalysisLevel>
+    <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +19,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\UNCAD\UNCAD.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="AdWindows"><HintPath>$(AutoCADDir)\AdWindows.dll</HintPath><Private>True</Private></Reference>
   </ItemGroup>
 
 </Project>

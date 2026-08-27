@@ -9,24 +9,23 @@ namespace UNCAD.Features.Conduit
 {
     /// <summary>线管标注：生成紫色原生偏移曲线和按实际曲线长度计算的规格文字。</summary>
     [Feature("conduit", "线管标注",
-        RibbonPanel = "标注",
-        Commands = "UNC_CONDUIT;UNC_CONDUIT20;UNC_CONDUIT25;UNC_CONDUIT32;UNC_CONDUIT_SET",
+        Commands = CommandIds.ConduitFeatureCommands,
         Description = "选中线段生成紫色线管及按实际长度计算的规格文字")]
     public class ConduitFeature : CommandBase
     {
-        [CommandMethod("UNC_CONDUIT", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Conduit, CommandFlags.UsePickSet)]
         public void UncadConduit() => Run(null);
 
-        [CommandMethod("UNC_CONDUIT20", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Conduit20, CommandFlags.UsePickSet)]
         public void UncadConduit20() => Run("20");
 
-        [CommandMethod("UNC_CONDUIT25", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Conduit25, CommandFlags.UsePickSet)]
         public void UncadConduit25() => Run("25");
 
-        [CommandMethod("UNC_CONDUIT32", CommandFlags.UsePickSet)]
+        [CommandMethod(CommandIds.Conduit32, CommandFlags.UsePickSet)]
         public void UncadConduit32() => Run("32");
 
-        [CommandMethod("UNC_CONDUIT_SET")]
+        [CommandMethod(CommandIds.ConduitSettings)]
         public void UncadConduitSet() => SettingsFeature.Show(2);
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);

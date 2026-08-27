@@ -8,25 +8,26 @@
 | 模块 | 状态 |
 | --- | --- |
 | 分层框架（Core/Cad/Infra/Ui/Features） | ✅ 完成 |
-| Feature 注册 + Ribbon 自动生成 | ✅ 完成 |
+| CommandIds + Feature 元数据 + RibbonCatalog 任务布局 | ✅ 完成并测试 |
 | 统一配置中心 UNC_SET（页签式） | ✅ 完成 |
 | UNC_LINE 连续画线（L 命令式交互） | ✅ 完成并验证 |
 | UNC_STAT / UNC_STAT_EX（统计+Excel） | ✅ 可用 |
-| UNC_TRAY 选中生成桥架标注 | 🔧 配置化定稿中（本次） |
-| UNC_ARCH 拱桥开洞 | ⬜ 未交互化 |
+| UNC_TRAY 选中生成桥架标注 | ✅ 完成并验证 |
+| UNC_ARCH 拱桥开洞 | ✅ 完成并验证 |
 | 分发（Bundle + 安装脚本） | ✅ 完成 |
 
 ## 1. 阶段规划
 
-### 阶段一：命令定稿（当前）
-- [x] UNC_LINE：交互/贴线/逐段生成 —— 已定稿
-- [ ] UNC_TRAY：**全面配置化**（偏移/侧向/文字/自动比例）+ 默认值合理化 —— 本次
-- [ ] UNC_ARCH：统一交互 + 配置并入 UNC_SET
-- [ ] UNC_STAT：输出样式可配置（高度/每格mm 已有；字体/样式后续）
+### 阶段一：命令定稿（已完成）
+- [x] UNC_LINE：交互/贴线/逐段生成
+- [x] UNC_TRAY：偏移、侧向、文字与预设规格配置化
+- [x] UNC_ARCH：连续交互并接入配置
+- [x] UNC_STAT：高度、每格毫米和文字样式配置化
 
-### 阶段二：质量与测试
-- [ ] Core 层单元测试（xUnit）：TextParser / StatCalculator / StatExcelReporter
-- [ ] 命令验收清单（每个命令的实测用例，见 §4）
+### 阶段二：质量与测试（持续）
+- [x] Core 层单元测试（xUnit）：Excel、填充、统计、文本和提交
+- [x] RibbonCatalog 结构测试 + Autodesk Ribbon 控件构造冒烟测试
+- [ ] 命令验收清单继续随功能扩展维护（见 §4）
 
 ### 阶段三：扩展蓝图（按需推进）
 - [ ] 批量处理管道（选择集 → 逐项处理 → 汇总报告）
