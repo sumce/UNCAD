@@ -61,7 +61,7 @@ namespace UNCAD.UI
 
         private static string IconName(string command)
         {
-            if (string.Equals(command, "UNC_FILL", StringComparison.OrdinalIgnoreCase)) return "fill";
+            if (command.StartsWith("UNC_FILL", StringComparison.OrdinalIgnoreCase)) return "fill";
             if (string.Equals(command, "UNC_SUBMIT", StringComparison.OrdinalIgnoreCase)) return "submit";
             if (string.Equals(command, "UNC_SET", StringComparison.OrdinalIgnoreCase) ||
                 command.EndsWith("_SET", StringComparison.OrdinalIgnoreCase)) return "settings";

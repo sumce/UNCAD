@@ -17,14 +17,22 @@ namespace UNCAD.Features.Fill
 {
     /// <summary>Coordinates selection, Excel lookup, preview, and specialized CAD writers.</summary>
     [Feature("fill", "Excel 填充清单表",
-        Commands = CommandIds.Fill,
-        Description = "动态填充清单、图框属性以及设备块 DEVICENAME 回路名称")]
+        Commands = CommandIds.FillFeatureCommands,
+        Description = "动态填充清单，并可读取已填充身份按当前统计重新生成")]
     public class FillFeature : CommandBase
     {
         [CommandMethod(CommandIds.Fill, CommandFlags.UsePickSet)]
         public void UncadFill() => Run();
 
-        protected override void Execute(CadContext ctx)
+        [CommandMethod(CommandIds.FillUpdate, CommandFlags.UsePickSet)]
+        public void UncadFillUpdate() => Run(true);
+
+        protected override void Execute(CadContext ctx) => ExecuteCore(ctx, false);
+
+        protected override void Execute(CadContext ctx, object state)
+            => ExecuteCore(ctx, state is bool updateMode && updateMode);
+
+        private static void ExecuteCore(CadContext ctx, bool updateMode)
         {
             FillSelection selection = FillSelectionCollector.Collect(ctx);
             if (selection.IsEmpty)
@@ -41,6 +49,12 @@ namespace UNCAD.Features.Fill
             double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
             CableStatResult statistics = FillSelectionCollector.CalculateStats(ctx,
                 selection.TextIds, mmPerGrid);
+            if (updateMode && statistics.CableSum <= 0 && statistics.Bridges.Count == 0
+                && statistics.Conduits.Count == 0)
+            {
+                ctx.Write("\n[UNC_FILL_UPDATE] 未框选到符合规则的电缆、桥架或线管长度文字，现有数据未修改。");
+                return;
+            }
 
             string path = ResolveMachineWorkbookPath(ctx);
             if (path == null) return;
@@ -86,18 +100,39 @@ namespace UNCAD.Features.Fill
                 TableFillFormatter.DefaultTextHeight);
             if (textHeight <= 0) textHeight = TableFillFormatter.DefaultTextHeight;
 
-            Func<MachineRow, string> preview = selected => BuildPreview(selected, listItems,
-                statistics, selection, startRow, textHeight, bridgeInfo);
-
             MachineRow picked;
-            using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
+            if (updateMode)
             {
-                if (form.ShowDialog(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
-                    != DialogResult.OK) return;
-                picked = form.Selected;
+                if (!FillSelectionCollector.TryReadExistingIdentity(ctx, selection,
+                    out ExistingFillIdentity identity, out string identityError))
+                {
+                    ctx.Write("\n[UNC_FILL_UPDATE] " + identityError);
+                    return;
+                }
+                picked = ExistingFillIdentityResolver.MatchMachine(identity,
+                    workbook.FindRows(identity.MachineId), out string matchError);
+                if (picked == null)
+                {
+                    ctx.Write("\n[UNC_FILL_UPDATE] " + matchError);
+                    return;
+                }
+                ctx.Write("\n[UNC_FILL_UPDATE] 已自动读取: "
+                    + picked.MachineId + " " + picked.CircuitName);
             }
-            ctx.Write("\n[UNC_FILL] 已选择: " + picked.MachineId + " " + picked.CircuitName);
+            else
+            {
+                Func<MachineRow, string> preview = selected => BuildPreview(selected, listItems,
+                    statistics, selection, startRow, textHeight, bridgeInfo);
+                using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
+                {
+                    if (form.ShowDialog(new WindowWrapper(
+                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
+                        != DialogResult.OK) return;
+                    picked = form.Selected;
+                }
+                ctx.Write("\n[UNC_FILL] 已选择: "
+                    + picked.MachineId + " " + picked.CircuitName);
+            }
 
             List<TableFillRow> defaultRows = TableFillPlanner.Build(picked, listItems, statistics);
             string defaultCableMeters = defaultRows.Find(row =>
@@ -120,7 +155,7 @@ namespace UNCAD.Features.Fill
                 StringComparison.OrdinalIgnoreCase))
                 ApplyCableLengthOverride(statistics, reviewedCableMeters);
 
-            ConfigPrinter.Print(ctx, CommandIds.Fill,
+            ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
@@ -142,7 +177,8 @@ namespace UNCAD.Features.Fill
                 ConnectionBlockFiller.DownstreamAxis(picked), false);
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[UNC_FILL] 完成：表格写入 " + filled + " 行；块属性更新 "
+            ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                + "] 完成：表格写入 " + filled + " 行；块属性更新 "
                 + frameResult.Blocks + " 个块共 " + frameResult.Values + " 项；统计电缆 "
                 + TextFormatter.FormatNum(statistics.CableSum) + "M，桥架规格 "
                 + statistics.Bridges.Count + " 项，线管规格 " + statistics.Conduits.Count

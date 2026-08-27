@@ -6,6 +6,7 @@ namespace UNCAD.Infra
     public static class CommandIds
     {
         public const string Fill = "UNC_FILL";
+        public const string FillUpdate = "UNC_FILL_UPDATE";
         public const string Submit = "UNC_SUBMIT";
         public const string Settings = "UNC_SET";
         public const string About = "UNC_ABOUT";
@@ -40,6 +41,7 @@ namespace UNCAD.Infra
         public const string LegacyArch = "UNR";
         public const string LegacyArchSettings = "OPUNR";
 
+        public const string FillFeatureCommands = Fill + ";" + FillUpdate;
         public const string ConduitFeatureCommands = Conduit + ";" + Conduit20 + ";"
             + Conduit25 + ";" + Conduit32 + ";" + ConduitSettings;
         public const string TrayFeatureCommands = Tray + ";" + Tray100 + ";"
@@ -50,7 +52,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Fill, Submit, Settings, About, Conduit, Conduit20, Conduit25, Conduit32,
+            Fill, FillUpdate, Submit, Settings, About, Conduit, Conduit20, Conduit25, Conduit32,
             ConduitSettings, Tray, Tray100, Tray200, Tray400, TraySettings, Line,
             LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel
         };

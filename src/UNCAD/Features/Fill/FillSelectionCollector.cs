@@ -63,6 +63,33 @@ namespace UNCAD.Features.Fill
                 lines.ConvertAll(TextParser.CleanMText), settings.Calculation);
         }
 
+        public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,
+            out ExistingFillIdentity identity, out string error)
+        {
+            var powers = new List<string>();
+            var composites = new List<string>();
+            var devices = new List<string>();
+            var ids = new HashSet<ObjectId>();
+            foreach (ObjectId id in selection.FrameBlockIds) ids.Add(id);
+            foreach (ObjectId id in selection.DeviceBlockIds) ids.Add(id);
+            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in ids)
+                {
+                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                    if (block == null) continue;
+                    if (TryGetBlockValue(tr, block, FrameBlockFiller.TagPower, out string power))
+                        powers.Add(power);
+                    if (TryGetBlockValue(tr, block, FrameBlockFiller.TagDevice, out string composite))
+                        composites.Add(composite);
+                    if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out string device))
+                        devices.Add(device);
+                }
+            }
+            return ExistingFillIdentityResolver.TryResolve(
+                powers, composites, devices, out identity, out error);
+        }
+
         private static FillSelection Split(CadContext ctx, ObjectId[] ids)
         {
             var tables = new List<ObjectId>();

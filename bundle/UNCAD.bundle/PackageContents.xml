@@ -2,8 +2,8 @@
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
-    Description="UNC_FILL 填充 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
-    AppVersion="1.4.1"
+    Description="UNC_FILL 填充与更新 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
+    AppVersion="1.5.0"
     ProductType="Application"
     ProductCode="{D801105A-CD8A-4892-AEE6-74723785BCD6}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
