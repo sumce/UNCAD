@@ -16,6 +16,7 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
+            Log.Info("UNCAD initialized; Ribbon registration requested");
         }
 
         public void Terminate() { }

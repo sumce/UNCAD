@@ -9,40 +9,85 @@ namespace UNCAD.UI
 {
     public static class RibbonBuilder
     {
+        public const string TabId = "UNCAD.Ribbon.Tab";
         public const string TabTitle = "UNCAD · UNSIAO Work™";
         private static readonly ICommand CommandHandler = new CadRibbonCommandHandler();
         private static readonly HashSet<string> QuickCommands = new HashSet<string>(
             new[] { "UNC_FILL", "UNC_SUBMIT", "UNC_SET", "UNC_ABOUT" },
             StringComparer.OrdinalIgnoreCase);
+        private static bool _eventsAttached;
+        private static bool _idleAttached;
+        private static bool _building;
 
         public static void Build()
         {
+            AttachEvents();
+            TryBuildSafely();
+        }
+
+        private static void AttachEvents()
+        {
+            if (!_eventsAttached)
+            {
+                ComponentManager.ItemInitialized += OnRibbonItemInitialized;
+                _eventsAttached = true;
+            }
+            if (!_idleAttached)
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnApplicationIdle;
+                _idleAttached = true;
+            }
+        }
+
+        private static void OnRibbonItemInitialized(object sender, RibbonItemEventArgs args)
+            => TryBuildSafely();
+
+        private static void OnApplicationIdle(object sender, EventArgs args)
+            => TryBuildSafely();
+
+        private static void TryBuildSafely()
+        {
+            if (_building) return;
             try
             {
-                RibbonControl ribbon = ComponentManager.Ribbon;
-                if (ribbon == null) return;
-                if (ribbon.Tabs.Cast<RibbonTab>().Any(t => t.Title == TabTitle)) return;
-
-                var tab = new RibbonTab { Title = TabTitle };
-                tab.Panels.Add(BuildQuickPanel());
-
-                foreach (var group in FeatureRegistry.Features.GroupBy(f => f.RibbonPanel))
+                _building = true;
+                if (!TryBuild()) return;
+                if (_idleAttached)
                 {
-                    var panel = new RibbonPanelSource { Title = group.Key };
-                    foreach (var feature in group)
-                    {
-                        foreach (string command in feature.Commands.Where(c => !QuickCommands.Contains(c)))
-                            panel.Items.Add(CreateButton(command, command, feature.Description));
-                    }
-                    if (panel.Items.Count > 0) tab.Panels.Add(new RibbonPanel { Source = panel });
+                    Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnApplicationIdle;
+                    _idleAttached = false;
                 }
-                ribbon.Tabs.Add(tab);
             }
             catch (Exception ex)
             {
+                Log.Error("Ribbon registration failed", ex);
                 Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
                     .MdiActiveDocument?.Editor.WriteMessage("\n[Ribbon] " + ex.Message);
             }
+            finally { _building = false; }
+        }
+
+        private static bool TryBuild()
+        {
+            RibbonControl ribbon = ComponentManager.Ribbon;
+            if (ribbon == null) return false;
+            if (ribbon.Tabs.Cast<RibbonTab>().Any(t => t.Id == TabId || t.Title == TabTitle)) return true;
+
+            var tab = new RibbonTab { Id = TabId, Title = TabTitle };
+            tab.Panels.Add(BuildQuickPanel());
+            foreach (var group in FeatureRegistry.Features.GroupBy(f => f.RibbonPanel))
+            {
+                var panel = new RibbonPanelSource { Title = group.Key };
+                foreach (var feature in group)
+                {
+                    foreach (string command in feature.Commands.Where(c => !QuickCommands.Contains(c)))
+                        panel.Items.Add(CreateButton(command, command, feature.Description));
+                }
+                if (panel.Items.Count > 0) tab.Panels.Add(new RibbonPanel { Source = panel });
+            }
+            ribbon.Tabs.Add(tab);
+            Log.Info("Ribbon registered: " + TabTitle);
+            return true;
         }
 
         private static RibbonPanel BuildQuickPanel()
@@ -59,12 +104,8 @@ namespace UNCAD.UI
         {
             return new RibbonButton
             {
-                Text = text,
-                ShowText = true,
-                CommandParameter = command,
-                CommandHandler = CommandHandler,
-                Size = RibbonItemSize.Large,
-                ToolTip = tooltip
+                Text = text, ShowText = true, CommandParameter = command,
+                CommandHandler = CommandHandler, Size = RibbonItemSize.Large, ToolTip = tooltip
             };
         }
 
