@@ -53,10 +53,10 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void FlexibleConduitQuantity_DefaultsToTwoMeters()
+        public void FlexibleConduitQuantity_DefaultsToOnePointFiveMeters()
         {
-            Assert.Equal(2000.0, TableFillFormatter.DefaultFlexibleConduitMm);
-            Assert.Equal("2", TableFillFormatter.FlexibleConduitQuantity());
+            Assert.Equal(1500.0, TableFillFormatter.DefaultFlexibleConduitMm);
+            Assert.Equal("1.5", TableFillFormatter.FlexibleConduitQuantity());
         }
 
         [Fact]

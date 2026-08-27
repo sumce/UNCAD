@@ -53,7 +53,7 @@ namespace UNCAD.Tests
             Assert.Equal("4.5", rows[0].Quantity);
             Assert.Equal("2.5", rows[1].Quantity);
             Assert.Equal("4.5", rows[2].Quantity);
-            Assert.Equal("2", rows[3].Quantity);
+            Assert.Equal("1.5", rows[3].Quantity);
             Assert.Equal("1", rows[4].Quantity);
             Assert.Equal("M", rows[0].Unit);
             Assert.Contains("\\P", rows[0].Description);
