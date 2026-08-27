@@ -292,38 +292,48 @@ namespace UNCAD.UI
         {
             var source = new FlowLayoutPanel
             {
-                AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false, Padding = new Padding(8, 4, 8, 4)
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Padding = new Padding(8, 8, 8, 4)
             };
             source.Controls.Add(_statText);
             source.Controls.Add(_statMText);
 
             var categories = new FlowLayoutPanel
             {
-                AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false, Padding = new Padding(8, 4, 8, 4)
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Padding = new Padding(8, 8, 8, 4)
             };
             categories.Controls.Add(_statCable);
             categories.Controls.Add(_statBridge);
             categories.Controls.Add(_statConduit);
 
             var output = Grid(2);
+            output.AutoSize = false;
+            output.Dock = DockStyle.Fill;
             output.Padding = new Padding(8, 4, 8, 4);
+            output.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+            output.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            output.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            output.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
             output.Controls.Add(Lbl("输出文字高度:"), 0, 0);
             output.Controls.Add(_statHgt, 1, 0);
             output.Controls.Add(Lbl("桥架每格长度 (mm):"), 0, 1);
             output.Controls.Add(_statMm, 1, 1);
 
-            var stack = new FlowLayoutPanel
+            var layout = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, AutoScroll = true,
-                FlowDirection = FlowDirection.TopDown, WrapContents = false,
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4,
                 Padding = new Padding(12, 10, 12, 10)
             };
-            stack.Controls.Add(Group("文字来源", source));
-            stack.Controls.Add(Group("统计类别", categories));
-            stack.Controls.Add(Group("换算与输出", output));
-            return Page("统计汇总", stack);
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.Controls.Add(Group("文字来源", source), 0, 0);
+            layout.Controls.Add(Group("统计类别", categories), 0, 1);
+            layout.Controls.Add(Group("换算与输出", output), 0, 2);
+            return Page("统计汇总", layout);
         }
 
         private TabPage BuildStyleTab()
@@ -411,10 +421,10 @@ namespace UNCAD.UI
         {
             var group = new GroupBox
             {
-                Text = title, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                MinimumSize = new System.Drawing.Size(620, 0), Padding = new Padding(8)
+                Text = title, Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, 0, 8), Padding = new Padding(8)
             };
-            content.Location = new System.Drawing.Point(8, 20);
+            content.Dock = DockStyle.Fill;
             group.Controls.Add(content);
             return group;
         }
