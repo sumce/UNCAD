@@ -51,10 +51,22 @@
 
 ### 安装步骤（用户机器的操作）
 
-1. 把整个 `bundle\UNCAD.bundle` 文件夹发给用户（可打包成 zip）；
-2. 用户双击 `install-user.bat`（当前用户），或右键管理员运行 `install-all.bat`（所有用户）；
-3. **重启 AutoCAD 2022** → 插件自动加载，命令行直接输入 `UNC_SET` / `UNC_LINE` / `UNC_TRAY` / `UNC_STAT` / `UNC_ARCH` 使用；
-4. 卸载：双击 `uninstall.bat`，或在 AutoCAD 中 `APPLOAD` → 已加载的应用程序 里管理。
+1. 解压完整发布 ZIP，不要单独复制 DLL；
+2. 完全退出 AutoCAD，双击 `setup.bat`；
+3. 选择“Install or repair for current user”（推荐），安装器会检测 AutoCAD 2022 并校验清单、版本和全部文件的 SHA-256；
+4. 看到 `INSTALLATION SUCCESSFUL` 后启动 AutoCAD 2022，打开 `UNCAD · UNSIAO Work™` Ribbon；
+5. 可随时运行 `verify-install.bat` 独立验证已安装文件。
+
+快捷入口：`install-user.bat` 安装当前用户，`install-all.bat` 安装所有用户并请求 UAC，`uninstall.bat` / `uninstall-all.bat` 分别卸载。
+
+### 安装器保证
+
+- AutoCAD 正在运行时拒绝安装和卸载，防止覆盖已加载的 DLL；
+- 安装前验证 AutoCAD 2022（R24.1）、PackageContents、DLL 版本和必需依赖；
+- 先复制到目标目录内的暂存文件夹并验证所有 SHA-256，再原子切换到正式目录；
+- 覆盖安装前备份旧 Bundle，任何步骤失败都会尝试恢复旧版本；
+- 当前用户和所有用户安装不能同时存在，避免 AutoCAD 重复加载同一 ProductCode；
+- 日志写入 `%TEMP%\UNCAD-Setup-*.log`，成功和失败都有明确退出码。
 
 ### 说明
 
