@@ -113,6 +113,70 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Fact]
+        public void Dialog_UnmatchedConduitsOpenWarningAndAllowPerModelSelection()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var rows = new List<TableFillRow>
+                    {
+                        new TableFillRow
+                        {
+                            Category = TableFillCategory.RigidConduit, Name = "⌀32线管",
+                            Description = "1.名称:⌀32线管", Quantity = "3",
+                            CatalogMatched = false
+                        },
+                        new TableFillRow
+                        {
+                            Category = TableFillCategory.FlexibleConduit,
+                            Name = "包塑金属软管",
+                            Description = "1.名称:包塑金属软管\\P2.规格:32mm",
+                            Quantity = "1.5", CatalogMatched = false
+                        }
+                    };
+                    using (var form = new FillReviewForm(
+                        FillReviewData.Create(new MachineRow { Dia = "32" }, rows)))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+                        TabControl tabs = Find<TabControl>(form);
+                        DataGridView grid = Find<DataGridView>(form);
+                        Label warning = FindLabelContaining(form, "固定清单未找到");
+
+                        Assert.Equal(1, tabs.SelectedIndex);
+                        Assert.NotNull(warning);
+                        Assert.Contains("32", warning.Text);
+                        Assert.False((bool)grid.Rows[0].Cells["Included"].Value);
+                        Assert.False((bool)grid.Rows[1].Cells["Included"].Value);
+
+                        grid.Rows[0].Cells["Included"].Value = true;
+                        Application.DoEvents();
+                        Assert.Single(form.Data.SelectedRows());
+                        Assert.Equal("⌀32线管", form.Data.SelectedRows()[0].Name);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        private static Label FindLabelContaining(Control root, string text)
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is Label label && label.Text.Contains(text)) return label;
+                Label nested = FindLabelContaining(child, text);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
         private static TextBox FindTextBox(Control root, string text)
         {
             foreach (Control child in root.Controls)

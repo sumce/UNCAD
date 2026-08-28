@@ -28,6 +28,7 @@ namespace UNCAD.Core.Fill
         public string Unit { get; set; }
         public string Quantity { get; set; }
         public string Code { get; set; }
+        public bool CatalogMatched { get; set; }
     }
 
     /// <summary>根据 Excel 回路、框选统计和 BOQ 清单生成有序表格行。</summary>
@@ -178,7 +179,8 @@ namespace UNCAD.Core.Fill
                 Description = ToCadText(ValueOrFallback(item?.Feature, fallbackDescription)),
                 Unit = NormalizeUnit(ValueOrFallback(item?.Unit, fallbackUnit)),
                 Quantity = quantity ?? "",
-                Code = item?.Code ?? ""
+                Code = item?.Code ?? "",
+                CatalogMatched = item != null
             };
         }
 
@@ -194,15 +196,8 @@ namespace UNCAD.Core.Fill
                 && (item.Name ?? "").IndexOf("线管", StringComparison.Ordinal) >= 0
                 && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) < 0)
                 .ToList();
-            ListItem exact = rigid.FirstOrDefault(item =>
+            return rigid.FirstOrDefault(item =>
                 NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
-            if (exact != null) return exact;
-
-            // 图纸沿用公称直径32，现有BOQ模板使用1-1/2英寸对应的38mm。
-            if (string.Equals(diameter, "32", StringComparison.Ordinal))
-                return rigid.FirstOrDefault(item =>
-                    NormalizeSpec(item.Spec) == NormalizeSpec("38mm"));
-            return null;
         }
 
         private static ListItem FindFlexibleConduit(List<ListItem> items, string diameter)
@@ -211,13 +206,8 @@ namespace UNCAD.Core.Fill
             List<ListItem> flexible = items.Where(item => StartsWithCode(item, "3.")
                 && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) >= 0)
                 .ToList();
-            ListItem exact = flexible.FirstOrDefault(item =>
+            return flexible.FirstOrDefault(item =>
                 NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
-            if (exact != null) return exact;
-            if (string.Equals(diameter, "32", StringComparison.Ordinal))
-                return flexible.FirstOrDefault(item =>
-                    NormalizeSpec(item.Spec) == NormalizeSpec("38mm"));
-            return null;
         }
 
         private static string InferSingleConduitDiameter(CableStatResult stat)

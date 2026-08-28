@@ -14,7 +14,18 @@ namespace UNCAD.UI
     {
         private readonly FillReviewData _defaults;
         private readonly DataGridView _grid;
+        private readonly TabControl _tabs;
         private readonly Label _count;
+        private readonly Label _catalogWarning = new Label
+        {
+            Dock = DockStyle.Top,
+            AutoSize = false,
+            Height = 42,
+            Padding = new Padding(8, 7, 8, 5),
+            ForeColor = Color.FromArgb(150, 70, 0),
+            BackColor = Color.FromArgb(255, 247, 220),
+            Visible = false
+        };
         private readonly List<ListItem> _catalogItems;
         private readonly TextBox _machine = Field();
         private readonly TextBox _region = Field();
@@ -70,11 +81,12 @@ namespace UNCAD.UI
 
             var listTab = new TabPage("清单选择") { Padding = new Padding(4) };
             listTab.Controls.Add(_grid);
+            listTab.Controls.Add(_catalogWarning);
             listTab.Controls.Add(toolbar);
 
-            var tabs = new TabControl { Dock = DockStyle.Fill };
-            tabs.TabPages.Add(basicTab);
-            tabs.TabPages.Add(listTab);
+            _tabs = new TabControl { Dock = DockStyle.Fill };
+            _tabs.TabPages.Add(basicTab);
+            _tabs.TabPages.Add(listTab);
 
             var ok = new Button { Text = "确认填充", Width = 96, Height = 30 };
             var cancel = new Button { Text = "取消", Width = 88, Height = 30, DialogResult = DialogResult.Cancel };
@@ -89,7 +101,7 @@ namespace UNCAD.UI
             buttons.Controls.Add(cancel);
             buttons.Controls.Add(ok);
 
-            Controls.Add(tabs);
+            Controls.Add(_tabs);
             Controls.Add(buttons);
             AcceptButton = ok;
             CancelButton = cancel;
@@ -201,9 +213,14 @@ namespace UNCAD.UI
             {
                 int index = _grid.Rows.Add(item.Included, FillReviewData.CategoryName(item.Category),
                     item.Name, item.Description, item.Unit, item.Quantity, item.Code);
-                _grid.Rows[index].Tag = item;
+                DataGridViewRow row = _grid.Rows[index];
+                row.Tag = item;
+                ApplyCatalogState(row, item);
             }
             UpdateCount();
+            UpdateCatalogWarning();
+            if (Data.Items.Any(item => item.RequiresCatalogConfirmation))
+                _tabs.SelectedIndex = 1;
         }
 
         private void CableModelChanged(object sender, EventArgs e)
@@ -324,14 +341,39 @@ namespace UNCAD.UI
             {
                 if (!ReferenceEquals(row.Tag, item)) continue;
                 _synchronizing = true;
+                row.Cells["Included"].Value = item.Included;
                 row.Cells["Name"].Value = item.Name;
                 row.Cells["Description"].Value = item.Description;
                 row.Cells["Unit"].Value = item.Unit;
                 row.Cells["Quantity"].Value = item.Quantity;
                 row.Cells["Code"].Value = item.Code;
+                ApplyCatalogState(row, item);
                 _synchronizing = false;
+                UpdateCount();
+                UpdateCatalogWarning();
                 break;
             }
+        }
+
+        private static void ApplyCatalogState(
+            DataGridViewRow row, FillReviewItem item)
+        {
+            row.DefaultCellStyle.BackColor = item.RequiresCatalogConfirmation
+                ? Color.FromArgb(255, 247, 220)
+                : Color.White;
+        }
+
+        private void UpdateCatalogWarning()
+        {
+            List<string> missing = Data.Items
+                .Where(item => item.RequiresCatalogConfirmation)
+                .Select(item => FillReviewData.CategoryName(item.Category) + "："
+                    + (item.Description ?? item.Name ?? "").Replace("\\P", " / "))
+                .Distinct(StringComparer.Ordinal).ToList();
+            _catalogWarning.Visible = missing.Count > 0;
+            _catalogWarning.Text = missing.Count == 0 ? ""
+                : "固定清单未找到，默认不生成：" + string.Join("；", missing)
+                    + "。请勾选本次仍需添加的型号。";
         }
 
         private void UpdateCount()

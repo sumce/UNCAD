@@ -14,6 +14,10 @@ namespace UNCAD.Core.Fill
         public string Unit { get; set; } = "";
         public string Quantity { get; set; } = "";
         public string Code { get; set; } = "";
+        public bool CatalogMatched { get; set; }
+        public bool RequiresCatalogConfirmation => !CatalogMatched
+            && (Category == TableFillCategory.RigidConduit
+                || Category == TableFillCategory.FlexibleConduit);
 
         public TableFillRow ToTableRow()
         {
@@ -24,7 +28,8 @@ namespace UNCAD.Core.Fill
                 Description = Description ?? "",
                 Unit = Unit ?? "",
                 Quantity = Quantity ?? "",
-                Code = Code ?? ""
+                Code = Code ?? "",
+                CatalogMatched = CatalogMatched
             };
         }
     }
@@ -42,13 +47,16 @@ namespace UNCAD.Core.Fill
             {
                 data.Items.Add(new FillReviewItem
                 {
-                    Included = true,
+                    Included = row.CatalogMatched
+                        || (row.Category != TableFillCategory.RigidConduit
+                            && row.Category != TableFillCategory.FlexibleConduit),
                     Category = row.Category,
                     Name = row.Name ?? "",
                     Description = row.Description ?? "",
                     Unit = row.Unit ?? "",
                     Quantity = row.Quantity ?? "",
-                    Code = row.Code ?? ""
+                    Code = row.Code ?? "",
+                    CatalogMatched = row.CatalogMatched
                 });
             }
             data.CableMeters = data.CableItem()?.Quantity ?? "";
@@ -90,13 +98,17 @@ namespace UNCAD.Core.Fill
             if (flexible == null) return null;
 
             string quantity = flexible.Quantity;
+            bool wasMatched = flexible.CatalogMatched;
             TableFillRow planned = TableFillPlanner.BuildFlexibleConduitRow(
                 value, catalogItems);
             flexible.Name = planned.Name;
             flexible.Description = planned.Description;
             flexible.Unit = planned.Unit;
             flexible.Code = planned.Code;
+            flexible.CatalogMatched = planned.CatalogMatched;
             flexible.Quantity = quantity;
+            if (wasMatched != planned.CatalogMatched)
+                flexible.Included = planned.CatalogMatched;
             return flexible;
         }
 

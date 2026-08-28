@@ -60,7 +60,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_RigidConduit32_Uses38TemplateWhenCatalogHasNo32()
+        public void Build_RigidConduit32_DoesNotUse38TemplateWhenCatalogHasNo32()
         {
             var items = new List<ListItem>
             {
@@ -75,14 +75,15 @@ namespace UNCAD.Tests
                     row.Category == TableFillCategory.RigidConduit);
 
             Assert.Equal(TableFillCategory.RigidConduit, conduit.Category);
-            Assert.Equal("3.3", conduit.Code);
-            Assert.Equal("镀锌穿线管", conduit.Name);
-            Assert.Equal("清单中的38mm线管模板", conduit.Description);
+            Assert.Equal("", conduit.Code);
+            Assert.Equal("⌀32线管", conduit.Name);
+            Assert.Equal("1.名称:⌀32线管", conduit.Description);
             Assert.Equal("3", conduit.Quantity);
+            Assert.False(conduit.CatalogMatched);
         }
 
         [Fact]
-        public void Build_RigidConduit32_PrefersExact32TemplateOver38Compatibility()
+        public void Build_RigidConduit32_UsesExact32TemplateOnly()
         {
             var items = new List<ListItem>
             {
@@ -98,6 +99,7 @@ namespace UNCAD.Tests
 
             Assert.Equal("3.32", conduit.Code);
             Assert.Equal("32mm精确模板", conduit.Description);
+            Assert.True(conduit.CatalogMatched);
         }
 
         [Theory]
@@ -171,7 +173,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_BlankDiaInfersSingle32ConduitAndUses38FlexibleTemplate()
+        public void Build_BlankDiaInfers32ButDoesNotUse38FlexibleTemplate()
         {
             var items = new List<ListItem>
             {
@@ -185,9 +187,11 @@ namespace UNCAD.Tests
             TableFillRow flexible = rows.Single(row =>
                 row.Category == TableFillCategory.FlexibleConduit);
 
-            Assert.Equal("3.7", flexible.Code);
-            Assert.Equal("软管38模板", flexible.Description);
+            Assert.Equal("", flexible.Code);
+            Assert.Contains("32", flexible.Description);
+            Assert.DoesNotContain("软管38模板", flexible.Description);
             Assert.Equal("1.5", flexible.Quantity);
+            Assert.False(flexible.CatalogMatched);
         }
 
         [Fact]

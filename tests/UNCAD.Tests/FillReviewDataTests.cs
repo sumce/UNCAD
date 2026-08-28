@@ -53,6 +53,42 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Create_UnmatchedConduitModelsRequireExplicitPerModelSelection()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.RigidConduit, Name = "⌀32线管",
+                    Description = "1.名称:⌀32线管", CatalogMatched = false
+                },
+                new TableFillRow
+                {
+                    Category = TableFillCategory.FlexibleConduit, Name = "包塑金属软管",
+                    Description = "1.名称:包塑金属软管\\P2.规格:32mm",
+                    CatalogMatched = false
+                },
+                new TableFillRow
+                {
+                    Category = TableFillCategory.RigidConduit, Name = "25mm线管",
+                    Code = "3.2", CatalogMatched = true
+                }
+            });
+
+            FillReviewItem rigid32 = data.Items[0];
+            FillReviewItem flexible32 = data.Items[1];
+            Assert.False(rigid32.Included);
+            Assert.False(flexible32.Included);
+            Assert.True(rigid32.RequiresCatalogConfirmation);
+            Assert.True(flexible32.RequiresCatalogConfirmation);
+            Assert.True(data.Items[2].Included);
+
+            rigid32.Included = true;
+            Assert.Equal(new[] { "⌀32线管", "25mm线管" },
+                data.SelectedRows().Select(row => row.Name));
+        }
+
+        [Fact]
         public void FlexibleConduitDiameterEditor_RematchesCatalogAndPreservesQuantity()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow { Dia = "38" },
@@ -82,6 +118,8 @@ namespace UNCAD.Tests
             Assert.Equal("Excel中的25mm软管模板", flexible.Description);
             Assert.Equal("M", flexible.Unit);
             Assert.Equal("2.25", flexible.Quantity);
+            Assert.True(flexible.CatalogMatched);
+            Assert.True(flexible.Included);
         }
 
         [Theory]
