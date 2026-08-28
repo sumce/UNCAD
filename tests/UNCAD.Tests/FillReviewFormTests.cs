@@ -39,6 +39,10 @@ namespace UNCAD.Tests
                         DataGridView grid = Find<DataGridView>(form);
                         Assert.Equal(3, grid.Rows.Count);
                         Assert.Equal(7, grid.Columns.Count);
+                        Assert.NotNull(FindButton(form, "新增清单项"));
+                        Button removeManual = FindButton(form, "删除手动项");
+                        Assert.NotNull(removeManual);
+                        Assert.False(removeManual.Enabled);
                         foreach (DataGridViewRow row in grid.Rows)
                             Assert.True(Convert.ToBoolean(row.Cells["Included"].Value));
                         grid.Rows[2].Cells["Included"].Value = false;
@@ -164,6 +168,17 @@ namespace UNCAD.Tests
             thread.Start();
             thread.Join();
             if (failure != null) throw failure;
+        }
+
+        private static Button FindButton(Control root, string text)
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is Button button && button.Text == text) return button;
+                Button nested = FindButton(child, text);
+                if (nested != null) return nested;
+            }
+            return null;
         }
 
         private static Label FindLabelContaining(Control root, string text)

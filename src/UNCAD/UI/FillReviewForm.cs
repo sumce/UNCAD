@@ -17,6 +17,7 @@ namespace UNCAD.UI
         private readonly DataGridView _grid;
         private readonly TabControl _tabs;
         private readonly Label _count;
+        private readonly Button _removeManual;
         private readonly ToolTip _toolTips = new ToolTip();
         private readonly Label _catalogWarning = new Label
         {
@@ -75,13 +76,19 @@ namespace UNCAD.UI
                 WrapContents = false,
                 Padding = new Padding(4, 4, 4, 2)
             };
+            Button addManual = CommandButton("新增清单项");
+            _removeManual = CommandButton("删除手动项");
             Button selectAll = CommandButton("全部勾选");
             Button clearAll = CommandButton("全部取消");
             Button restore = CommandButton("恢复默认");
             _count = new Label { AutoSize = true, Padding = new Padding(12, 7, 0, 0) };
+            addManual.Click += AddManualItem;
+            _removeManual.Click += RemoveSelectedManualItem;
             selectAll.Click += (sender, args) => SetAll(true);
             clearAll.Click += (sender, args) => SetAll(false);
             restore.Click += (sender, args) => RestoreDefaults();
+            toolbar.Controls.Add(addManual);
+            toolbar.Controls.Add(_removeManual);
             toolbar.Controls.Add(selectAll);
             toolbar.Controls.Add(clearAll);
             toolbar.Controls.Add(restore);
@@ -118,6 +125,8 @@ namespace UNCAD.UI
                 if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
             _grid.CellValueChanged += GridValueChanged;
+            _grid.SelectionChanged += (sender, args) => UpdateManualDeleteState();
+            UpdateManualDeleteState();
         }
 
         public FillReviewData Data { get; private set; }
@@ -265,6 +274,44 @@ namespace UNCAD.UI
             }
         }
 
+        private void AddManualItem(object sender, EventArgs e)
+        {
+            using (var form = new ManualListItemForm())
+            {
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+                FillReviewItem item = Data.AddManualItem(form.ItemName,
+                    form.Description, form.Unit, form.Quantity, form.Code);
+                int index = _grid.Rows.Add(item.Included,
+                    FillReviewData.CategoryName(item.Category), item.Name,
+                    item.Description, item.Unit, item.Quantity, item.Code);
+                DataGridViewRow row = _grid.Rows[index];
+                row.Tag = item;
+                ApplyCatalogState(row, item);
+                _tabs.SelectedIndex = 1;
+                _grid.CurrentCell = row.Cells["Name"];
+                UpdateCount();
+                UpdateManualDeleteState();
+            }
+        }
+
+        private void RemoveSelectedManualItem(object sender, EventArgs e)
+        {
+            DataGridViewRow row = _grid.CurrentRow;
+            if (!(row?.Tag is FillReviewItem item)
+                || !Data.RemoveManualItem(item)) return;
+            _grid.Rows.Remove(row);
+            UpdateCount();
+            UpdateCatalogWarning();
+            UpdateManualDeleteState();
+        }
+
+        private void UpdateManualDeleteState()
+        {
+            if (_removeManual == null) return;
+            _removeManual.Enabled = _grid?.CurrentRow?.Tag is FillReviewItem item
+                && item.Category == TableFillCategory.Manual;
+        }
+
         private void SetAll(bool included)
         {
             _synchronizing = true;
@@ -322,7 +369,17 @@ namespace UNCAD.UI
             for (int index = 0; index < Data.Items.Count; index++)
             {
                 FillReviewItem item = Data.Items[index];
-                if (!item.Included || ValidQuantity(item.Quantity)) continue;
+                if (!item.Included) continue;
+                if (string.IsNullOrWhiteSpace(item.Name))
+                {
+                    _tabs.SelectedIndex = 1;
+                    _grid.CurrentCell = _grid.Rows[index].Cells["Name"];
+                    _grid.BeginEdit(true);
+                    MessageBox.Show(this, "清单项名称不能为空。", "UNC_FILL",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                if (ValidQuantity(item.Quantity)) continue;
                 _tabs.SelectedIndex = 1;
                 _grid.CurrentCell = _grid.Rows[index].Cells["Quantity"];
                 _grid.BeginEdit(true);

@@ -80,6 +80,28 @@ namespace UNCAD.Core.Fill
             => Items.FirstOrDefault(item =>
                 item.Category == TableFillCategory.FlexibleConduit);
 
+        public FillReviewItem AddManualItem(string name, string description,
+            string unit, string quantity, string code)
+        {
+            var item = new FillReviewItem
+            {
+                Included = true,
+                Category = TableFillCategory.Manual,
+                Name = (name ?? "").Trim(),
+                Description = (description ?? "").Trim(),
+                Unit = (unit ?? "").Trim(),
+                Quantity = (quantity ?? "").Trim(),
+                Code = (code ?? "").Trim(),
+                CatalogMatched = false
+            };
+            Items.Add(item);
+            return item;
+        }
+
+        public bool RemoveManualItem(FillReviewItem item)
+            => item != null && item.Category == TableFillCategory.Manual
+                && Items.Remove(item);
+
         public void SetCableModel(string model)
         {
             string value = (model ?? "").Trim();
@@ -140,6 +162,7 @@ namespace UNCAD.Core.Fill
                 case TableFillCategory.BusPlugBox: return "母线插接箱";
                 case TableFillCategory.Breaker: return "断路器";
                 case TableFillCategory.Outlet: return "插座";
+                case TableFillCategory.Manual: return "手动项";
                 default: return category.ToString();
             }
         }

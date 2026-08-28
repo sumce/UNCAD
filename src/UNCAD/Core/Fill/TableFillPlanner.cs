@@ -16,7 +16,8 @@ namespace UNCAD.Core.Fill
         FlexibleConduit,
         BusPlugBox,
         Breaker,
-        Outlet
+        Outlet,
+        Manual
     }
 
     public sealed class TableFillRow

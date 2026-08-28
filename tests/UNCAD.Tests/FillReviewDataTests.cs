@@ -31,6 +31,25 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ManualItem_CanBeAddedSelectedAndRemovedWithoutDeletingPlannedRows()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), Rows());
+            FillReviewItem manual = data.AddManualItem(
+                " 插座 ", " 五孔 ", " 个 ", " 2 ", " 8.9 ");
+
+            Assert.Equal(TableFillCategory.Manual, manual.Category);
+            Assert.Equal("手动项", FillReviewData.CategoryName(manual.Category));
+            Assert.True(manual.Included);
+            Assert.Equal("插座", manual.Name);
+            Assert.Equal("2", manual.Quantity);
+            Assert.Equal("8.9", manual.Code);
+            Assert.Equal(manual.Name, data.SelectedRows().Last().Name);
+            Assert.False(data.RemoveManualItem(data.Items[0]));
+            Assert.True(data.RemoveManualItem(manual));
+            Assert.DoesNotContain(manual, data.Items);
+        }
+
+        [Fact]
         public void CableEditors_UpdateModelDescriptionAndLength()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow { Cable = "OLD" }, Rows());

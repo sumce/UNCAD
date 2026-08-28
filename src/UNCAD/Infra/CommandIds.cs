@@ -58,5 +58,23 @@ namespace UNCAD.Infra
             ConduitSettings, Tray, Tray100, Tray200, Tray400, TraySettings, Line,
             LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel
         };
+
+        public static IReadOnlyList<string> Legacy { get; } = new[]
+        {
+            LegacyLine, LegacyLineSettings, LegacyTray100, LegacyTray200,
+            LegacyTray400, LegacyTraySettings, LegacyStatistics,
+            LegacyStatisticsExcel, LegacyArch, LegacyArchSettings
+        };
+
+        public static IReadOnlyList<string> Registered { get; } = new[]
+        {
+            Fill, FillUpdate, Submit, Settings, About, Ribbon,
+            Conduit, Conduit20, Conduit25, Conduit32, ConduitSettings,
+            Tray, Tray100, Tray200, Tray400, TraySettings,
+            Line, LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel,
+            LegacyLine, LegacyLineSettings, LegacyTray100, LegacyTray200,
+            LegacyTray400, LegacyTraySettings, LegacyStatistics,
+            LegacyStatisticsExcel, LegacyArch, LegacyArchSettings
+        };
     }
 }
