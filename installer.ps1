@@ -128,6 +128,28 @@ function Assert-AutoCADClosed {
     }
 }
 
+# 等待目录内所有文件可被独占打开：AutoCAD 退出后 DLL 句柄可能仍被短暂占用，
+# 直接覆盖会失败并留下残缺安装目录。轮询直到锁释放或超时。
+function Assert-TargetUnlocked {
+    param([string]$Path, [int]$TimeoutSeconds = 180)
+    if (-not (Test-Path $Path)) { return }
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $blocked = $false
+        Get-ChildItem $Path -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $stream = [IO.File]::Open($_.FullName, [IO.FileMode]::Open,
+                    [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+                $stream.Close()
+            }
+            catch { $blocked = $true }
+        }
+        if (-not $blocked) { return }
+        Start-Sleep -Seconds 5
+    }
+    throw "安装目录仍被其他程序占用：$Path。请关闭 AutoCAD 及占用该目录的程序后重试。"
+}
+
 function Assert-NoScopeConflict {
     param([ValidateSet("User", "Machine")][string]$Scope)
     $other = if ($Scope -eq "User") { $MachineBundle } else { $UserBundle }
@@ -147,6 +169,7 @@ function Install-Bundle {
     $destination = if ($Scope -eq "User") { $UserBundle } else { $MachineBundle }
     $parent = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    Assert-TargetUnlocked $destination
     $stage = Join-Path $parent ("UNCAD.bundle.installing." + $PID)
     $backup = Join-Path $parent ("UNCAD.bundle.backup." + (Get-Date -Format "yyyyMMddHHmmss"))
     $oldMoved = $false
@@ -186,7 +209,11 @@ function Install-Bundle {
             Remove-Item $destination -Recurse -Force -ErrorAction SilentlyContinue
         }
         if ($oldMoved -and (Test-Path $backup)) {
+            try { Assert-TargetUnlocked $backup 60 } catch { }
             Move-Item -LiteralPath $backup -Destination $destination -ErrorAction SilentlyContinue
+            try { Get-PackageInfo $destination | Out-Null } catch {
+                Write-SetupLog "回滚不完整：$destination 缺少文件，请手动删除该目录后重新安装。" Red
+            }
             Write-SetupLog "Previous installation was restored." Yellow
         }
         throw
