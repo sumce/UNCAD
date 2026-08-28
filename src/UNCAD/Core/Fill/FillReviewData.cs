@@ -6,6 +6,7 @@ using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Fill
 {
+    /// <summary>Editable BOQ row shown during final fill review.</summary>
     public sealed class FillReviewItem
     {
         public bool Included { get; set; } = true;
@@ -16,9 +17,10 @@ namespace UNCAD.Core.Fill
         public string Quantity { get; set; } = "";
         public string Code { get; set; } = "";
         public bool CatalogMatched { get; set; }
+        // Manual rows intentionally allow a blank code; every generated row must either
+        // match the fixed catalog or receive explicit user confirmation before writing.
         public bool RequiresCatalogConfirmation => !CatalogMatched
-            && (Category == TableFillCategory.RigidConduit
-                || Category == TableFillCategory.FlexibleConduit);
+            && Category != TableFillCategory.Manual;
 
         public TableFillRow ToTableRow()
         {
@@ -35,9 +37,14 @@ namespace UNCAD.Core.Fill
         }
     }
 
+    /// <summary>
+    /// Review state that separates device identity from procurement substitutions.
+    /// </summary>
     public sealed class FillReviewData
     {
         public MachineRow Machine { get; set; }
+        public string OriginalCableModel { get; private set; } = "";
+        public string BoqCableModel { get; private set; } = "";
         public string CableMeters { get; set; } = "";
         public List<FillReviewItem> Items { get; } = new List<FillReviewItem>();
 
@@ -48,7 +55,13 @@ namespace UNCAD.Core.Fill
             FillPlanningOptions options)
         {
             options = options ?? FillPlanningOptions.Default;
-            var data = new FillReviewData { Machine = CloneMachine(source) };
+            MachineRow machine = CloneMachine(source);
+            var data = new FillReviewData
+            {
+                Machine = machine,
+                OriginalCableModel = (machine.Cable ?? "").Trim(),
+                BoqCableModel = (machine.Cable ?? "").Trim()
+            };
             foreach (TableFillRow row in rows ?? Enumerable.Empty<TableFillRow>())
             {
                 data.Items.Add(new FillReviewItem
@@ -70,8 +83,51 @@ namespace UNCAD.Core.Fill
             return data;
         }
 
+        /// <summary>
+        /// Creates an independent session snapshot, including a confirmed BOQ substitute.
+        /// Restore Defaults must not reconstruct both cable fields from the device attribute.
+        /// </summary>
+        public FillReviewData Snapshot()
+        {
+            var snapshot = new FillReviewData
+            {
+                Machine = CloneMachine(Machine),
+                OriginalCableModel = OriginalCableModel,
+                BoqCableModel = BoqCableModel,
+                CableMeters = CableMeters
+            };
+            foreach (FillReviewItem item in Items)
+            {
+                snapshot.Items.Add(new FillReviewItem
+                {
+                    Included = item.Included,
+                    Category = item.Category,
+                    Name = item.Name ?? "",
+                    Description = item.Description ?? "",
+                    Unit = item.Unit ?? "",
+                    Quantity = item.Quantity ?? "",
+                    Code = item.Code ?? "",
+                    CatalogMatched = item.CatalogMatched
+                });
+            }
+            return snapshot;
+        }
+
+        /// <summary>
+        /// Returns the current review order with a continuous 1-based sequence. Deleted or
+        /// unchecked rows leave no gaps; manual rows remain where the user added them.
+        /// </summary>
         public List<TableFillRow> SelectedRows()
-            => Items.Where(item => item.Included).Select(item => item.ToTableRow()).ToList();
+        {
+            var selected = new List<TableFillRow>();
+            foreach (FillReviewItem item in Items.Where(item => item.Included))
+            {
+                TableFillRow row = item.ToTableRow();
+                row.SortOrder = selected.Count + 1;
+                selected.Add(row);
+            }
+            return selected;
+        }
 
         public FillReviewItem CableItem()
             => Items.FirstOrDefault(item => item.Category == TableFillCategory.Cable);
@@ -98,17 +154,34 @@ namespace UNCAD.Core.Fill
             return item;
         }
 
+        public bool RemoveItem(FillReviewItem item)
+            => item != null && Items.Remove(item);
+
         public bool RemoveManualItem(FillReviewItem item)
             => item != null && item.Category == TableFillCategory.Manual
-                && Items.Remove(item);
+                && RemoveItem(item);
 
         public void SetCableModel(string model)
+            => SetCableModel(model, null);
+
+        public void SetCableModel(string model, BoqCatalogIndex catalog)
         {
             string value = (model ?? "").Trim();
-            Machine.Cable = value;
+            BoqCableModel = value;
             FillReviewItem cable = CableItem();
-            if (cable != null && value.Length > 0)
-                cable.Description = string.Format(FillTemplates.CableDesc, value);
+            if (cable == null) return;
+
+            ListItem matched = catalog?.FindCable(value);
+            cable.Name = string.IsNullOrWhiteSpace(matched?.Name)
+                ? "电缆" : matched.Name;
+            cable.Description = string.IsNullOrWhiteSpace(matched?.Feature)
+                ? (value.Length > 0
+                    ? string.Format(FillTemplates.CableDesc, value)
+                    : "1.名称:电缆")
+                : matched.Feature;
+            cable.Unit = string.IsNullOrWhiteSpace(matched?.Unit) ? "M" : matched.Unit;
+            cable.Code = matched?.Code ?? "";
+            cable.CatalogMatched = matched != null;
         }
 
         public void SetCableMeters(string meters)

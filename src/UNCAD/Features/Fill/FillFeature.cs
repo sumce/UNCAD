@@ -35,6 +35,7 @@ namespace UNCAD.Features.Fill
 
         private static void ExecuteCore(CadContext ctx, bool updateMode)
         {
+            // 阶段1：检测写入目标和统计文字。此阶段只读图纸，不产生任何修改。
             FillSelection selection = FillSelectionCollector.Collect(ctx);
             if (selection.IsEmpty)
             {
@@ -52,6 +53,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
+            // 阶段2：冻结配置并按实际标注求和，后续预览和写入复用同一结果。
             FillRuntimeOptions options = FillSettings.Current();
             SummationOutput summation = FillStatisticsModule.Execute(ctx,
                 selection.TextIds, options.MmPerGrid);
@@ -74,6 +76,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
+            // 阶段3：加载机台/盘柜数据和固定清单索引，外部文件异常在此终止。
             FillWorkbookSnapshot workbook;
             try
             {
@@ -99,8 +102,14 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[UNC_FILL] Excel 中无机台ID数据。");
                 return;
             }
-            if (listItems.Count == 0)
-                ctx.Write("\n[UNC_FILL] 警告：未读取到清单项目，编号列将留空。");
+            if (listItems.Count == 0
+                && MessageBox.Show(new WindowWrapper(
+                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
+                    "未读取到固定清单项目，所有自动生成行的项目编码都将留空。\r\n\r\n是否继续？",
+                    "UNC_FILL 固定清单异常", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+                    != DialogResult.Yes)
+                return;
 
             string bridgeInfo = options.BridgeInfo;
             int startRow = options.StartRow;
@@ -141,10 +150,13 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
+            // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
             TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
+            ResolveMissingCableCatalog(review, catalog);
+            // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
             using (var form = new FillReviewForm(review, catalog, options.Planning))
             {
                 if (form.ShowDialog(new WindowWrapper(
@@ -152,8 +164,30 @@ namespace UNCAD.Features.Fill
                     != DialogResult.OK) return;
                 review = form.Data;
             }
+            // Machine.Cable remains the source-device value. A BOQ replacement updates only
+            // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
+            if (tableRows.Count == 0
+                && MessageBox.Show(new WindowWrapper(
+                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
+                    "当前没有要生成的清单项。继续将只清空模板数据区，不写入新清单。",
+                    "UNC_FILL 空清单确认", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+                    != DialogResult.Yes)
+                return;
+            int tableCapacity = ResolveTableWriteCapacity(ctx, selection.TableIds,
+                startRow, clearRowCount);
+            if (tableRows.Count > tableCapacity)
+            {
+                MessageBox.Show(new WindowWrapper(
+                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
+                    "清单共 " + tableRows.Count + " 项，所选表格实际可写范围只有 "
+                        + tableCapacity + " 行。请删除部分清单项，或在UNC_SET中调整起始行和清除行数。",
+                    "UNC_FILL 表格容量不足", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
             string reviewedCableMeters = review.CableMeters ?? "";
             if (!string.Equals(defaultCableMeters, reviewedCableMeters,
                 StringComparison.OrdinalIgnoreCase))
@@ -161,11 +195,14 @@ namespace UNCAD.Features.Fill
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
+                ("表格容量", tableCapacity.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
             int filled;
             FillWriteResult frameResult, deviceResult, upstreamInfoResult;
             FillWriteResult upstreamAxisResult, downstreamAxisResult;
+            // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
+            // 所有CAD修改共用一个事务，任一异常都会整体回滚。
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
@@ -198,6 +235,58 @@ namespace UNCAD.Features.Fill
                 + deviceResult.Blocks + " 个；上游信息 "
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
+        }
+
+        private static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
+            int startRow, int configuredRows)
+        {
+            // Multiple selected tables are written together, so the smallest resolved
+            // capacity is the only value that can guarantee the atomic write will fit.
+            int zeroBasedStart = Math.Max(0, startRow - 1);
+            int capacity = int.MaxValue;
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
+                {
+                    Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
+                    if (table == null) continue;
+                    int available = Math.Max(0, table.Rows.Count - zeroBasedStart);
+                    capacity = Math.Min(capacity,
+                        TableClearPolicy.ResolveRows(available, configuredRows));
+                }
+            }
+            return capacity == int.MaxValue ? 0 : capacity;
+        }
+
+        private static void ResolveMissingCableCatalog(FillReviewData review,
+            BoqCatalogIndex catalog)
+        {
+            FillAnomaly anomaly = FillAnomalyDetector.MissingCable(review);
+            if (anomaly == null) return;
+            Log.Warn("UNC_FILL " + anomaly.Code + ": " + anomaly.Subject);
+            var owner = new WindowWrapper(
+                Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle);
+            DialogResult replace = MessageBox.Show(owner,
+                "固定清单找不到电缆型号：" + anomaly.Subject
+                    + "\r\n\r\n是否从固定清单选择替代型号？"
+                    + "\r\n替代型号只用于本次清单，图框和块属性中的设备原型号保持不变。",
+                "UNC_FILL 电缆型号异常", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
+            if (replace != DialogResult.Yes) return;
+            if (catalog.Cables.Count == 0)
+            {
+                MessageBox.Show(owner, "固定清单中没有可选择的电缆型号。",
+                    "UNC_FILL 电缆型号异常", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+            using (var picker = new CableCatalogSelectionForm(
+                catalog.Cables, review.BoqCableModel))
+            {
+                if (picker.ShowDialog(owner) != DialogResult.OK
+                    || picker.SelectedItem == null) return;
+                review.SetCableModel(picker.SelectedItem.Spec, catalog);
+            }
         }
 
         private static void ApplyCableLengthOverride(CableStatResult statistics, string value)

@@ -39,15 +39,23 @@ namespace UNCAD.Tests
                         DataGridView grid = Find<DataGridView>(form);
                         Assert.Equal(3, grid.Rows.Count);
                         Assert.Equal(7, grid.Columns.Count);
+                        Assert.Equal("C1", FindByName<TextBox>(form,
+                            "OriginalCableModel").Text);
+                        Assert.Equal("C1", FindByName<TextBox>(form,
+                            "BoqCableModel").Text);
                         Assert.NotNull(FindButton(form, "新增清单项"));
-                        Button removeManual = FindButton(form, "删除手动项");
-                        Assert.NotNull(removeManual);
-                        Assert.False(removeManual.Enabled);
+                        Button removeItem = FindButton(form, "删除选中项");
+                        Assert.NotNull(removeItem);
+                        Assert.True(removeItem.Enabled);
                         foreach (DataGridViewRow row in grid.Rows)
                             Assert.True(Convert.ToBoolean(row.Cells["Included"].Value));
                         grid.Rows[2].Cells["Included"].Value = false;
                         Application.DoEvents();
                         Assert.False(form.Data.Items[2].Included);
+                        grid.CurrentCell = grid.Rows[2].Cells["Name"];
+                        removeItem.PerformClick();
+                        Assert.Equal(2, grid.Rows.Count);
+                        Assert.Equal(2, form.Data.Items.Count);
                         Assert.True(form.ClientSize.Width >= 980);
                         Assert.True(form.ClientSize.Height >= 620);
                     }
@@ -198,6 +206,17 @@ namespace UNCAD.Tests
             {
                 if (child is TextBox box && box.Text == text) return box;
                 TextBox nested = FindTextBox(child, text);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        private static T FindByName<T>(Control root, string name) where T : Control
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is T match && child.Name == name) return match;
+                T nested = FindByName<T>(child, name);
                 if (nested != null) return nested;
             }
             return null;

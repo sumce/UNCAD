@@ -52,7 +52,10 @@ namespace UNCAD.Core.Submission
             bool hasBridgeRows = HasTableRows(source, IsBridgeRow);
             bool hasConduitRows = HasTableRows(source, IsRigidConduitRow);
             string tableCable = ExtractTableCableModel(source);
-            string cable = tableCable.Length > 0 ? tableCable : ExtractCableModel(cableInfo);
+            string originalCable = ExtractCableModel(cableInfo);
+            // The edited table is authoritative for procurement, while the frame attribute
+            // preserves the device design value for traceability after a BOQ substitution.
+            string cable = tableCable.Length > 0 ? tableCable : originalCable;
 
             string flexibleDiameter = ExtractTableDiameter(source, IsFlexibleConduitRow);
             string flexibleMeters = TableMeters(source, IsFlexibleConduitRow);
@@ -73,6 +76,7 @@ namespace UNCAD.Core.Submission
                 DeviceName = deviceName,
                 PanelType = InferPanelType(source.DynamicValues)
                     ?? InferPanelType(source.TableValues) ?? "未指定",
+                OriginalCable = originalCable,
                 Cable = cable,
                 CableMeters = cableMeters,
                 Fr = infoLines.Count > 0 ? infoLines[0] : "",

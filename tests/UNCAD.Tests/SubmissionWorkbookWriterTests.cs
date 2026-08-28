@@ -105,6 +105,7 @@ namespace UNCAD.Tests
                     var legacy = sheet.CreateRow(1);
                     legacy.CreateCell(0).SetCellValue("OLD");
                     legacy.CreateCell(1).SetCellValue("旧设备");
+                    legacy.CreateCell(3).SetCellValue("LEGACY-CABLE");
                     using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
                         legacyWorkbook.Write(stream);
                 }
@@ -123,6 +124,16 @@ namespace UNCAD.Tests
                         Assert.Equal("旧设备", sheet.GetRow(1).GetCell(Column(sheet, "设备名称")).StringCellValue);
                         foreach (string header in SubmissionWorkbookWriter.Headers)
                             Assert.True(Column(sheet, header) >= 0);
+                        Assert.True(Column(sheet, "设备原电缆型号") >= 0);
+                        Assert.True(Column(sheet, "清单电缆型号") >= 0);
+                        Assert.Equal("LEGACY-CABLE", sheet.GetRow(1)
+                            .GetCell(Column(sheet, "设备原电缆型号")).StringCellValue);
+                        Assert.Equal("LEGACY-CABLE", sheet.GetRow(1)
+                            .GetCell(Column(sheet, "清单电缆型号")).StringCellValue);
+                        Assert.Equal("ZB-YJVR-3*2.5", sheet.GetRow(2)
+                            .GetCell(Column(sheet, "电缆型号")).StringCellValue);
+                        Assert.Equal("ORIGINAL-CABLE", sheet.GetRow(2)
+                            .GetCell(Column(sheet, "设备原电缆型号")).StringCellValue);
                         Assert.Equal("16.4", sheet.GetRow(2).GetCell(Column(sheet, "电缆米数")).StringCellValue);
                         var details = workbook.GetSheet(SubmissionWorkbookWriter.DetailSheetName);
                         Assert.Equal(2, details.LastRowNum);
@@ -150,6 +161,7 @@ namespace UNCAD.Tests
                 MachineId = machine,
                 DeviceName = device,
                 PanelType = "I-Line盘",
+                OriginalCable = "ORIGINAL-CABLE",
                 Cable = "ZB-YJVR-3*2.5",
                 CableMeters = "16.4",
                 Fr = "FR-01",

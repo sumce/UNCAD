@@ -10,6 +10,7 @@ namespace UNCAD.Core.Excel
     {
         private static readonly Regex Whitespace = new Regex(@"\s+", RegexOptions.Compiled);
         private readonly Dictionary<string, ListItem> _cables;
+        private readonly List<ListItem> _cableCandidates;
         private readonly Dictionary<string, ListItem> _bridges;
         private readonly Dictionary<string, ListItem> _rigidConduits;
         private readonly Dictionary<string, ListItem> _flexibleConduits;
@@ -20,8 +21,12 @@ namespace UNCAD.Core.Excel
         public BoqCatalogIndex(IEnumerable<ListItem> items)
         {
             Items = (items ?? Enumerable.Empty<ListItem>()).Where(item => item != null).ToList();
-            _cables = Index(Items.Where(item => StartsWithCode(item, "1.")),
-                item => NormalizeSpec(item.Spec));
+            // A replacement must have a real specification because exact normalized matching
+            // is the contract; rows with a blank spec cannot safely identify a cable model.
+            _cableCandidates = Items.Where(item => StartsWithCode(item, "1.")
+                    && NormalizeSpec(item.Spec).Length > 0)
+                .OrderBy(item => item.Code ?? "", StringComparer.Ordinal).ToList();
+            _cables = Index(_cableCandidates, item => NormalizeSpec(item.Spec));
             _bridges = Index(Items.Where(item => StartsWithCode(item, "2.")),
                 item => NormalizeSpec(item.Spec));
             _rigidConduits = Index(Items.Where(item => StartsWithCode(item, "3.")
@@ -38,6 +43,7 @@ namespace UNCAD.Core.Excel
         }
 
         public List<ListItem> Items { get; }
+        public IReadOnlyList<ListItem> Cables => _cableCandidates;
         public IReadOnlyList<ListItem> Breakers => _breakers;
         public IReadOnlyList<ListItem> Outlets => _outlets;
 

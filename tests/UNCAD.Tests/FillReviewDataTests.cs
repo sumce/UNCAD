@@ -56,7 +56,9 @@ namespace UNCAD.Tests
             data.SetCableModel("ZB-YJVR-5*6");
             data.SetCableMeters("18.5");
 
-            Assert.Equal("ZB-YJVR-5*6", data.Machine.Cable);
+            Assert.Equal("OLD", data.Machine.Cable);
+            Assert.Equal("OLD", data.OriginalCableModel);
+            Assert.Equal("ZB-YJVR-5*6", data.BoqCableModel);
             Assert.Contains("ZB-YJVR-5*6", data.CableItem().Description);
             Assert.Equal("18.5", data.CableItem().Quantity);
         }
@@ -155,6 +157,22 @@ namespace UNCAD.Tests
             Assert.Equal("2.25", flexible.Quantity);
             Assert.True(flexible.CatalogMatched);
             Assert.True(flexible.Included);
+        }
+
+        [Fact]
+        public void SelectedRows_ReordersContinuouslyAfterDeleteExcludeAndAdd()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), Rows());
+            data.RemoveItem(data.Items[0]);
+            data.Items[0].Included = false;
+            data.AddManualItem("插座", "五孔", "个", "2", "8.9");
+
+            List<TableFillRow> selected = data.SelectedRows();
+
+            Assert.Equal(2, selected.Count);
+            Assert.Equal(TableFillCategory.Outlet, selected[0].Category);
+            Assert.Equal(TableFillCategory.Manual, selected[1].Category);
+            Assert.Equal(new[] { 1, 2 }, selected.ConvertAll(row => row.SortOrder));
         }
 
         [Theory]

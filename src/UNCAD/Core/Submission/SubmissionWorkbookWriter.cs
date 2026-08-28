@@ -17,7 +17,7 @@ namespace UNCAD.Core.Submission
         public static readonly string[] Headers =
         {
             "机台ID", "设备名称", "盘柜类型",
-            "电缆型号", "电缆米数", "FR", "配电详情",
+            "电缆型号", "设备原电缆型号", "清单电缆型号", "电缆米数", "FR", "配电详情",
             "软管直径", "软管米数",
             "桥架信息", "桥架米数", "线管信息", "线管米数",
             "下游轴位", "上游轴位", "提交时间", "更新时间"
@@ -51,6 +51,7 @@ namespace UNCAD.Core.Submission
                 workbook = LoadOrCreate(fullPath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.CreateSheet(SheetName);
                 Dictionary<string, int> columns = EnsureHeader(workbook, sheet, Headers);
+                MigrateLegacyCableColumns(sheet, columns);
                 ISheet detailSheet = workbook.GetSheet(DetailSheetName)
                     ?? workbook.CreateSheet(DetailSheetName);
                 Dictionary<string, int> detailColumns = EnsureHeader(
@@ -76,7 +77,10 @@ namespace UNCAD.Core.Submission
                 Set(target, columns, "机台ID", record.MachineId);
                 Set(target, columns, "设备名称", record.DeviceName);
                 Set(target, columns, "盘柜类型", record.PanelType);
+                // Keep the legacy column current so existing workbook formulas still work.
                 Set(target, columns, "电缆型号", record.Cable);
+                Set(target, columns, "设备原电缆型号", record.OriginalCable);
+                Set(target, columns, "清单电缆型号", record.Cable);
                 Set(target, columns, "电缆米数", record.CableMeters);
                 Set(target, columns, "FR", record.Fr);
                 Set(target, columns, "配电详情", record.Detail);
@@ -205,6 +209,29 @@ namespace UNCAD.Core.Submission
             return result;
         }
 
+        private static void MigrateLegacyCableColumns(ISheet sheet,
+            Dictionary<string, int> columns)
+        {
+            // v1.7 has one cable field. Seed both v1.8 lineage fields without
+            // overwriting rows that were already exported by the new schema.
+            int legacyColumn = columns["电缆型号"];
+            int originalColumn = columns["设备原电缆型号"];
+            int boqColumn = columns["清单电缆型号"];
+            for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+            {
+                IRow row = sheet.GetRow(rowIndex);
+                if (row == null) continue;
+                string legacy = CellText(row.GetCell(legacyColumn));
+                if (legacy.Length == 0) continue;
+                if (CellText(row.GetCell(originalColumn)).Length == 0)
+                    row.GetCell(originalColumn, MissingCellPolicy.CREATE_NULL_AS_BLANK)
+                        .SetCellValue(legacy);
+                if (CellText(row.GetCell(boqColumn)).Length == 0)
+                    row.GetCell(boqColumn, MissingCellPolicy.CREATE_NULL_AS_BLANK)
+                        .SetCellValue(legacy);
+            }
+        }
+
         private static ICellStyle HeaderStyle(IWorkbook workbook)
         {
             IFont font = workbook.CreateFont();
@@ -239,7 +266,8 @@ namespace UNCAD.Core.Submission
             foreach (KeyValuePair<string, int> column in columns)
             {
                 int width = column.Key == "FR" || column.Key == "配电详情"
-                    || column.Key == "电缆型号" || column.Key == "特征描述"
+                    || column.Key.EndsWith("电缆型号", StringComparison.Ordinal)
+                    || column.Key == "特征描述"
                     || column.Key.EndsWith("信息", StringComparison.Ordinal)
                     ? 30 : column.Key.EndsWith("时间", StringComparison.Ordinal) ? 20 : 16;
                 sheet.SetColumnWidth(column.Value, width * 256);

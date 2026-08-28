@@ -17,7 +17,7 @@ namespace UNCAD.UI
         private readonly DataGridView _grid;
         private readonly TabControl _tabs;
         private readonly Label _count;
-        private readonly Button _removeManual;
+        private readonly Button _removeItem;
         private readonly ToolTip _toolTips = new ToolTip();
         private readonly Label _catalogWarning = new Label
         {
@@ -39,6 +39,13 @@ namespace UNCAD.UI
         private readonly ComboBox _panel = new ComboBox { Width = 210, DropDownStyle = ComboBoxStyle.DropDown };
         private readonly TextBox _fr = Field();
         private readonly TextBox _seq = Field();
+        private readonly TextBox _originalCable = new TextBox
+        {
+            Name = "OriginalCableModel",
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            BackColor = SystemColors.Control
+        };
         private readonly TextBox _cable = Field();
         private readonly TextBox _cableMeters = Field();
         private readonly TextBox _diameter = Field();
@@ -58,12 +65,12 @@ namespace UNCAD.UI
             Data = data ?? throw new ArgumentNullException(nameof(data));
             _catalog = catalog ?? new BoqCatalogIndex(null);
             _planningOptions = planningOptions ?? FillPlanningOptions.Default;
-            _defaults = FillReviewData.Create(Data.Machine,
-                Data.Items.Select(item => item.ToTableRow()), _planningOptions);
+            _defaults = Data.Snapshot();
 
             DialogLayout.Apply(this, "UNC_FILL 填充确认 · " + Branding.Nameplate,
                 new Size(1040, 660), new Size(880, 560));
 
+            _cable.Name = "BoqCableModel";
             _panel.Items.AddRange(new object[] { "", "I-Line盘", "母线插接口", "插座盘" });
             TabPage basicTab = BuildBasicTab();
 
@@ -77,18 +84,18 @@ namespace UNCAD.UI
                 Padding = new Padding(4, 4, 4, 2)
             };
             Button addManual = CommandButton("新增清单项");
-            _removeManual = CommandButton("删除手动项");
+            _removeItem = CommandButton("删除选中项");
             Button selectAll = CommandButton("全部勾选");
             Button clearAll = CommandButton("全部取消");
             Button restore = CommandButton("恢复默认");
             _count = new Label { AutoSize = true, Padding = new Padding(12, 7, 0, 0) };
             addManual.Click += AddManualItem;
-            _removeManual.Click += RemoveSelectedManualItem;
+            _removeItem.Click += RemoveSelectedItem;
             selectAll.Click += (sender, args) => SetAll(true);
             clearAll.Click += (sender, args) => SetAll(false);
             restore.Click += (sender, args) => RestoreDefaults();
             toolbar.Controls.Add(addManual);
-            toolbar.Controls.Add(_removeManual);
+            toolbar.Controls.Add(_removeItem);
             toolbar.Controls.Add(selectAll);
             toolbar.Controls.Add(clearAll);
             toolbar.Controls.Add(restore);
@@ -125,8 +132,8 @@ namespace UNCAD.UI
                 if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
             _grid.CellValueChanged += GridValueChanged;
-            _grid.SelectionChanged += (sender, args) => UpdateManualDeleteState();
-            UpdateManualDeleteState();
+            _grid.SelectionChanged += (sender, args) => UpdateDeleteState();
+            UpdateDeleteState();
         }
 
         public FillReviewData Data { get; private set; }
@@ -148,11 +155,9 @@ namespace UNCAD.UI
             AddPair(layout, 0, "机台ID:", _machine, "区域:", _region);
             AddPair(layout, 1, "设备 / 回路:", _circuit, "盘柜类型:", _panel);
             AddPair(layout, 2, "FR:", _fr, "项目序号:", _seq);
-            AddPair(layout, 3, "电缆型号:", _cable, "电缆长度 (m):", _cableMeters);
-            AddPair(layout, 4, "软管直径:", _diameter, "下游轴位:", _downstream);
-            layout.Controls.Add(LabelFor("上游轴位:"), 0, 5);
-            layout.Controls.Add(_upstream, 1, 5);
-            layout.SetColumnSpan(_upstream, 3);
+            AddPair(layout, 3, "设备原电缆:", _originalCable, "清单电缆:", _cable);
+            AddPair(layout, 4, "电缆长度 (m):", _cableMeters, "软管直径:", _diameter);
+            AddPair(layout, 5, "下游轴位:", _downstream, "上游轴位:", _upstream);
             Label detailLabel = LabelFor("配电详情:");
             detailLabel.TextAlign = ContentAlignment.TopRight;
             detailLabel.Padding = new Padding(0, 6, 0, 0);
@@ -208,7 +213,8 @@ namespace UNCAD.UI
             _panel.Text = data.Machine.Next ?? "";
             _fr.Text = data.Machine.Fr ?? "";
             _seq.Text = data.Machine.Seq ?? "";
-            _cable.Text = data.Machine.Cable ?? "";
+            _originalCable.Text = data.OriginalCableModel ?? "";
+            _cable.Text = data.BoqCableModel ?? "";
             _cableMeters.Text = data.CableMeters ?? "";
             _diameter.Text = data.Machine.Dia ?? "";
             _downstream.Text = data.Machine.DownstreamAxis ?? "";
@@ -237,7 +243,7 @@ namespace UNCAD.UI
         private void CableModelChanged(object sender, EventArgs e)
         {
             if (_synchronizing) return;
-            Data.SetCableModel(_cable.Text);
+            Data.SetCableModel(_cable.Text, _catalog);
             FillReviewItem cable = Data.CableItem();
             if (cable != null) RefreshItem(cable);
         }
@@ -290,26 +296,24 @@ namespace UNCAD.UI
                 _tabs.SelectedIndex = 1;
                 _grid.CurrentCell = row.Cells["Name"];
                 UpdateCount();
-                UpdateManualDeleteState();
+                UpdateDeleteState();
             }
         }
 
-        private void RemoveSelectedManualItem(object sender, EventArgs e)
+        private void RemoveSelectedItem(object sender, EventArgs e)
         {
             DataGridViewRow row = _grid.CurrentRow;
-            if (!(row?.Tag is FillReviewItem item)
-                || !Data.RemoveManualItem(item)) return;
+            if (!(row?.Tag is FillReviewItem item) || !Data.RemoveItem(item)) return;
             _grid.Rows.Remove(row);
             UpdateCount();
             UpdateCatalogWarning();
-            UpdateManualDeleteState();
+            UpdateDeleteState();
         }
 
-        private void UpdateManualDeleteState()
+        private void UpdateDeleteState()
         {
-            if (_removeManual == null) return;
-            _removeManual.Enabled = _grid?.CurrentRow?.Tag is FillReviewItem item
-                && item.Category == TableFillCategory.Manual;
+            if (_removeItem == null) return;
+            _removeItem.Enabled = _grid?.CurrentRow?.Tag is FillReviewItem;
         }
 
         private void SetAll(bool included)
@@ -326,8 +330,7 @@ namespace UNCAD.UI
 
         private void RestoreDefaults()
         {
-            Data = FillReviewData.Create(_defaults.Machine,
-                _defaults.Items.Select(item => item.ToTableRow()), _planningOptions);
+            Data = _defaults.Snapshot();
             LoadFromData(Data);
             PopulateRows(Data.Items);
         }
@@ -405,7 +408,6 @@ namespace UNCAD.UI
             Data.Machine.Next = _panel.Text.Trim();
             Data.Machine.Fr = _fr.Text.Trim();
             Data.Machine.Seq = _seq.Text.Trim();
-            Data.Machine.Cable = _cable.Text.Trim();
             Data.SetFlexibleConduitDiameter(
                 _diameter.Text, _catalog, _planningOptions);
             Data.Machine.DownstreamAxis = _downstream.Text.Trim();
@@ -456,15 +458,15 @@ namespace UNCAD.UI
 
         private void UpdateCatalogWarning()
         {
-            List<string> missing = Data.Items
-                .Where(item => item.RequiresCatalogConfirmation)
-                .Select(item => FillReviewData.CategoryName(item.Category) + "："
-                    + (item.Description ?? item.Name ?? "").Replace("\\P", " / "))
+            List<string> missing = FillAnomalyDetector.DetectCatalog(Data)
+                .Select(anomaly => FillReviewData.CategoryName(anomaly.Category) + "："
+                    + anomaly.Subject.Replace("\\P", " / "))
                 .Distinct(StringComparer.Ordinal).ToList();
             _catalogWarning.Visible = missing.Count > 0;
             _catalogWarning.Text = missing.Count == 0 ? ""
-                : "固定清单未找到：" + string.Join("；", missing)
-                    + "。请确认本次需要生成的型号。";
+                : "[BOQ-CATALOG-MISSING] 固定清单未找到："
+                    + string.Join("；", missing)
+                    + "。可修改型号、删除该项，或确认后以空编码生成。";
             _catalogWarning.AccessibleDescription = _catalogWarning.Text;
             _toolTips.SetToolTip(_catalogWarning, _catalogWarning.Text);
         }

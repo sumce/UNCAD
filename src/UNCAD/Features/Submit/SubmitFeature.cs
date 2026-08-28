@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Windows.Forms;
-using AcApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
@@ -9,6 +8,7 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.Submission;
 using UNCAD.Infra;
 using UNCAD.UI;
+using AcApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 
 namespace UNCAD.Features.Submit
 {
@@ -54,17 +54,29 @@ namespace UNCAD.Features.Submit
             }
 
             string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            var owner = new WindowWrapper(AcApplication.MainWindow.Handle);
+            if (record.Materials.Count == 0
+                && MessageBox.Show(owner,
+                    "框选内容中没有读取到清单明细。继续后只导出设备汇总，不会生成材料明细行。\r\n\r\n是否继续？",
+                    "UNC_SUBMIT 清单明细异常", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+                    != DialogResult.Yes)
+                return;
+            string cableSummary = string.Equals(record.OriginalCable, record.Cable,
+                StringComparison.OrdinalIgnoreCase)
+                ? Display(record.Cable)
+                : Display(record.OriginalCable) + " → 清单替代 " + Display(record.Cable);
             string summary = "机台ID: " + record.MachineId
                 + "\n设备名称: " + record.DeviceName
                 + "\n盘柜类型: " + record.PanelType
-                + "\n电缆: " + Display(record.Cable) + " / " + Meters(record.CableMeters)
+                + "\n电缆: " + cableSummary + " / " + Meters(record.CableMeters)
                 + "\n软管: " + (record.Diameter.Length > 0 ? "Φ" + record.Diameter : "无")
                 + " / " + Meters(record.FlexibleConduitMeters)
                 + "\n桥架: " + Meters(record.BridgeMeters)
                 + "\n线管: " + Meters(record.ConduitMeters)
                 + "\n清单明细: " + record.Materials.Count + " 项"
                 + "\n\n提交到:\n" + path;
-            if (MessageBox.Show(new WindowWrapper(AcApplication.MainWindow.Handle), summary,
+            if (MessageBox.Show(owner, summary,
                 "确认提交", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
 
             try
@@ -75,7 +87,9 @@ namespace UNCAD.Features.Submit
                 ctx.Write("\n[UNC_SUBMIT] " + (result.ReplacedExisting
                     ? "已覆盖原记录（清理 " + result.RemovedDuplicates + " 条重复数据）"
                     : "已新增记录") + ": " + record.MachineId + " / " + record.DeviceName
-                    + "；更新时间 " + result.UpdatedAt + "；文件 " + result.FilePath);
+                    + "；清单明细 " + record.Materials.Count + " 项已写入“"
+                    + SubmissionWorkbookWriter.DetailSheetName + "”；更新时间 "
+                    + result.UpdatedAt + "；文件 " + result.FilePath);
             }
             catch (IOException ex)
             {

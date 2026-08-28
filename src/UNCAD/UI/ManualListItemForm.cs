@@ -6,6 +6,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
+    /// <summary>Collects one user-owned BOQ row with bounded quantity input.</summary>
     public sealed class ManualListItemForm : Form
     {
         private readonly TextBox _name = Field("ManualName");

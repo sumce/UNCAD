@@ -8,6 +8,8 @@ namespace UNCAD.Core.Submission
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
         public string PanelType { get; set; } = "";
+        // Preserved from the device block when the edited table uses a BOQ substitute.
+        public string OriginalCable { get; set; } = "";
         public string Cable { get; set; } = "";
         public string CableMeters { get; set; } = "";
         public string Fr { get; set; } = "";

@@ -32,6 +32,7 @@ namespace UNCAD.Tests
             Assert.Equal("MQBAN01", record.MachineId);
             Assert.Equal("中央实验台1-1", record.DeviceName);
             Assert.Equal("I-Line盘", record.PanelType);
+            Assert.Equal("ZB-YJVR-3*2.5", record.OriginalCable);
             Assert.Equal("ZB-YJVR-3*2.5", record.Cable);
             Assert.Equal("5", record.CableMeters);
             Assert.Equal("3U-UPS28D1-PP-03", record.Fr);
@@ -111,6 +112,7 @@ namespace UNCAD.Tests
 
             SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
 
+            Assert.Equal("OLD-CABLE", record.OriginalCable);
             Assert.Equal("NEW-CABLE", record.Cable);
             Assert.Equal("18.5", record.CableMeters);
             Assert.Equal("7.25", record.BridgeMeters);
