@@ -24,25 +24,17 @@ namespace UNCAD.Core.Excel
         {
             Items = (items ?? Enumerable.Empty<ListItem>()).Where(item => item != null).ToList();
             _migrationAliases = MigrationIndex(Items);
-            // A replacement must have a real specification because exact normalized matching
-            // is the contract; rows with a blank spec cannot safely identify a cable model.
-            _cableCandidates = Items.Where(item => StartsWithCode(item, "1.")
-                    && NormalizeSpec(item.Spec).Length > 0)
+            // “类”是自动判定的唯一边界，“别名”是边界内唯一比较值。项目编码、
+            // 名称和项目特征都不能反推类别；没有“类”的清单行因此不会被自动命中。
+            _cableCandidates = CategoryItems("电缆").Where(HasPrimaryAlias)
                 .OrderBy(item => item.Code ?? "", StringComparer.Ordinal).ToList();
-            _cables = Index(_cableCandidates, item => NormalizeSpec(item.Spec));
-            _bridges = Index(Items.Where(item => StartsWithCode(item, "2.")),
-                item => NormalizeSpec(item.Spec));
-            _rigidConduits = Index(Items.Where(item => StartsWithCode(item, "3.")
-                && Contains(item.Name, "线管") && !Contains(item.Name, "软管")),
-                item => NormalizeSpec(item.Spec));
-            _flexibleConduits = Index(Items.Where(item => StartsWithCode(item, "3.")
-                && Contains(item.Name, "软管")), item => NormalizeSpec(item.Spec));
-            _busPlugBoxes = Index(Items.Where(item => StartsWithCode(item, "5.")
-                && Contains(item.Name, "母线插接箱")), item => NormalizeSpec(item.Spec));
-            _breakers = Items.Where(item => StartsWithCode(item, "6.")
-                && Contains(item.Name, "断路器")).ToList();
-            _outlets = Items.Where(item => StartsWithCode(item, "8.")
-                && Contains(item.Name, "插座")).ToList();
+            _cables = AliasIndex(_cableCandidates, "电缆");
+            _bridges = AliasIndex(CategoryItems("桥架"), "桥架");
+            _rigidConduits = AliasIndex(CategoryItems("线管"), "线管");
+            _flexibleConduits = AliasIndex(CategoryItems("软管"), "软管");
+            _busPlugBoxes = AliasIndex(CategoryItems("母线插接箱"), "母线插接箱");
+            _breakers = CategoryItems("断路器").ToList();
+            _outlets = CategoryItems("插座").ToList();
         }
 
         public List<ListItem> Items { get; }
@@ -87,14 +79,18 @@ namespace UNCAD.Core.Excel
             return NormalizeSpec(value);
         }
 
-        private static Dictionary<string, ListItem> Index(IEnumerable<ListItem> items,
-            Func<ListItem, string> keySelector)
+        private static Dictionary<string, ListItem> AliasIndex(IEnumerable<ListItem> items,
+            string categoryName)
         {
             var result = new Dictionary<string, ListItem>(StringComparer.OrdinalIgnoreCase);
             foreach (ListItem item in items)
             {
-                string key = keySelector(item);
-                if (key.Length > 0 && !result.ContainsKey(key)) result[key] = item;
+                string key = NormalizeSpec(item.Alias);
+                if (key.Length == 0) continue;
+                if (result.TryGetValue(key, out ListItem existing))
+                    throw new InvalidDataException("固定清单“" + categoryName + "”别名重复："
+                        + item.Alias + " 同时指向 " + existing.Code + " 和 " + item.Code + "。");
+                result[key] = item;
             }
             return result;
         }
@@ -133,10 +129,17 @@ namespace UNCAD.Core.Excel
             return value.Length == 0 ? "" : NormalizeSpec(value + "mm");
         }
 
-        private static bool StartsWithCode(ListItem item, string prefix)
-            => (item.Code ?? "").StartsWith(prefix, StringComparison.Ordinal);
+        private IEnumerable<ListItem> CategoryItems(string category)
+            => Items.Where(item => HasCategory(item, category));
 
-        private static bool Contains(string value, string part)
-            => (value ?? "").IndexOf(part, StringComparison.Ordinal) >= 0;
+        private static bool HasPrimaryAlias(ListItem item)
+            => NormalizeSpec(item?.Alias).Length > 0;
+
+        private static bool HasCategory(ListItem item, params string[] categories)
+        {
+            string value = (item?.Category ?? "").Trim();
+            return categories.Any(category => string.Equals(value, category,
+                StringComparison.Ordinal));
+        }
     }
 }

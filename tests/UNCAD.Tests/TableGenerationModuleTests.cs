@@ -60,6 +60,7 @@ namespace UNCAD.Tests
         private static ListItem Item(string code, string name, string spec)
             => new ListItem
             {
+                Category = name.Contains("软管") ? "软管" : "电缆",
                 Code = code,
                 Name = name,
                 Feature = name + spec,

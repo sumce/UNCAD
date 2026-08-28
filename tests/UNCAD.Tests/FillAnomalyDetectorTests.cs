@@ -24,7 +24,8 @@ namespace UNCAD.Tests
             {
                 new ListItem
                 {
-                    Code = "1.25", Name = "交联电缆", Feature = "清单电缆模板",
+                    Category = "电缆", Code = "1.25", Name = "交联电缆",
+                    Feature = "清单电缆模板",
                     Unit = "m", Spec = "3*2.5"
                 }
             });

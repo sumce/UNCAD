@@ -24,17 +24,19 @@ namespace UNCAD.Tests
             hdr.CreateCell(1).SetCellValue("项目名称");
             hdr.CreateCell(2).SetCellValue("项目特征");
             hdr.CreateCell(3).SetCellValue("单位");
+            hdr.CreateCell(4).SetCellValue("类");
+            hdr.CreateCell(5).SetCellValue("别名");
 
             string[,] data = {
                 { "1", "电缆", "", "", "", "" },
-                { "1.1", "多芯电缆 XLPE", "1.名称:0.6/1kV-YJVR-2.5mm2*3C 多芯电缆", "m", "", "3*2.5" },
-                { "1.25", "单芯电缆 XLPE", "1.名称:0.6/1kV-YJV-70mm2*1C*3+PVC-35mm2*1C 单芯电缆", "m", "", "3*70+1*35" },
-                { "1.29", "单芯电缆 XLPE", "1.名称:0.6/1kV-YJV-95mm2*1C*3+PVC-50mm2*1C 单芯电缆", "m", "", "3*95+1*50" },
+                { "1.1", "多芯电缆 XLPE", "1.名称:0.6/1kV-YJVR-2.5mm2*3C 多芯电缆", "m", "电缆", "3*2.5" },
+                { "1.25", "单芯电缆 XLPE", "1.名称:0.6/1kV-YJV-70mm2*1C*3+PVC-35mm2*1C 单芯电缆", "m", "电缆", "3*70+1*35" },
+                { "1.29", "单芯电缆 XLPE", "1.名称:0.6/1kV-YJV-95mm2*1C*3+PVC-50mm2*1C 单芯电缆", "m", "电缆", "3*95+1*50" },
                 { "", "小计", "", "", "", "" },
                 { "3", "配管 PIPE", "", "", "", "" },
-                { "3.4", "镀锌穿线管", "1.名称:镀锌穿线管EMT PIPE 51mm(2\")", "m", "", "51mm" },
-                { "3.8", "包塑金属软管(波纹管)", "1.名称:51mm(2\") 包塑金属软管(波纹管)附镀锌接头", "m", "", "51mm" },
-                { "3.9", "包塑金属软管(波纹管)", "1.名称:75mm(3\") 包塑金属软管", "m", "", "75mm" }
+                { "3.4", "镀锌穿线管", "1.名称:镀锌穿线管EMT PIPE 51mm(2\")", "m", "线管", "51mm" },
+                { "3.8", "包塑金属软管(波纹管)", "1.名称:51mm(2\") 包塑金属软管(波纹管)附镀锌接头", "m", "软管", "51mm" },
+                { "3.9", "包塑金属软管(波纹管)", "1.名称:75mm(3\") 包塑金属软管", "m", "软管", "75mm" }
             };
             for (int r = 0; r < data.GetLength(0); r++)
             {
@@ -168,6 +170,14 @@ namespace UNCAD.Tests
             Assert.Equal("镀锌穿线管", rigid38.Name);
             Assert.Equal("38mm", rigid38.Alias);
             Assert.Equal("32mm", rigid38.Alias1);
+
+            // 新版 ts.xlsx：旧/简化电缆型号通过全局别名1迁移到正式清单行。
+            ListItem cable35 = items.Single(item => item.Code == "1.20");
+            Assert.Equal("电缆", cable35.Category);
+            Assert.Equal("3*35+1*16", cable35.Alias);
+            Assert.Equal("3*35+1*25", cable35.Alias1);
+            Assert.Equal("1.20", new BoqCatalogIndex(items)
+                .FindCable("ZB-YJV-3*35+1*25")?.Code);
         }
 
         [Fact]

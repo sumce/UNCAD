@@ -18,6 +18,7 @@ namespace UNCAD.UI
         private readonly TabControl _tabs;
         private readonly Label _count;
         private readonly Button _replaceItem;
+        private readonly Button _resolveMissing;
         private readonly Button _removeItem;
         private readonly ToolTip _toolTips = new ToolTip();
         private readonly Label _catalogWarning = new Label
@@ -88,6 +89,7 @@ namespace UNCAD.UI
             };
             Button addManual = CommandButton("从固定清单添加");
             _replaceItem = CommandButton("替换为固定清单");
+            _resolveMissing = CommandButton("选择未匹配项");
             _removeItem = CommandButton("删除选中项");
             Button selectAll = CommandButton("全部勾选");
             Button clearAll = CommandButton("全部取消");
@@ -95,12 +97,14 @@ namespace UNCAD.UI
             _count = new Label { AutoSize = true, Padding = new Padding(12, 7, 0, 0) };
             addManual.Click += AddCatalogItem;
             _replaceItem.Click += ReplaceSelectedItem;
+            _resolveMissing.Click += ResolveFirstUnmatched;
             _removeItem.Click += RemoveSelectedItem;
             selectAll.Click += (sender, args) => SetAll(true);
             clearAll.Click += (sender, args) => SetAll(false);
             restore.Click += (sender, args) => RestoreDefaults();
             toolbar.Controls.Add(addManual);
             toolbar.Controls.Add(_replaceItem);
+            toolbar.Controls.Add(_resolveMissing);
             toolbar.Controls.Add(_removeItem);
             toolbar.Controls.Add(selectAll);
             toolbar.Controls.Add(clearAll);
@@ -315,11 +319,34 @@ namespace UNCAD.UI
 
         private void ReplaceSelectedItem(object sender, EventArgs e)
         {
-            if (!(_grid.CurrentRow?.Tag is FillReviewItem item)) return;
-            using (var form = new ManualListItemForm(_catalog.SelectableItems, true))
+            if (_grid.CurrentRow?.Tag is FillReviewItem item) OpenCatalogPicker(item);
+        }
+
+        private void ResolveFirstUnmatched(object sender, EventArgs e)
+        {
+            FillReviewItem item = Data.Items.FirstOrDefault(candidate =>
+                candidate.RequiresCatalogConfirmation);
+            if (item == null) return;
+            FocusReviewItem(item);
+            OpenCatalogPicker(item);
+        }
+
+        private void OpenCatalogPicker(FillReviewItem item)
+        {
+            string category = FillReviewData.CategoryName(item.Category);
+            using (var form = new ManualListItemForm(
+                _catalog.SelectableItems, true, category))
             {
                 if (form.ShowDialog(this) != DialogResult.OK
                     || form.SelectedItem == null) return;
+                string selectedCategory = (form.SelectedItem.Category ?? "").Trim();
+                if (item.Category != TableFillCategory.Manual
+                    && !string.Equals(selectedCategory, category, StringComparison.Ordinal))
+                {
+                    MessageBox.Show(this, "只能选择“" + category + "”类别的固定清单项目。",
+                        "固定清单类别不一致", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
                 Data.ReplaceWithCatalogItem(item, form.SelectedItem);
                 if (item.Category == TableFillCategory.Cable)
                 {
@@ -329,6 +356,17 @@ namespace UNCAD.UI
                 }
                 RefreshItem(item);
                 UpdateDeleteState();
+            }
+        }
+
+        private void FocusReviewItem(FillReviewItem item)
+        {
+            _tabs.SelectedIndex = 1;
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (!ReferenceEquals(row.Tag, item)) continue;
+                _grid.CurrentCell = row.Cells["Name"];
+                break;
             }
         }
 
@@ -408,6 +446,22 @@ namespace UNCAD.UI
                     "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            // 未匹配行的默认未勾选仅用于阻止写出，不代表用户已决定忽略。
+            // 必须明确选择固定清单身份或删除该行，避免关键材料被静默遗漏。
+            FillReviewItem unmatched = Data.Items.FirstOrDefault(item =>
+                item.RequiresCatalogConfirmation);
+            if (unmatched != null)
+            {
+                FocusReviewItem(unmatched);
+                string category = FillReviewData.CategoryName(unmatched.Category);
+                MessageBox.Show(this, "找不到对应型号的" + category + "："
+                    + MissingSubject(unmatched) + "。\r\n\r\n将自动打开“" + category
+                    + "”待选页，请从固定清单中选择对应项目。",
+                    "固定清单未匹配", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                OpenCatalogPicker(unmatched);
+                return;
+            }
+
             for (int index = 0; index < Data.Items.Count; index++)
             {
                 FillReviewItem item = Data.Items[index];
@@ -427,16 +481,6 @@ namespace UNCAD.UI
                 _grid.BeginEdit(true);
                 MessageBox.Show(this, "“" + item.Name + "”的数量/长度必须是非负数字或留空。",
                     "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            List<FillReviewItem> unmatched = Data.Items.Where(item =>
-                item.Included && item.RequiresCatalogConfirmation).ToList();
-            if (unmatched.Count > 0)
-            {
-                string names = string.Join("；", unmatched.Select(item => item.Name).Distinct());
-                MessageBox.Show(this, "以下项目没有固定清单身份，不能生成：\r\n"
-                    + names + "\r\n\r\n请使用“替换为固定清单”选择数据库项目，或取消勾选。",
-                    "固定清单校验失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             Data.SetCableMeters(_cableMeters.Text);
@@ -501,6 +545,17 @@ namespace UNCAD.UI
             }
         }
 
+        private string MissingSubject(FillReviewItem item)
+        {
+            if (item.Category == TableFillCategory.Cable)
+            {
+                string model = (Data.BoqCableModel ?? "").Trim();
+                if (model.Length > 0) return model;
+            }
+            return string.IsNullOrWhiteSpace(item.Name)
+                ? "未提供型号" : item.Name.Trim().Replace(@"\P", " / ");
+        }
+
         private void UpdateCatalogWarning()
         {
             List<string> missing = FillAnomalyDetector.DetectCatalog(Data)
@@ -508,10 +563,11 @@ namespace UNCAD.UI
                     + anomaly.Subject.Replace("\\P", " / "))
                 .Distinct(StringComparer.Ordinal).ToList();
             _catalogWarning.Visible = missing.Count > 0;
+            _resolveMissing.Enabled = missing.Count > 0;
             _catalogWarning.Text = missing.Count == 0 ? ""
-                : "[BOQ-CATALOG-MISSING] 固定清单未找到："
+                : "[BOQ-CATALOG-MISSING] 找不到对应型号："
                     + string.Join("；", missing)
-                    + "。未匹配项目已禁用，必须替换为数据库项目或删除。";
+                    + "。点击“选择未匹配项”会自动打开对应类别，或删除不需要的项目。";
             _catalogWarning.AccessibleDescription = _catalogWarning.Text;
             _toolTips.SetToolTip(_catalogWarning, _catalogWarning.Text);
         }

@@ -5,11 +5,24 @@
 # Usage: pwsh ./scripts/GenerateEmbeddedCatalog.ps1 [-CatalogPath ts.xlsx] [-OutputPath src\UNCAD\Resources\embedded_catalog.tsv]
 [CmdletBinding()]
 param(
-    [string]$CatalogPath = (Join-Path $PSScriptRoot "..\ts.xlsx"),
-    [string]$OutputPath = (Join-Path $PSScriptRoot "..\src\UNCAD\Resources\embedded_catalog.tsv"),
-    [string]$BundlePath = (Join-Path $PSScriptRoot "..\bundle\UNCAD.bundle")
+    [string]$CatalogPath = "",
+    [string]$OutputPath = "",
+    [string]$BundlePath = ""
 )
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell may evaluate parameter defaults before $PSScriptRoot is populated.
+# Resolve defaults here so the documented no-argument command works in both hosts.
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ([string]::IsNullOrWhiteSpace($CatalogPath)) {
+    $CatalogPath = Join-Path $scriptRoot "..\ts.xlsx"
+}
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $scriptRoot "..\src\UNCAD\Resources\embedded_catalog.tsv"
+}
+if ([string]::IsNullOrWhiteSpace($BundlePath)) {
+    $BundlePath = Join-Path $scriptRoot "..\bundle\UNCAD.bundle"
+}
 $CatalogPath = [IO.Path]::GetFullPath($CatalogPath)
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 $bundle = [IO.Path]::GetFullPath($BundlePath)

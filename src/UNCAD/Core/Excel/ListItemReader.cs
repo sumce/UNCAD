@@ -8,7 +8,7 @@ using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Excel
 {
-    /// <summary>清单条目（Sheet2：编号/项目名称/项目特征/单位/规格）。</summary>
+    /// <summary>固定清单条目：类/编码/名称/特征/单位/别名/全局迁移别名。</summary>
     public sealed class ListItem
     {
         public string Category { get; set; }
@@ -28,8 +28,8 @@ namespace UNCAD.Core.Excel
     }
 
     /// <summary>
-    /// 读取工程量清单（自动定位表头含"项目特征"的工作表，即 Sheet2）。
-    /// 电缆/软管按规格匹配清单编号：电缆型号 ZB-YJV-3*70+1*35 ↔ 编号 1.25，软管直径 51 ↔ 编号 3.8。
+    /// 读取工程量清单（自动定位表头含"项目特征"的工作表）。
+    /// 自动匹配严格使用“类”划定范围，再与“别名”精确比较；空类不参与判定。
     /// </summary>
     public static class ListItemReader
     {
@@ -211,11 +211,11 @@ namespace UNCAD.Core.Excel
             => column < 0 ? ""
                 : ExcelColumnReader.CellToString(row.GetCell(column)).Trim();
 
-        /// <summary>按电缆型号查清单条目：去掉 ZB-YJV[R]- 前缀后匹配规格列（电缆段编号 1.x）。</summary>
+        /// <summary>规范化电缆型号后，仅与“电缆”类的别名比较。</summary>
         public static ListItem FindCable(List<ListItem> items, string cableModel)
             => new BoqCatalogIndex(items).FindCable(cableModel);
 
-        /// <summary>按软管直径查清单条目：规格 "51mm" 且名称含"软管"（配管段编号 3.x）。</summary>
+        /// <summary>规范化直径后，仅与“软管”类的别名比较。</summary>
         public static ListItem FindConduit(List<ListItem> items, string dia)
             => new BoqCatalogIndex(items).FindFlexibleConduit(dia);
     }

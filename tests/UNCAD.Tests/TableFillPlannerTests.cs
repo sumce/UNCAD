@@ -255,12 +255,25 @@ namespace UNCAD.Tests
         {
             return new ListItem
             {
+                // 测试夹具显式模拟工作簿“类”列，产品代码不会再按编码推断。
+                Category = TestCategory(code, name),
                 Code = code,
                 Name = name,
                 Feature = feature,
                 Unit = unit,
                 Spec = spec
             };
+        }
+
+        private static string TestCategory(string code, string name)
+        {
+            if (code.StartsWith("1.")) return "电缆";
+            if (code.StartsWith("2.")) return "桥架";
+            if (code.StartsWith("3.")) return name.Contains("软管") ? "软管" : "线管";
+            if (code.StartsWith("5.")) return "母线插接箱";
+            if (code.StartsWith("6.")) return "断路器";
+            if (code.StartsWith("8.")) return "插座";
+            return "";
         }
     }
 }

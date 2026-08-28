@@ -26,11 +26,13 @@ namespace UNCAD.UI
             Name = "CatalogSearch",
             Dock = DockStyle.Fill
         };
-        private readonly ComboBox _category = new ComboBox
+        private readonly TabControl _categoryTabs = new TabControl
         {
-            Name = "CatalogCategory",
+            Name = "CatalogTabs",
             Dock = DockStyle.Fill,
-            DropDownStyle = ComboBoxStyle.DropDownList
+            Multiline = false,
+            Padding = new Point(14, 4),
+            ShowToolTips = true
         };
         private readonly ListView _list = new ListView
         {
@@ -68,12 +70,20 @@ namespace UNCAD.UI
         /// <summary>连续添加模式：双击或“添加并继续”时触发，对话框保持打开。</summary>
         public event Action<ListItem, string> PickRequested;
 
-        public ManualListItemForm(IEnumerable<ListItem> catalog, bool replacement = false)
+        public ManualListItemForm(IEnumerable<ListItem> catalog, bool replacement = false,
+            string initialCategory = null)
         {
             _replacement = replacement;
-            _catalog = (catalog ?? Enumerable.Empty<ListItem>())
-                .Where(IsSelectable)
-                .OrderBy(item => item.Code ?? "", StringComparer.Ordinal)
+            List<ListItem> selectable = (catalog ?? Enumerable.Empty<ListItem>())
+                .Where(IsSelectable).ToList();
+            if (replacement && !string.IsNullOrWhiteSpace(initialCategory)
+                && !string.Equals(initialCategory, "手动添加", StringComparison.Ordinal))
+            {
+                // 替换必须保持原清单类别，防止把桥架身份写入电缆行等跨类错误。
+                selectable = selectable.Where(item => string.Equals(CategoryOf(item),
+                    initialCategory.Trim(), StringComparison.Ordinal)).ToList();
+            }
+            _catalog = selectable.OrderBy(item => item.Code ?? "", StringComparer.Ordinal)
                 .ToList();
             _recentCodes = LoadRecentCodes();
 
@@ -83,19 +93,14 @@ namespace UNCAD.UI
 
             var filters = new TableLayoutPanel
             {
-                Dock = DockStyle.Top,
-                Height = 48,
-                ColumnCount = 4,
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
                 Padding = new Padding(8, 7, 8, 5)
             };
             filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
-            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             filters.Controls.Add(LabelFor("搜索:"), 0, 0);
             filters.Controls.Add(_search, 1, 0);
-            filters.Controls.Add(LabelFor("类别:"), 2, 0);
-            filters.Controls.Add(_category, 3, 0);
 
             _list.Columns.Add("类别", 90);
             _list.Columns.Add("项目编码", 90);
@@ -106,16 +111,17 @@ namespace UNCAD.UI
             _list.Columns.Add("项目特征", 300);
             _list.ColumnClick += OnColumnClick;
 
-            _category.Items.Add("全部");
-            _category.Items.Add("最近使用");
+            // 类别直接做成顶部标签；标签值只来自“类”列，不根据名称或编码推断。
+            AddCategoryTab("全部");
+            AddCategoryTab("最近使用");
             foreach (string category in _catalog.Select(CategoryOf)
                 .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal))
-                _category.Items.Add(category);
-            _category.SelectedIndex = 0;
+                AddCategoryTab(category);
+            SelectCategoryTab(initialCategory);
 
             var quantityBar = new TableLayoutPanel
             {
-                Dock = DockStyle.Bottom,
+                Dock = DockStyle.Fill,
                 Height = 44,
                 ColumnCount = 4,
                 Padding = new Padding(10, 6, 10, 4)
@@ -153,15 +159,29 @@ namespace UNCAD.UI
             commands.Controls.Add(_continueAdd);
             commands.Controls.Add(_confirm);
 
-            Controls.Add(_list);
-            Controls.Add(filters);
-            Controls.Add(quantityBar);
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, replacement ? 0 : 44));
+            content.Controls.Add(_categoryTabs, 0, 0);
+            content.Controls.Add(filters, 0, 1);
+            content.Controls.Add(_list, 0, 2);
+            content.Controls.Add(quantityBar, 0, 3);
+
+            Controls.Add(content);
             Controls.Add(commands);
             AcceptButton = _confirm;
             CancelButton = cancel;
 
             _search.TextChanged += (sender, args) => Populate();
-            _category.SelectedIndexChanged += (sender, args) => Populate();
+            _categoryTabs.SelectedIndexChanged += (sender, args) => Populate();
             _list.SelectedIndexChanged += (sender, args) => UpdateConfirmState();
             _list.DoubleClick += (sender, args) =>
                 PickCurrent(keepOpen: !_replacement);
@@ -172,6 +192,9 @@ namespace UNCAD.UI
             ? _list.SelectedItems[0].Tag as ListItem : null;
 
         public string Quantity => TextFormatter.FormatNum((double)_quantity.Value);
+
+        /// <summary>当前顶部类别标签，供未匹配项跳转和 UI 回归测试核对。</summary>
+        public string SelectedCategory => Convert.ToString(_categoryTabs.SelectedTab?.Tag) ?? "全部";
 
         private void PickCurrent(bool keepOpen)
         {
@@ -193,7 +216,7 @@ namespace UNCAD.UI
         private void Populate()
         {
             string query = (_search.Text ?? "").Trim();
-            string category = Convert.ToString(_category.SelectedItem) ?? "全部";
+            string category = SelectedCategory;
             _list.BeginUpdate();
             try
             {
@@ -201,8 +224,9 @@ namespace UNCAD.UI
                 List<ListItem> visible = _catalog.Where(candidate =>
                     CategoryMatches(candidate, category) && Matches(candidate, query)).ToList();
                 IEnumerable<ListItem> ordered = category == "最近使用"
-                    ? visible.OrderByDescending(item => RecentRank(item.Code))
-                    : visible.OrderByDescending(item => RecentRank(item.Code))
+                    ? visible.OrderBy(item => RecentRank(item.Code))
+                    : visible.OrderBy(item => RecentRank(item.Code) < 0 ? 1 : 0)
+                        .ThenBy(item => RecentRank(item.Code))
                         .ThenBy(item => item.Code ?? "", StringComparer.Ordinal);
                 foreach (ListItem item in ordered)
                 {
@@ -221,6 +245,26 @@ namespace UNCAD.UI
             }
             finally { _list.EndUpdate(); }
             UpdateConfirmState();
+        }
+
+        private void AddCategoryTab(string category)
+        {
+            var page = new TabPage(category)
+            {
+                Tag = category,
+                ToolTipText = category == "未分类"
+                    ? "这些项目未设置类，仅供人工选择，不参与自动匹配。"
+                    : category + "清单"
+            };
+            _categoryTabs.TabPages.Add(page);
+        }
+
+        private void SelectCategoryTab(string requestedCategory)
+        {
+            string requested = (requestedCategory ?? "").Trim();
+            TabPage selected = _categoryTabs.TabPages.Cast<TabPage>().FirstOrDefault(page =>
+                string.Equals(Convert.ToString(page.Tag), requested, StringComparison.Ordinal));
+            _categoryTabs.SelectedTab = selected ?? _categoryTabs.TabPages[0];
         }
 
         private bool CategoryMatches(ListItem item, string category)
@@ -259,7 +303,7 @@ namespace UNCAD.UI
             string text = (item.Category ?? "") + " · " + (item.Code ?? "")
                 + " " + (item.Name ?? "");
             if (!string.IsNullOrWhiteSpace(item.Alias))
-                text += "\\n规格: " + item.Alias.Trim();
+                text += "\\n别名: " + item.Alias.Trim();
             if (!string.IsNullOrWhiteSpace(item.Feature))
                 text += "\\n" + item.Feature.Trim();
             return text;

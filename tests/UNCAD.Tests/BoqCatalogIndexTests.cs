@@ -12,9 +12,9 @@ namespace UNCAD.Tests
         {
             var index = new BoqCatalogIndex(new List<ListItem>
             {
-                Item("3.3", "镀锌穿线管", "38mm"),
-                Item("3.7", "包塑金属软管", "38mm"),
-                Item("3.32", "镀锌穿线管", "32mm")
+                Item("3.3", "线管", "38mm", "线管"),
+                Item("3.7", "软管", "38mm", "软管"),
+                Item("3.32", "线管", "32mm", "线管")
             });
 
             Assert.Equal("3.32", index.FindRigidConduit("Φ32")?.Code);
@@ -26,12 +26,12 @@ namespace UNCAD.Tests
         [Fact]
         public void Alias1_Migrates32mmInputToTheDatabase38mmMaterial()
         {
-            ListItem target = Item("3.3", "镀锌穿线管", "38mm");
+            ListItem target = Item("3.3", "镀锌穿线管", "38mm", "线管");
             target.Alias1 = "32mm";
             var index = new BoqCatalogIndex(new[]
             {
                 target,
-                Item("3.7", "包塑金属软管", "38mm")
+                Item("3.7", "包塑金属软管", "38mm", "软管")
             });
 
             ListItem migrated = index.FindFlexibleConduit("32mm");
@@ -45,9 +45,9 @@ namespace UNCAD.Tests
         [Fact]
         public void Alias1_DuplicateMigrationTargetsAreRejected()
         {
-            ListItem first = Item("3.3", "镀锌穿线管", "38mm");
+            ListItem first = Item("3.3", "镀锌穿线管", "38mm", "线管");
             first.Alias1 = "32mm";
-            ListItem second = Item("3.7", "包塑金属软管", "38mm");
+            ListItem second = Item("3.7", "包塑金属软管", "38mm", "软管");
             second.Alias1 = "DN32";
 
             InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
@@ -59,20 +59,35 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void SpecIndex_NormalizesWhitespaceAndKeepsFirstDuplicateDeterministically()
+        public void AliasIndex_NormalizesValuesAndRejectsAmbiguousCategoryDuplicates()
         {
-            var index = new BoqCatalogIndex(new List<ListItem>
-            {
-                Item("2.1", "桥架", "200 x 100"),
-                Item("2.9", "重复桥架", "200*100"),
-                Item("1.1", "电缆", "3*2.5")
-            });
+            InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                new BoqCatalogIndex(new List<ListItem>
+                {
+                    Item("2.1", "桥架", "200 x 100", "桥架"),
+                    Item("2.9", "重复桥架", "200*100", "桥架")
+                }));
 
-            Assert.Equal("2.1", index.FindBridge("200*100")?.Code);
-            Assert.Equal("1.1", index.FindCable("ZB-YJVR-3x2.5")?.Code);
+            Assert.Contains("桥架", error.Message);
+            Assert.Contains("2.1", error.Message);
+            Assert.Contains("2.9", error.Message);
         }
 
-        private static ListItem Item(string code, string name, string spec)
-            => new ListItem { Code = code, Name = name, Spec = spec };
+        [Fact]
+        public void AliasMatching_UsesExplicitCategoryAndNeverInfersBlankClass()
+        {
+            var index = new BoqCatalogIndex(new[]
+            {
+                Item("1.1", "复杂电缆名称", "3*2.5", "电缆"),
+                Item("1.2", "电缆", "4*2.5", "")
+            });
+
+            Assert.Equal("1.1", index.FindCable("ZB-YJVR-3x2.5")?.Code);
+            Assert.Null(index.FindCable("ZB-YJVR-4*2.5"));
+            Assert.Single(index.Cables);
+        }
+
+        private static ListItem Item(string code, string name, string alias, string category)
+            => new ListItem { Category = category, Code = code, Name = name, Alias = alias };
     }
 }

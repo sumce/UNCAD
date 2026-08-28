@@ -186,7 +186,7 @@ namespace UNCAD.Tests
             {
                 new ListItem
                 {
-                    Code = "3.6", Name = "25mm包塑金属软管",
+                    Category = "软管", Code = "3.6", Name = "25mm包塑金属软管",
                     Feature = "Excel中的25mm软管模板", Unit = "m", Spec = "25mm"
                 }
             };

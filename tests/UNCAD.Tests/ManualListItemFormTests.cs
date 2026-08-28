@@ -22,6 +22,11 @@ namespace UNCAD.Tests
             {
                 Category = "桥架", Code = "2.6", Name = "桥架",
                 Feature = "200*100桥架", Unit = "m", Alias = "200*100"
+            },
+            new ListItem
+            {
+                Category = "电缆", Code = "1.1", Name = "多芯电缆 XLPE",
+                Feature = "电缆清单模板", Unit = "m", Alias = "3*2.5"
             }
         };
 
@@ -180,8 +185,9 @@ namespace UNCAD.Tests
                                 button.Text == "添加并继续").PerformClick();
                             Application.DoEvents();
 
-                            ComboBox category = Find<ComboBox>(form, "CatalogCategory");
-                            category.SelectedItem = "最近使用";
+                            TabControl tabs = Find<TabControl>(form, "CatalogTabs");
+                            tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page =>
+                                Convert.ToString(page.Tag) == "最近使用");
                             Application.DoEvents();
 
                             var recent = list.Items.Cast<ListViewItem>()
@@ -190,6 +196,40 @@ namespace UNCAD.Tests
 
                             All<Button>(form).Single(button =>
                                 button.Text == "取消").PerformClick();
+                        };
+                        form.ShowDialog();
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void Dialog_ReplacementOpensRequestedCableTabAndFiltersRows()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new ManualListItemForm(Catalog(), true, "电缆"))
+                    {
+                        form.Shown += (sender, args) =>
+                        {
+                            TabControl tabs = Find<TabControl>(form, "CatalogTabs");
+                            Assert.DoesNotContain(tabs.TabPages.Cast<TabPage>(),
+                                page => page.Text == "桥架");
+                            Assert.Contains(tabs.TabPages.Cast<TabPage>(), page => page.Text == "电缆");
+                            Assert.Equal("电缆", form.SelectedCategory);
+
+                            ListView list = Find<ListView>(form, "CatalogItems");
+                            ListViewItem row = Assert.Single(list.Items.Cast<ListViewItem>());
+                            Assert.Equal("1.1", ((ListItem)row.Tag).Code);
+                            All<Button>(form).Single(button => button.Text == "取消").PerformClick();
                         };
                         form.ShowDialog();
                     }

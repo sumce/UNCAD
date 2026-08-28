@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
 using UNCAD.Core.Excel;
@@ -133,7 +134,7 @@ namespace UNCAD.Tests
                     {
                         new ListItem
                         {
-                            Code = "3.6", Name = "25mm软管",
+                            Category = "软管", Code = "3.6", Name = "25mm软管",
                             Feature = "25mm新模板", Unit = "m", Spec = "25mm"
                         }
                     };
@@ -200,7 +201,7 @@ namespace UNCAD.Tests
                         Application.DoEvents();
                         TabControl tabs = Find<TabControl>(form);
                         DataGridView grid = Find<DataGridView>(form);
-                        Label warning = FindLabelContaining(form, "固定清单未找到");
+                        Label warning = FindLabelContaining(form, "找不到对应型号");
 
                         Assert.Equal(1, tabs.SelectedIndex);
                         Assert.NotNull(warning);
@@ -214,6 +215,87 @@ namespace UNCAD.Tests
                         Application.DoEvents();
                         Assert.Empty(form.Data.SelectedRows());
                         Assert.True(FindButton(form, "替换为固定清单").Enabled);
+                        Assert.True(FindButton(form, "选择未匹配项").Enabled);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void Dialog_SelectUnmatchedCableOpensCableCatalogTab()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var rows = new[]
+                    {
+                        new TableFillRow
+                        {
+                            Category = TableFillCategory.Cable, Name = "电缆",
+                            Description = "1.名称:44*2+21", Quantity = "10",
+                            CatalogMatched = false
+                        }
+                    };
+                    var catalog = new[]
+                    {
+                        new ListItem
+                        {
+                            Category = "电缆", Code = "1.1", Name = "多芯电缆",
+                            Feature = "电缆模板", Unit = "m", Alias = "3*2.5"
+                        },
+                        new ListItem
+                        {
+                            Category = "桥架", Code = "2.1", Name = "桥架",
+                            Feature = "桥架模板", Unit = "m", Alias = "200*100"
+                        }
+                    };
+                    using (var form = new FillReviewForm(FillReviewData.Create(
+                        new MachineRow
+                        {
+                            MachineId = "M1", CircuitName = "设备A", Cable = "44*2+21"
+                        }, rows), catalog.ToList()))
+                    {
+                        Exception pickerFailure = null;
+                        bool pickerOpened = false;
+                        var timer = new System.Windows.Forms.Timer { Interval = 30 };
+                        timer.Tick += (sender, args) =>
+                        {
+                            ManualListItemForm picker = Application.OpenForms
+                                .OfType<ManualListItemForm>().FirstOrDefault();
+                            if (picker == null) return;
+                            timer.Stop();
+                            try
+                            {
+                                pickerOpened = true;
+                                Assert.Equal("电缆", picker.SelectedCategory);
+                                ListView list = Find<ListView>(picker);
+                                ListViewItem row = Assert.Single(list.Items.Cast<ListViewItem>());
+                                Assert.Equal("1.1", ((ListItem)row.Tag).Code);
+                            }
+                            catch (Exception ex) { pickerFailure = ex; }
+                            finally
+                            {
+                                picker.DialogResult = DialogResult.Cancel;
+                                picker.Close();
+                            }
+                        };
+                        form.Shown += (sender, args) =>
+                        {
+                            timer.Start();
+                            FindButton(form, "选择未匹配项").PerformClick();
+                            timer.Dispose();
+                            Assert.True(pickerOpened);
+                            if (pickerFailure != null) throw pickerFailure;
+                            form.Close();
+                        };
+                        form.ShowDialog();
                     }
                 }
                 catch (Exception ex) { failure = ex; }
