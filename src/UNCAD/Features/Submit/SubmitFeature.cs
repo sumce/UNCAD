@@ -56,8 +56,7 @@ namespace UNCAD.Features.Submit
             string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
             var owner = new WindowWrapper(AcApplication.MainWindow.Handle);
             if (record.Materials.Count == 0
-                && MessageBox.Show(owner,
-                    "框选内容中没有读取到清单明细。继续后只导出设备汇总，不会生成材料明细行。\r\n\r\n是否继续？",
+                && MessageBox.Show(owner, BuildNoMaterialsMessage(record),
                     "UNC_SUBMIT 清单明细异常", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
                     != DialogResult.Yes)
@@ -103,6 +102,35 @@ namespace UNCAD.Features.Submit
             }
         }
 
+        /// <summary>把“没有读到清单明细”变成可诊断的提示：区分没框到表、表是空的、数据列缺失。</summary>
+        private static string BuildNoMaterialsMessage(SubmissionRecord record)
+        {
+            string detail;
+            if (record.TableRowsRead == 0 && record.TextEntityCount > 0)
+            {
+                detail = "框选到了 " + record.TextEntityCount
+                    + " 个文字/多行文字，但没有 AutoCAD 表格实体。\r\n"
+                    + "UNC_SUBMIT 读取的是真实清单表（ACAD_TABLE）。若你的清单是文字画的，\r\n"
+                    + "请改用 UNC_FILL 的标准表格，或直接框选表格实体本身。";
+            }
+            else if (record.TableRowsRead == 0)
+            {
+                detail = "框选区域中没有读取到表格实体。请确认：\r\n"
+                    + "1) 框选到了 UNC_FILL 使用的清单表（AutoCAD 表格实体）；\r\n"
+                    + "2) 清单表所在图层没有被关闭或冻结；\r\n"
+                    + "3) 若清单表在块/外部参照内部，请直接框选表格本身。";
+            }
+            else
+            {
+                detail = "已读取表格 " + record.TableRowsRead + " 行，但没有识别到材料明细行。请确认：\r\n"
+                    + "1) 清单表已由 UNC_FILL 填充（数据行含 No.1 编号、名称、单位、数量和编码）；\r\n"
+                    + "2) 表格不是只有表头或已被清空，请先运行 UNC_FILL；\r\n"
+                    + "3) 表格数据列位置为标准列序（序号/名称/特征/单位/数量/编码）。";
+            }
+            return "框选内容中没有读取到清单明细。\r\n\r\n" + detail
+                + "\r\n\r\n继续后只导出设备汇总，不会生成材料明细行。\r\n\r\n是否继续？";
+        }
+
         private static string Display(string value)
             => string.IsNullOrWhiteSpace(value) ? "无" : value.Trim();
 
@@ -119,6 +147,7 @@ namespace UNCAD.Features.Submit
                     Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
                     if (entity is BlockReference block) ReadBlock(transaction, block, source);
                     else if (entity is Table table) ReadTable(table, source);
+                    else if (entity is DBText || entity is MText) source.TextEntityCount++;
                 }
             }
             return source;

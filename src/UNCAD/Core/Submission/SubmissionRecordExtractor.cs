@@ -90,7 +90,9 @@ namespace UNCAD.Core.Submission
                 ConduitMeters = conduitMeters,
                 DownstreamAxis = Unique(source, ConnectionBlockFiller.TagDownstreamAxis),
                 UpstreamAxis = Unique(source, ConnectionBlockFiller.TagUpstreamAxis),
-                Materials = ExtractMaterials(source)
+                Materials = ExtractMaterials(source),
+                TableRowsRead = source.TableRows.Count,
+                TextEntityCount = source.TextEntityCount
             };
         }
 

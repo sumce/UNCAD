@@ -23,6 +23,10 @@ namespace UNCAD.Core.Submission
         public string DownstreamAxis { get; set; } = "";
         public string UpstreamAxis { get; set; } = "";
         public List<SubmissionMaterial> Materials { get; set; } = new List<SubmissionMaterial>();
+        // 框选读取到的表格总行数（供 UNC_SUBMIT 诊断：区分“没框到表”与“表是空的”）。
+        public int TableRowsRead { get; set; }
+        // 框选到的文字/多行文字实体数（诊断：用户框到的可能是文字画的表，而不是 AutoCAD 表格）。
+        public int TextEntityCount { get; set; }
     }
 
     public sealed class SubmissionMaterial
@@ -45,6 +49,7 @@ namespace UNCAD.Core.Submission
         public Dictionary<string, List<string>> Attributes { get; }
         public List<string> DynamicValues { get; } = new List<string>();
         public List<string> TableValues { get; } = new List<string>();
+        public int TextEntityCount { get; set; }
         public List<List<string>> TableRows { get; } = new List<List<string>>();
 
         public void AddTableRow(params string[] values)
