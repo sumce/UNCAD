@@ -29,6 +29,37 @@ namespace UNCAD.Core.Submission
             "单位", "数量", "项目编码", "提交时间", "更新时间"
         };
 
+        /// <summary>
+        /// Acquires the same process lock used by the writer, verifies an existing workbook can be
+        /// parsed, and proves the target directory accepts a temporary file before CAD is changed.
+        /// </summary>
+        public static void ValidateTargetForUpdate(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("自动记录文件路径为空。", nameof(filePath));
+            string fullPath = Path.GetFullPath(filePath);
+            string folder = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+                throw new DirectoryNotFoundException("自动记录文件夹不存在: " + folder);
+
+            using (FileStream updateLock = AcquireUpdateLock(fullPath))
+            {
+                if (File.Exists(fullPath))
+                {
+                    IWorkbook workbook = null;
+                    try { workbook = LoadOrCreate(fullPath); }
+                    finally { workbook?.Close(); }
+                }
+                string probe = Path.Combine(folder, "." + Path.GetFileName(fullPath)
+                    + "." + Guid.NewGuid().ToString("N") + ".probe");
+                try
+                {
+                    using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
+                }
+                finally { TryDelete(probe); }
+            }
+        }
+
         public static SubmissionWriteResult Upsert(string filePath, SubmissionRecord record,
             DateTimeOffset submittedNow)
         {

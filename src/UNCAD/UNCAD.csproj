@@ -13,13 +13,13 @@
     <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
 
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
-    <AssemblyDescription>AutoCAD 2022 电气清单填充、统计、提交与标注工具</AssemblyDescription>
+    <AssemblyDescription>AutoCAD 2022 电气清单生成、批量更新、自动记录、统计与标注工具</AssemblyDescription>
     <AssemblyCompany>UNSIAO Work™ | 云邵出品</AssemblyCompany>
-    <AssemblyVersion>1.9.3.0</AssemblyVersion>
-    <FileVersion>1.9.3.0</FileVersion>
-    <Version>1.9.3</Version>
+    <AssemblyVersion>1.9.4.0</AssemblyVersion>
+    <FileVersion>1.9.4.0</FileVersion>
+    <Version>1.9.4</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
-    <InformationalVersion>1.9.3+build.$(BuildTimestampCompact)</InformationalVersion>
+    <InformationalVersion>1.9.4+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->

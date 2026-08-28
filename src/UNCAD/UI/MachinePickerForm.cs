@@ -9,7 +9,7 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// UNC_FILL 机台选择窗口 v3：
+    /// UNC_F 机台选择窗口 v3：
     ///   ① 机台ID 输入（前缀优先的相似建议，最多 8 个，回车/点击选择）
     ///   ② 选中机台后：顶部显示机台摘要（区域/机台ID/回路数），
     ///      中间列表显示全部回路（设备名称）及 电缆型号/软管Φ/详情/序号
@@ -37,7 +37,7 @@ namespace UNCAD.UI
             _lookup = lookup;
             _previewBuilder = previewBuilder;
 
-            DialogLayout.Apply(this, "UNC_FILL · " + Branding.Nameplate,
+            DialogLayout.Apply(this, "UNC_F · " + Branding.Nameplate,
                 new Size(820, 620), new Size(700, 520));
 
             // ① 机台ID 输入
@@ -329,7 +329,7 @@ namespace UNCAD.UI
         {
             if (_circuit.SelectedItems.Count == 0)
             {
-                MessageBox.Show("请先在列表中选择一个设备/回路。", "UNC_FILL",
+                MessageBox.Show("请先在列表中选择一个设备/回路。", "UNC_F",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }

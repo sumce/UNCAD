@@ -4,13 +4,13 @@ using Xunit;
 
 namespace UNCAD.Tests
 {
-    public class SubmitFeatureContractTests
+    public class AutomaticSubmissionServiceContractTests
     {
         [Fact]
         public void ReadSelection_ClassifiesTableBeforeBlockReference()
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Submit", "SubmitFeature.cs"));
+                "Submit", "AutomaticSubmissionService.cs"));
             int table = source.IndexOf("if (entity is Table table)", StringComparison.Ordinal);
             int block = source.IndexOf("else if (entity is BlockReference block)",
                 StringComparison.Ordinal);
@@ -18,6 +18,23 @@ namespace UNCAD.Tests
             // Autodesk Table derives from BlockReference; order is a behavioral contract.
             Assert.True(table >= 0);
             Assert.True(block > table);
+        }
+
+        [Fact]
+        public void FillCommandsOwnAutomaticExcelAndNoSubmitCommandExists()
+        {
+            string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Submit", "AutomaticSubmissionService.cs"));
+            string fill = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "FillFeature.cs"));
+            string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "BatchFillUpdateCoordinator.cs"));
+
+            Assert.DoesNotContain("CommandMethod", service);
+            Assert.Contains("AutomaticSubmissionService.Write", fill);
+            Assert.Contains("AutomaticSubmissionService.Write", batch);
+            Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 Excel", fill);
+            Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 Excel", batch);
         }
 
         private static string RepoFile(params string[] parts)

@@ -135,7 +135,7 @@ namespace UNCAD.Features.Fill
                 try { table.Rows[row].Height = rowHeights[row]; }
                 catch (System.Exception ex)
                 {
-                    Log.Warn("UNC_FILL restore row height " + row + " failed: " + ex.Message);
+                    Log.Warn("UNC_F restore row height " + row + " failed: " + ex.Message);
                 }
             }
             for (int column = 0; column < columnWidths.Length
@@ -144,7 +144,7 @@ namespace UNCAD.Features.Fill
                 try { table.Columns[column].Width = columnWidths[column]; }
                 catch (System.Exception ex)
                 {
-                    Log.Warn("UNC_FILL restore column width " + column + " failed: " + ex.Message);
+                    Log.Warn("UNC_F restore column width " + column + " failed: " + ex.Message);
                 }
             }
         }
@@ -157,7 +157,7 @@ namespace UNCAD.Features.Fill
                 try { table.Rows[row].Height = TableFillFormatter.GeneratedRowHeight; }
                 catch (System.Exception ex)
                 {
-                    Log.Warn("UNC_FILL lock generated row height " + row + " failed: "
+                    Log.Warn("UNC_F lock generated row height " + row + " failed: "
                         + ex.Message);
                 }
             }

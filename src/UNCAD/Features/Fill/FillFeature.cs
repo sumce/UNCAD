@@ -11,6 +11,7 @@ using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Text;
+using UNCAD.Features.Submit;
 using UNCAD.Infra;
 using UNCAD.UI;
 
@@ -39,7 +40,7 @@ namespace UNCAD.Features.Fill
             FillSelection selection = FillSelectionCollector.Collect(ctx);
             if (selection.IsEmpty)
             {
-                ctx.Write("\n[UNC_FILL] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
+                ctx.Write("\n[UNC_F] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
                 return;
             }
             if (updateMode)
@@ -50,7 +51,7 @@ namespace UNCAD.Features.Fill
                     if (regions.Errors.Count > 0)
                     {
                         foreach (string error in regions.Errors)
-                            ctx.Write("\n[UNC_FILL_UPDATE] 图框分区失败: " + error);
+                            ctx.Write("\n[UNC_UPDATE] 图框分区失败: " + error);
                         return;
                     }
                     // Only multi-frame update replaces the explicit selection with spatial groups.
@@ -61,12 +62,12 @@ namespace UNCAD.Features.Fill
             }
             if (!selection.HasWriteTargets)
             {
-                ctx.Write("\n[UNC_FILL] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
+                ctx.Write("\n[UNC_F] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
                 return;
             }
             if (selection.TableIds.Length > 1 || selection.FrameBlockIds.Length > 1)
             {
-                ctx.Write("\n[UNC_FILL] 一次只允许一个清单表和一个目标图框块，避免批量误写。");
+                ctx.Write("\n[UNC_F] 一次只允许一个清单表和一个目标图框块，避免批量误写。");
                 return;
             }
 
@@ -94,11 +95,11 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[UNC_FILL] 读取机台 Excel 失败: " + ex.Message);
-                Log.Error("UNC_FILL read machine excel failed", ex);
+                ctx.Write("\n[UNC_F] 读取机台 Excel 失败: " + ex.Message);
+                Log.Error("UNC_F read machine excel failed", ex);
                 return;
             }
-            ctx.Write("\n[UNC_FILL] 机台数据 "
+            ctx.Write("\n[UNC_F] 机台数据 "
                 + (workbook.MachineCacheHit ? "已使用缓存" : "已重新加载")
                 + "：" + workbook.MachineSourcePath
                 + "；内嵌固定清单 " + workbook.CatalogItemCount + " 项。");
@@ -108,7 +109,7 @@ namespace UNCAD.Features.Fill
             BoqCatalogIndex catalog = workbook.Catalog;
             if (machineIds.Count == 0)
             {
-                ctx.Write("\n[UNC_FILL] Excel 中无机台ID数据。");
+                ctx.Write("\n[UNC_F] Excel 中无机台ID数据。");
                 return;
             }
             if (listItems.Count == 0)
@@ -117,7 +118,7 @@ namespace UNCAD.Features.Fill
                 MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "插件内没有固定清单数据，已停止本次填充。请重新安装完整版本。",
-                    "UNC_FILL 固定清单异常", MessageBoxButtons.OK,
+                    "UNC_F 固定清单异常", MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 return;
             }
@@ -133,17 +134,17 @@ namespace UNCAD.Features.Fill
                 if (!FillSelectionCollector.TryReadExistingIdentity(ctx, selection,
                     out ExistingFillIdentity identity, out string identityError))
                 {
-                    ctx.Write("\n[UNC_FILL_UPDATE] " + identityError);
+                    ctx.Write("\n[UNC_UPDATE] " + identityError);
                     return;
                 }
                 picked = ExistingFillIdentityResolver.MatchMachine(identity,
                     workbook.FindRows(identity.MachineId), out string matchError);
                 if (picked == null)
                 {
-                    ctx.Write("\n[UNC_FILL_UPDATE] " + matchError);
+                    ctx.Write("\n[UNC_UPDATE] " + matchError);
                     return;
                 }
-                ctx.Write("\n[UNC_FILL_UPDATE] 已自动读取: "
+                ctx.Write("\n[UNC_UPDATE] 已自动读取: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
             else
@@ -157,7 +158,7 @@ namespace UNCAD.Features.Fill
                         != DialogResult.OK) return;
                     picked = form.Selected;
                 }
-                ctx.Write("\n[UNC_FILL] 已选择: "
+                ctx.Write("\n[UNC_F] 已选择: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
@@ -180,13 +181,13 @@ namespace UNCAD.Features.Fill
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
-            Log.Info("UNC_FILL confirmed BOQ rows: " + string.Join(" | ",
+            Log.Info("UNC_F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
             if (tableRows.Count == 0
                 && MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "当前没有要生成的清单项。继续将只清空模板数据区，不写入新清单。",
-                    "UNC_FILL 空清单确认", MessageBoxButtons.YesNo,
+                    "UNC_F 空清单确认", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
                     != DialogResult.Yes)
                 return;
@@ -198,7 +199,7 @@ namespace UNCAD.Features.Fill
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "清单共 " + tableRows.Count + " 项，所选表格实际可写范围只有 "
                         + tableCapacity + " 行。请删除部分清单项，或在UNC_SET中调整起始行和清除行数。",
-                    "UNC_FILL 表格容量不足", MessageBoxButtons.OK,
+                    "UNC_F 表格容量不足", MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }
@@ -211,6 +212,15 @@ namespace UNCAD.Features.Fill
                 ("清单行数", tableRows.Count.ToString()),
                 ("表格容量", tableCapacity.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
+
+            string automaticExcelPath;
+            try { automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(); }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] Excel 自动记录路径不可用，图纸未修改: " + ex.Message);
+                return;
+            }
 
             int filled;
             FillWriteResult frameResult, deviceResult, upstreamInfoResult;
@@ -238,6 +248,20 @@ namespace UNCAD.Features.Fill
                 transaction.Commit();
             }
 
+            AutomaticSubmissionWriteResult automaticExcel;
+            try
+            {
+                automaticExcel = AutomaticSubmissionService.Write(ctx, automaticExcelPath,
+                    new[] { selection.SourceIds });
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error((updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + " automatic Excel update failed after CAD commit", ex);
+                throw new InvalidOperationException("CAD 已更新，但 Excel 自动更新失败："
+                    + ex.Message + "；目标文件 " + automaticExcelPath, ex);
+            }
+
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] 完成：表格写入 " + filled + " 行；块属性更新 "
@@ -249,6 +273,10 @@ namespace UNCAD.Features.Fill
                 + deviceResult.Blocks + " 个；上游信息 "
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
+            ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                + "] Excel 已自动更新：新增 " + automaticExcel.AddedCount
+                + " 条，覆盖 " + automaticExcel.ReplacedCount + " 条，材料明细 "
+                + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
         }
 
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
@@ -278,20 +306,20 @@ namespace UNCAD.Features.Fill
         {
             FillAnomaly anomaly = FillAnomalyDetector.MissingCable(review);
             if (anomaly == null) return;
-            Log.Warn("UNC_FILL " + anomaly.Code + ": " + anomaly.Subject);
+            Log.Warn("UNC_F " + anomaly.Code + ": " + anomaly.Subject);
             var owner = new WindowWrapper(
                 Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle);
             DialogResult replace = MessageBox.Show(owner,
                 "固定清单找不到电缆型号：" + anomaly.Subject
                     + "\r\n\r\n是否从固定清单选择替代型号？"
                     + "\r\n替代型号只用于本次清单，图框和块属性中的设备原型号保持不变。",
-                "UNC_FILL 电缆型号异常", MessageBoxButtons.YesNo,
+                "UNC_F 电缆型号异常", MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
             if (replace != DialogResult.Yes) return;
             if (catalog.Cables.Count == 0)
             {
                 MessageBox.Show(owner, "固定清单中没有可选择的电缆型号。",
-                    "UNC_FILL 电缆型号异常", MessageBoxButtons.OK,
+                    "UNC_F 电缆型号异常", MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }
@@ -324,7 +352,7 @@ namespace UNCAD.Features.Fill
             string path = (configuredPath ?? "").Trim();
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
-                ctx.Write("\n[UNC_FILL] 使用上次 Excel: " + path
+                ctx.Write("\n[UNC_F] 使用上次 Excel: " + path
                     + "（UNC_SET → Excel 填充 可修改）");
                 return path;
             }
@@ -341,7 +369,7 @@ namespace UNCAD.Features.Fill
                 path = dialog.FileName;
             }
             Settings.Set(ConfigKeys.FillExcelPath, path);
-            ctx.Write("\n[UNC_FILL] 已记住 Excel: " + path);
+            ctx.Write("\n[UNC_F] 已记住 Excel: " + path);
             return path;
         }
 

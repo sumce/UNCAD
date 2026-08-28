@@ -23,7 +23,7 @@ namespace UNCAD.Core.Submission
         public string DownstreamAxis { get; set; } = "";
         public string UpstreamAxis { get; set; } = "";
         public List<SubmissionMaterial> Materials { get; set; } = new List<SubmissionMaterial>();
-        // 框选读取到的表格总行数（供 UNC_SUBMIT 诊断：区分“没框到表”与“表是空的”）。
+        // 自动记录读取到的表格总行数，用于区分“未读到表格”和“表格没有材料行”。
         public int TableRowsRead { get; set; }
         // 框选到的文字/多行文字实体数（诊断：用户框到的可能是文字画的表，而不是 AutoCAD 表格）。
         public int TextEntityCount { get; set; }

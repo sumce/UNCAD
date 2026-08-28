@@ -225,6 +225,38 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ValidateTargetForUpdate_AcceptsWritableNewTargetWithoutCreatingWorkbook()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_preflight_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                SubmissionWorkbookWriter.ValidateTargetForUpdate(path);
+                Assert.False(File.Exists(path));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void ValidateTargetForUpdate_RejectsCorruptExistingWorkbook()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_preflight_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                File.WriteAllText(path, "not an xlsx workbook");
+                Assert.ThrowsAny<Exception>(() =>
+                    SubmissionWorkbookWriter.ValidateTargetForUpdate(path));
+                Assert.Equal("not an xlsx workbook", File.ReadAllText(path));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
         public void Upsert_WhenWorkbookIsWriteLocked_ReleasesInternalLockForRetry()
         {
             string folder = Path.Combine(Path.GetTempPath(),

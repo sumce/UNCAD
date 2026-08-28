@@ -41,7 +41,7 @@ namespace UNCAD.Infra
         public const string StyleBigFont = "UNC_STYLE_BIGFONT";  // SHX 大字体，空=纯 TTF
         public const string StyleWidth = "UNC_STYLE_WIDTH";      // 宽高比
 
-        // Excel 填充（UNC_FILL）
+        // Excel 生成与更新（UNC_F / UNC_UPDATE）
         public const string FillExcelPath = "UNC_FILL_EXCEL";    // 机台数据 Excel（用户唯一需要提供的文件）
         public const string FillTableRow = "UNC_FILL_TABLE_ROW"; // Table 起始行（1 基）
         public const string FillClearRows = "UNC_FILL_CLEAR_ROWS"; // 每次先清空的模板数据行数，默认 11
@@ -54,8 +54,8 @@ namespace UNCAD.Infra
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
-        // 设备信息提交（UNC_SUBMIT）
-        public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 首次选择后记住输出文件夹
+        // 自动记录 Excel；沿用旧键名以迁移现有用户设置。
+        public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动记录文件夹
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";

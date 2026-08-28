@@ -2,23 +2,22 @@
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
-    Description="UNC_FILL 填充与更新 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
-    AppVersion="1.9.3"
+    Description="UNC_F 生成 / UNC_UPDATE 批量更新并自动记录 Excel / 统计、标注与绘图工具"
+    AppVersion="1.9.4"
     ProductType="Application"
-    ProductCode="{F6E0A926-3B3B-4ECA-9EFF-7EB54C512737}"
+    ProductCode="{EC9A3EDE-1958-48A2-8CE9-75BEB058E1FB}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
   <Components>
     <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.1" SeriesMax="R24.1" />
     <ComponentEntry AppName="UNCAD"
-                    AppDescription="UNCAD AutoCAD 2022 填充、提交、统计和标注命令集"
+                    AppDescription="UNCAD AutoCAD 2022 生成、批量更新、自动记录、统计和标注命令集"
                     ModuleName="./UNCAD.dll"
                     LoadOnAutoCADStartup="True"
                     LoadOnCommandInvocation="True">
       <Commands GroupName="UNCAD">
-        <Command Global="UNC_FILL" />
-        <Command Global="UNC_FILL_UPDATE" />
-        <Command Global="UNC_SUBMIT" />
+        <Command Global="UNC_F" />
+        <Command Global="UNC_UPDATE" />
         <Command Global="UNC_SET" />
         <Command Global="UNC_ABOUT" />
         <Command Global="UNC_RIBBON" />

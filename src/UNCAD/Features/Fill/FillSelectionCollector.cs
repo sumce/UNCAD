@@ -21,7 +21,7 @@ namespace UNCAD.Features.Fill
                 selection = Split(ctx, implied.Value.GetObjectIds());
                 if (!selection.IsEmpty)
                 {
-                    ctx.Write("\n[UNC_FILL] 已使用预选：表格 " + selection.TableIds.Length
+                    ctx.Write("\n[UNC_F] 已使用预选：表格 " + selection.TableIds.Length
                         + " 个，统计文字 " + selection.TextIds.Length + " 个，图框块 "
                         + selection.FrameBlockIds.Length + " 个，DEVICENAME 设备块 "
                         + selection.DeviceBlockIds.Length + " 个，上游信息块 "
@@ -120,7 +120,7 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Warn("UNC_FILL selection split failed: " + ex.Message);
+                Log.Warn("UNC_F selection split failed: " + ex.Message);
             }
 
             return new FillSelection

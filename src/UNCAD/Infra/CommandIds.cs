@@ -5,9 +5,8 @@ namespace UNCAD.Infra
     /// <summary>UNCAD command names shared by attributes, Ribbon definitions, and tests.</summary>
     public static class CommandIds
     {
-        public const string Fill = "UNC_FILL";
-        public const string FillUpdate = "UNC_FILL_UPDATE";
-        public const string Submit = "UNC_SUBMIT";
+        public const string Fill = "UNC_F";
+        public const string FillUpdate = "UNC_UPDATE";
         public const string Settings = "UNC_SET";
         public const string About = "UNC_ABOUT";
         public const string Ribbon = "UNC_RIBBON";
@@ -54,7 +53,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Fill, FillUpdate, Submit, Settings, About, Ribbon, Conduit, Conduit20, Conduit25, Conduit32,
+            Fill, FillUpdate, Settings, About, Ribbon, Conduit, Conduit20, Conduit25, Conduit32,
             ConduitSettings, Tray, Tray100, Tray200, Tray400, TraySettings, Line,
             LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel
         };
@@ -68,7 +67,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Fill, FillUpdate, Submit, Settings, About, Ribbon,
+            Fill, FillUpdate, Settings, About, Ribbon,
             Conduit, Conduit20, Conduit25, Conduit32, ConduitSettings,
             Tray, Tray100, Tray200, Tray400, TraySettings,
             Line, LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel,

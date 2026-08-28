@@ -71,10 +71,14 @@ function Get-PackageInfo {
         throw "Package must support both startup and command-triggered loading."
     }
     $declaredCommands = @($entry.Commands.Command | ForEach-Object { [string]$_.Global })
-    foreach ($requiredCommand in @("UNC_ABOUT", "UNC_RIBBON", "UNC_FILL", "UNC_ARCH")) {
+    foreach ($requiredCommand in @("UNC_ABOUT", "UNC_RIBBON", "UNC_F", "UNC_UPDATE", "UNC_ARCH")) {
         if ($declaredCommands -notcontains $requiredCommand) {
             throw "Package command-triggered loading is missing: $requiredCommand"
         }
+    }
+    # UNC_SUBMIT was intentionally removed: generation and update own automatic Excel writes.
+    if ($declaredCommands -contains "UNC_SUBMIT") {
+        throw "Package must not declare removed command: UNC_SUBMIT"
     }
     $moduleRelative = ([string]$entry.ModuleName).Replace("/", "\").TrimStart([char[]]".\")
     $modulePath = Join-Path $BundlePath $moduleRelative

@@ -69,7 +69,7 @@ namespace UNCAD.UI
             _planningOptions = planningOptions ?? FillPlanningOptions.Default;
             _defaults = Data.Snapshot();
 
-            DialogLayout.Apply(this, "UNC_FILL 填充确认 · " + Branding.Nameplate,
+            DialogLayout.Apply(this, "UNC_F 填充确认 · " + Branding.Nameplate,
                 new Size(1040, 660), new Size(880, 560));
 
             _cable.Name = "BoqCableModel";
@@ -422,7 +422,7 @@ namespace UNCAD.UI
                 Control invalid = string.IsNullOrWhiteSpace(_machine.Text)
                     ? (Control)_machine : _circuit;
                 invalid.Focus();
-                MessageBox.Show(this, "机台ID和设备/回路不能为空。", "UNC_FILL",
+                MessageBox.Show(this, "机台ID和设备/回路不能为空。", "UNC_F",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -430,7 +430,7 @@ namespace UNCAD.UI
             {
                 _tabs.SelectedIndex = 0;
                 _cableMeters.Focus();
-                MessageBox.Show(this, "电缆长度必须是非负数字或留空。", "UNC_FILL",
+                MessageBox.Show(this, "电缆长度必须是非负数字或留空。", "UNC_F",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -443,7 +443,7 @@ namespace UNCAD.UI
                 _diameter.SelectAll();
                 MessageBox.Show(this,
                     "软管直径格式无效，请输入数字、DN32、Φ32或32mm等格式。",
-                    "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "UNC_F", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             // 未匹配行的默认未勾选仅用于阻止写出，不代表用户已决定忽略。
@@ -471,7 +471,7 @@ namespace UNCAD.UI
                     _tabs.SelectedIndex = 1;
                     _grid.CurrentCell = _grid.Rows[index].Cells["Name"];
                     _grid.BeginEdit(true);
-                    MessageBox.Show(this, "清单项名称不能为空。", "UNC_FILL",
+                    MessageBox.Show(this, "清单项名称不能为空。", "UNC_F",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -480,7 +480,7 @@ namespace UNCAD.UI
                 _grid.CurrentCell = _grid.Rows[index].Cells["Quantity"];
                 _grid.BeginEdit(true);
                 MessageBox.Show(this, "“" + item.Name + "”的数量/长度必须是非负数字或留空。",
-                    "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "UNC_F", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             Data.SetCableMeters(_cableMeters.Text);
