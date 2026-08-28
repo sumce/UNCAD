@@ -11,7 +11,7 @@ namespace UNCAD.Tests
     public class BundleLoadingTests
     {
         private const string PreviousProductCode =
-            "{FDB11363-2F09-43CF-A78F-C00B8A4703AE}";
+            "{05E0A1BF-EE38-46A5-A0C8-22F576D6F82C}";
 
         [Fact]
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
