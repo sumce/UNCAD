@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
 using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Excel
@@ -9,16 +8,22 @@ namespace UNCAD.Core.Excel
     /// <summary>UNC_FILL 单次命令使用的只读 Excel 快照和机台索引。</summary>
     public sealed class FillWorkbookSnapshot
     {
+        private static readonly StableFileCache<List<MachineRow>> MachineCache =
+            new StableFileCache<List<MachineRow>>("机台数据 Excel",
+                LoadMachineRows, CloneMachineRows);
         private readonly List<MachineRow> _machineRows;
         private readonly Dictionary<string, List<MachineRow>> _machineIndex;
 
         private FillWorkbookSnapshot(List<MachineRow> machineRows, List<ListItem> listItems,
-            string machineSourcePath, string catalogSourcePath, bool catalogCacheHit)
+            string machineSourcePath, string catalogSourcePath, bool machineCacheHit,
+            bool catalogCacheHit)
         {
             _machineRows = machineRows;
-            ListItems = listItems;
+            Catalog = new BoqCatalogIndex(listItems);
+            ListItems = Catalog.Items;
             MachineSourcePath = machineSourcePath;
             CatalogSourcePath = catalogSourcePath;
+            MachineCacheHit = machineCacheHit;
             CatalogCacheHit = catalogCacheHit;
             MachineIds = ExcelMachineReader.DistinctMachineIds(machineRows);
             _machineIndex = new Dictionary<string, List<MachineRow>>(StringComparer.OrdinalIgnoreCase);
@@ -37,8 +42,10 @@ namespace UNCAD.Core.Excel
 
         public List<string> MachineIds { get; }
         public List<ListItem> ListItems { get; }
+        public BoqCatalogIndex Catalog { get; }
         public string MachineSourcePath { get; }
         public string CatalogSourcePath { get; }
+        public bool MachineCacheHit { get; }
         public bool CatalogCacheHit { get; }
 
         public static FillWorkbookSnapshot Load(string filePath)
@@ -51,41 +58,46 @@ namespace UNCAD.Core.Excel
                 ? machinePath
                 : Path.GetFullPath(catalogFilePath.Trim());
 
-            List<MachineRow> machineRows = LoadMachineRowsStable(machinePath);
-            List<ListItem> listItems = BoqCatalogCache.Load(catalogPath, out bool cacheHit);
+            List<MachineRow> machineRows = MachineCache.Load(
+                machinePath, out bool machineCacheHit);
+            List<ListItem> listItems = BoqCatalogCache.Load(
+                catalogPath, out bool catalogCacheHit);
             return new FillWorkbookSnapshot(machineRows, listItems, machinePath,
-                catalogPath, cacheHit);
+                catalogPath, machineCacheHit, catalogCacheHit);
         }
 
-        private static List<MachineRow> LoadMachineRowsStable(string path)
+        private static List<MachineRow> LoadMachineRows(string path)
         {
-            System.Exception lastError = null;
-            for (int attempt = 0; attempt < 3; attempt++)
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
             {
-                var before = new FileInfo(path);
-                if (!before.Exists) throw new FileNotFoundException("机台数据 Excel 不存在。", path);
-                long length = before.Length;
-                DateTime writeTime = before.LastWriteTimeUtc;
-                try
-                {
-                    List<MachineRow> rows;
-                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-                        FileShare.ReadWrite | FileShare.Delete))
-                    {
-                        var workbook = new XSSFWorkbook(stream);
-                        try { rows = ExcelMachineReader.ReadAll(workbook); }
-                        finally { workbook.Close(); }
-                    }
-                    before.Refresh();
-                    if (before.Exists && before.Length == length
-                        && before.LastWriteTimeUtc == writeTime) return rows;
-                }
-                catch (InvalidDataException) { throw; }
-                catch (System.Exception ex) { lastError = ex; }
-                if (attempt < 2) Thread.Sleep(120);
+                var workbook = new XSSFWorkbook(stream);
+                try { return ExcelMachineReader.ReadAll(workbook); }
+                finally { workbook.Close(); }
             }
-            throw new IOException("机台数据 Excel 正在更新或无法稳定读取，请保存完成后重试。",
-                lastError);
+        }
+
+        private static List<MachineRow> CloneMachineRows(List<MachineRow> source)
+        {
+            var result = new List<MachineRow>();
+            foreach (MachineRow row in source ?? new List<MachineRow>())
+            {
+                result.Add(new MachineRow
+                {
+                    Region = row.Region,
+                    MachineId = row.MachineId,
+                    CircuitName = row.CircuitName,
+                    Cable = row.Cable,
+                    Fr = row.Fr,
+                    Detail = row.Detail,
+                    Seq = row.Seq,
+                    Dia = row.Dia,
+                    Next = row.Next,
+                    DownstreamAxis = row.DownstreamAxis,
+                    UpstreamAxis = row.UpstreamAxis
+                });
+            }
+            return result;
         }
 
         public List<MachineRow> FindRows(string keyword)

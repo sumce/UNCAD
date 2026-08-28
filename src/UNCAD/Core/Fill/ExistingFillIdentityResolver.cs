@@ -105,9 +105,16 @@ namespace UNCAD.Core.Fill
         {
             return new MachineRow
             {
-                Region = source.Region, MachineId = source.MachineId, CircuitName = source.CircuitName,
-                Cable = source.Cable, Fr = source.Fr, Detail = source.Detail, Seq = source.Seq,
-                Dia = source.Dia, Next = source.Next, DownstreamAxis = source.DownstreamAxis,
+                Region = source.Region,
+                MachineId = source.MachineId,
+                CircuitName = source.CircuitName,
+                Cable = source.Cable,
+                Fr = source.Fr,
+                Detail = source.Detail,
+                Seq = source.Seq,
+                Dia = source.Dia,
+                Next = source.Next,
+                DownstreamAxis = source.DownstreamAxis,
                 UpstreamAxis = source.UpstreamAxis
             };
         }

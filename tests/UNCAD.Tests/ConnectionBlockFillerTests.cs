@@ -33,7 +33,8 @@ namespace UNCAD.Tests
         {
             var row = new MachineRow
             {
-                DownstreamAxis = " 2/T ", UpstreamAxis = " 化学实验室 "
+                DownstreamAxis = " 2/T ",
+                UpstreamAxis = " 化学实验室 "
             };
 
             Assert.Equal("2/T", ConnectionBlockFiller.DownstreamAxis(row));

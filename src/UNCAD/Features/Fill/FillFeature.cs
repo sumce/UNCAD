@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
@@ -40,15 +41,20 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[UNC_FILL] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
                 return;
             }
+            if (!selection.HasWriteTargets)
+            {
+                ctx.Write("\n[UNC_FILL] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
+                return;
+            }
             if (selection.TableIds.Length > 1 || selection.FrameBlockIds.Length > 1)
             {
                 ctx.Write("\n[UNC_FILL] 一次只允许一个清单表和一个目标图框块，避免批量误写。");
                 return;
             }
 
-            double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
+            FillRuntimeOptions options = FillSettings.Current();
             CableStatResult statistics = FillSelectionCollector.CalculateStats(ctx,
-                selection.TextIds, mmPerGrid);
+                selection.TextIds, options.MmPerGrid);
             if (updateMode && statistics.CableSum <= 0 && statistics.Bridges.Count == 0
                 && statistics.Conduits.Count == 0)
             {
@@ -56,10 +62,10 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            string path = ResolveMachineWorkbookPath(ctx);
+            string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
 
-            string catalogPath = Settings.Get(ConfigKeys.FillCatalogPath, "").Trim();
+            string catalogPath = options.CatalogWorkbookPath;
             if (catalogPath.Length > 0 && !File.Exists(catalogPath))
             {
                 ctx.Write("\n[UNC_FILL] 固定清单 Excel 不存在: " + catalogPath
@@ -78,12 +84,15 @@ namespace UNCAD.Features.Fill
                 Log.Error("UNC_FILL read excel failed", ex);
                 return;
             }
-            ctx.Write("\n[UNC_FILL] 机台数据已刷新；固定清单 "
+            ctx.Write("\n[UNC_FILL] 机台数据 "
+                + (workbook.MachineCacheHit ? "已使用缓存" : "已重新加载")
+                + "；固定清单 "
                 + (workbook.CatalogCacheHit ? "已使用缓存" : "已重新加载")
                 + ": " + workbook.CatalogSourcePath);
 
             List<string> machineIds = workbook.MachineIds;
             List<ListItem> listItems = workbook.ListItems;
+            BoqCatalogIndex catalog = workbook.Catalog;
             if (machineIds.Count == 0)
             {
                 ctx.Write("\n[UNC_FILL] Excel 中无机台ID数据。");
@@ -92,13 +101,10 @@ namespace UNCAD.Features.Fill
             if (listItems.Count == 0)
                 ctx.Write("\n[UNC_FILL] 警告：未读取到清单项目，编号列将留空。");
 
-            string bridgeInfo = Settings.Get(ConfigKeys.FillBridge, "");
-            int startRow = (int)Settings.GetDouble(ConfigKeys.FillTableRow, 1.0);
-            int clearRowCount = (int)Settings.GetDouble(ConfigKeys.FillClearRows,
-                TableClearPolicy.DefaultRows);
-            double textHeight = Settings.GetDouble(ConfigKeys.FillTextHeight,
-                TableFillFormatter.DefaultTextHeight);
-            if (textHeight <= 0) textHeight = TableFillFormatter.DefaultTextHeight;
+            string bridgeInfo = options.BridgeInfo;
+            int startRow = options.StartRow;
+            int clearRowCount = options.ClearRows;
+            double textHeight = options.TextHeight;
 
             MachineRow picked;
             if (updateMode)
@@ -121,8 +127,8 @@ namespace UNCAD.Features.Fill
             }
             else
             {
-                Func<MachineRow, string> preview = selected => BuildPreview(selected, listItems,
-                    statistics, selection, startRow, textHeight, bridgeInfo);
+                Func<MachineRow, string> preview = selected => BuildPreview(selected, catalog,
+                    statistics, selection, options);
                 using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
                 {
                     if (form.ShowDialog(new WindowWrapper(
@@ -134,14 +140,16 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
-            List<TableFillRow> defaultRows = TableFillPlanner.Build(picked, listItems, statistics);
+            List<TableFillRow> defaultRows = TableFillPlanner.Build(
+                picked, catalog, statistics, options.Planning);
             string defaultCableMeters = defaultRows.Find(row =>
                 row.Category == TableFillCategory.Cable)?.Quantity ?? "";
             if (defaultCableMeters.Length == 0 && statistics.CableSum > 0)
                 defaultCableMeters = TextFormatter.FormatNum(statistics.CableSum);
-            FillReviewData review = FillReviewData.Create(picked, defaultRows);
+            FillReviewData review = FillReviewData.Create(
+                picked, defaultRows, options.Planning);
             if (review.CableMeters.Length == 0) review.CableMeters = defaultCableMeters;
-            using (var form = new FillReviewForm(review, listItems))
+            using (var form = new FillReviewForm(review, catalog, options.Planning))
             {
                 if (form.ShowDialog(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
@@ -159,22 +167,29 @@ namespace UNCAD.Features.Fill
                 ("清单行数", tableRows.Count.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
-            int filled = CadTableFillWriter.Fill(ctx, selection.TableIds, startRow,
-                clearRowCount, tableRows, textHeight);
-            if (filled < 0) return;
-            FillWriteResult frameResult = CadBlockAttributeWriter.FillFrame(ctx,
-                selection.FrameBlockIds, picked, bridgeInfo, statistics);
-            FillWriteResult deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx,
-                selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
-            FillWriteResult upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx,
-                selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
-                ConnectionBlockFiller.UpstreamInfo(picked), true);
-            FillWriteResult upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx,
-                selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
-                ConnectionBlockFiller.UpstreamAxis(picked), false);
-            FillWriteResult downstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx,
-                selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
-                ConnectionBlockFiller.DownstreamAxis(picked), false);
+            int filled;
+            FillWriteResult frameResult, deviceResult, upstreamInfoResult;
+            FillWriteResult upstreamAxisResult, downstreamAxisResult;
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                filled = CadTableFillWriter.Fill(ctx, transaction, selection.TableIds,
+                    startRow, clearRowCount, tableRows, textHeight);
+                if (filled < 0) return;
+                frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
+                    selection.FrameBlockIds, picked, bridgeInfo, statistics);
+                deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
+                    selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
+                upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                    selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
+                    ConnectionBlockFiller.UpstreamInfo(picked), true);
+                upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                    selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
+                    ConnectionBlockFiller.UpstreamAxis(picked), false);
+                downstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                    selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
+                    ConnectionBlockFiller.DownstreamAxis(picked), false);
+                transaction.Commit();
+            }
 
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -201,9 +216,10 @@ namespace UNCAD.Features.Fill
                 statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
         }
 
-        private static string ResolveMachineWorkbookPath(CadContext ctx)
+        private static string ResolveMachineWorkbookPath(
+            CadContext ctx, string configuredPath)
         {
-            string path = Settings.Get(ConfigKeys.FillExcelPath, "");
+            string path = (configuredPath ?? "").Trim();
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
                 ctx.Write("\n[UNC_FILL] 使用上次 Excel: " + path
@@ -227,9 +243,8 @@ namespace UNCAD.Features.Fill
             return path;
         }
 
-        private static string BuildPreview(MachineRow row, List<ListItem> listItems,
-            CableStatResult statistics, FillSelection selection, int startRow,
-            double textHeight, string bridgeInfo)
+        private static string BuildPreview(MachineRow row, BoqCatalogIndex catalog,
+            CableStatResult statistics, FillSelection selection, FillRuntimeOptions options)
         {
             var preview = new StringBuilder();
             preview.AppendLine("▼ 回路详情");
@@ -241,14 +256,15 @@ namespace UNCAD.Features.Fill
             preview.AppendLine("  下游轴位：" + row.DownstreamAxis + " ｜ 上游轴位："
                 + row.UpstreamAxis);
 
-            List<TableFillRow> plannedRows = TableFillPlanner.Build(row, listItems, statistics);
-            preview.AppendLine("▼ 表格写入（覆盖，从 No." + startRow + " 行开始，共 "
+            List<TableFillRow> plannedRows = TableFillPlanner.Build(
+                row, catalog, statistics, options.Planning);
+            preview.AppendLine("▼ 表格写入（覆盖，从 No." + options.StartRow + " 行开始，共 "
                 + plannedRows.Count + " 项，文字高度 "
-                + TextFormatter.FormatNum(textHeight) + "）");
+                + TextFormatter.FormatNum(options.TextHeight) + "）");
             for (int i = 0; i < plannedRows.Count; i++)
             {
                 TableFillRow planned = plannedRows[i];
-                preview.AppendLine("  No." + (startRow + i) + " " + planned.Name
+                preview.AppendLine("  No." + (options.StartRow + i) + " " + planned.Name
                     + " ｜ " + planned.Unit + " "
                     + (planned.Quantity.Length > 0 ? planned.Quantity : "数量待定")
                     + " ｜ 编号 " + (planned.Code.Length > 0 ? planned.Code : "未匹配"));
@@ -256,7 +272,8 @@ namespace UNCAD.Features.Fill
             if (selection.FrameBlockIds.Length > 0)
             {
                 preview.AppendLine("▼ 图框块属性（" + selection.FrameBlockIds.Length + " 个块）");
-                foreach (var value in FrameBlockFiller.BuildValues(row, bridgeInfo, statistics))
+                foreach (var value in FrameBlockFiller.BuildValues(
+                    row, options.BridgeInfo, statistics))
                     preview.AppendLine("  " + value.Key + " = " + value.Value);
             }
             if (selection.DeviceBlockIds.Length > 0)

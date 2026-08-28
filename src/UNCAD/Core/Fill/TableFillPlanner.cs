@@ -46,17 +46,22 @@ namespace UNCAD.Core.Fill
 
         public static List<TableFillRow> Build(
             MachineRow machine, List<ListItem> items, CableStatResult stat)
+            => Build(machine, new BoqCatalogIndex(items), stat, FillPlanningOptions.Default);
+
+        public static List<TableFillRow> Build(MachineRow machine,
+            BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options)
         {
             machine = machine ?? new MachineRow();
-            items = items ?? new List<ListItem>();
+            catalog = catalog ?? new BoqCatalogIndex(null);
             stat = stat ?? new CableStatResult();
+            options = options ?? FillPlanningOptions.Default;
             var rows = new List<TableFillRow>();
 
-            AddCable(rows, machine, items, stat);
-            AddBridges(rows, items, stat);
-            AddRigidConduits(rows, items, stat);
-            AddFlexibleConduit(rows, machine, items, stat);
-            AddNextEquipment(rows, machine, items);
+            AddCable(rows, machine, catalog, stat);
+            AddBridges(rows, catalog, stat);
+            AddRigidConduits(rows, catalog, stat);
+            AddFlexibleConduit(rows, machine, catalog, stat, options);
+            AddNextEquipment(rows, machine, catalog);
 
             return rows.OrderBy(r => r.SortOrder)
                 .ThenBy(r => r.Code ?? "", StringComparer.Ordinal)
@@ -64,25 +69,25 @@ namespace UNCAD.Core.Fill
         }
 
         private static void AddCable(List<TableFillRow> rows, MachineRow machine,
-            List<ListItem> items, CableStatResult stat)
+            BoqCatalogIndex catalog, CableStatResult stat)
         {
             string model = (machine.Cable ?? "").Trim();
             if (model.Length == 0 && stat.CableSum <= 0) return;
-            ListItem item = ListItemReader.FindCable(items, model);
+            ListItem item = catalog.FindCable(model);
             rows.Add(FromItem(TableFillCategory.Cable, 100, item,
                 "电缆",
                 model.Length > 0 ? string.Format(FillTemplates.CableDesc, model) : "1.名称:电缆",
                 "M", TableFillFormatter.CableQuantity(stat)));
         }
 
-        private static void AddBridges(List<TableFillRow> rows, List<ListItem> items, CableStatResult stat)
+        private static void AddBridges(List<TableFillRow> rows, BoqCatalogIndex catalog,
+            CableStatResult stat)
         {
             int index = 0;
             foreach (BridgeStat bridge in stat.Bridges)
             {
                 string spec = NormalizeBridgeSpec(bridge.Spec);
-                ListItem item = items.FirstOrDefault(i => StartsWithCode(i, "2.")
-                    && NormalizeSpec(i.Spec) == NormalizeSpec(spec));
+                ListItem item = catalog.FindBridge(spec);
                 rows.Add(FromItem(TableFillCategory.Bridge, 200 + index++, item,
                     bridge.Spec, "1.名称:" + bridge.Spec, "M",
                     TextFormatter.FormatNum(bridge.TotalM)));
@@ -90,52 +95,64 @@ namespace UNCAD.Core.Fill
         }
 
         private static void AddRigidConduits(List<TableFillRow> rows,
-            List<ListItem> items, CableStatResult stat)
+            BoqCatalogIndex catalog, CableStatResult stat)
         {
             int index = 0;
             foreach (ConduitStat conduit in stat.Conduits)
             {
                 string diameter = ExtractNumber(conduit.Spec);
-                ListItem item = FindRigidConduit(items, diameter);
+                ListItem item = catalog.FindRigidConduit(diameter);
                 rows.Add(FromItem(TableFillCategory.RigidConduit, 300 + index++, item,
                     conduit.Spec, "1.名称:" + conduit.Spec, "M",
                     TextFormatter.FormatNum(conduit.TotalM)));
             }
         }
 
-        private static void AddFlexibleConduit(List<TableFillRow> rows,
-            MachineRow machine, List<ListItem> items, CableStatResult stat)
+        private static void AddFlexibleConduit(List<TableFillRow> rows, MachineRow machine,
+            BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options)
         {
-            string diameter = (machine.Dia ?? "").Trim();
-            if (diameter.Length == 0) diameter = InferSingleConduitDiameter(stat);
-            rows.Add(BuildFlexibleConduitRow(diameter, items));
+            string sourceDiameter = (machine.Dia ?? "").Trim();
+            string diameter = ConduitDiameter.NormalizeOrEmpty(sourceDiameter);
+            if (diameter.Length == 0)
+                diameter = sourceDiameter.Length == 0
+                    ? InferSingleConduitDiameter(stat)
+                    : sourceDiameter;
+            rows.Add(BuildFlexibleConduitRow(diameter, catalog, options));
         }
 
         public static TableFillRow BuildFlexibleConduitRow(
             string diameter, List<ListItem> items)
+            => BuildFlexibleConduitRow(diameter, new BoqCatalogIndex(items),
+                FillPlanningOptions.Default);
+
+        public static TableFillRow BuildFlexibleConduitRow(string diameter,
+            BoqCatalogIndex catalog, FillPlanningOptions options)
         {
-            diameter = (diameter ?? "").Trim();
-            items = items ?? new List<ListItem>();
-            ListItem item = FindFlexibleConduit(items, diameter);
+            string sourceDiameter = (diameter ?? "").Trim();
+            string normalized = ConduitDiameter.NormalizeOrEmpty(sourceDiameter);
+            diameter = normalized.Length > 0 ? normalized : sourceDiameter;
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            options = options ?? FillPlanningOptions.Default;
+            ListItem item = catalog.FindFlexibleConduit(diameter);
             string description = diameter.Length > 0
                 ? string.Format(FillTemplates.ConduitDesc, diameter)
                 : "1.名称:包塑金属软管";
             return FromItem(TableFillCategory.FlexibleConduit, 400, item,
                 "包塑金属软管", description, "M",
-                TableFillFormatter.FlexibleConduitQuantity());
+                TableFillFormatter.FlexibleConduitQuantity(
+                    options.FlexibleConduitMeters));
         }
 
         private static void AddNextEquipment(List<TableFillRow> rows,
-            MachineRow machine, List<ListItem> items)
+            MachineRow machine, BoqCatalogIndex catalog)
         {
             string next = (machine.Next ?? "").Trim();
             TryExtractRating(machine.Detail, out int poles, out int amps);
 
             if (string.Equals(next, "I-Line盘", StringComparison.OrdinalIgnoreCase))
             {
-                ListItem item = items.FirstOrDefault(i => StartsWithCode(i, "6.")
-                    && (i.Name ?? "").IndexOf("断路器", StringComparison.Ordinal) >= 0
-                    && BreakerRangeContains(i.Spec, poles, amps));
+                ListItem item = catalog.Breakers.FirstOrDefault(i =>
+                    BreakerRangeContains(i.Spec, poles, amps));
                 string model = poles > 0 && amps > 0 ? poles + "P" + amps + "A" : "";
                 rows.Add(FromItem(TableFillCategory.Breaker, 600, item,
                     "断路器", "1.名称:断路器 " + model + "(I-LINE)", "个", "1"));
@@ -144,9 +161,8 @@ namespace UNCAD.Core.Fill
 
             if (string.Equals(next, "插座盘", StringComparison.OrdinalIgnoreCase))
             {
-                ListItem item = items.FirstOrDefault(i => StartsWithCode(i, "8.")
-                    && (i.Name ?? "").IndexOf("插座", StringComparison.Ordinal) >= 0
-                    && RangeContains(i.Spec, amps));
+                ListItem item = catalog.Outlets.FirstOrDefault(i =>
+                    RangeContains(i.Spec, amps));
                 string description = "1.名称:插座"
                     + (amps > 0 ? "\\P2.额定电流:" + amps + "A" : "");
                 rows.Add(FromItem(TableFillCategory.Outlet, 800, item,
@@ -157,10 +173,7 @@ namespace UNCAD.Core.Fill
             if (string.Equals(next, "母线插接口", StringComparison.OrdinalIgnoreCase))
             {
                 string model = amps > 0 ? amps + "A" : "";
-                ListItem item = items.FirstOrDefault(i => StartsWithCode(i, "5.")
-                    && (i.Name ?? "").IndexOf("母线插接箱", StringComparison.Ordinal) >= 0
-                    && string.Equals(NormalizeSpec(i.Spec), NormalizeSpec(model),
-                        StringComparison.OrdinalIgnoreCase));
+                ListItem item = catalog.FindBusPlugBox(model);
                 string description = "1.名称:SQ-D PLUG-IN " + model + " 母线插接开关箱";
                 rows.Add(FromItem(TableFillCategory.BusPlugBox, 500, item,
                     "母线插接箱", description, "个", "1"));
@@ -184,32 +197,6 @@ namespace UNCAD.Core.Fill
             };
         }
 
-        private static bool StartsWithCode(ListItem item, string prefix)
-        {
-            return (item?.Code ?? "").StartsWith(prefix, StringComparison.Ordinal);
-        }
-
-        private static ListItem FindRigidConduit(List<ListItem> items, string diameter)
-        {
-            if (string.IsNullOrWhiteSpace(diameter)) return null;
-            List<ListItem> rigid = items.Where(item => StartsWithCode(item, "3.")
-                && (item.Name ?? "").IndexOf("线管", StringComparison.Ordinal) >= 0
-                && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) < 0)
-                .ToList();
-            return rigid.FirstOrDefault(item =>
-                NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
-        }
-
-        private static ListItem FindFlexibleConduit(List<ListItem> items, string diameter)
-        {
-            if (string.IsNullOrWhiteSpace(diameter)) return null;
-            List<ListItem> flexible = items.Where(item => StartsWithCode(item, "3.")
-                && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) >= 0)
-                .ToList();
-            return flexible.FirstOrDefault(item =>
-                NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
-        }
-
         private static string InferSingleConduitDiameter(CableStatResult stat)
         {
             List<string> diameters = (stat?.Conduits ?? new List<ConduitStat>())
@@ -224,12 +211,6 @@ namespace UNCAD.Core.Fill
             string s = value ?? "";
             if (s.StartsWith("桥架", StringComparison.Ordinal)) s = s.Substring(2);
             return s;
-        }
-
-        private static string NormalizeSpec(string value)
-        {
-            return Regex.Replace(value ?? "", @"\s+", "")
-                .Replace("x", "*").Replace("X", "*").ToUpperInvariant();
         }
 
         private static string ExtractNumber(string value)
@@ -256,11 +237,11 @@ namespace UNCAD.Core.Fill
         private static bool BreakerRangeContains(string spec, int poles, int amps)
         {
             if (poles <= 0 || amps <= 0) return false;
-            Match match = BreakerSpecRegex.Match(NormalizeSpec(spec));
+            Match match = BreakerSpecRegex.Match(BoqCatalogIndex.NormalizeSpec(spec));
             if (!match.Success) return false;
-            int itemPoles = int.Parse(match.Groups[1].Value);
-            int min = int.Parse(match.Groups[2].Value);
-            int max = int.Parse(match.Groups[3].Value);
+            if (!int.TryParse(match.Groups[1].Value, out int itemPoles)
+                || !int.TryParse(match.Groups[2].Value, out int min)
+                || !int.TryParse(match.Groups[3].Value, out int max)) return false;
             return itemPoles == poles && amps >= min && amps <= max;
         }
 
@@ -269,8 +250,8 @@ namespace UNCAD.Core.Fill
             if (amps <= 0) return false;
             Match match = RangeRegex.Match(spec ?? "");
             if (!match.Success) return false;
-            int min = int.Parse(match.Groups[1].Value);
-            int max = int.Parse(match.Groups[2].Value);
+            if (!int.TryParse(match.Groups[1].Value, out int min)
+                || !int.TryParse(match.Groups[2].Value, out int max)) return false;
             return amps >= min && amps <= max;
         }
 

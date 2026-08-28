@@ -12,6 +12,10 @@ namespace UNCAD.Features.Fill
         public ObjectId[] UpstreamAxisBlockIds { get; set; } = new ObjectId[0];
         public ObjectId[] DownstreamAxisBlockIds { get; set; } = new ObjectId[0];
 
+        public bool HasWriteTargets => TableIds.Length > 0 || FrameBlockIds.Length > 0
+            || DeviceBlockIds.Length > 0 || UpstreamInfoBlockIds.Length > 0
+            || UpstreamAxisBlockIds.Length > 0 || DownstreamAxisBlockIds.Length > 0;
+
         public bool IsEmpty => TableIds.Length == 0 && TextIds.Length == 0
             && FrameBlockIds.Length == 0 && DeviceBlockIds.Length == 0
             && UpstreamInfoBlockIds.Length == 0 && UpstreamAxisBlockIds.Length == 0

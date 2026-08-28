@@ -9,7 +9,7 @@ namespace UNCAD.Tests
     public class FillWorkbookSnapshotTests
     {
         [Fact]
-        public void Load_RefreshesMachineRows_AndCachesCatalogUntilCatalogChanges()
+        public void Load_CachesBothSourcesAndInvalidatesEachSourceOnChange()
         {
             string machinePath = Path.Combine(Path.GetTempPath(),
                 "uncad_machine_source_" + Guid.NewGuid().ToString("N") + ".xlsx");
@@ -21,21 +21,28 @@ namespace UNCAD.Tests
                 WriteCatalog(catalogPath, "8.3", "插座20~30A");
 
                 FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                Assert.False(first.MachineCacheHit);
                 Assert.False(first.CatalogCacheHit);
                 Assert.Equal("设备A", Assert.Single(first.FindRows("CACHE01")).CircuitName);
                 Assert.Equal("8.3", Assert.Single(first.ListItems).Code);
 
+                first.FindRows("CACHE01")[0].CircuitName = "缓存副本被修改";
                 FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                Assert.True(second.MachineCacheHit);
                 Assert.True(second.CatalogCacheHit);
+                Assert.Equal("设备A", Assert.Single(second.FindRows("CACHE01")).CircuitName);
 
                 WriteMachine(machinePath, "设备B");
+                File.SetLastWriteTimeUtc(machinePath, DateTime.UtcNow.AddSeconds(5));
                 FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                Assert.False(refreshedMachine.MachineCacheHit);
                 Assert.True(refreshedMachine.CatalogCacheHit);
                 Assert.Equal("设备B", Assert.Single(refreshedMachine.FindRows("CACHE01")).CircuitName);
 
                 WriteCatalog(catalogPath, "8.30", "插座20~30A（新版固定清单）");
                 File.SetLastWriteTimeUtc(catalogPath, DateTime.UtcNow.AddSeconds(5));
                 FillWorkbookSnapshot refreshedCatalog = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                Assert.True(refreshedCatalog.MachineCacheHit);
                 Assert.False(refreshedCatalog.CatalogCacheHit);
                 Assert.Equal("8.30", Assert.Single(refreshedCatalog.ListItems).Code);
             }

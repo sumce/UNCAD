@@ -195,6 +195,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_ConfiguredFlexibleMetersFlowsToPlannedQuantity()
+        {
+            var catalog = new BoqCatalogIndex(new List<ListItem>
+            {
+                Item("3.6", "包塑金属软管", "25mm模板", "m", "25mm")
+            });
+            List<TableFillRow> rows = TableFillPlanner.Build(
+                new MachineRow { Dia = "DN25" }, catalog, new CableStatResult(),
+                FillPlanningOptions.Create(2.25, false));
+
+            TableFillRow flexible = rows.Single(row =>
+                row.Category == TableFillCategory.FlexibleConduit);
+            Assert.Equal("3.6", flexible.Code);
+            Assert.Equal("2.25", flexible.Quantity);
+        }
+
+        [Fact]
         public void Build_BlankDiaWithMultipleConduitsKeepsGenericEditableFlexibleRow()
         {
             CableStatResult stat = StatCalculator.Calculate(new[]

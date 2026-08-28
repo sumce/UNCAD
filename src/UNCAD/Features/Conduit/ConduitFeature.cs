@@ -64,7 +64,7 @@ namespace UNCAD.Features.Conduit
                 TextHeight = hgt,
                 Above = side != "0",
                 ColorIndex = 6,
-                LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
+                LabelFactory = length => ConduitLabelFormatter.Build(diameter, length)
             });
 
             SelectionService.ClearPickFirst(ctx);
@@ -72,10 +72,6 @@ namespace UNCAD.Features.Conduit
         }
 
         private static string NormalizeDiameter(string value)
-        {
-            string d = (value ?? "20").Trim()
-                .Replace("⌀", "").Replace("Ø", "").Replace("Φ", "").Replace("线管", "");
-            return d == "25" || d == "32" ? d : "20";
-        }
+            => ConduitDiameter.NormalizeOrDefault(value, "20");
     }
 }

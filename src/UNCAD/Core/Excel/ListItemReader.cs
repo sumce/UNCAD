@@ -107,31 +107,10 @@ namespace UNCAD.Core.Excel
 
         /// <summary>按电缆型号查清单条目：去掉 ZB-YJV[R]- 前缀后匹配规格列（电缆段编号 1.x）。</summary>
         public static ListItem FindCable(List<ListItem> items, string cableModel)
-        {
-            if (string.IsNullOrEmpty(cableModel)) return null;
-            string spec = NormalizeCable(cableModel);
-            return items.FirstOrDefault(i => i.Code.StartsWith("1.", StringComparison.Ordinal) && i.Spec == spec);
-        }
+            => new BoqCatalogIndex(items).FindCable(cableModel);
 
         /// <summary>按软管直径查清单条目：规格 "51mm" 且名称含"软管"（配管段编号 3.x）。</summary>
         public static ListItem FindConduit(List<ListItem> items, string dia)
-        {
-            if (string.IsNullOrEmpty(dia)) return null;
-            string spec = dia.Trim() + "mm";
-            return items.FirstOrDefault(i => i.Code.StartsWith("3.", StringComparison.Ordinal)
-                && i.Spec == spec
-                && i.Name.IndexOf("软管", StringComparison.Ordinal) >= 0);
-        }
-
-        /// <summary>"ZB-YJV-3*70+1*35" / "ZB-YJVR-3*2.5" → "3*70+1*35" / "3*2.5"。</summary>
-        private static string NormalizeCable(string cable)
-        {
-            string s = cable.Trim();
-            int idx = s.IndexOf('-');
-            if (idx >= 0) s = s.Substring(idx + 1);
-            idx = s.IndexOf('-');
-            if (idx >= 0) s = s.Substring(idx + 1);
-            return s;
-        }
+            => new BoqCatalogIndex(items).FindFlexibleConduit(dia);
     }
 }

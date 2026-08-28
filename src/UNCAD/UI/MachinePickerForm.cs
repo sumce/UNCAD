@@ -15,7 +15,7 @@ namespace UNCAD.UI
     ///      中间列表显示全部回路（设备名称）及 电缆型号/软管Φ/详情/序号
     ///   ③ 底部实时预览：本次将写入表格与块属性的内容（单击回路即更新）
     /// </summary>
-    internal sealed class MachinePickerForm : Form
+    public sealed class MachinePickerForm : Form
     {
         private readonly TextBox _machineInput;
         private readonly ListBox _machineSuggest;
@@ -37,12 +37,8 @@ namespace UNCAD.UI
             _lookup = lookup;
             _previewBuilder = previewBuilder;
 
-            Text = "UNC_FILL · " + Branding.Nameplate;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(700, 520);
-            MinimumSize = new Size(620, 460);
-            Padding = new Padding(8);
-            Font = new Font("微软雅黑", 9f);
+            DialogLayout.Apply(this, "UNC_FILL · " + Branding.Nameplate,
+                new Size(820, 620), new Size(700, 520));
 
             // ① 机台ID 输入
             var mBox = new GroupBox
@@ -138,15 +134,10 @@ namespace UNCAD.UI
             lowerTabs.TabPages.Add(previewTab);
 
             // 按钮
-            _ok = new Button { Text = "确定", Width = 88, Height = 30, Enabled = false };
-            var cancel = new Button { Text = "取消", Width = 88, Height = 30, DialogResult = DialogResult.Cancel };
-            var btnRow = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Bottom,
-                FlowDirection = FlowDirection.RightToLeft,
-                AutoSize = true,
-                Padding = new Padding(0, 5, 4, 2)
-            };
+            _ok = DialogLayout.CommandButton("确定");
+            _ok.Enabled = false;
+            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
+            FlowLayoutPanel btnRow = DialogLayout.CommandBar();
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(_ok);
 
@@ -179,6 +170,7 @@ namespace UNCAD.UI
                 }
             };
             _circuit.SelectedIndexChanged += (s, e) => UpdatePreview();
+            _circuit.Resize += (s, e) => ResizeCircuitColumns();
             _circuit.DoubleClick += (s, e) => Confirm();
             _ok.Click += (s, e) => Confirm();
         }
@@ -225,6 +217,11 @@ namespace UNCAD.UI
                 .ToList();
             _machineSuggest.Items.Clear();
             foreach (var id in list) _machineSuggest.Items.Add(id);
+            if (list.Any(id => string.Equals(id, kw, StringComparison.OrdinalIgnoreCase)))
+            {
+                CommitMachine();
+                return;
+            }
             _machineSuggest.Visible = list.Count > 0;
         }
 
@@ -253,13 +250,13 @@ namespace UNCAD.UI
                 && rows[0].MachineId.Equals(mid, StringComparison.OrdinalIgnoreCase);
             if (!exact)
             {
-                _machineSummary.Text = "✗ 未找到机台 " + mid + "，请点击上方相似机台";
+                _machineSummary.Text = "未找到机台 " + mid + "，请选择上方相似机台";
                 _machineSummary.ForeColor = Color.Crimson;
                 return;
             }
 
             _current.AddRange(rows);
-            _machineSummary.Text = "✓ " + rows[0].Region + " ｜ 机台 " + rows[0].MachineId
+            _machineSummary.Text = rows[0].Region + " ｜ 机台 " + rows[0].MachineId
                 + " ｜ 共 " + rows.Count + " 个回路";
             _machineSummary.ForeColor = Color.SteelBlue;
 
@@ -303,6 +300,16 @@ namespace UNCAD.UI
             if (type == "母线插接口") return Color.FromArgb(132, 82, 25);
             if (type == "插座盘") return Color.FromArgb(34, 122, 74);
             return Color.DimGray;
+        }
+
+        private void ResizeCircuitColumns()
+        {
+            int width = Math.Max(480, _circuit.ClientSize.Width - 6);
+            int nameWidth = Math.Max(180, (int)(width * 0.32));
+            int panelWidth = Math.Max(110, (int)(width * 0.18));
+            _circuit.Columns[0].Width = nameWidth;
+            _circuit.Columns[1].Width = panelWidth;
+            _circuit.Columns[2].Width = Math.Max(180, width - nameWidth - panelWidth);
         }
 
         private static string BuildCircuitDetail(MachineRow row)

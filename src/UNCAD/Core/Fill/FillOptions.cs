@@ -1,0 +1,91 @@
+using System;
+
+namespace UNCAD.Core.Fill
+{
+    public sealed class FillPlanningOptions
+    {
+        public const double DefaultFlexibleConduitMeters = 1.5;
+        public const double MaximumFlexibleConduitMeters = 100.0;
+
+        private FillPlanningOptions(double flexibleConduitMeters,
+            bool includeUnmatchedConduitsByDefault)
+        {
+            FlexibleConduitMeters = flexibleConduitMeters;
+            IncludeUnmatchedConduitsByDefault = includeUnmatchedConduitsByDefault;
+        }
+
+        public double FlexibleConduitMeters { get; }
+        public bool IncludeUnmatchedConduitsByDefault { get; }
+
+        public static FillPlanningOptions Default { get; } =
+            new FillPlanningOptions(DefaultFlexibleConduitMeters, false);
+
+        public static FillPlanningOptions Create(double flexibleConduitMeters,
+            bool includeUnmatchedConduitsByDefault)
+        {
+            double meters = IsFinitePositive(flexibleConduitMeters)
+                && flexibleConduitMeters <= MaximumFlexibleConduitMeters
+                ? flexibleConduitMeters
+                : DefaultFlexibleConduitMeters;
+            return new FillPlanningOptions(meters, includeUnmatchedConduitsByDefault);
+        }
+
+        private static bool IsFinitePositive(double value)
+            => value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
+    }
+
+    public sealed class FillRuntimeOptions
+    {
+        public const int DefaultStartRow = 1;
+        public const int MaximumStartRow = 1000;
+        public const int MaximumClearRows = 100;
+        public const double MaximumTextHeight = 100000.0;
+        public const double MaximumMmPerGrid = 100000.0;
+
+        private FillRuntimeOptions(string machineWorkbookPath, string catalogWorkbookPath,
+            int startRow, int clearRows, double textHeight, double mmPerGrid,
+            string bridgeInfo, FillPlanningOptions planning)
+        {
+            MachineWorkbookPath = machineWorkbookPath;
+            CatalogWorkbookPath = catalogWorkbookPath;
+            StartRow = startRow;
+            ClearRows = clearRows;
+            TextHeight = textHeight;
+            MmPerGrid = mmPerGrid;
+            BridgeInfo = bridgeInfo;
+            Planning = planning;
+        }
+
+        public string MachineWorkbookPath { get; }
+        public string CatalogWorkbookPath { get; }
+        public int StartRow { get; }
+        public int ClearRows { get; }
+        public double TextHeight { get; }
+        public double MmPerGrid { get; }
+        public string BridgeInfo { get; }
+        public FillPlanningOptions Planning { get; }
+
+        public static FillRuntimeOptions Create(string machineWorkbookPath,
+            string catalogWorkbookPath, int startRow, int clearRows, double textHeight,
+            double mmPerGrid, string bridgeInfo, FillPlanningOptions planning)
+        {
+            return new FillRuntimeOptions(
+                (machineWorkbookPath ?? "").Trim(),
+                (catalogWorkbookPath ?? "").Trim(),
+                Clamp(startRow, 1, MaximumStartRow, DefaultStartRow),
+                Clamp(clearRows, 1, MaximumClearRows, TableClearPolicy.DefaultRows),
+                PositiveWithin(textHeight, MaximumTextHeight,
+                    TableFillFormatter.DefaultTextHeight),
+                PositiveWithin(mmPerGrid, MaximumMmPerGrid, 250.0),
+                (bridgeInfo ?? "").Trim(),
+                planning ?? FillPlanningOptions.Default);
+        }
+
+        private static int Clamp(int value, int minimum, int maximum, int fallback)
+            => value >= minimum && value <= maximum ? value : fallback;
+
+        private static double PositiveWithin(double value, double maximum, double fallback)
+            => value > 0 && value <= maximum && !double.IsNaN(value)
+                && !double.IsInfinity(value) ? value : fallback;
+    }
+}

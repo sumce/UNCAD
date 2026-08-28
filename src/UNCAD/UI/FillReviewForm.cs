@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Text;
 using UNCAD.Infra;
 
 namespace UNCAD.UI
@@ -16,17 +17,21 @@ namespace UNCAD.UI
         private readonly DataGridView _grid;
         private readonly TabControl _tabs;
         private readonly Label _count;
+        private readonly ToolTip _toolTips = new ToolTip();
         private readonly Label _catalogWarning = new Label
         {
             Dock = DockStyle.Top,
             AutoSize = false,
-            Height = 42,
+            Height = 54,
+            AutoEllipsis = true,
+            UseMnemonic = false,
             Padding = new Padding(8, 7, 8, 5),
             ForeColor = Color.FromArgb(150, 70, 0),
             BackColor = Color.FromArgb(255, 247, 220),
             Visible = false
         };
-        private readonly List<ListItem> _catalogItems;
+        private readonly BoqCatalogIndex _catalog;
+        private readonly FillPlanningOptions _planningOptions;
         private readonly TextBox _machine = Field();
         private readonly TextBox _region = Field();
         private readonly TextBox _circuit = Field();
@@ -42,18 +47,21 @@ namespace UNCAD.UI
         private bool _synchronizing;
 
         public FillReviewForm(FillReviewData data, List<ListItem> catalogItems = null)
+            : this(data, new BoqCatalogIndex(catalogItems), FillPlanningOptions.Default)
+        {
+        }
+
+        public FillReviewForm(FillReviewData data, BoqCatalogIndex catalog,
+            FillPlanningOptions planningOptions)
         {
             Data = data ?? throw new ArgumentNullException(nameof(data));
-            _catalogItems = catalogItems ?? new List<ListItem>();
+            _catalog = catalog ?? new BoqCatalogIndex(null);
+            _planningOptions = planningOptions ?? FillPlanningOptions.Default;
             _defaults = FillReviewData.Create(Data.Machine,
-                Data.Items.Select(item => item.ToTableRow()));
+                Data.Items.Select(item => item.ToTableRow()), _planningOptions);
 
-            Text = "UNC_FILL 填充确认 · " + Branding.Nameplate;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(980, 620);
-            MinimumSize = new Size(820, 540);
-            Font = new Font("微软雅黑", 9f);
-            Padding = new Padding(8);
+            DialogLayout.Apply(this, "UNC_FILL 填充确认 · " + Branding.Nameplate,
+                new Size(1040, 660), new Size(880, 560));
 
             _panel.Items.AddRange(new object[] { "", "I-Line盘", "母线插接口", "插座盘" });
             TabPage basicTab = BuildBasicTab();
@@ -88,16 +96,10 @@ namespace UNCAD.UI
             _tabs.TabPages.Add(basicTab);
             _tabs.TabPages.Add(listTab);
 
-            var ok = new Button { Text = "确认填充", Width = 96, Height = 30 };
-            var cancel = new Button { Text = "取消", Width = 88, Height = 30, DialogResult = DialogResult.Cancel };
+            Button ok = DialogLayout.CommandButton("确认填充");
+            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
             ok.Click += Confirm;
-            var buttons = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Bottom,
-                AutoSize = true,
-                FlowDirection = FlowDirection.RightToLeft,
-                Padding = new Padding(0, 6, 4, 2)
-            };
+            FlowLayoutPanel buttons = DialogLayout.CommandBar();
             buttons.Controls.Add(cancel);
             buttons.Controls.Add(ok);
 
@@ -243,7 +245,7 @@ namespace UNCAD.UI
         {
             if (_synchronizing) return;
             FillReviewItem flexible = Data.SetFlexibleConduitDiameter(
-                _diameter.Text, _catalogItems);
+                _diameter.Text, _catalog, _planningOptions);
             if (flexible != null) RefreshItem(flexible);
         }
 
@@ -278,7 +280,7 @@ namespace UNCAD.UI
         private void RestoreDefaults()
         {
             Data = FillReviewData.Create(_defaults.Machine,
-                _defaults.Items.Select(item => item.ToTableRow()));
+                _defaults.Items.Select(item => item.ToTableRow()), _planningOptions);
             LoadFromData(Data);
             PopulateRows(Data.Items);
         }
@@ -289,24 +291,55 @@ namespace UNCAD.UI
             foreach (DataGridViewRow row in _grid.Rows) ReadGridRow(row);
             if (string.IsNullOrWhiteSpace(_machine.Text) || string.IsNullOrWhiteSpace(_circuit.Text))
             {
+                _tabs.SelectedIndex = 0;
+                Control invalid = string.IsNullOrWhiteSpace(_machine.Text)
+                    ? (Control)_machine : _circuit;
+                invalid.Focus();
                 MessageBox.Show(this, "机台ID和设备/回路不能为空。", "UNC_FILL",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             if (!ValidQuantity(_cableMeters.Text))
             {
-                MessageBox.Show(this, "电缆长度必须是数字或留空。", "UNC_FILL",
+                _tabs.SelectedIndex = 0;
+                _cableMeters.Focus();
+                MessageBox.Show(this, "电缆长度必须是非负数字或留空。", "UNC_FILL",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            foreach (FillReviewItem item in Data.Items.Where(item => item.Included))
+            string diameterText = _diameter.Text.Trim();
+            if (diameterText.Length > 0
+                && !ConduitDiameter.TryNormalize(diameterText, out _))
             {
-                if (!ValidQuantity(item.Quantity))
-                {
-                    MessageBox.Show(this, "“" + item.Name + "”的数量/长度必须是数字或留空。",
-                        "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _tabs.SelectedIndex = 0;
+                _diameter.Focus();
+                _diameter.SelectAll();
+                MessageBox.Show(this,
+                    "软管直径格式无效，请输入数字、DN32、Φ32或32mm等格式。",
+                    "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            for (int index = 0; index < Data.Items.Count; index++)
+            {
+                FillReviewItem item = Data.Items[index];
+                if (!item.Included || ValidQuantity(item.Quantity)) continue;
+                _tabs.SelectedIndex = 1;
+                _grid.CurrentCell = _grid.Rows[index].Cells["Quantity"];
+                _grid.BeginEdit(true);
+                MessageBox.Show(this, "“" + item.Name + "”的数量/长度必须是非负数字或留空。",
+                    "UNC_FILL", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            List<FillReviewItem> unmatched = Data.Items.Where(item =>
+                item.Included && item.RequiresCatalogConfirmation).ToList();
+            if (unmatched.Count > 0)
+            {
+                string names = string.Join("；", unmatched.Select(item => item.Name).Distinct());
+                if (MessageBox.Show(this, "以下型号不在固定清单中，项目编码将留空：\r\n"
+                    + names + "\r\n\r\n仍要生成吗？", "确认未匹配型号",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
                     return;
-                }
             }
             Data.SetCableMeters(_cableMeters.Text);
             Data.Machine.MachineId = _machine.Text.Trim();
@@ -316,7 +349,8 @@ namespace UNCAD.UI
             Data.Machine.Fr = _fr.Text.Trim();
             Data.Machine.Seq = _seq.Text.Trim();
             Data.Machine.Cable = _cable.Text.Trim();
-            Data.SetFlexibleConduitDiameter(_diameter.Text, _catalogItems);
+            Data.SetFlexibleConduitDiameter(
+                _diameter.Text, _catalog, _planningOptions);
             Data.Machine.DownstreamAxis = _downstream.Text.Trim();
             Data.Machine.UpstreamAxis = _upstream.Text.Trim();
             Data.Machine.Detail = _detail.Text.Trim();
@@ -372,8 +406,10 @@ namespace UNCAD.UI
                 .Distinct(StringComparer.Ordinal).ToList();
             _catalogWarning.Visible = missing.Count > 0;
             _catalogWarning.Text = missing.Count == 0 ? ""
-                : "固定清单未找到，默认不生成：" + string.Join("；", missing)
-                    + "。请勾选本次仍需添加的型号。";
+                : "固定清单未找到：" + string.Join("；", missing)
+                    + "。请确认本次需要生成的型号。";
+            _catalogWarning.AccessibleDescription = _catalogWarning.Text;
+            _toolTips.SetToolTip(_catalogWarning, _catalogWarning.Text);
         }
 
         private void UpdateCount()
@@ -386,8 +422,19 @@ namespace UNCAD.UI
         {
             string text = (value ?? "").Trim();
             if (text.Length == 0) return true;
-            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
-                || double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out _);
+            double parsedValue;
+            bool parsed = double.TryParse(text, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out parsedValue)
+                || double.TryParse(text, NumberStyles.Float,
+                    CultureInfo.CurrentCulture, out parsedValue);
+            return parsed && parsedValue >= 0 && !double.IsNaN(parsedValue)
+                && !double.IsInfinity(parsedValue);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _toolTips.Dispose();
+            base.Dispose(disposing);
         }
 
         private static string Cell(DataGridViewRow row, string name)

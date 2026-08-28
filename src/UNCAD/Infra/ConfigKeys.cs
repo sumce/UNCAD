@@ -48,6 +48,10 @@ namespace UNCAD.Infra
         public const string FillClearRows = "UNC_FILL_CLEAR_ROWS"; // 每次先清空的模板数据行数，默认 11
         public const string FillTextHeight = "UNC_FILL_TEXT_HEIGHT"; // 写入单元格文字高度，默认 500
         public const string FillBridge = "UNC_FILL_BRIDGE";      // 图框块 BRIDGE_FRAME_INFO 内容（空=不写）
+        public const string FillFlexibleConduitMeters =
+            "UNC_FILL_FLEXIBLE_CONDUIT_METERS"; // 软管默认长度，单位米
+        public const string FillIncludeUnmatchedConduits =
+            "UNC_FILL_INCLUDE_UNMATCHED_CONDUITS"; // 未匹配管材是否默认勾选
 
         // 设备信息提交（UNC_SUBMIT）
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 首次选择后记住输出文件夹

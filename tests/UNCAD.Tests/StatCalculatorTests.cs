@@ -120,8 +120,10 @@ namespace UNCAD.Tests
                 "2000mm", "桥架200*100 4格", "⌀20线管 3000mm"
             }, new StatCalculationOptions
             {
-                MmPerGrid = 250.0, IncludeCable = false,
-                IncludeBridge = true, IncludeConduit = false
+                MmPerGrid = 250.0,
+                IncludeCable = false,
+                IncludeBridge = true,
+                IncludeConduit = false
             });
 
             Assert.Equal(0, result.CableSum);

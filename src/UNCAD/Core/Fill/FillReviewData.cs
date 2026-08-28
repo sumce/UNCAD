@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UNCAD.Core.Excel;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Fill
 {
@@ -41,7 +42,12 @@ namespace UNCAD.Core.Fill
         public List<FillReviewItem> Items { get; } = new List<FillReviewItem>();
 
         public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows)
+            => Create(source, rows, FillPlanningOptions.Default);
+
+        public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows,
+            FillPlanningOptions options)
         {
+            options = options ?? FillPlanningOptions.Default;
             var data = new FillReviewData { Machine = CloneMachine(source) };
             foreach (TableFillRow row in rows ?? Enumerable.Empty<TableFillRow>())
             {
@@ -49,7 +55,8 @@ namespace UNCAD.Core.Fill
                 {
                     Included = row.CatalogMatched
                         || (row.Category != TableFillCategory.RigidConduit
-                            && row.Category != TableFillCategory.FlexibleConduit),
+                            && row.Category != TableFillCategory.FlexibleConduit)
+                        || options.IncludeUnmatchedConduitsByDefault,
                     Category = row.Category,
                     Name = row.Name ?? "",
                     Description = row.Description ?? "",
@@ -91,8 +98,17 @@ namespace UNCAD.Core.Fill
 
         public FillReviewItem SetFlexibleConduitDiameter(
             string diameter, List<ListItem> catalogItems)
+            => SetFlexibleConduitDiameter(diameter, new BoqCatalogIndex(catalogItems),
+                FillPlanningOptions.Default);
+
+        public FillReviewItem SetFlexibleConduitDiameter(string diameter,
+            BoqCatalogIndex catalog, FillPlanningOptions options)
         {
-            string value = (diameter ?? "").Trim();
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            options = options ?? FillPlanningOptions.Default;
+            string sourceValue = (diameter ?? "").Trim();
+            string normalized = ConduitDiameter.NormalizeOrEmpty(sourceValue);
+            string value = normalized.Length > 0 ? normalized : sourceValue;
             Machine.Dia = value;
             FillReviewItem flexible = FlexibleConduitItem();
             if (flexible == null) return null;
@@ -100,7 +116,7 @@ namespace UNCAD.Core.Fill
             string quantity = flexible.Quantity;
             bool wasMatched = flexible.CatalogMatched;
             TableFillRow planned = TableFillPlanner.BuildFlexibleConduitRow(
-                value, catalogItems);
+                value, catalog, options);
             flexible.Name = planned.Name;
             flexible.Description = planned.Description;
             flexible.Unit = planned.Unit;
@@ -108,7 +124,8 @@ namespace UNCAD.Core.Fill
             flexible.CatalogMatched = planned.CatalogMatched;
             flexible.Quantity = quantity;
             if (wasMatched != planned.CatalogMatched)
-                flexible.Included = planned.CatalogMatched;
+                flexible.Included = planned.CatalogMatched
+                    || options.IncludeUnmatchedConduitsByDefault;
             return flexible;
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Excel;
@@ -25,151 +26,157 @@ namespace UNCAD.Features.Fill
     {
         public static FillWriteResult FillDeviceName(CadContext ctx, ObjectId[] blockIds,
             string circuitName)
+            => RunStandalone(ctx, transaction =>
+                FillDeviceName(ctx, transaction, blockIds, circuitName));
+
+        internal static FillWriteResult FillDeviceName(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, string circuitName)
         {
             string value = (circuitName ?? "").Trim();
             if (blockIds == null || blockIds.Length == 0 || value.Length == 0)
                 return FillWriteResult.Empty;
 
             int blocks = 0, values = 0;
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            foreach (ObjectId id in blockIds)
             {
-                foreach (ObjectId id in blockIds)
+                var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                if (block == null) continue;
+                bool touched = false;
+                foreach (ObjectId attributeId in block.AttributeCollection)
                 {
-                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
-                    if (block == null) continue;
-                    bool touched = false;
-                    foreach (ObjectId attributeId in block.AttributeCollection)
-                    {
-                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
-                            as AttributeReference;
-                        if (attribute == null || !string.Equals(attribute.Tag,
-                            DeviceBlockFiller.TagDeviceName, StringComparison.OrdinalIgnoreCase))
-                            continue;
-                        attribute.UpgradeOpen();
-                        attribute.TextString = value;
-                        attribute.AdjustAlignment(ctx.Db);
-                        values++;
-                        touched = true;
-                    }
-
-                    if (!touched && block.IsDynamicBlock)
-                    {
-                        foreach (DynamicBlockReferenceProperty property
-                            in block.DynamicBlockReferencePropertyCollection)
-                        {
-                            if (!string.Equals(property.PropertyName,
-                                DeviceBlockFiller.TagDeviceName, StringComparison.OrdinalIgnoreCase)
-                                || property.ReadOnly) continue;
-                            try
-                            {
-                                block.UpgradeOpen();
-                                property.Value = value;
-                                values++;
-                                touched = true;
-                            }
-                            catch (System.Exception ex)
-                            {
-                                Log.Warn("UNC_FILL DEVICENAME dynamic property failed: " + ex.Message);
-                            }
-                            break;
-                        }
-                    }
-                    if (touched) blocks++;
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
+                        as AttributeReference;
+                    if (attribute == null || !string.Equals(attribute.Tag,
+                        DeviceBlockFiller.TagDeviceName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    SetAttributeValue(ctx, attribute, value, false);
+                    values++;
+                    touched = true;
                 }
-                tr.Commit();
+
+                if (!touched && block.IsDynamicBlock)
+                {
+                    foreach (DynamicBlockReferenceProperty property
+                        in block.DynamicBlockReferencePropertyCollection)
+                    {
+                        if (!string.Equals(property.PropertyName,
+                            DeviceBlockFiller.TagDeviceName, StringComparison.OrdinalIgnoreCase)
+                            || property.ReadOnly) continue;
+                        try
+                        {
+                            block.UpgradeOpen();
+                            property.Value = value;
+                            values++;
+                            touched = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Warn("UNC_FILL DEVICENAME dynamic property failed: " + ex.Message);
+                        }
+                        break;
+                    }
+                }
+                if (touched) blocks++;
             }
             return new FillWriteResult(blocks, values);
         }
 
         public static FillWriteResult FillTagged(CadContext ctx, ObjectId[] blockIds,
             string tag, string value, bool multiline)
+            => RunStandalone(ctx, transaction =>
+                FillTagged(ctx, transaction, blockIds, tag, value, multiline));
+
+        internal static FillWriteResult FillTagged(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, string tag, string value, bool multiline)
         {
             if (blockIds == null || blockIds.Length == 0) return FillWriteResult.Empty;
             int blocks = 0, attributes = 0;
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            foreach (ObjectId id in blockIds)
             {
-                foreach (ObjectId id in blockIds)
+                var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                if (block == null) continue;
+                bool touched = false;
+                foreach (ObjectId attributeId in block.AttributeCollection)
                 {
-                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
-                    if (block == null) continue;
-                    bool touched = false;
-                    foreach (ObjectId attributeId in block.AttributeCollection)
-                    {
-                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
-                            as AttributeReference;
-                        if (attribute == null || !string.Equals(attribute.Tag, tag,
-                            StringComparison.OrdinalIgnoreCase)) continue;
-
-                        attribute.UpgradeOpen();
-                        attribute.TextString = value ?? "";
-                        if (multiline && attribute.IsMTextAttribute)
-                        {
-                            using (MText mtext = attribute.MTextAttribute)
-                            {
-                                if (mtext != null)
-                                {
-                                    mtext.Contents = value ?? "";
-                                    attribute.MTextAttribute = mtext;
-                                }
-                            }
-                            attribute.UpdateMTextAttribute();
-                        }
-                        attribute.AdjustAlignment(ctx.Db);
-                        attributes++;
-                        touched = true;
-                    }
-                    if (touched) blocks++;
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
+                        as AttributeReference;
+                    if (attribute == null || !string.Equals(attribute.Tag, tag,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                    SetAttributeValue(ctx, attribute, value, multiline);
+                    attributes++;
+                    touched = true;
                 }
-                tr.Commit();
+                if (touched) blocks++;
             }
             return new FillWriteResult(blocks, attributes);
         }
 
         public static FillWriteResult FillFrame(CadContext ctx, ObjectId[] blockIds,
             MachineRow selected, string bridgeInfo, CableStatResult statistics)
+            => RunStandalone(ctx, transaction =>
+                FillFrame(ctx, transaction, blockIds, selected, bridgeInfo, statistics));
+
+        internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
+            CableStatResult statistics)
         {
             if (blockIds == null || blockIds.Length == 0) return FillWriteResult.Empty;
-            var values = FrameBlockFiller.BuildValues(selected, bridgeInfo, statistics);
+            Dictionary<string, string> values = FrameBlockFiller.BuildValues(
+                selected, bridgeInfo, statistics);
             if (values.Count == 0) return FillWriteResult.Empty;
 
             int blocks = 0, attributes = 0;
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            foreach (ObjectId id in blockIds)
             {
-                foreach (ObjectId id in blockIds)
+                var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                if (block == null || block.AttributeCollection == null
+                    || block.AttributeCollection.Count == 0) continue;
+                bool touched = false;
+                foreach (ObjectId attributeId in block.AttributeCollection)
                 {
-                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
-                    if (block == null || block.AttributeCollection == null
-                        || block.AttributeCollection.Count == 0) continue;
-                    bool touched = false;
-                    foreach (ObjectId attributeId in block.AttributeCollection)
-                    {
-                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead)
-                            as AttributeReference;
-                        if (attribute == null
-                            || !values.TryGetValue(attribute.Tag, out string newValue)) continue;
-                        attribute.UpgradeOpen();
-                        attribute.TextString = newValue;
-                        if (attribute.IsMTextAttribute)
-                        {
-                            using (MText mtext = attribute.MTextAttribute)
-                            {
-                                if (mtext != null)
-                                {
-                                    mtext.Contents = newValue;
-                                    attribute.MTextAttribute = mtext;
-                                }
-                            }
-                            attribute.UpdateMTextAttribute();
-                        }
-                        attribute.AdjustAlignment(ctx.Db);
-                        attributes++;
-                        touched = true;
-                    }
-                    if (touched) blocks++;
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead)
+                        as AttributeReference;
+                    if (attribute == null
+                        || !values.TryGetValue(attribute.Tag, out string newValue)) continue;
+                    SetAttributeValue(ctx, attribute, newValue, attribute.IsMTextAttribute);
+                    attributes++;
+                    touched = true;
                 }
-                tr.Commit();
+                if (touched) blocks++;
             }
             return new FillWriteResult(blocks, attributes);
+        }
+
+        private static void SetAttributeValue(CadContext ctx, AttributeReference attribute,
+            string value, bool multiline)
+        {
+            string text = value ?? "";
+            attribute.UpgradeOpen();
+            attribute.TextString = text;
+            if (multiline && attribute.IsMTextAttribute)
+            {
+                using (MText mtext = attribute.MTextAttribute)
+                {
+                    if (mtext != null)
+                    {
+                        mtext.Contents = text;
+                        attribute.MTextAttribute = mtext;
+                    }
+                }
+                attribute.UpdateMTextAttribute();
+            }
+            attribute.AdjustAlignment(ctx.Db);
+        }
+
+        private static FillWriteResult RunStandalone(CadContext ctx,
+            Func<Transaction, FillWriteResult> write)
+        {
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FillWriteResult result = write(transaction);
+                transaction.Commit();
+                return result;
+            }
         }
     }
 }

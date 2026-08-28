@@ -147,13 +147,21 @@ namespace UNCAD.Tests
         private static SubmissionRecord Record(string machine, string device, string detail)
             => new SubmissionRecord
             {
-                MachineId = machine, DeviceName = device, PanelType = "I-Line盘",
-                Cable = "ZB-YJVR-3*2.5", CableMeters = "16.4",
-                Fr = "FR-01", Detail = detail,
-                Diameter = "20", FlexibleConduitMeters = "2",
-                BridgeInfo = "桥架200*100 4M", BridgeMeters = "4",
-                ConduitInfo = "⌀20线管 5M", ConduitMeters = "5",
-                DownstreamAxis = "2/T", UpstreamAxis = "LAB",
+                MachineId = machine,
+                DeviceName = device,
+                PanelType = "I-Line盘",
+                Cable = "ZB-YJVR-3*2.5",
+                CableMeters = "16.4",
+                Fr = "FR-01",
+                Detail = detail,
+                Diameter = "20",
+                FlexibleConduitMeters = "2",
+                BridgeInfo = "桥架200*100 4M",
+                BridgeMeters = "4",
+                ConduitInfo = "⌀20线管 5M",
+                ConduitMeters = "5",
+                DownstreamAxis = "2/T",
+                UpstreamAxis = "LAB",
                 Materials = new System.Collections.Generic.List<SubmissionMaterial>
                 {
                     new SubmissionMaterial

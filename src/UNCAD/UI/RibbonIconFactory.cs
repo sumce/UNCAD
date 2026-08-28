@@ -36,7 +36,8 @@ namespace UNCAD.UI
                     var brush = new SolidColorBrush(IconColor(icon));
                     var pen = new Pen(brush, 1.8)
                     {
-                        StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round,
+                        StartLineCap = PenLineCap.Round,
+                        EndLineCap = PenLineCap.Round,
                         LineJoin = PenLineJoin.Round
                     };
                     foreach (XmlNode node in document.GetElementsByTagName("path"))

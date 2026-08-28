@@ -89,6 +89,22 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Create_CanDefaultUnmatchedConduitsSelectedByConfiguration()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.RigidConduit,
+                    Name = "⌀32线管", CatalogMatched = false
+                }
+            }, FillPlanningOptions.Create(1.5, true));
+
+            Assert.True(Assert.Single(data.Items).Included);
+            Assert.Single(data.SelectedRows());
+        }
+
+        [Fact]
         public void FlexibleConduitDiameterEditor_RematchesCatalogAndPreservesQuantity()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow { Dia = "38" },

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Linq;
 using System.Windows.Forms;
 using UNCAD.UI;
 using Xunit;
@@ -42,8 +43,10 @@ namespace UNCAD.Tests
                             Assert.True(item.Visible);
                             Assert.True(item.Width > 0 && item.Height > 0);
                         }
-                        Assert.True(form.ClientSize.Width >= 680);
-                        Assert.True(form.ClientSize.Height >= 400);
+                        Assert.True(form.ClientSize.Width >= 900);
+                        Assert.True(form.ClientSize.Height >= 600);
+                        Assert.Equal(AutoScaleMode.Dpi, form.AutoScaleMode);
+                        Assert.Equal(FormBorderStyle.Sizable, form.FormBorderStyle);
                     }
                 }
                 catch (Exception ex) { failure = ex; }
@@ -69,12 +72,19 @@ namespace UNCAD.Tests
                         TabControl tabs = Find<TabControl>(form);
                         Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
                         List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                        NumericUpDown clearRows = Assert.Single(numbers);
+                        Assert.Equal(4, numbers.Count);
+                        NumericUpDown clearRows = Assert.Single(numbers, number =>
+                            number.DecimalPlaces == 0 && number.Minimum == 1m
+                                && number.Maximum == 100m);
                         Assert.Equal(0, clearRows.DecimalPlaces);
                         Assert.Equal(1m, clearRows.Minimum);
                         Assert.Equal(100m, clearRows.Maximum);
                         Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                             label => label.Text == "每次清空数据行数:");
+                        Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                            label => label.Text == "软管默认长度 (m):");
+                        Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab),
+                            check => check.Text == "未匹配管材默认勾选");
                     }
                 }
                 catch (Exception ex) { failure = ex; }

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Infra;
@@ -20,6 +21,8 @@ namespace UNCAD.Cad
             var doc = Application.DocumentManager.MdiActiveDocument;
             if (doc == null) return;
             var ctx = new CadContext(doc);
+            string command = GetType().Name;
+            var stopwatch = Stopwatch.StartNew();
             try
             {
                 Execute(ctx, state);
@@ -27,17 +30,22 @@ namespace UNCAD.Cad
             catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == ErrorStatus.UserBreak)
             {
                 // 用户按 ESC，静默退出
-                Log.Info(GetType().Name + " cancelled");
+                Log.Info(command + " cancelled");
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex)
             {
                 ctx.Write("\n错误: " + ex.Message);
-                Log.Error(GetType().Name + " failed", ex);
+                Log.Error(command + " failed", ex);
             }
             catch (System.Exception ex)
             {
                 ctx.Write("\n错误: " + ex.Message);
-                Log.Error(GetType().Name + " failed", ex);
+                Log.Error(command + " failed", ex);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                Log.Info(command + " finished in " + stopwatch.ElapsedMilliseconds + "ms");
             }
         }
 
@@ -51,8 +59,16 @@ namespace UNCAD.Cad
             catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == ErrorStatus.UserBreak)
             {
             }
-            catch (Autodesk.AutoCAD.Runtime.Exception ex) { WriteError(ex.Message); }
-            catch (System.Exception ex) { WriteError(ex.Message); }
+            catch (Autodesk.AutoCAD.Runtime.Exception ex)
+            {
+                WriteError(ex.Message);
+                Log.Error("Guarded command failed", ex);
+            }
+            catch (System.Exception ex)
+            {
+                WriteError(ex.Message);
+                Log.Error("Guarded command failed", ex);
+            }
         }
 
         private static void WriteError(string msg)

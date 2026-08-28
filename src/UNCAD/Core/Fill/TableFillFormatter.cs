@@ -18,8 +18,12 @@ namespace UNCAD.Core.Fill
 
         /// <summary>包塑金属软管默认按 1500mm 计量，清单数量单位为米。</summary>
         public static string FlexibleConduitQuantity()
+            => FlexibleConduitQuantity(FillPlanningOptions.DefaultFlexibleConduitMeters);
+
+        public static string FlexibleConduitQuantity(double meters)
         {
-            return TextFormatter.FormatNum(DefaultFlexibleConduitMm / 1000.0);
+            FillPlanningOptions options = FillPlanningOptions.Create(meters, false);
+            return TextFormatter.FormatNum(options.FlexibleConduitMeters);
         }
     }
 }
