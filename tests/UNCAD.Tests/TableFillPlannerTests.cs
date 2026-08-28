@@ -70,8 +70,9 @@ namespace UNCAD.Tests
             CableStatResult stat = StatCalculator.Calculate(
                 new[] { "⌀32线管 3000mm" }, 250.0);
 
-            TableFillRow conduit = Assert.Single(TableFillPlanner.Build(
-                new MachineRow(), items, stat));
+            TableFillRow conduit = TableFillPlanner.Build(
+                new MachineRow(), items, stat).Single(row =>
+                    row.Category == TableFillCategory.RigidConduit);
 
             Assert.Equal(TableFillCategory.RigidConduit, conduit.Category);
             Assert.Equal("3.3", conduit.Code);
@@ -91,8 +92,9 @@ namespace UNCAD.Tests
             CableStatResult stat = StatCalculator.Calculate(
                 new[] { "Φ32 线管 2000MM" }, 250.0);
 
-            TableFillRow conduit = Assert.Single(TableFillPlanner.Build(
-                new MachineRow(), items, stat));
+            TableFillRow conduit = TableFillPlanner.Build(
+                new MachineRow(), items, stat).Single(row =>
+                    row.Category == TableFillCategory.RigidConduit);
 
             Assert.Equal("3.32", conduit.Code);
             Assert.Equal("32mm精确模板", conduit.Description);
@@ -128,8 +130,9 @@ namespace UNCAD.Tests
                 Detail = "N480 3P4W 3P250A"
             };
 
-            TableFillRow breaker = Assert.Single(TableFillPlanner.Build(
-                machine, Items(), new CableStatResult()));
+            TableFillRow breaker = TableFillPlanner.Build(
+                machine, Items(), new CableStatResult()).Single(row =>
+                    row.Category == TableFillCategory.Breaker);
             Assert.Equal(TableFillCategory.Breaker, breaker.Category);
             Assert.Equal("6.5", breaker.Code);
             Assert.Equal("1", breaker.Quantity);
@@ -144,8 +147,9 @@ namespace UNCAD.Tests
                 Detail = "N480 3P4W 3P250A"
             };
 
-            TableFillRow busPlug = Assert.Single(TableFillPlanner.Build(
-                machine, Items(), new CableStatResult()));
+            TableFillRow busPlug = TableFillPlanner.Build(
+                machine, Items(), new CableStatResult()).Single(row =>
+                    row.Category == TableFillCategory.BusPlugBox);
             Assert.Equal(TableFillCategory.BusPlugBox, busPlug.Category);
             Assert.Equal("5.8", busPlug.Code);
             Assert.Equal("母线插接箱", busPlug.Name);
@@ -154,10 +158,53 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_DoesNotReserveRowsForAbsentCategories()
+        public void Build_AlwaysAddsEditableOnePointFiveMeterFlexibleConduit()
         {
             var machine = new MachineRow { CircuitName = "普通设备" };
-            Assert.Empty(TableFillPlanner.Build(machine, Items(), new CableStatResult()));
+            TableFillRow flexible = Assert.Single(TableFillPlanner.Build(
+                machine, Items(), new CableStatResult()));
+
+            Assert.Equal(TableFillCategory.FlexibleConduit, flexible.Category);
+            Assert.Equal("包塑金属软管", flexible.Name);
+            Assert.Equal("1.5", flexible.Quantity);
+            Assert.Equal("", flexible.Code);
+        }
+
+        [Fact]
+        public void Build_BlankDiaInfersSingle32ConduitAndUses38FlexibleTemplate()
+        {
+            var items = new List<ListItem>
+            {
+                Item("3.3", "镀锌穿线管", "刚性38模板", "m", "38mm"),
+                Item("3.7", "包塑金属软管", "软管38模板", "m", "38mm")
+            };
+            CableStatResult stat = StatCalculator.Calculate(
+                new[] { "⌀32线管 3000mm" }, 250.0);
+
+            List<TableFillRow> rows = TableFillPlanner.Build(new MachineRow(), items, stat);
+            TableFillRow flexible = rows.Single(row =>
+                row.Category == TableFillCategory.FlexibleConduit);
+
+            Assert.Equal("3.7", flexible.Code);
+            Assert.Equal("软管38模板", flexible.Description);
+            Assert.Equal("1.5", flexible.Quantity);
+        }
+
+        [Fact]
+        public void Build_BlankDiaWithMultipleConduitsKeepsGenericEditableFlexibleRow()
+        {
+            CableStatResult stat = StatCalculator.Calculate(new[]
+            {
+                "⌀20线管 2000mm", "⌀25线管 3000mm"
+            }, 250.0);
+
+            TableFillRow flexible = TableFillPlanner.Build(
+                new MachineRow(), Items(), stat).Single(row =>
+                    row.Category == TableFillCategory.FlexibleConduit);
+
+            Assert.Equal("", flexible.Code);
+            Assert.Equal("1.名称:包塑金属软管", flexible.Description);
+            Assert.Equal("1.5", flexible.Quantity);
         }
 
         private static ListItem Item(string code, string name, string feature, string unit, string spec)

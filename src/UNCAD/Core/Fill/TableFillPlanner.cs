@@ -54,7 +54,7 @@ namespace UNCAD.Core.Fill
             AddCable(rows, machine, items, stat);
             AddBridges(rows, items, stat);
             AddRigidConduits(rows, items, stat);
-            AddFlexibleConduit(rows, machine, items);
+            AddFlexibleConduit(rows, machine, items, stat);
             AddNextEquipment(rows, machine, items);
 
             return rows.OrderBy(r => r.SortOrder)
@@ -103,13 +103,16 @@ namespace UNCAD.Core.Fill
         }
 
         private static void AddFlexibleConduit(List<TableFillRow> rows,
-            MachineRow machine, List<ListItem> items)
+            MachineRow machine, List<ListItem> items, CableStatResult stat)
         {
             string diameter = (machine.Dia ?? "").Trim();
-            if (diameter.Length == 0) return;
-            ListItem item = ListItemReader.FindConduit(items, diameter);
+            if (diameter.Length == 0) diameter = InferSingleConduitDiameter(stat);
+            ListItem item = FindFlexibleConduit(items, diameter);
+            string description = diameter.Length > 0
+                ? string.Format(FillTemplates.ConduitDesc, diameter)
+                : "1.名称:包塑金属软管";
             rows.Add(FromItem(TableFillCategory.FlexibleConduit, 400, item,
-                "包塑金属软管", string.Format(FillTemplates.ConduitDesc, diameter), "M",
+                "包塑金属软管", description, "M",
                 TableFillFormatter.FlexibleConduitQuantity()));
         }
 
@@ -192,6 +195,30 @@ namespace UNCAD.Core.Fill
                 return rigid.FirstOrDefault(item =>
                     NormalizeSpec(item.Spec) == NormalizeSpec("38mm"));
             return null;
+        }
+
+        private static ListItem FindFlexibleConduit(List<ListItem> items, string diameter)
+        {
+            if (string.IsNullOrWhiteSpace(diameter)) return null;
+            List<ListItem> flexible = items.Where(item => StartsWithCode(item, "3.")
+                && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) >= 0)
+                .ToList();
+            ListItem exact = flexible.FirstOrDefault(item =>
+                NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
+            if (exact != null) return exact;
+            if (string.Equals(diameter, "32", StringComparison.Ordinal))
+                return flexible.FirstOrDefault(item =>
+                    NormalizeSpec(item.Spec) == NormalizeSpec("38mm"));
+            return null;
+        }
+
+        private static string InferSingleConduitDiameter(CableStatResult stat)
+        {
+            List<string> diameters = (stat?.Conduits ?? new List<ConduitStat>())
+                .Select(item => ExtractNumber(item.Spec))
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return diameters.Count == 1 ? diameters[0] : "";
         }
 
         private static string NormalizeBridgeSpec(string value)
