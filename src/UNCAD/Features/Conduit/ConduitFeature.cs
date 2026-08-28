@@ -7,10 +7,10 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Conduit
 {
-    /// <summary>线管标注：生成紫色原生偏移曲线和按实际曲线长度计算的规格文字。</summary>
+    /// <summary>线管标注：生成紫色原生偏移曲线和固定 2000mm 占位文字。</summary>
     [Feature("conduit", "线管标注",
         Commands = CommandIds.ConduitFeatureCommands,
-        Description = "选中线段生成紫色线管及按实际长度计算的规格文字")]
+        Description = "选中线段生成紫色线管及固定 2000mm 占位文字")]
     public class ConduitFeature : CommandBase
     {
         [CommandMethod(CommandIds.Conduit, CommandFlags.UsePickSet)]
@@ -64,7 +64,7 @@ namespace UNCAD.Features.Conduit
                 TextHeight = hgt,
                 Above = side != "0",
                 ColorIndex = 6,
-                LabelFactory = length => ConduitLabelFormatter.Build(diameter, length)
+                LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
             });
 
             SelectionService.ClearPickFirst(ctx);

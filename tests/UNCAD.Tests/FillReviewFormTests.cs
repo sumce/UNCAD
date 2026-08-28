@@ -74,6 +74,45 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Dialog_UncheckedOutletImmediatelyConfirmedIsNotSelected()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var rows = new List<TableFillRow>
+                    {
+                        new TableFillRow { Category = TableFillCategory.Cable, Name = "电缆", Quantity = "5", Code = "1.1", CatalogMatched = true },
+                        new TableFillRow { Category = TableFillCategory.Outlet, Name = "插座", Quantity = "1", Code = "8.1", CatalogMatched = true }
+                    };
+                    using (var form = new FillReviewForm(FillReviewData.Create(
+                        new MachineRow { MachineId = "M1", CircuitName = "设备A", Cable = "C1" }, rows)))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+                        DataGridView grid = Find<DataGridView>(form);
+                        DataGridViewCell outletCheck = grid.Rows[1].Cells["Included"];
+                        grid.CurrentCell = outletCheck;
+                        outletCheck.Value = false;
+                        grid.NotifyCurrentCellDirty(true);
+
+                        // 模拟用户取消勾选后不切换单元格，直接确认填充。
+                        FindButton(form, "确认填充").PerformClick();
+                        Assert.Equal(DialogResult.OK, form.DialogResult);
+                        Assert.DoesNotContain(form.Data.SelectedRows(), row =>
+                            row.Category == TableFillCategory.Outlet || row.Name == "插座");
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
         public void Dialog_SoftConduitDiameterEditRefreshesCatalogRow()
         {
             Exception failure = null;

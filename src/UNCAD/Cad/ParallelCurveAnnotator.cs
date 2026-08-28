@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using UNCAD.Infra;
 
 namespace UNCAD.Cad
 {
@@ -22,6 +23,7 @@ namespace UNCAD.Cad
         {
             if (ids == null || options == null || options.LabelFactory == null) return 0;
             int count = 0;
+            int skipped = 0;
             using (var tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
@@ -30,31 +32,41 @@ namespace UNCAD.Cad
                     var source = tr.GetObject(id, OpenMode.ForRead, true) as Curve;
                     if (!IsSupported(source)) continue;
 
-                    double length = GetLength(source);
-                    if (length <= 0) continue;
-                    Point3d sourceMid = source.GetPointAtDist(length / 2.0);
-                    Vector3d tangent = source.GetFirstDerivative(sourceMid);
-                    if (tangent.Length < 1e-9) continue;
-                    double sourceAngle = GeoMath.ReadableAngle(sourceMid, sourceMid + tangent);
-                    double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
-                    var desired = new Vector3d(Math.Cos(sideAngle), Math.Sin(sideAngle), 0);
+                    double length;
+                    Point3d sourceMid;
+                    double sourceAngle;
+                    Vector3d desired;
+                    try
+                    {
+                        // 某些损坏或退化曲线能被选中，但在取中点/切线时会由 AutoCAD 抛错。
+                        // 在创建任何数据库实体前完成预检，单条坏曲线不会中断其他线管生成。
+                        length = GetLength(source);
+                        if (length <= 0) { skipped++; continue; }
+                        sourceMid = source.GetPointAtDist(length / 2.0);
+                        Vector3d tangent = source.GetFirstDerivative(sourceMid);
+                        if (tangent.Length < 1e-9) { skipped++; continue; }
+                        sourceAngle = GeoMath.ReadableAngle(sourceMid, sourceMid + tangent);
+                        double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
+                        desired = new Vector3d(Math.Cos(sideAngle), Math.Sin(sideAngle), 0);
+                    }
+                    catch (Exception ex)
+                    {
+                        skipped++;
+                        Log.Warn("平行曲线预检失败，已跳过对象 " + id + ": " + ex.Message);
+                        continue;
+                    }
 
                     OffsetCandidate positive = CreateCandidate(source, options.CurveOffset, sourceMid, desired);
                     OffsetCandidate negative = CreateCandidate(source, -options.CurveOffset, sourceMid, desired);
                     OffsetCandidate selected = SelectCandidate(positive, negative);
                     OffsetCandidate rejected = ReferenceEquals(selected, positive) ? negative : positive;
                     rejected?.Dispose();
-                    if (selected == null) continue;
+                    if (selected == null) { skipped++; continue; }
 
+                    DBText text;
                     try
                     {
-                        foreach (Entity entity in selected.Entities)
-                        {
-                            entity.LayerId = ctx.CurrentLayerId;
-                            if (options.ColorIndex != 0) entity.ColorIndex = options.ColorIndex;
-                            ctx.AddToCurrentSpace(tr, entity);
-                        }
-
+                        // 文本位置也先计算完毕，防止偏移曲线已入库后才因切线异常失败。
                         Curve labelCurve = selected.LabelCurve;
                         Point3d curvePoint = labelCurve.GetClosestPointTo(sourceMid, false);
                         Vector3d labelTangent = labelCurve.GetFirstDerivative(curvePoint);
@@ -63,10 +75,28 @@ namespace UNCAD.Cad
                             : GeoMath.ReadableAngle(curvePoint, curvePoint + labelTangent);
                         Point3d textPoint = GeoMath.Polar(curvePoint,
                             GeoMath.SideDirection(textAngle, options.Above), options.TextOffset);
-                        var text = EntityFactory.DBText(ctx, options.LabelFactory(length), textPoint,
+                        text = EntityFactory.DBText(ctx, options.LabelFactory(length), textPoint,
                             options.TextHeight, textAngle,
                             options.Above ? AttachmentPoint.BottomCenter : AttachmentPoint.TopCenter,
                             options.ColorIndex, styleId);
+                    }
+                    catch (Exception ex)
+                    {
+                        selected.Dispose();
+                        skipped++;
+                        Log.Warn("平行曲线标注预检失败，已跳过对象 " + id + ": " + ex.Message);
+                        continue;
+                    }
+
+                    try
+                    {
+                        // 一旦开始入库就不再吞异常：数据库失败必须让整个命令事务回滚，禁止留下半批标注。
+                        foreach (Entity entity in selected.Entities)
+                        {
+                            entity.LayerId = ctx.CurrentLayerId;
+                            if (options.ColorIndex != 0) entity.ColorIndex = options.ColorIndex;
+                            ctx.AddToCurrentSpace(tr, entity);
+                        }
                         ctx.AddToCurrentSpace(tr, text);
                         selected.Detach();
                         count++;
@@ -78,6 +108,8 @@ namespace UNCAD.Cad
                 }
                 tr.Commit();
             }
+            if (skipped > 0)
+                ctx.Write("\n[UNCAD] 已跳过 " + skipped + " 条无法偏移或无法标注的曲线。");
             return count;
         }
 
@@ -125,9 +157,13 @@ namespace UNCAD.Cad
                         labelCurve = curve;
                     }
                 }
-                return entities.Count == 0 || labelCurve == null
-                    ? null
-                    : new OffsetCandidate(entities, labelCurve, score);
+                if (entities.Count == 0 || labelCurve == null)
+                {
+                    // GetOffsetCurves 返回的对象尚未入库，失败出口必须由当前方法释放所有权。
+                    foreach (Entity entity in entities) entity.Dispose();
+                    return null;
+                }
+                return new OffsetCandidate(entities, labelCurve, score);
             }
             catch
             {

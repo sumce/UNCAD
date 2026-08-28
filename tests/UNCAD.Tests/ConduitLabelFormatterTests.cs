@@ -16,14 +16,13 @@ namespace UNCAD.Tests
             Assert.Equal(expected, ConduitLabelFormatter.Build(diameter));
         }
 
-        [Theory]
-        [InlineData(3150.5, "⌀32线管 3150.5mm")]
-        [InlineData(800, "⌀32线管 800mm")]
-        [InlineData(-1, "⌀32线管 2000mm")]
-        public void Build_WithMeasuredLengthUsesActualPositiveCurveLength(
-            double lengthMm, string expected)
+        [Fact]
+        public void Build_DoesNotExposeMeasuredLengthOverride()
         {
-            Assert.Equal(expected, ConduitLabelFormatter.Build("DN32", lengthMm));
+            // 线管标签必须保持人工修改用的 2000mm 占位，防止再次接入曲线实测距离。
+            Assert.Null(typeof(ConduitLabelFormatter).GetMethod("Build",
+                new[] { typeof(string), typeof(double) }));
+            Assert.Equal("⌀32线管 2000mm", ConduitLabelFormatter.Build("DN32"));
         }
     }
 }

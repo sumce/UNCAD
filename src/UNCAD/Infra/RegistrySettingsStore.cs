@@ -16,7 +16,7 @@ namespace UNCAD.Infra
         public static readonly RegistrySettingsStore Instance = new RegistrySettingsStore();
 
         private const string VariablesKey = "Variables";
-        private const string FallbackRoot = @"SoftwareAutodeskAutoCAD";
+        private const string FallbackRoot = @"Software\Autodesk\AutoCAD";
 
         private static string ProductRootKey
         {
@@ -25,7 +25,7 @@ namespace UNCAD.Infra
                 try
                 {
                     Type hostType = Type.GetType(
-                        "Autodesk.AutoCAD.ApplicationServices.HostApplicationServices, AcDbMgd",
+                        "Autodesk.AutoCAD.DatabaseServices.HostApplicationServices, AcDbMgd",
                         throwOnError: false);
                     object host = hostType?.GetProperty("Current",
                         BindingFlags.Public | BindingFlags.Static)?.GetValue(null, null);
@@ -49,13 +49,13 @@ namespace UNCAD.Infra
                 {
                     string profile = CurrentProfileName();
                     if (profile.Length > 0)
-                        return ProductRootKey + @"Profiles" + profile + @"" + VariablesKey;
+                        return ProductRootKey + @"\Profiles\" + profile + @"\" + VariablesKey;
                 }
                 catch (Exception ex)
                 {
                     Log.Warn("配置档名读取失败: " + ex.Message);
                 }
-                return ProductRootKey + @"" + VariablesKey;
+                return ProductRootKey + @"\" + VariablesKey;
             }
         }
 
@@ -63,17 +63,13 @@ namespace UNCAD.Infra
         {
             try
             {
-                Type application = Type.GetType(
-                    "Autodesk.AutoCAD.ApplicationServices.Application, AcMgd",
-                    throwOnError: false);
-                object value = application?.GetMethod("GetSystemVariable",
-                    BindingFlags.Public | BindingFlags.Static)?.Invoke(null,
-                    new object[] { "CPROFILE" });
-                return Convert.ToString(value) ?? "";
+                // 当前配置档名已保存在产品根键；直接读取可避免配置读取期间再次回调 AutoCAD 系统变量。
+                using (var key = Registry.CurrentUser.OpenSubKey(ProductRootKey))
+                    return Convert.ToString(key?.GetValue("CurProfile")) ?? "";
             }
             catch (Exception ex)
             {
-                Log.Warn("CPROFILE 读取失败: " + ex.Message);
+                Log.Warn("当前配置档名读取失败: " + ex.Message);
                 return "";
             }
         }
@@ -84,7 +80,7 @@ namespace UNCAD.Infra
             {
                 var v = ReadKey(ProfileVariablesPath, name);
                 if (v != null) return v;
-                v = ReadKey(ProductRootKey + @"" + VariablesKey, name);
+                v = ReadKey(ProductRootKey + @"\" + VariablesKey, name);
                 if (v != null) return v;
             }
             catch (System.Exception ex)
@@ -97,7 +93,7 @@ namespace UNCAD.Infra
         public void Set(string name, string value)
         {
             WriteKey(ProfileVariablesPath, name, value);
-            WriteKey(ProductRootKey + @"" + VariablesKey, name, value);
+            WriteKey(ProductRootKey + @"\" + VariablesKey, name, value);
         }
 
         private static string ReadKey(string path, string name)

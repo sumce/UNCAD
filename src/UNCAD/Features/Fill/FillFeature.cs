@@ -162,6 +162,9 @@ namespace UNCAD.Features.Fill
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
+            // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
+            Log.Info("UNC_FILL confirmed BOQ rows: " + string.Join(" | ",
+                tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
             if (tableRows.Count == 0
                 && MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),

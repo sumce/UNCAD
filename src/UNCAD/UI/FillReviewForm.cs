@@ -373,6 +373,9 @@ namespace UNCAD.UI
 
         private void Confirm(object sender, EventArgs e)
         {
+            // 用户可能取消勾选后立即按“确认填充”；先提交当前脏复选框，再以界面可见值重建最终选择。
+            if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewCheckBoxCell)
+                _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             _grid.EndEdit();
             foreach (DataGridViewRow row in _grid.Rows) ReadGridRow(row);
             if (string.IsNullOrWhiteSpace(_machine.Text) || string.IsNullOrWhiteSpace(_circuit.Text))
