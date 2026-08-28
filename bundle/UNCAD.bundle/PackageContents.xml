@@ -3,9 +3,10 @@
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
     Description="UNC_FILL 填充与更新 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
-    AppVersion="1.5.1"
+    AppVersion="1.5.2"
     ProductType="Application"
-    ProductCode="{D801105A-CD8A-4892-AEE6-74723785BCD6}">
+    ProductCode="{E97CC343-AA16-4ECA-9516-C44A4EFD37F4}"
+    UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
   <Components>
     <RuntimeRequirements OS="Win64" Platform="AutoCAD" SeriesMin="R24.1" SeriesMax="R24.1" />
@@ -13,6 +14,41 @@
                     AppDescription="UNCAD AutoCAD 2022 填充、提交、统计和标注命令集"
                     ModuleName="./UNCAD.dll"
                     LoadOnAutoCADStartup="True"
-                    LoadOnCommandInvocation="True" />
+                    LoadOnCommandInvocation="True">
+      <Commands GroupName="UNCAD">
+        <Command Global="UNC_FILL" />
+        <Command Global="UNC_FILL_UPDATE" />
+        <Command Global="UNC_SUBMIT" />
+        <Command Global="UNC_SET" />
+        <Command Global="UNC_ABOUT" />
+        <Command Global="UNC_RIBBON" />
+        <Command Global="UNC_CONDUIT" />
+        <Command Global="UNC_CONDUIT20" />
+        <Command Global="UNC_CONDUIT25" />
+        <Command Global="UNC_CONDUIT32" />
+        <Command Global="UNC_CONDUIT_SET" />
+        <Command Global="UNC_TRAY" />
+        <Command Global="UNC_TRAY100" />
+        <Command Global="UNC_TRAY200" />
+        <Command Global="UNC_TRAY400" />
+        <Command Global="UNC_TRAY_SET" />
+        <Command Global="UNC_LINE" />
+        <Command Global="UNC_LINE_SET" />
+        <Command Global="UNC_ARCH" />
+        <Command Global="UNC_ARCH_SET" />
+        <Command Global="UNC_STAT" />
+        <Command Global="UNC_STAT_EX" />
+        <Command Global="UNL" />
+        <Command Global="OPUNL" />
+        <Command Global="UNQ1" />
+        <Command Global="UNQ2" />
+        <Command Global="UNQ4" />
+        <Command Global="OPUNQ" />
+        <Command Global="UNADD" />
+        <Command Global="UNADDX" />
+        <Command Global="UNR" />
+        <Command Global="OPUNR" />
+      </Commands>
+    </ComponentEntry>
   </Components>
 </ApplicationPackage>

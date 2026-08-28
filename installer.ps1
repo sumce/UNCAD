@@ -61,6 +61,21 @@ function Get-PackageInfo {
     if ($requirements.SeriesMin -ne "R24.1" -or $requirements.SeriesMax -ne "R24.1") {
         throw "This package is not restricted to AutoCAD 2022 (R24.1)."
     }
+    if ([string]::IsNullOrWhiteSpace([string]$package.ProductCode) -or
+        [string]::IsNullOrWhiteSpace([string]$package.UpgradeCode) -or
+        $package.ProductCode -eq $package.UpgradeCode) {
+        throw "Package product and upgrade identifiers are missing or invalid."
+    }
+    if ([string]$entry.LoadOnAutoCADStartup -ne "True" -or
+        [string]$entry.LoadOnCommandInvocation -ne "True") {
+        throw "Package must support both startup and command-triggered loading."
+    }
+    $declaredCommands = @($entry.Commands.Command | ForEach-Object { [string]$_.Global })
+    foreach ($requiredCommand in @("UNC_ABOUT", "UNC_RIBBON", "UNC_FILL", "UNC_ARCH")) {
+        if ($declaredCommands -notcontains $requiredCommand) {
+            throw "Package command-triggered loading is missing: $requiredCommand"
+        }
+    }
     $moduleRelative = ([string]$entry.ModuleName).Replace("/", "\").TrimStart([char[]]".\")
     $modulePath = Join-Path $BundlePath $moduleRelative
     if (-not (Test-Path $modulePath -PathType Leaf)) { throw "Plugin module is missing: $moduleRelative" }
@@ -100,6 +115,13 @@ function Compare-BundleFiles {
     }
 }
 
+function Unblock-BundleFiles {
+    param([string]$BundlePath)
+    if (-not (Test-Path $BundlePath -PathType Container)) { return }
+    Get-ChildItem -LiteralPath $BundlePath -File -Recurse -ErrorAction SilentlyContinue |
+        Unblock-File -ErrorAction SilentlyContinue
+}
+
 function Assert-AutoCADClosed {
     if (Get-Process acad -ErrorAction SilentlyContinue) {
         throw "AutoCAD is running. Save all drawings and close AutoCAD before continuing."
@@ -120,6 +142,7 @@ function Install-Bundle {
     $cadPath = Get-AutoCAD2022Path
     if (-not $cadPath) { throw "AutoCAD 2022 was not detected. Installation stopped." }
     Assert-NoScopeConflict $Scope
+    Unblock-BundleFiles $SourceBundle
     $sourceInfo = Get-PackageInfo $SourceBundle
     $destination = if ($Scope -eq "User") { $UserBundle } else { $MachineBundle }
     $parent = Split-Path -Parent $destination
@@ -135,6 +158,7 @@ function Install-Bundle {
         if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
         New-Item -ItemType Directory -Path $stage -Force | Out-Null
         Copy-Item -Path (Join-Path $SourceBundle "*") -Destination $stage -Recurse -Force
+        Unblock-BundleFiles $stage
         Get-PackageInfo $stage | Out-Null
         Compare-BundleFiles $SourceBundle $stage
         Write-SetupLog "Staged files passed manifest, version, and SHA-256 validation." Green
@@ -145,11 +169,16 @@ function Install-Bundle {
         }
         Move-Item -LiteralPath $stage -Destination $destination
         $newPlaced = $true
+        Unblock-BundleFiles $destination
         Get-PackageInfo $destination | Out-Null
         Compare-BundleFiles $SourceBundle $destination
         if ($oldMoved -and (Test-Path $backup)) { Remove-Item $backup -Recurse -Force }
         Write-SetupLog "INSTALLATION SUCCESSFUL: UNCAD $($sourceInfo.Version)" Green
-        Write-SetupLog "Restart AutoCAD 2022 and open the UNCAD Ribbon tab." Green
+        Write-SetupLog "Downloaded-file security marks were removed from the installed bundle." Green
+        Write-SetupLog $(if ($Scope -eq "User") {
+            "Scope: current Windows user only. Use InstallAll on shared computers."
+        } else { "Scope: all Windows users on this computer." }) Cyan
+        Write-SetupLog "Restart AutoCAD 2022. If the tab is hidden, run UNC_RIBBON." Green
     }
     catch {
         if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }

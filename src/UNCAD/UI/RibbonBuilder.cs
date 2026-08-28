@@ -69,9 +69,15 @@ namespace UNCAD.UI
         {
             RibbonControl ribbon = ComponentManager.Ribbon;
             if (ribbon == null) return false;
-            if (ribbon.Tabs.Cast<RibbonTab>().Any(t => t.Id == TabId || t.Title == TabTitle)) return true;
+            RibbonTab existing = ribbon.Tabs.Cast<RibbonTab>()
+                .FirstOrDefault(t => t.Id == TabId || t.Title == TabTitle);
+            if (existing != null)
+            {
+                existing.IsVisible = true;
+                return true;
+            }
 
-            var tab = new RibbonTab { Id = TabId, Title = TabTitle };
+            var tab = new RibbonTab { Id = TabId, Title = TabTitle, IsVisible = true };
             foreach (RibbonPanelDefinition definition in RibbonCatalog.Panels)
                 tab.Panels.Add(BuildPanel(definition));
             ribbon.Tabs.Add(tab);
@@ -95,9 +101,13 @@ namespace UNCAD.UI
         {
             return new RibbonButton
             {
-                Text = definition.Text, ShowText = true, ShowImage = true,
-                CommandParameter = definition.Command, CommandHandler = CommandHandler,
-                Size = size, ToolTip = definition.ToolTip,
+                Text = definition.Text,
+                ShowText = true,
+                ShowImage = true,
+                CommandParameter = definition.Command,
+                CommandHandler = CommandHandler,
+                Size = size,
+                ToolTip = definition.ToolTip,
                 Image = RibbonIconFactory.Create(definition.IconCommand, 16),
                 LargeImage = RibbonIconFactory.Create(definition.IconCommand, 32)
             };
@@ -107,9 +117,13 @@ namespace UNCAD.UI
         {
             var menu = new RibbonSplitButton
             {
-                Text = definition.Text, ShowText = true, ShowImage = true,
-                Size = RibbonItemSize.Large, ToolTip = definition.ToolTip,
-                IsSplit = false, IsSynchronizedWithCurrentItem = false,
+                Text = definition.Text,
+                ShowText = true,
+                ShowImage = true,
+                Size = RibbonItemSize.Large,
+                ToolTip = definition.ToolTip,
+                IsSplit = false,
+                IsSynchronizedWithCurrentItem = false,
                 Image = RibbonIconFactory.Create(definition.IconCommand, 16),
                 LargeImage = RibbonIconFactory.Create(definition.IconCommand, 32)
             };

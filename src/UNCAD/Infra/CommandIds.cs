@@ -10,6 +10,7 @@ namespace UNCAD.Infra
         public const string Submit = "UNC_SUBMIT";
         public const string Settings = "UNC_SET";
         public const string About = "UNC_ABOUT";
+        public const string Ribbon = "UNC_RIBBON";
 
         public const string Conduit = "UNC_CONDUIT";
         public const string Conduit20 = "UNC_CONDUIT20";
@@ -41,6 +42,7 @@ namespace UNCAD.Infra
         public const string LegacyArch = "UNR";
         public const string LegacyArchSettings = "OPUNR";
 
+        public const string AboutFeatureCommands = About + ";" + Ribbon;
         public const string FillFeatureCommands = Fill + ";" + FillUpdate;
         public const string ConduitFeatureCommands = Conduit + ";" + Conduit20 + ";"
             + Conduit25 + ";" + Conduit32 + ";" + ConduitSettings;
@@ -52,7 +54,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Fill, FillUpdate, Submit, Settings, About, Conduit, Conduit20, Conduit25, Conduit32,
+            Fill, FillUpdate, Submit, Settings, About, Ribbon, Conduit, Conduit20, Conduit25, Conduit32,
             ConduitSettings, Tray, Tray100, Tray200, Tray400, TraySettings, Line,
             LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel
         };

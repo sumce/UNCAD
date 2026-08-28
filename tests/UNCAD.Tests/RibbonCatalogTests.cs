@@ -55,8 +55,9 @@ namespace UNCAD.Tests
             string[] ribbonCommands = RibbonCatalog.CommandItems
                 .Select(item => item.Command).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             Assert.All(ribbonCommands, command => Assert.Contains(command, canonical));
-            Assert.All(canonical, command => Assert.Contains(command, ribbonCommands,
-                StringComparer.OrdinalIgnoreCase));
+            Assert.All(canonical.Where(command => !string.Equals(command, CommandIds.Ribbon,
+                StringComparison.OrdinalIgnoreCase)), command => Assert.Contains(command,
+                    ribbonCommands, StringComparer.OrdinalIgnoreCase));
 
         }
     }
