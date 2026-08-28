@@ -1,6 +1,6 @@
 using System;
-using Autodesk.AutoCAD.ApplicationServices;
-using Autodesk.AutoCAD.DatabaseServices;
+using System.Reflection;
+using Microsoft.Win32;
 using UNCAD.Core.Contracts;
 
 namespace UNCAD.Infra
@@ -8,19 +8,36 @@ namespace UNCAD.Infra
     /// <summary>
     /// 注册表配置存储（ISettingsStore 实现）。
     /// 键名与旧 AutoLISP 插件 (setenv)/(getenv) 一致，可读取 LISP 版已保存的配置。
+    /// AutoCAD 主机 API 通过反射访问：在无 AutoCAD 的测试/工具环境（例如 xUnit 宿主）下
+    /// 不会在 JIT 阶段因缺少 accoremgd/AcMgd 抛 FileNotFoundException，而是降级到固定根键。
     /// </summary>
     public sealed class RegistrySettingsStore : ISettingsStore
     {
         public static readonly RegistrySettingsStore Instance = new RegistrySettingsStore();
 
         private const string VariablesKey = "Variables";
+        private const string FallbackRoot = @"SoftwareAutodeskAutoCAD";
 
         private static string ProductRootKey
         {
             get
             {
-                try { return HostApplicationServices.Current.UserRegistryProductRootKey; }
-                catch { return @"Software\Autodesk\AutoCAD"; }
+                try
+                {
+                    Type hostType = Type.GetType(
+                        "Autodesk.AutoCAD.ApplicationServices.HostApplicationServices, AcDbMgd",
+                        throwOnError: false);
+                    object host = hostType?.GetProperty("Current",
+                        BindingFlags.Public | BindingFlags.Static)?.GetValue(null, null);
+                    string root = Convert.ToString(host?.GetType().GetProperty(
+                        "UserRegistryProductRootKey")?.GetValue(host, null) ?? "");
+                    return string.IsNullOrWhiteSpace(root) ? FallbackRoot : root;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("AutoCAD 主机注册表根不可用: " + ex.Message);
+                    return FallbackRoot;
+                }
             }
         }
 
@@ -30,12 +47,34 @@ namespace UNCAD.Infra
             {
                 try
                 {
-                    var profile = Convert.ToString(Application.GetSystemVariable("CPROFILE"));
-                    if (!string.IsNullOrEmpty(profile))
-                        return ProductRootKey + @"\Profiles\" + profile + @"\" + VariablesKey;
+                    string profile = CurrentProfileName();
+                    if (profile.Length > 0)
+                        return ProductRootKey + @"Profiles" + profile + @"" + VariablesKey;
                 }
-                catch { }
-                return ProductRootKey + @"\" + VariablesKey;
+                catch (Exception ex)
+                {
+                    Log.Warn("配置档名读取失败: " + ex.Message);
+                }
+                return ProductRootKey + @"" + VariablesKey;
+            }
+        }
+
+        private static string CurrentProfileName()
+        {
+            try
+            {
+                Type application = Type.GetType(
+                    "Autodesk.AutoCAD.ApplicationServices.Application, AcMgd",
+                    throwOnError: false);
+                object value = application?.GetMethod("GetSystemVariable",
+                    BindingFlags.Public | BindingFlags.Static)?.Invoke(null,
+                    new object[] { "CPROFILE" });
+                return Convert.ToString(value) ?? "";
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("CPROFILE 读取失败: " + ex.Message);
+                return "";
             }
         }
 
@@ -45,7 +84,7 @@ namespace UNCAD.Infra
             {
                 var v = ReadKey(ProfileVariablesPath, name);
                 if (v != null) return v;
-                v = ReadKey(ProductRootKey + @"\" + VariablesKey, name);
+                v = ReadKey(ProductRootKey + @"" + VariablesKey, name);
                 if (v != null) return v;
             }
             catch (System.Exception ex)
@@ -58,14 +97,14 @@ namespace UNCAD.Infra
         public void Set(string name, string value)
         {
             WriteKey(ProfileVariablesPath, name, value);
-            WriteKey(ProductRootKey + @"\" + VariablesKey, name, value);
+            WriteKey(ProductRootKey + @"" + VariablesKey, name, value);
         }
 
         private static string ReadKey(string path, string name)
         {
             try
             {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path))
+                using (var key = Registry.CurrentUser.OpenSubKey(path))
                     return key?.GetValue(name) as string;
             }
             catch (System.Exception ex)
@@ -79,8 +118,8 @@ namespace UNCAD.Infra
         {
             try
             {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(path))
-                    key?.SetValue(name, value, Microsoft.Win32.RegistryValueKind.String);
+                using (var key = Registry.CurrentUser.CreateSubKey(path))
+                    key?.SetValue(name, value, RegistryValueKind.String);
             }
             catch (System.Exception ex)
             {

@@ -51,6 +51,8 @@ namespace UNCAD.Infra
             "UNC_FILL_FLEXIBLE_CONDUIT_METERS"; // 软管默认长度，单位米
         public const string FillIncludeUnmatchedConduits =
             "UNC_FILL_INCLUDE_UNMATCHED_CONDUITS"; // 仅兼容旧配置；运行时固定忽略
+        public const string FillRecentCatalogItems =
+            "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
         // 设备信息提交（UNC_SUBMIT）
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 首次选择后记住输出文件夹

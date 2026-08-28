@@ -288,23 +288,29 @@ namespace UNCAD.UI
 
         private void AddCatalogItem(object sender, EventArgs e)
         {
+            // 连续添加：对话框保持打开，每选中一项立即加入评审表，直到用户关闭。
             using (var form = new ManualListItemForm(_catalog.SelectableItems))
             {
-                if (form.ShowDialog(this) != DialogResult.OK
-                    || form.SelectedItem == null) return;
-                FillReviewItem item = Data.AddCatalogItem(
-                    form.SelectedItem, form.Quantity);
-                int index = _grid.Rows.Add(item.Included,
-                    FillReviewData.CategoryName(item.Category), item.Name,
-                    item.Description, item.Unit, item.Quantity, item.Code);
-                DataGridViewRow row = _grid.Rows[index];
-                row.Tag = item;
-                ApplyCatalogState(row, item);
-                _tabs.SelectedIndex = 1;
-                _grid.CurrentCell = row.Cells["Name"];
-                UpdateCount();
-                UpdateDeleteState();
+                form.PickRequested += AddCatalogRow;
+                if (form.ShowDialog(this) != DialogResult.OK) return;
+                if (form.SelectedItem != null)
+                    AddCatalogRow(form.SelectedItem, form.Quantity);
             }
+        }
+
+        private void AddCatalogRow(ListItem catalogItem, string quantity)
+        {
+            FillReviewItem item = Data.AddCatalogItem(catalogItem, quantity);
+            int index = _grid.Rows.Add(item.Included,
+                FillReviewData.CategoryName(item.Category), item.Name,
+                item.Description, item.Unit, item.Quantity, item.Code);
+            DataGridViewRow row = _grid.Rows[index];
+            row.Tag = item;
+            ApplyCatalogState(row, item);
+            _tabs.SelectedIndex = 1;
+            _grid.CurrentCell = row.Cells["Name"];
+            UpdateCount();
+            UpdateDeleteState();
         }
 
         private void ReplaceSelectedItem(object sender, EventArgs e)
