@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet("Menu", "InstallUser", "InstallAll", "VerifyUser", "VerifyAll", "VerifyPackage", "UninstallUser", "UninstallAll")]
     [string]$Mode = "Menu",
