@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using UNCAD.Core.Excel;
 using UNCAD.UI;
 using Xunit;
 
@@ -10,31 +11,48 @@ namespace UNCAD.Tests
     public class ManualListItemFormTests
     {
         [Fact]
-        public void Dialog_CapturesSocketQuantityWithBoundedNumericInput()
+        public void Dialog_SelectsDatabaseSocketAndCapturesOnlyQuantity()
         {
             Exception failure = null;
             var thread = new Thread(() =>
             {
                 try
                 {
-                    using (var form = new ManualListItemForm())
+                    var catalog = new[]
+                    {
+                        new ListItem
+                        {
+                            Category = "插座", Code = "8.9", Name = "插座",
+                            Feature = "普通五孔插座", Unit = "个", Alias = "五孔"
+                        },
+                        new ListItem
+                        {
+                            Category = "桥架", Code = "2.6", Name = "桥架",
+                            Feature = "200*100桥架", Unit = "m", Alias = "200*100"
+                        }
+                    };
+                    using (var form = new ManualListItemForm(catalog))
                     {
                         form.Shown += (sender, args) =>
                         {
-                            Find<TextBox>(form, "ManualName").Text = "插座";
-                            Find<TextBox>(form, "ManualDescription").Text = "普通五孔插座";
-                            Find<TextBox>(form, "ManualUnit").Text = "个";
-                            Find<NumericUpDown>(form, "ManualQuantity").Value = 2;
-                            Find<TextBox>(form, "ManualCode").Text = "8.9";
-                            All<Button>(form).Single(button => button.Text == "添加")
-                                .PerformClick();
+                            Find<TextBox>(form, "CatalogSearch").Text = "五孔";
+                            Find<NumericUpDown>(form, "CatalogQuantity").Value = 2;
+                            Application.DoEvents();
+                            ListView list = Find<ListView>(form, "CatalogItems");
+                            Assert.Single(list.Items.Cast<ListViewItem>());
+                            list.Items[0].Selected = true;
+                            All<Button>(form).Single(button =>
+                                button.Text == "添加所选清单").PerformClick();
                         };
+
                         Assert.Equal(DialogResult.OK, form.ShowDialog());
-                        Assert.Equal("插座", form.ItemName);
-                        Assert.Equal("普通五孔插座", form.Description);
-                        Assert.Equal("个", form.Unit);
+                        Assert.Equal("8.9", form.SelectedItem.Code);
+                        Assert.Equal("插座", form.SelectedItem.Name);
+                        Assert.Equal("普通五孔插座", form.SelectedItem.Feature);
+                        Assert.Equal("个", form.SelectedItem.Unit);
                         Assert.Equal("2", form.Quantity);
-                        Assert.Equal("8.9", form.Code);
+                        Assert.DoesNotContain(All<TextBox>(form), control =>
+                            control.Name == "ManualName" || control.Name == "ManualCode");
                     }
                 }
                 catch (Exception ex) { failure = ex; }

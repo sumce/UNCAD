@@ -21,9 +21,9 @@ namespace UNCAD.Tests
                 {
                     var rows = new List<TableFillRow>
                     {
-                        new TableFillRow { Category = TableFillCategory.Cable, Name = "电缆", Quantity = "5", Code = "1.1" },
-                        new TableFillRow { Category = TableFillCategory.Bridge, Name = "桥架", Quantity = "2", Code = "2.1" },
-                        new TableFillRow { Category = TableFillCategory.Outlet, Name = "插座", Quantity = "1", Code = "8.1" }
+                        new TableFillRow { Category = TableFillCategory.Cable, Name = "电缆", Quantity = "5", Code = "1.1", CatalogMatched = true },
+                        new TableFillRow { Category = TableFillCategory.Bridge, Name = "桥架", Quantity = "2", Code = "2.1", CatalogMatched = true },
+                        new TableFillRow { Category = TableFillCategory.Outlet, Name = "插座", Quantity = "1", Code = "8.1", CatalogMatched = true }
                     };
                     using (var form = new FillReviewForm(FillReviewData.Create(
                         new MachineRow { MachineId = "M1", CircuitName = "设备A", Cable = "C1" }, rows)))
@@ -43,7 +43,12 @@ namespace UNCAD.Tests
                             "OriginalCableModel").Text);
                         Assert.Equal("C1", FindByName<TextBox>(form,
                             "BoqCableModel").Text);
-                        Assert.NotNull(FindButton(form, "新增清单项"));
+                        Assert.NotNull(FindButton(form, "从固定清单添加"));
+                        Assert.NotNull(FindButton(form, "替换为固定清单"));
+                        Assert.True(grid.Columns["Name"].ReadOnly);
+                        Assert.True(grid.Columns["Description"].ReadOnly);
+                        Assert.True(grid.Columns["Unit"].ReadOnly);
+                        Assert.True(grid.Columns["Code"].ReadOnly);
                         Button removeItem = FindButton(form, "删除选中项");
                         Assert.NotNull(removeItem);
                         Assert.True(removeItem.Enabled);
@@ -126,7 +131,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Dialog_UnmatchedConduitsOpenWarningAndAllowPerModelSelection()
+        public void Dialog_UnmatchedConduitsAreDisabledUntilCatalogReplacement()
         {
             Exception failure = null;
             var thread = new Thread(() =>
@@ -164,10 +169,12 @@ namespace UNCAD.Tests
                         Assert.False((bool)grid.Rows[0].Cells["Included"].Value);
                         Assert.False((bool)grid.Rows[1].Cells["Included"].Value);
 
+                        Assert.True(grid.Rows[0].Cells["Included"].ReadOnly);
+                        Assert.True(grid.Rows[1].Cells["Included"].ReadOnly);
                         grid.Rows[0].Cells["Included"].Value = true;
                         Application.DoEvents();
-                        Assert.Single(form.Data.SelectedRows());
-                        Assert.Equal("⌀32线管", form.Data.SelectedRows()[0].Name);
+                        Assert.Empty(form.Data.SelectedRows());
+                        Assert.True(FindButton(form, "替换为固定清单").Enabled);
                     }
                 }
                 catch (Exception ex) { failure = ex; }

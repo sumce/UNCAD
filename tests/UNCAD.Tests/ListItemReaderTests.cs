@@ -93,6 +93,46 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ReadList_BindsTsCategoryAliasAndMigrationAliasHeaders()
+        {
+            string path = Path.Combine(Path.GetTempPath(),
+                "uncad_alias_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            var workbook = new XSSFWorkbook();
+            try
+            {
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                string[] headers =
+                {
+                    "类", "项次编码", "项目名称", "项目特征", "单位", "别名", "别名1"
+                };
+                IRow header = sheet.CreateRow(0);
+                for (int column = 0; column < headers.Length; column++)
+                    header.CreateCell(column).SetCellValue(headers[column]);
+                IRow row = sheet.CreateRow(1);
+                string[] values =
+                {
+                    "线管", "3.3", "镀锌穿线管", "38mm清单特征", "m", "38mm", "32mm"
+                };
+                for (int column = 0; column < values.Length; column++)
+                    row.CreateCell(column).SetCellValue(values[column]);
+
+                using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+                    workbook.Write(stream);
+                ListItem item = Assert.Single(ListItemReader.ReadList(path));
+
+                Assert.Equal("线管", item.Category);
+                Assert.Equal("38mm", item.Alias);
+                Assert.Equal("38mm", item.Spec);
+                Assert.Equal("32mm", item.Alias1);
+            }
+            finally
+            {
+                workbook.Close();
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void FindCable_MatchesBySpec()
         {
             string path = CreateTempWorkbook();

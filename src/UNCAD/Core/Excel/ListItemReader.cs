@@ -10,11 +10,20 @@ namespace UNCAD.Core.Excel
     /// <summary>清单条目（Sheet2：编号/项目名称/项目特征/单位/规格）。</summary>
     public sealed class ListItem
     {
+        public string Category { get; set; }
         public string Code { get; set; }     // 编号，如 1.25 / 3.8
         public string Name { get; set; }     // 项目名称，如 单芯电缆 XLPE / 包塑金属软管(波纹管)
         public string Feature { get; set; }  // 项目特征（完整描述模板）
         public string Unit { get; set; }     // 单位
-        public string Spec { get; set; }     // 规格列，如 3*70+1*35 / 51mm / 400*100
+        public string Alias { get; set; }    // 主别名，如 3*70+1*35 / 38mm
+        public string Alias1 { get; set; }   // 迁移别名，如 32mm -> 本行38mm材料
+
+        // 保留Spec兼容旧调用；固定清单的新正式字段名是“别名”。
+        public string Spec
+        {
+            get => Alias ?? "";
+            set => Alias = value;
+        }
     }
 
     /// <summary>
@@ -25,11 +34,13 @@ namespace UNCAD.Core.Excel
     {
         private sealed class ListColumns
         {
+            public int Category;
             public int Code;
             public int Name;
             public int Feature;
             public int Unit;
-            public int Spec;
+            public int Alias;
+            public int Alias1;
         }
 
         public static List<ListItem> ReadList(string filePath)
@@ -62,11 +73,13 @@ namespace UNCAD.Core.Excel
 
                 result.Add(new ListItem
                 {
+                    Category = Cell(row, columns.Category),
                     Code = code,
                     Name = name,
                     Feature = ExcelColumnReader.CellToString(row.GetCell(columns.Feature)).Trim(),
-                    Unit = ExcelColumnReader.CellToString(row.GetCell(columns.Unit)).Trim(),
-                    Spec = ExcelColumnReader.CellToString(row.GetCell(columns.Spec)).Trim()
+                    Unit = Cell(row, columns.Unit),
+                    Alias = Cell(row, columns.Alias),
+                    Alias1 = Cell(row, columns.Alias1)
                 });
             }
             return result;
@@ -92,18 +105,25 @@ namespace UNCAD.Core.Excel
             IRow header = sheet.GetRow(0);
             if (header == null)
                 throw new InvalidDataException("固定清单工作表“" + sheet.SheetName + "”缺少表头行。");
-            int spec = ExcelHeaderBinder.Optional(header, sheet.SheetName, "规格", "型号规格");
-            // 兼容当前固定模板：规格数据位于第 6 列，但该列表头为空。
-            if (spec < 0) spec = 5;
+            int alias = ExcelHeaderBinder.Optional(header, sheet.SheetName,
+                "别名", "规格", "型号规格");
+            // 兼容旧模板：规格/别名数据固定在第6列，但表头可能为空。
+            if (alias < 0) alias = 5;
             return new ListColumns
             {
+                Category = ExcelHeaderBinder.Optional(header, sheet.SheetName, "类", "类别"),
                 Code = ExcelHeaderBinder.Require(header, sheet.SheetName, "编号", "项次编码"),
                 Name = ExcelHeaderBinder.Require(header, sheet.SheetName, "项目名称"),
                 Feature = ExcelHeaderBinder.Require(header, sheet.SheetName, "项目特征"),
                 Unit = ExcelHeaderBinder.Require(header, sheet.SheetName, "单位"),
-                Spec = spec
+                Alias = alias,
+                Alias1 = ExcelHeaderBinder.Optional(header, sheet.SheetName, "别名1", "迁移别名")
             };
         }
+
+        private static string Cell(IRow row, int column)
+            => column < 0 ? ""
+                : ExcelColumnReader.CellToString(row.GetCell(column)).Trim();
 
         /// <summary>按电缆型号查清单条目：去掉 ZB-YJV[R]- 前缀后匹配规格列（电缆段编号 1.x）。</summary>
         public static ListItem FindCable(List<ListItem> items, string cableModel)

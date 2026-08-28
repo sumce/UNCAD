@@ -10,7 +10,7 @@ namespace UNCAD.Tests
         {
             FillPlanningOptions custom = FillPlanningOptions.Create(2.25, true);
             Assert.Equal(2.25, custom.FlexibleConduitMeters);
-            Assert.True(custom.IncludeUnmatchedConduitsByDefault);
+            Assert.False(custom.IncludeUnmatchedConduitsByDefault);
 
             Assert.Equal(1.5, FillPlanningOptions.Create(-1, false)
                 .FlexibleConduitMeters);

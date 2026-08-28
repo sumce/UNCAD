@@ -67,11 +67,6 @@ namespace UNCAD.UI
         private readonly NumericUpDown _fillTextHeight = NumberBox(500m, 1m, 100000m);
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
-        private readonly CheckBox _fillIncludeUnmatched = new CheckBox
-        {
-            Text = "未匹配管材默认勾选",
-            AutoSize = true
-        };
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
 
         public UnifiedSettingsForm(int tabIndex)
@@ -193,8 +188,6 @@ namespace UNCAD.UI
             SetNumber(_fillFlexibleMeters, Settings.GetDouble(
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
-            _fillIncludeUnmatched.Checked = Settings.GetBool(
-                ConfigKeys.FillIncludeUnmatchedConduits, false);
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
         }
 
@@ -248,8 +241,6 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillTextHeight, Value(_fillTextHeight));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
-            Settings.SetBool(ConfigKeys.FillIncludeUnmatchedConduits,
-                _fillIncludeUnmatched.Checked);
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
         }
 
@@ -263,8 +254,6 @@ namespace UNCAD.UI
             _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
             _toolTips.SetToolTip(_fillFlexibleMeters, "软管清单行的默认数量，单位为米。");
-            _toolTips.SetToolTip(_fillIncludeUnmatched,
-                "开启后，固定清单中找不到的线管/软管仍会默认勾选；严格型号匹配不变。");
         }
 
         private static NumericUpDown IntegerBox(decimal value, decimal minimum, decimal maximum)
@@ -411,16 +400,15 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(9);
+            var g = Grid(8);
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
             g.Controls.Add(Lbl("固定清单 Excel(空=同文件):"), 0, 1); g.Controls.Add(PathPicker(_fillCatalog), 1, 1);
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 2); g.Controls.Add(_fillTblRow, 1, 2);
             g.Controls.Add(Lbl("每次清空数据行数:"), 0, 3); g.Controls.Add(_fillClearRows, 1, 3);
             g.Controls.Add(Lbl("表格文字高度:"), 0, 4); g.Controls.Add(_fillTextHeight, 1, 4);
             g.Controls.Add(Lbl("软管默认长度 (m):"), 0, 5); g.Controls.Add(_fillFlexibleMeters, 1, 5);
-            g.Controls.Add(Lbl("未匹配管材:"), 0, 6); g.Controls.Add(_fillIncludeUnmatched, 1, 6);
-            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 7); g.Controls.Add(_fillBridge, 1, 7);
-            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 8); g.Controls.Add(FolderPicker(_submitFolder), 1, 8);
+            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 6); g.Controls.Add(_fillBridge, 1, 6);
+            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 7); g.Controls.Add(FolderPicker(_submitFolder), 1, 7);
             return Page("Excel 数据", g);
         }
 

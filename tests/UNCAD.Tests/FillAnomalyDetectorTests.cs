@@ -59,7 +59,12 @@ namespace UNCAD.Tests
                 Row(TableFillCategory.Bridge, "桥架200*100"),
                 Row(TableFillCategory.Outlet, "插座")
             });
-            review.AddManualItem("临时辅材", "", "个", "2", "");
+            review.AddCatalogItem(new ListItem
+            {
+                Code = "8.9",
+                Name = "数据库辅材",
+                Unit = "个"
+            }, "2");
 
             List<FillAnomaly> anomalies = FillAnomalyDetector.DetectCatalog(review);
 

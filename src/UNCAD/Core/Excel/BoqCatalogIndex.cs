@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UNCAD.Core.Text;
@@ -9,6 +10,7 @@ namespace UNCAD.Core.Excel
     public sealed class BoqCatalogIndex
     {
         private static readonly Regex Whitespace = new Regex(@"\s+", RegexOptions.Compiled);
+        private readonly Dictionary<string, ListItem> _migrationAliases;
         private readonly Dictionary<string, ListItem> _cables;
         private readonly List<ListItem> _cableCandidates;
         private readonly Dictionary<string, ListItem> _bridges;
@@ -21,6 +23,7 @@ namespace UNCAD.Core.Excel
         public BoqCatalogIndex(IEnumerable<ListItem> items)
         {
             Items = (items ?? Enumerable.Empty<ListItem>()).Where(item => item != null).ToList();
+            _migrationAliases = MigrationIndex(Items);
             // A replacement must have a real specification because exact normalized matching
             // is the contract; rows with a blank spec cannot safely identify a cable model.
             _cableCandidates = Items.Where(item => StartsWithCode(item, "1.")
@@ -43,24 +46,31 @@ namespace UNCAD.Core.Excel
         }
 
         public List<ListItem> Items { get; }
+        public IReadOnlyList<ListItem> SelectableItems => Items
+            .Where(item => !string.IsNullOrWhiteSpace(item.Code)
+                && !string.IsNullOrWhiteSpace(item.Name))
+            .OrderBy(item => item.Code ?? "", StringComparer.Ordinal).ToList();
         public IReadOnlyList<ListItem> Cables => _cableCandidates;
         public IReadOnlyList<ListItem> Breakers => _breakers;
         public IReadOnlyList<ListItem> Outlets => _outlets;
 
         public ListItem FindCable(string cableModel)
-            => Find(_cables, NormalizeCable(cableModel));
+            => FindWithMigration(_cables, NormalizeCable(cableModel));
 
         public ListItem FindBridge(string spec)
-            => Find(_bridges, NormalizeSpec(spec));
+            => FindWithMigration(_bridges, NormalizeSpec(spec));
 
         public ListItem FindRigidConduit(string diameter)
-            => Find(_rigidConduits, DiameterSpec(diameter));
+            => FindWithMigration(_rigidConduits, DiameterSpec(diameter));
 
         public ListItem FindFlexibleConduit(string diameter)
-            => Find(_flexibleConduits, DiameterSpec(diameter));
+            => FindWithMigration(_flexibleConduits, DiameterSpec(diameter));
 
         public ListItem FindBusPlugBox(string rating)
-            => Find(_busPlugBoxes, NormalizeSpec(rating));
+            => FindWithMigration(_busPlugBoxes, NormalizeSpec(rating));
+
+        public ListItem FindMigrationAlias(string value)
+            => Find(_migrationAliases, NormalizeAlias(value));
 
         public static string NormalizeSpec(string value)
             => Whitespace.Replace(value ?? "", "")
@@ -89,8 +99,33 @@ namespace UNCAD.Core.Excel
             return result;
         }
 
+        private ListItem FindWithMigration(Dictionary<string, ListItem> primary, string key)
+            => Find(primary, key) ?? Find(_migrationAliases, key);
+
         private static ListItem Find(Dictionary<string, ListItem> index, string key)
             => key.Length > 0 && index.TryGetValue(key, out ListItem item) ? item : null;
+
+        private static Dictionary<string, ListItem> MigrationIndex(IEnumerable<ListItem> items)
+        {
+            var result = new Dictionary<string, ListItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (ListItem item in items)
+            {
+                string key = NormalizeAlias(item.Alias1);
+                if (key.Length == 0) continue;
+                if (result.TryGetValue(key, out ListItem existing))
+                    throw new InvalidDataException("固定清单别名1重复：" + item.Alias1
+                        + " 同时指向 " + existing.Code + " 和 " + item.Code + "。");
+                result[key] = item;
+            }
+            return result;
+        }
+
+        private static string NormalizeAlias(string value)
+        {
+            string diameter = ConduitDiameter.NormalizeOrEmpty(value);
+            return diameter.Length > 0 ? NormalizeSpec(diameter + "mm")
+                : NormalizeSpec(value);
+        }
 
         private static string DiameterSpec(string diameter)
         {

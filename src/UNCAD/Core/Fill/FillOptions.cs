@@ -11,7 +11,8 @@ namespace UNCAD.Core.Fill
             bool includeUnmatchedConduitsByDefault)
         {
             FlexibleConduitMeters = flexibleConduitMeters;
-            IncludeUnmatchedConduitsByDefault = includeUnmatchedConduitsByDefault;
+            // Parameter retained for source compatibility; unmatched output is forbidden.
+            IncludeUnmatchedConduitsByDefault = false;
         }
 
         public double FlexibleConduitMeters { get; }

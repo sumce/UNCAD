@@ -34,11 +34,17 @@ namespace UNCAD.Tests
         public void ManualItem_CanBeAddedSelectedAndRemovedWithoutDeletingPlannedRows()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow(), Rows());
-            FillReviewItem manual = data.AddManualItem(
-                " 插座 ", " 五孔 ", " 个 ", " 2 ", " 8.9 ");
+            FillReviewItem manual = data.AddCatalogItem(new ListItem
+            {
+                Code = " 8.9 ",
+                Name = " 插座 ",
+                Feature = " 五孔 ",
+                Unit = " 个 "
+            }, " 2 ");
 
             Assert.Equal(TableFillCategory.Manual, manual.Category);
-            Assert.Equal("手动项", FillReviewData.CategoryName(manual.Category));
+            Assert.Equal("手动添加", FillReviewData.CategoryName(manual.Category));
+            Assert.True(manual.CatalogMatched);
             Assert.True(manual.Included);
             Assert.Equal("插座", manual.Name);
             Assert.Equal("2", manual.Quantity);
@@ -47,6 +53,44 @@ namespace UNCAD.Tests
             Assert.False(data.RemoveManualItem(data.Items[0]));
             Assert.True(data.RemoveManualItem(manual));
             Assert.DoesNotContain(manual, data.Items);
+        }
+
+        [Fact]
+        public void CatalogIdentity_IsRequiredForManualAdditionAndReplacement()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.Bridge, Name = "未匹配桥架",
+                    Quantity = "4.5", CatalogMatched = false
+                }
+            });
+            var replacement = new ListItem
+            {
+                Category = "桥架",
+                Code = "2.6",
+                Name = "桥架",
+                Feature = "200*100固定清单特征",
+                Unit = "m",
+                Alias = "200*100"
+            };
+
+            Assert.Throws<System.ArgumentNullException>(() =>
+                data.AddCatalogItem(null, "1"));
+            Assert.Throws<System.ArgumentException>(() =>
+                data.AddCatalogItem(new ListItem { Name = "无编码" }, "1"));
+
+            FillReviewItem item = Assert.Single(data.Items);
+            data.ReplaceWithCatalogItem(item, replacement);
+
+            Assert.True(item.CatalogMatched);
+            Assert.True(item.Included);
+            Assert.Equal("2.6", item.Code);
+            Assert.Equal("桥架", item.Name);
+            Assert.Equal("200*100固定清单特征", item.Description);
+            Assert.Equal("m", item.Unit);
+            Assert.Equal("4.5", item.Quantity);
         }
 
         [Fact]
@@ -105,12 +149,12 @@ namespace UNCAD.Tests
             Assert.True(data.Items[2].Included);
 
             rigid32.Included = true;
-            Assert.Equal(new[] { "⌀32线管", "25mm线管" },
+            Assert.Equal(new[] { "25mm线管" },
                 data.SelectedRows().Select(row => row.Name));
         }
 
         [Fact]
-        public void Create_CanDefaultUnmatchedConduitsSelectedByConfiguration()
+        public void Create_RejectsUnmatchedConduitsDespiteLegacyConfiguration()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
             {
@@ -121,8 +165,8 @@ namespace UNCAD.Tests
                 }
             }, FillPlanningOptions.Create(1.5, true));
 
-            Assert.True(Assert.Single(data.Items).Included);
-            Assert.Single(data.SelectedRows());
+            Assert.False(Assert.Single(data.Items).Included);
+            Assert.Empty(data.SelectedRows());
         }
 
         [Fact]
@@ -165,7 +209,13 @@ namespace UNCAD.Tests
             FillReviewData data = FillReviewData.Create(new MachineRow(), Rows());
             data.RemoveItem(data.Items[0]);
             data.Items[0].Included = false;
-            data.AddManualItem("插座", "五孔", "个", "2", "8.9");
+            data.AddCatalogItem(new ListItem
+            {
+                Code = "8.9",
+                Name = "插座",
+                Feature = "五孔",
+                Unit = "个"
+            }, "2");
 
             List<TableFillRow> selected = data.SelectedRows();
 
@@ -188,9 +238,9 @@ namespace UNCAD.Tests
 
         private static List<TableFillRow> Rows() => new List<TableFillRow>
         {
-            new TableFillRow { Category = TableFillCategory.Cable, Name = "电缆", Quantity = "5", Code = "1.1" },
-            new TableFillRow { Category = TableFillCategory.Bridge, Name = "桥架", Quantity = "2", Code = "2.1" },
-            new TableFillRow { Category = TableFillCategory.Outlet, Name = "插座", Quantity = "1", Code = "8.1" }
+            new TableFillRow { Category = TableFillCategory.Cable, Name = "电缆", Quantity = "5", Code = "1.1", CatalogMatched = true },
+            new TableFillRow { Category = TableFillCategory.Bridge, Name = "桥架", Quantity = "2", Code = "2.1", CatalogMatched = true },
+            new TableFillRow { Category = TableFillCategory.Outlet, Name = "插座", Quantity = "1", Code = "8.1", CatalogMatched = true }
         };
     }
 }

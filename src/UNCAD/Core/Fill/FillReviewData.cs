@@ -17,10 +17,8 @@ namespace UNCAD.Core.Fill
         public string Quantity { get; set; } = "";
         public string Code { get; set; } = "";
         public bool CatalogMatched { get; set; }
-        // Manual rows intentionally allow a blank code; every generated row must either
-        // match the fixed catalog or receive explicit user confirmation before writing.
-        public bool RequiresCatalogConfirmation => !CatalogMatched
-            && Category != TableFillCategory.Manual;
+        // Every row, including a user-added row, must retain a fixed-catalog identity.
+        public bool RequiresCatalogConfirmation => !CatalogMatched;
 
         public TableFillRow ToTableRow()
         {
@@ -66,10 +64,9 @@ namespace UNCAD.Core.Fill
             {
                 data.Items.Add(new FillReviewItem
                 {
-                    Included = row.CatalogMatched
-                        || (row.Category != TableFillCategory.RigidConduit
-                            && row.Category != TableFillCategory.FlexibleConduit)
-                        || options.IncludeUnmatchedConduitsByDefault,
+                    // Unmatched rows cannot be generated. The user must replace them with
+                    // a database item before the inclusion checkbox becomes available.
+                    Included = row.CatalogMatched,
                     Category = row.Category,
                     Name = row.Name ?? "",
                     Description = row.Description ?? "",
@@ -120,7 +117,10 @@ namespace UNCAD.Core.Fill
         public List<TableFillRow> SelectedRows()
         {
             var selected = new List<TableFillRow>();
-            foreach (FillReviewItem item in Items.Where(item => item.Included))
+            // This core boundary is the final guard even if a caller bypasses the UI and
+            // toggles Included directly on an unmatched row.
+            foreach (FillReviewItem item in Items.Where(item =>
+                item.Included && item.CatalogMatched))
             {
                 TableFillRow row = item.ToTableRow();
                 row.SortOrder = selected.Count + 1;
@@ -136,22 +136,46 @@ namespace UNCAD.Core.Fill
             => Items.FirstOrDefault(item =>
                 item.Category == TableFillCategory.FlexibleConduit);
 
-        public FillReviewItem AddManualItem(string name, string description,
-            string unit, string quantity, string code)
+        public FillReviewItem AddCatalogItem(ListItem catalogItem, string quantity)
         {
+            if (catalogItem == null) throw new ArgumentNullException(nameof(catalogItem));
+            if (string.IsNullOrWhiteSpace(catalogItem.Code)
+                || string.IsNullOrWhiteSpace(catalogItem.Name))
+                throw new ArgumentException("固定清单项目缺少项目编码或名称。", nameof(catalogItem));
+
+            // A user-added row is manual only in how it entered the review. Its material
+            // identity is copied verbatim from the database and is never user-authored.
             var item = new FillReviewItem
             {
                 Included = true,
                 Category = TableFillCategory.Manual,
-                Name = (name ?? "").Trim(),
-                Description = (description ?? "").Trim(),
-                Unit = (unit ?? "").Trim(),
+                Name = catalogItem.Name.Trim(),
+                Description = (catalogItem.Feature ?? "").Trim(),
+                Unit = (catalogItem.Unit ?? "").Trim(),
                 Quantity = (quantity ?? "").Trim(),
-                Code = (code ?? "").Trim(),
-                CatalogMatched = false
+                Code = catalogItem.Code.Trim(),
+                CatalogMatched = true
             };
             Items.Add(item);
             return item;
+        }
+
+        public void ReplaceWithCatalogItem(FillReviewItem item, ListItem catalogItem)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (catalogItem == null) throw new ArgumentNullException(nameof(catalogItem));
+            if (string.IsNullOrWhiteSpace(catalogItem.Code)
+                || string.IsNullOrWhiteSpace(catalogItem.Name))
+                throw new ArgumentException("固定清单项目缺少项目编码或名称。", nameof(catalogItem));
+
+            item.Name = catalogItem.Name.Trim();
+            item.Description = (catalogItem.Feature ?? "").Trim();
+            item.Unit = (catalogItem.Unit ?? "").Trim();
+            item.Code = catalogItem.Code.Trim();
+            item.CatalogMatched = true;
+            item.Included = true;
+            if (item.Category == TableFillCategory.Cable)
+                BoqCableModel = (catalogItem.Alias ?? "").Trim();
         }
 
         public bool RemoveItem(FillReviewItem item)
@@ -182,6 +206,7 @@ namespace UNCAD.Core.Fill
             cable.Unit = string.IsNullOrWhiteSpace(matched?.Unit) ? "M" : matched.Unit;
             cable.Code = matched?.Code ?? "";
             cable.CatalogMatched = matched != null;
+            cable.Included = matched != null;
         }
 
         public void SetCableMeters(string meters)
@@ -209,7 +234,6 @@ namespace UNCAD.Core.Fill
             if (flexible == null) return null;
 
             string quantity = flexible.Quantity;
-            bool wasMatched = flexible.CatalogMatched;
             TableFillRow planned = TableFillPlanner.BuildFlexibleConduitRow(
                 value, catalog, options);
             flexible.Name = planned.Name;
@@ -218,9 +242,7 @@ namespace UNCAD.Core.Fill
             flexible.Code = planned.Code;
             flexible.CatalogMatched = planned.CatalogMatched;
             flexible.Quantity = quantity;
-            if (wasMatched != planned.CatalogMatched)
-                flexible.Included = planned.CatalogMatched
-                    || options.IncludeUnmatchedConduitsByDefault;
+            flexible.Included = planned.CatalogMatched;
             return flexible;
         }
 
@@ -235,7 +257,7 @@ namespace UNCAD.Core.Fill
                 case TableFillCategory.BusPlugBox: return "母线插接箱";
                 case TableFillCategory.Breaker: return "断路器";
                 case TableFillCategory.Outlet: return "插座";
-                case TableFillCategory.Manual: return "手动项";
+                case TableFillCategory.Manual: return "手动添加";
                 default: return category.ToString();
             }
         }

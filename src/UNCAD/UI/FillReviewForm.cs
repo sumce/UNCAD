@@ -17,6 +17,7 @@ namespace UNCAD.UI
         private readonly DataGridView _grid;
         private readonly TabControl _tabs;
         private readonly Label _count;
+        private readonly Button _replaceItem;
         private readonly Button _removeItem;
         private readonly ToolTip _toolTips = new ToolTip();
         private readonly Label _catalogWarning = new Label
@@ -71,6 +72,8 @@ namespace UNCAD.UI
                 new Size(1040, 660), new Size(880, 560));
 
             _cable.Name = "BoqCableModel";
+            _cable.ReadOnly = true;
+            _cable.BackColor = SystemColors.Control;
             _panel.Items.AddRange(new object[] { "", "I-Line盘", "母线插接口", "插座盘" });
             TabPage basicTab = BuildBasicTab();
 
@@ -83,18 +86,21 @@ namespace UNCAD.UI
                 WrapContents = false,
                 Padding = new Padding(4, 4, 4, 2)
             };
-            Button addManual = CommandButton("新增清单项");
+            Button addManual = CommandButton("从固定清单添加");
+            _replaceItem = CommandButton("替换为固定清单");
             _removeItem = CommandButton("删除选中项");
             Button selectAll = CommandButton("全部勾选");
             Button clearAll = CommandButton("全部取消");
             Button restore = CommandButton("恢复默认");
             _count = new Label { AutoSize = true, Padding = new Padding(12, 7, 0, 0) };
-            addManual.Click += AddManualItem;
+            addManual.Click += AddCatalogItem;
+            _replaceItem.Click += ReplaceSelectedItem;
             _removeItem.Click += RemoveSelectedItem;
             selectAll.Click += (sender, args) => SetAll(true);
             clearAll.Click += (sender, args) => SetAll(false);
             restore.Click += (sender, args) => RestoreDefaults();
             toolbar.Controls.Add(addManual);
+            toolbar.Controls.Add(_replaceItem);
             toolbar.Controls.Add(_removeItem);
             toolbar.Controls.Add(selectAll);
             toolbar.Controls.Add(clearAll);
@@ -196,11 +202,11 @@ namespace UNCAD.UI
             grid.RowTemplate.Height = 44;
             grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = 52 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = 80, ReadOnly = true });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", Width = 150 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Description", HeaderText = "特征 / 型号", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 260 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "单位", Width = 58 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", Width = 150, ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Description", HeaderText = "特征 / 型号", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 260, ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "单位", Width = 58, ReadOnly = true });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Quantity", HeaderText = "数量 / 长度", Width = 92 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Code", HeaderText = "项目编码", Width = 90 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Code", HeaderText = "项目编码", Width = 90, ReadOnly = true });
             return grid;
         }
 
@@ -280,13 +286,14 @@ namespace UNCAD.UI
             }
         }
 
-        private void AddManualItem(object sender, EventArgs e)
+        private void AddCatalogItem(object sender, EventArgs e)
         {
-            using (var form = new ManualListItemForm())
+            using (var form = new ManualListItemForm(_catalog.SelectableItems))
             {
-                if (form.ShowDialog(this) != DialogResult.OK) return;
-                FillReviewItem item = Data.AddManualItem(form.ItemName,
-                    form.Description, form.Unit, form.Quantity, form.Code);
+                if (form.ShowDialog(this) != DialogResult.OK
+                    || form.SelectedItem == null) return;
+                FillReviewItem item = Data.AddCatalogItem(
+                    form.SelectedItem, form.Quantity);
                 int index = _grid.Rows.Add(item.Included,
                     FillReviewData.CategoryName(item.Category), item.Name,
                     item.Description, item.Unit, item.Quantity, item.Code);
@@ -296,6 +303,25 @@ namespace UNCAD.UI
                 _tabs.SelectedIndex = 1;
                 _grid.CurrentCell = row.Cells["Name"];
                 UpdateCount();
+                UpdateDeleteState();
+            }
+        }
+
+        private void ReplaceSelectedItem(object sender, EventArgs e)
+        {
+            if (!(_grid.CurrentRow?.Tag is FillReviewItem item)) return;
+            using (var form = new ManualListItemForm(_catalog.SelectableItems, true))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK
+                    || form.SelectedItem == null) return;
+                Data.ReplaceWithCatalogItem(item, form.SelectedItem);
+                if (item.Category == TableFillCategory.Cable)
+                {
+                    _synchronizing = true;
+                    _cable.Text = Data.BoqCableModel;
+                    _synchronizing = false;
+                }
+                RefreshItem(item);
                 UpdateDeleteState();
             }
         }
@@ -313,7 +339,9 @@ namespace UNCAD.UI
         private void UpdateDeleteState()
         {
             if (_removeItem == null) return;
-            _removeItem.Enabled = _grid?.CurrentRow?.Tag is FillReviewItem;
+            bool hasItem = _grid?.CurrentRow?.Tag is FillReviewItem;
+            _replaceItem.Enabled = hasItem;
+            _removeItem.Enabled = hasItem;
         }
 
         private void SetAll(bool included)
@@ -321,8 +349,10 @@ namespace UNCAD.UI
             _synchronizing = true;
             foreach (DataGridViewRow row in _grid.Rows)
             {
-                row.Cells["Included"].Value = included;
-                if (row.Tag is FillReviewItem item) item.Included = included;
+                if (!(row.Tag is FillReviewItem item)) continue;
+                bool value = included && item.CatalogMatched;
+                row.Cells["Included"].Value = value;
+                item.Included = value;
             }
             _synchronizing = false;
             UpdateCount();
@@ -395,11 +425,10 @@ namespace UNCAD.UI
             if (unmatched.Count > 0)
             {
                 string names = string.Join("；", unmatched.Select(item => item.Name).Distinct());
-                if (MessageBox.Show(this, "以下型号不在固定清单中，项目编码将留空：\r\n"
-                    + names + "\r\n\r\n仍要生成吗？", "确认未匹配型号",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
-                    MessageBoxDefaultButton.Button2) != DialogResult.Yes)
-                    return;
+                MessageBox.Show(this, "以下项目没有固定清单身份，不能生成：\r\n"
+                    + names + "\r\n\r\n请使用“替换为固定清单”选择数据库项目，或取消勾选。",
+                    "固定清单校验失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
             Data.SetCableMeters(_cableMeters.Text);
             Data.Machine.MachineId = _machine.Text.Trim();
@@ -451,9 +480,16 @@ namespace UNCAD.UI
         private static void ApplyCatalogState(
             DataGridViewRow row, FillReviewItem item)
         {
-            row.DefaultCellStyle.BackColor = item.RequiresCatalogConfirmation
+            bool unmatched = item.RequiresCatalogConfirmation;
+            row.DefaultCellStyle.BackColor = unmatched
                 ? Color.FromArgb(255, 247, 220)
                 : Color.White;
+            row.Cells["Included"].ReadOnly = unmatched;
+            if (unmatched)
+            {
+                item.Included = false;
+                row.Cells["Included"].Value = false;
+            }
         }
 
         private void UpdateCatalogWarning()
@@ -466,7 +502,7 @@ namespace UNCAD.UI
             _catalogWarning.Text = missing.Count == 0 ? ""
                 : "[BOQ-CATALOG-MISSING] 固定清单未找到："
                     + string.Join("；", missing)
-                    + "。可修改型号、删除该项，或确认后以空编码生成。";
+                    + "。未匹配项目已禁用，必须替换为数据库项目或删除。";
             _catalogWarning.AccessibleDescription = _catalogWarning.Text;
             _toolTips.SetToolTip(_catalogWarning, _catalogWarning.Text);
         }

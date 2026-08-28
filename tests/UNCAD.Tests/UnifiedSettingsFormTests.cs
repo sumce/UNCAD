@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 using UNCAD.UI;
 using Xunit;
@@ -83,8 +83,8 @@ namespace UNCAD.Tests
                             label => label.Text == "每次清空数据行数:");
                         Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                             label => label.Text == "软管默认长度 (m):");
-                        Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab),
-                            check => check.Text == "未匹配管材默认勾选");
+                        Assert.DoesNotContain(FindAll<CheckBox>(tabs.SelectedTab),
+                            check => check.Text.Contains("未匹配"));
                     }
                 }
                 catch (Exception ex) { failure = ex; }

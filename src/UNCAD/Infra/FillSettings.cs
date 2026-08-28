@@ -8,8 +8,7 @@ namespace UNCAD.Infra
         {
             FillPlanningOptions planning = FillPlanningOptions.Create(
                 Settings.GetDouble(ConfigKeys.FillFlexibleConduitMeters,
-                    FillPlanningOptions.DefaultFlexibleConduitMeters),
-                Settings.GetBool(ConfigKeys.FillIncludeUnmatchedConduits, false));
+                    FillPlanningOptions.DefaultFlexibleConduitMeters), false);
             return FillRuntimeOptions.Create(
                 Settings.Get(ConfigKeys.FillExcelPath, ""),
                 Settings.Get(ConfigKeys.FillCatalogPath, ""),
