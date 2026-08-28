@@ -7,18 +7,23 @@ namespace UNCAD.Tests
     public class CommandRegistrationTests
     {
         [Fact]
-        public void Catalog_UsesGenerationAndBatchUpdateWithoutSubmitCommand()
+        public void Catalog_ContainsOnlyU1AndRetainedTraditionalCommands()
         {
-            Assert.Equal(21, CommandIds.Canonical.Count);
-            Assert.Equal(10, CommandIds.Legacy.Count);
-            Assert.Equal(31, CommandIds.Registered.Count);
-            Assert.Equal(31, CommandIds.Registered.Distinct(
+            Assert.Equal(new[]
+            {
+                "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4",
+                "U1F", "U1U", "U1C", "U1A", "U1S"
+            }, CommandIds.Canonical);
+            Assert.Equal(new[] { "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD" },
+                CommandIds.Legacy);
+            Assert.Equal(16, CommandIds.Registered.Count);
+            Assert.Equal(16, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
-            Assert.Contains("UNC_F", CommandIds.Registered);
-            Assert.Contains("UNC_UPDATE", CommandIds.Registered);
-            Assert.DoesNotContain("UNC_SUBMIT", CommandIds.Registered);
-            Assert.DoesNotContain("UNC_FILL", CommandIds.Registered);
-            Assert.DoesNotContain("UNC_FILL_UPDATE", CommandIds.Registered);
+            Assert.DoesNotContain(CommandIds.Registered, command =>
+                command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(CommandIds.Registered, command =>
+                command.StartsWith("OPUN", System.StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain("UNADDX", CommandIds.Registered);
         }
 
     }

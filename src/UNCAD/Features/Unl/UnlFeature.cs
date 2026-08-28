@@ -11,8 +11,8 @@ using UNCAD.Features.ConfigCenter;
 namespace UNCAD.Features.Unl
 {
     /// <summary>
-    /// UNC_LINE：连续绘制线段（交互同 AutoCAD L 命令），每段中心靠边立即生成占位文字（默认 "2000mm"）。
-    /// UNC_LINE_SET：打开统一配置中心（线段页签）。
+    /// U1L：连续绘制线段（交互同 AutoCAD L 命令），每段中心靠边立即生成占位文字（默认 "2000mm"）。
+    /// U1S：打开统一配置中心（线段页签）。
     /// </summary>
     [Feature("unl", "带标注线段",
         Commands = CommandIds.LineFeatureCommands,
@@ -24,7 +24,6 @@ namespace UNCAD.Features.Unl
         [CommandMethod(CommandIds.Line)]
         public void UncadLine() => Run();
 
-        [CommandMethod(CommandIds.LineSettings)]
         public void UncadLineSet() => SettingsFeature.Show(0);
 
         // ===== 旧名兼容（后续版本可删除） =====
@@ -32,7 +31,6 @@ namespace UNCAD.Features.Unl
         [CommandMethod(CommandIds.LegacyLine)]
         public void Unl() => UncadLine();
 
-        [CommandMethod(CommandIds.LegacyLineSettings)]
         public void OpUnl() => UncadLineSet();
 
         // ===== 主逻辑 =====
@@ -48,12 +46,12 @@ namespace UNCAD.Features.Unl
             // 防御性钳制：偏移不应超过 2 倍字高
             if (offset > hgt * 2)
             {
-                ctx.Write("\n[UNC_LINE] 警告：偏移设置异常（>2 倍字高），已按贴线处理。请用 UNC_SET 重新设置。");
+                ctx.Write("\n[U1L] 警告：偏移设置异常（>2 倍字高），已按贴线处理。请用 U1S 重新设置。");
                 offset = 0.0;
             }
 
             string posName = pos == "0" ? "居中" : pos == "2" ? "靠边上" : "靠边下";
-            ConfigPrinter.Print(ctx, "UNC_LINE",
+            ConfigPrinter.Print(ctx, "U1L",
                 ("文字", "\"" + txt + "\""),
                 ("高度", TextFormatter.FormatNum(hgt)),
                 ("位置", posName),

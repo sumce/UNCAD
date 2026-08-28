@@ -2,10 +2,10 @@
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
-    Description="UNC_F 生成 / UNC_UPDATE 批量更新并自动记录 Excel / 统计、标注与绘图工具"
-    AppVersion="1.9.4"
+    Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
+    AppVersion="1.9.5"
     ProductType="Application"
-    ProductCode="{EC9A3EDE-1958-48A2-8CE9-75BEB058E1FB}"
+    ProductCode="{2AC56E88-DA40-4E57-B625-AA8347C2CA96}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
   <Components>
@@ -16,37 +16,22 @@
                     LoadOnAutoCADStartup="True"
                     LoadOnCommandInvocation="True">
       <Commands GroupName="UNCAD">
-        <Command Global="UNC_F" />
-        <Command Global="UNC_UPDATE" />
-        <Command Global="UNC_SET" />
-        <Command Global="UNC_ABOUT" />
-        <Command Global="UNC_RIBBON" />
-        <Command Global="UNC_CONDUIT" />
-        <Command Global="UNC_CONDUIT20" />
-        <Command Global="UNC_CONDUIT25" />
-        <Command Global="UNC_CONDUIT32" />
-        <Command Global="UNC_CONDUIT_SET" />
-        <Command Global="UNC_TRAY" />
-        <Command Global="UNC_TRAY100" />
-        <Command Global="UNC_TRAY200" />
-        <Command Global="UNC_TRAY400" />
-        <Command Global="UNC_TRAY_SET" />
-        <Command Global="UNC_LINE" />
-        <Command Global="UNC_LINE_SET" />
-        <Command Global="UNC_ARCH" />
-        <Command Global="UNC_ARCH_SET" />
-        <Command Global="UNC_STAT" />
-        <Command Global="UNC_STAT_EX" />
+        <Command Global="U1L" />
+        <Command Global="U1R" />
+        <Command Global="U1Q1" />
+        <Command Global="U1Q2" />
+        <Command Global="U1Q4" />
+        <Command Global="U1F" />
+        <Command Global="U1U" />
+        <Command Global="U1C" />
+        <Command Global="U1A" />
+        <Command Global="U1S" />
         <Command Global="UNL" />
-        <Command Global="OPUNL" />
+        <Command Global="UNR" />
         <Command Global="UNQ1" />
         <Command Global="UNQ2" />
         <Command Global="UNQ4" />
-        <Command Global="OPUNQ" />
         <Command Global="UNADD" />
-        <Command Global="UNADDX" />
-        <Command Global="UNR" />
-        <Command Global="OPUNR" />
       </Commands>
     </ComponentEntry>
   </Components>

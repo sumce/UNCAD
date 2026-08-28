@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -7,7 +6,6 @@ using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
-using UNCAD.Core.Report;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
@@ -15,85 +13,62 @@ using UNCAD.Infra;
 namespace UNCAD.Features.Unadd
 {
     /// <summary>
-    /// UNADD：框选文字，统计电缆长度、桥架格数与线管长度，生成汇总文字；
-    /// UNADDX：同统计，导出 Excel 报表（NPOI）。
+    /// UNADD：框选文字，统计电缆长度、桥架格数与线管长度，并生成汇总文字。
     /// </summary>
     [Feature("unadd", "文字统计汇总",
         Commands = CommandIds.StatisticsFeatureCommands,
-        Description = "框选 TEXT/MTEXT，统计电缆、桥架和线管长度（UNADD 输出图纸，UNADDX 导出 Excel）")]
+        Description = "框选 TEXT/MTEXT，统计电缆、桥架和线管长度并输出图纸汇总")]
     public class UnaddFeature : CommandBase
     {
-        // 规范命令：UNC_STAT（图纸汇总）/ UNC_STAT_EX（Excel 导出）
-        // 通过 Run(state) 传参，避免命令类共享可变实例字段
-        [CommandMethod(CommandIds.Statistics, CommandFlags.UsePickSet)]
-        public void UncadStat() => Run(false);
-
-        [CommandMethod(CommandIds.StatisticsExcel, CommandFlags.UsePickSet)]
-        public void UncadStatEx() => Run(true);
-
-        // 旧名兼容（后续版本可删除）
+        // UNADD is intentionally the only public statistics command retained for compatibility.
         [CommandMethod(CommandIds.LegacyStatistics, CommandFlags.UsePickSet)]
-        public void Unadd() => UncadStat();
+        public void Unadd() => Run();
 
-        [CommandMethod(CommandIds.LegacyStatisticsExcel, CommandFlags.UsePickSet)]
-        public void UnaddX() => UncadStatEx();
-
-        protected override void Execute(CadContext ctx) => Execute(ctx, false);
-
-        protected override void Execute(CadContext ctx, object state)
+        protected override void Execute(CadContext ctx)
         {
-            var stat = CollectAndCalculate(ctx);
+            CableStatResult stat = CollectAndCalculate(ctx);
             if (stat == null) return;
 
-            if (state is bool b && b)
-            {
-                ExportExcel(ctx, stat);
-            }
-            else
-            {
-                var report = StatCalculator.BuildReport(stat);
-                var pp = new PromptPointOptions("\n请点击指定统计结果放置位置: ");
-                var pr = ctx.Ed.GetPoint(pp);
-                if (pr.Status != PromptStatus.OK) return;
+            IReadOnlyList<string> report = StatCalculator.BuildReport(stat);
+            var pointOptions = new PromptPointOptions("\n请点击指定统计结果放置位置: ");
+            var pointResult = ctx.Ed.GetPoint(pointOptions);
+            if (pointResult.Status != PromptStatus.OK) return;
 
-                double hgt = Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0);
-
-                using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            double height = Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0);
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                // Output remains individual DBText rows so legacy drawings can edit every line.
+                ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
+                double lineSpacing = height * 1.5;
+                for (int i = 0; i < report.Count; i++)
                 {
-                    // 电缆长度和各规格桥架长度都跟随图纸 Standard 样式
-                    ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
-                    // 单行文字逐行输出（从点击点向下排）：无 MTEXT 控制码、可单独编辑，
-                    // 与旧 UNADD 兼容（TEXT 读取干净，不会夹带 \\P 等控制内容）
-                    double lineSpacing = hgt * 1.5;
-                    for (int i = 0; i < report.Count; i++)
-                    {
-                        var pt = new Point3d(pr.Value.X, pr.Value.Y - i * lineSpacing, pr.Value.Z);
-                        var t = EntityFactory.DBText(ctx, report[i], pt, hgt, 0.0,
-                            AttachmentPoint.TopLeft, textStyleId: styleId);
-                        ctx.AddToCurrentSpace(tr, t);
-                    }
-                    tr.Commit();
+                    var point = new Point3d(pointResult.Value.X,
+                        pointResult.Value.Y - i * lineSpacing, pointResult.Value.Z);
+                    var text = EntityFactory.DBText(ctx, report[i], point, height, 0.0,
+                        AttachmentPoint.TopLeft, textStyleId: styleId);
+                    ctx.AddToCurrentSpace(transaction, text);
                 }
-                ctx.Write("\n[UNADD] 汇总结果已成功生成！");
+                transaction.Commit();
             }
+            ctx.Write("\n[UNADD] 汇总结果已成功生成！");
         }
 
-        /// <summary>选择文字并统计（UNADD/UNADDX 共用；取消返回 null）。</summary>
+        /// <summary>选择文字并按当前统计设置汇总；用户取消时返回 null。</summary>
         private CableStatResult CollectAndCalculate(CadContext ctx)
         {
             StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             if (settings.SelectionFilter.Length == 0)
             {
-                ctx.Write("\n[UNC_STAT] TEXT和MTEXT来源均已关闭，请先在配置中心开启。");
+                ctx.Write("\n[UNADD] TEXT和MTEXT来源均已关闭，请先在配置中心开启。");
                 return null;
             }
             if (!settings.Calculation.IncludeCable && !settings.Calculation.IncludeBridge
                 && !settings.Calculation.IncludeConduit)
             {
-                ctx.Write("\n[UNC_STAT] 电缆、桥架和线管统计均已关闭，请先在配置中心开启。");
+                ctx.Write("\n[UNADD] 电缆、桥架和线管统计均已关闭，请先在配置中心开启。");
                 return null;
             }
-            ConfigPrinter.Print(ctx, CommandIds.Statistics,
+            ConfigPrinter.Print(ctx, CommandIds.LegacyStatistics,
                 ("文字来源", SourceLabel(settings)),
                 ("统计类别", CategoryLabel(settings.Calculation)),
                 ("桥架每格", TextFormatter.FormatNum(settings.Calculation.MmPerGrid) + " mm"));
@@ -143,32 +118,5 @@ namespace UNCAD.Features.Unadd
             return string.Join(" + ", values);
         }
 
-        private void ExportExcel(CadContext ctx, CableStatResult stat)
-        {
-            using (var dlg = new System.Windows.Forms.SaveFileDialog
-            {
-                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                FileName = "UNCAD统计_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".xlsx",
-                Title = "导出统计报表"
-            })
-            {
-                if (dlg.ShowDialog(new UI.WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle)) !=
-                    System.Windows.Forms.DialogResult.OK)
-                    return;
-
-                try
-                {
-                    StatExcelReporter.WriteToFile(stat, dlg.FileName);
-                    Log.Info("UNADDX exported: " + dlg.FileName);
-                    ctx.Write("\n[UNADDX] 已导出 Excel: " + dlg.FileName);
-                }
-                catch (System.Exception ex)
-                {
-                    ctx.Write("\n[UNADDX] 导出失败: " + ex.Message);
-                    Log.Error("UNADDX export failed", ex);
-                }
-            }
-        }
     }
 }

@@ -9,7 +9,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Submit
 {
-    /// <summary>Result printed by UNC_F/UNC_UPDATE after their automatic Excel synchronization.</summary>
+    /// <summary>Result printed by U1F/U1U after their automatic Excel synchronization.</summary>
     internal sealed class AutomaticSubmissionWriteResult
     {
         public string FilePath { get; set; }
@@ -20,7 +20,7 @@ namespace UNCAD.Features.Submit
     }
 
     /// <summary>
-    /// Synchronizes the CAD state produced by UNC_F/UNC_UPDATE into UNCAD_Submissions.xlsx.
+    /// Synchronizes the CAD state produced by U1F/U1U into UNCAD_Submissions.xlsx.
     /// This is deliberately not an AutoCAD command: successful fill/update owns the Excel write.
     /// </summary>
     internal static class AutomaticSubmissionService
@@ -32,7 +32,7 @@ namespace UNCAD.Features.Submit
             if (folder.Length == 0)
                 folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 Excel 自动记录文件夹，请先在 UNC_SET 中设置。");
+                throw new DirectoryNotFoundException("无法确定 Excel 自动记录文件夹，请先在 U1S 中设置。");
 
             Directory.CreateDirectory(folder);
             if (!Directory.Exists(folder))

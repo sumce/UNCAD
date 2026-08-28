@@ -31,7 +31,7 @@ namespace UNCAD.Cad
 
         /// <summary>
         /// 正向阅读角：线段角度翻转到 0~180°（避免文字倒置）。
-        /// UNC_LINE / UNC_TRAY / UNC_ARCH 共用。
+        /// U1L / U1Q / U1R 共用。
         /// </summary>
         public static double ReadableAngle(Point3d from, Point3d to)
         {

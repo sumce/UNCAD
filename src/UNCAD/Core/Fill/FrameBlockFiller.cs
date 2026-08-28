@@ -12,7 +12,7 @@ namespace UNCAD.Core.Fill
     ///   MACHINEID-DEVICE   机台ID-设备名称
     ///   MACHINEID-POWER    机台ID-POWER，例如 "MDAPT01-POWER"
     ///   CABLE_INFO         电缆型号mm²: 分段长度求和公式=总长度
-    ///   BRIDGE_FRAME_INFO  UNC_STAT 桥架规格 + 总长度（无统计结果时回退配置）
+    ///   BRIDGE_FRAME_INFO  UNADD 桥架规格 + 总长度（无统计结果时回退配置）
     ///   CONDUIT_INFO       各管径线管总长度，多个用中文逗号分隔
     /// 可选统计标签始终返回；无数据时写空字符串，避免保留上一次填充内容。
     /// </summary>
@@ -55,7 +55,7 @@ namespace UNCAD.Core.Fill
         }
 
         /// <summary>
-        /// 构建 标签→值 映射。统计结果来自 UNC_FILL 同一次框选，
+        /// 构建 标签→值 映射。统计结果来自 U1F 同一次框选，
         /// CABLE_INFO 写电缆公式，BRIDGE_FRAME_INFO 写桥架总长，CONDUIT_INFO 写各管径线管总长。
         /// </summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(

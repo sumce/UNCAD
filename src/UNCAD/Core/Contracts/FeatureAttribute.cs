@@ -25,7 +25,7 @@ namespace UNCAD.Core.Contracts
         public string Description { get; set; }
 
 
-        /// <summary>对外命令列表，分号分隔（如 "UNL;OPUNL"）。</summary>
+        /// <summary>对外命令列表，分号分隔（如 "U1L;UNL"）。</summary>
         public string Commands { get; set; }
     }
 }

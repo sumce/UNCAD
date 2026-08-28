@@ -9,7 +9,7 @@ namespace UNCAD.Core.Excel
 {
     /// <summary>
     /// 读取 Excel 列数据（NPOI，纯 C# 可单测）。
-    /// 用于 UNC_FILL：把 Excel 某一列的值按行序取出来，替换图纸中的文字。
+    /// 用于 U1F：把 Excel 某一列的值按行序取出来，替换图纸中的文字。
     /// </summary>
     public static class ExcelColumnReader
     {

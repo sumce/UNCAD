@@ -12,13 +12,12 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Unr
 {
-    /// <summary>UNR / OPUNR：连续在直线上开半圆拱桥洞。</summary>
+    /// <summary>U1R / UNR：连续在直线上开半圆拱桥洞。</summary>
     [Feature("unr", "拱桥开洞",
         Commands = CommandIds.ArchFeatureCommands,
         Description = "在直线上连续开半圆拱桥洞")]
     public class UnrFeature : CommandBase
     {
-        [CommandMethod(CommandIds.ArchSettings)]
         public void UncadArchSet()
         {
             Guard(() =>
@@ -50,7 +49,7 @@ namespace UNCAD.Features.Unr
             });
         }
 
-        // 规范命令：UNC_ARCH / UNC_ARCH_SET
+        // 规范命令：U1R / U1S
         [CommandMethod(CommandIds.Arch)]
         public void UncadArch() => Run();
 
@@ -58,7 +57,6 @@ namespace UNCAD.Features.Unr
         [CommandMethod(CommandIds.LegacyArch)]
         public void Unr() => UncadArch();
 
-        [CommandMethod(CommandIds.LegacyArchSettings)]
         public void OpUnr() => UncadArchSet();
 
         protected override void Execute(CadContext ctx)

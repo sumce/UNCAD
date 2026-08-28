@@ -71,14 +71,19 @@ function Get-PackageInfo {
         throw "Package must support both startup and command-triggered loading."
     }
     $declaredCommands = @($entry.Commands.Command | ForEach-Object { [string]$_.Global })
-    foreach ($requiredCommand in @("UNC_ABOUT", "UNC_RIBBON", "UNC_F", "UNC_UPDATE", "UNC_ARCH")) {
+    # The manifest is an explicit public API: only the current U1 family and six retained
+    # traditional keyboard commands may trigger package loading.
+    $expectedCommands = @(
+        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1C", "U1A", "U1S",
+        "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
+    foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
             throw "Package command-triggered loading is missing: $requiredCommand"
         }
     }
-    # UNC_SUBMIT was intentionally removed: generation and update own automatic Excel writes.
-    if ($declaredCommands -contains "UNC_SUBMIT") {
-        throw "Package must not declare removed command: UNC_SUBMIT"
+    $unexpectedCommands = @($declaredCommands | Where-Object { $expectedCommands -notcontains $_ })
+    if ($unexpectedCommands.Count -gt 0) {
+        throw "Package declares unsupported public commands: $($unexpectedCommands -join ", ")"
     }
     $moduleRelative = ([string]$entry.ModuleName).Replace("/", "\").TrimStart([char[]]".\")
     $modulePath = Join-Path $BundlePath $moduleRelative
@@ -259,7 +264,7 @@ function Install-Bundle {
         Write-SetupLog $(if ($Scope -eq "User") {
             "Scope: current Windows user only. Use InstallAll on shared computers."
         } else { "Scope: all Windows users on this computer." }) Cyan
-        Write-SetupLog "Restart AutoCAD 2022. If the tab is hidden, run UNC_RIBBON." Green
+        Write-SetupLog "Restart AutoCAD 2022. The UNCAD tab registers automatically; use AutoCAD RIBBON if hidden." Green
     }
     catch {
         $failure = $_

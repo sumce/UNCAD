@@ -9,7 +9,7 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// 统一配置中心对话框（UNC_SET）。
+    /// 统一配置中心对话框（U1S）。
     /// 页签：线段绘制 / 桥架标注 / 线管标注 / 拱桥开洞 / 统计汇总。
     /// 确定时一次性写回全部配置键（Features 只读，这里统一写）。
     /// </summary>
@@ -108,7 +108,7 @@ namespace UNCAD.UI
                 _conduitDia.Focus();
                 _conduitDia.SelectAll();
                 MessageBox.Show(this, "默认管径无效，请输入1到1000毫米之间的数值。",
-                    "UNC_SET", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "U1S", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             _conduitDia.Text = diameter;
@@ -128,7 +128,7 @@ namespace UNCAD.UI
             _tabs.SelectedIndex = 6;
             field.Focus();
             field.SelectAll();
-            MessageBox.Show(this, message, "UNC_SET",
+            MessageBox.Show(this, message, "U1S",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
@@ -411,7 +411,7 @@ namespace UNCAD.UI
             {
                 using (var dialog = new FolderBrowserDialog
                 {
-                    Description = "选择 UNC_F / UNC_UPDATE 自动记录文件夹",
+                    Description = "选择 U1F / U1U 自动记录文件夹",
                     ShowNewFolderButton = true,
                     SelectedPath = Directory.Exists(target.Text.Trim()) ? target.Text.Trim() : ""
                 })

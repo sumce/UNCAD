@@ -13,7 +13,6 @@ namespace UNCAD.Features.About
         [CommandMethod(CommandIds.About)]
         public void UncadAbout() => Run();
 
-        [CommandMethod(CommandIds.Ribbon)]
         public void UncadRibbon()
         {
             Guard(() =>

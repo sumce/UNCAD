@@ -16,16 +16,12 @@ namespace UNCAD.Features.Conduit
         [CommandMethod(CommandIds.Conduit, CommandFlags.UsePickSet)]
         public void UncadConduit() => Run(null);
 
-        [CommandMethod(CommandIds.Conduit20, CommandFlags.UsePickSet)]
         public void UncadConduit20() => Run("20");
 
-        [CommandMethod(CommandIds.Conduit25, CommandFlags.UsePickSet)]
         public void UncadConduit25() => Run("25");
 
-        [CommandMethod(CommandIds.Conduit32, CommandFlags.UsePickSet)]
         public void UncadConduit32() => Run("32");
 
-        [CommandMethod(CommandIds.ConduitSettings)]
         public void UncadConduitSet() => SettingsFeature.Show(2);
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);
@@ -46,11 +42,11 @@ namespace UNCAD.Features.Conduit
                         System.Globalization.CultureInfo.InvariantCulture)));
             if (ids == null || ids.Length == 0)
             {
-                ctx.Write("\n[UNC_CONDUIT] 未选择线段，已取消。");
+                ctx.Write("\n[U1C] 未选择线段，已取消。");
                 return;
             }
 
-            ConfigPrinter.Print(ctx, "UNC_CONDUIT",
+            ConfigPrinter.Print(ctx, "U1C",
                 ("管径", "⌀" + diameter),
                 ("高度", TextFormatter.FormatNum(hgt)),
                 ("紫线偏移", TextFormatter.FormatNum(lineOff)),
@@ -68,7 +64,7 @@ namespace UNCAD.Features.Conduit
             });
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[UNC_CONDUIT] 已生成 " + count + " 条 ⌀" + diameter + " 线管标注。");
+            ctx.Write("\n[U1C] 已生成 " + count + " 条 ⌀" + diameter + " 线管标注。");
         }
 
         private static string NormalizeDiameter(string value)

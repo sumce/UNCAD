@@ -10,14 +10,14 @@ namespace UNCAD.Tests
     public class RibbonCatalogTests
     {
         [Fact]
-        public void PrimaryLayout_HasFourPanelsAndFourteenTaskOrientedControls()
+        public void PrimaryLayout_HasFourPanelsAndNineTaskOrientedControls()
         {
             Assert.Equal(new[] { "UNSIAO Work™", "标注", "绘制", "统计" },
                 RibbonCatalog.Panels.Select(panel => panel.Title));
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(14, primary.Length);
+            Assert.Equal(9, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));
@@ -33,8 +33,8 @@ namespace UNCAD.Tests
         {
             RibbonItemDefinition[] menus = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).Where(item => item.IsMenu).ToArray();
-            Assert.Equal(4, menus.Length);
-            Assert.Equal(new[] { 3, 3, 2, 2 }, menus.Select(menu => menu.Children.Count));
+            Assert.Single(menus);
+            Assert.Equal(new[] { 3 }, menus.Select(menu => menu.Children.Count));
             Assert.All(menus, menu =>
             {
                 Assert.Null(menu.Command);
@@ -48,17 +48,17 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void EveryRibbonAction_UsesOneRegisteredCanonicalCommand()
+        public void EveryRibbonAction_UsesOneRegisteredCommand()
         {
-            var canonical = new HashSet<string>(CommandIds.Canonical,
+            var registered = new HashSet<string>(CommandIds.Registered,
                 StringComparer.OrdinalIgnoreCase);
             string[] ribbonCommands = RibbonCatalog.CommandItems
                 .Select(item => item.Command).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            Assert.All(ribbonCommands, command => Assert.Contains(command, canonical));
-            Assert.All(canonical.Where(command => !string.Equals(command, CommandIds.Ribbon,
-                StringComparison.OrdinalIgnoreCase)), command => Assert.Contains(command,
-                    ribbonCommands, StringComparer.OrdinalIgnoreCase));
-
+            Assert.All(ribbonCommands, command => Assert.Contains(command, registered));
+            Assert.All(CommandIds.Canonical, command => Assert.Contains(command,
+                ribbonCommands, StringComparer.OrdinalIgnoreCase));
+            Assert.Contains(CommandIds.LegacyStatistics, ribbonCommands,
+                StringComparer.OrdinalIgnoreCase);
         }
     }
 }

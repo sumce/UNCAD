@@ -11,7 +11,7 @@ namespace UNCAD.Tests
     public class BundleLoadingTests
     {
         private const string PreviousProductCode =
-            "{F6E0A926-3B3B-4ECA-9EFF-7EB54C512737}";
+            "{EC9A3EDE-1958-48A2-8CE9-75BEB058E1FB}";
 
         [Fact]
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
@@ -41,7 +41,8 @@ namespace UNCAD.Tests
             var declared = new HashSet<string>(entry.Element("Commands")
                 ?.Elements("Command").Select(item => (string)item.Attribute("Global"))
                 ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-            Assert.All(CommandIds.Canonical, command => Assert.Contains(command, declared));
+            Assert.Equal(CommandIds.Registered.OrderBy(command => command),
+                declared.OrderBy(command => command), StringComparer.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -52,7 +53,8 @@ namespace UNCAD.Tests
             Assert.Contains("Unblock-BundleFiles $stage", script);
             Assert.Contains("Unblock-BundleFiles $destination", script);
             Assert.Contains("current Windows user only", script);
-            Assert.Contains("run UNC_RIBBON", script);
+            Assert.Contains("use AutoCAD RIBBON if hidden", script);
+            Assert.Contains("$unexpectedCommands", script);
         }
 
         [Fact]

@@ -5,7 +5,7 @@ using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Excel
 {
-    /// <summary>UNC_FILL 单次命令使用的只读 Excel 快照和机台索引。</summary>
+    /// <summary>U1F / U1U 单次命令使用的只读 Excel 快照和机台索引。</summary>
     public sealed class FillWorkbookSnapshot
     {
         private static readonly StableFileCache<List<MachineRow>> MachineCache =

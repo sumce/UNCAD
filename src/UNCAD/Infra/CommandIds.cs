@@ -2,78 +2,53 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>UNCAD command names shared by attributes, Ribbon definitions, and tests.</summary>
+    /// <summary>
+    /// Public AutoCAD command contract. U1 names are the current interface; the six short
+    /// traditional commands remain registered only for established keyboard workflows.
+    /// </summary>
     public static class CommandIds
     {
-        public const string Fill = "UNC_F";
-        public const string FillUpdate = "UNC_UPDATE";
-        public const string Settings = "UNC_SET";
-        public const string About = "UNC_ABOUT";
-        public const string Ribbon = "UNC_RIBBON";
-
-        public const string Conduit = "UNC_CONDUIT";
-        public const string Conduit20 = "UNC_CONDUIT20";
-        public const string Conduit25 = "UNC_CONDUIT25";
-        public const string Conduit32 = "UNC_CONDUIT32";
-        public const string ConduitSettings = "UNC_CONDUIT_SET";
-
-        public const string Tray = "UNC_TRAY";
-        public const string Tray100 = "UNC_TRAY100";
-        public const string Tray200 = "UNC_TRAY200";
-        public const string Tray400 = "UNC_TRAY400";
-        public const string TraySettings = "UNC_TRAY_SET";
-
-        public const string Line = "UNC_LINE";
-        public const string LineSettings = "UNC_LINE_SET";
-        public const string Arch = "UNC_ARCH";
-        public const string ArchSettings = "UNC_ARCH_SET";
-        public const string Statistics = "UNC_STAT";
-        public const string StatisticsExcel = "UNC_STAT_EX";
+        public const string Fill = "U1F";
+        public const string FillUpdate = "U1U";
+        public const string Settings = "U1S";
+        public const string About = "U1A";
+        public const string Conduit = "U1C";
+        public const string Tray100 = "U1Q1";
+        public const string Tray200 = "U1Q2";
+        public const string Tray400 = "U1Q4";
+        public const string Line = "U1L";
+        public const string Arch = "U1R";
 
         public const string LegacyLine = "UNL";
-        public const string LegacyLineSettings = "OPUNL";
+        public const string LegacyArch = "UNR";
         public const string LegacyTray100 = "UNQ1";
         public const string LegacyTray200 = "UNQ2";
         public const string LegacyTray400 = "UNQ4";
-        public const string LegacyTraySettings = "OPUNQ";
         public const string LegacyStatistics = "UNADD";
-        public const string LegacyStatisticsExcel = "UNADDX";
-        public const string LegacyArch = "UNR";
-        public const string LegacyArchSettings = "OPUNR";
 
-        public const string AboutFeatureCommands = About + ";" + Ribbon;
+        public const string AboutFeatureCommands = About;
         public const string FillFeatureCommands = Fill + ";" + FillUpdate;
-        public const string ConduitFeatureCommands = Conduit + ";" + Conduit20 + ";"
-            + Conduit25 + ";" + Conduit32 + ";" + ConduitSettings;
-        public const string TrayFeatureCommands = Tray + ";" + Tray100 + ";"
-            + Tray200 + ";" + Tray400 + ";" + TraySettings;
-        public const string LineFeatureCommands = Line + ";" + LineSettings;
-        public const string ArchFeatureCommands = Arch + ";" + ArchSettings;
-        public const string StatisticsFeatureCommands = Statistics + ";" + StatisticsExcel;
+        public const string ConduitFeatureCommands = Conduit;
+        public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
+        public const string LineFeatureCommands = Line;
+        public const string ArchFeatureCommands = Arch;
+        public const string StatisticsFeatureCommands = LegacyStatistics;
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Fill, FillUpdate, Settings, About, Ribbon, Conduit, Conduit20, Conduit25, Conduit32,
-            ConduitSettings, Tray, Tray100, Tray200, Tray400, TraySettings, Line,
-            LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel
+            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings
         };
 
         public static IReadOnlyList<string> Legacy { get; } = new[]
         {
-            LegacyLine, LegacyLineSettings, LegacyTray100, LegacyTray200,
-            LegacyTray400, LegacyTraySettings, LegacyStatistics,
-            LegacyStatisticsExcel, LegacyArch, LegacyArchSettings
+            LegacyLine, LegacyArch, LegacyTray100, LegacyTray200,
+            LegacyTray400, LegacyStatistics
         };
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Fill, FillUpdate, Settings, About, Ribbon,
-            Conduit, Conduit20, Conduit25, Conduit32, ConduitSettings,
-            Tray, Tray100, Tray200, Tray400, TraySettings,
-            Line, LineSettings, Arch, ArchSettings, Statistics, StatisticsExcel,
-            LegacyLine, LegacyLineSettings, LegacyTray100, LegacyTray200,
-            LegacyTray400, LegacyTraySettings, LegacyStatistics,
-            LegacyStatisticsExcel, LegacyArch, LegacyArchSettings
+            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings,
+            LegacyLine, LegacyArch, LegacyTray100, LegacyTray200, LegacyTray400, LegacyStatistics
         };
     }
 }

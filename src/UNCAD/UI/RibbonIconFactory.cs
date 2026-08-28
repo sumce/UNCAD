@@ -65,15 +65,15 @@ namespace UNCAD.UI
             if (string.Equals(command, CommandIds.Fill, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.FillUpdate, StringComparison.OrdinalIgnoreCase))
                 return "fill";
-            if (string.Equals(command, "UNC_SET", StringComparison.OrdinalIgnoreCase) ||
-                command.EndsWith("_SET", StringComparison.OrdinalIgnoreCase)) return "settings";
-            if (string.Equals(command, "UNC_ABOUT", StringComparison.OrdinalIgnoreCase)) return "about";
-            if (command.StartsWith("UNC_CONDUIT", StringComparison.OrdinalIgnoreCase)) return "conduit";
-            if (command.StartsWith("UNC_TRAY", StringComparison.OrdinalIgnoreCase)) return "tray";
-            if (command.StartsWith("UNC_LINE", StringComparison.OrdinalIgnoreCase)) return "line";
-            if (command.StartsWith("UNC_ARCH", StringComparison.OrdinalIgnoreCase)) return "arch";
-            if (string.Equals(command, "UNC_STAT_EX", StringComparison.OrdinalIgnoreCase)) return "excel";
-            if (command.StartsWith("UNC_STAT", StringComparison.OrdinalIgnoreCase)) return "stat";
+            if (string.Equals(command, CommandIds.Settings, StringComparison.OrdinalIgnoreCase)) return "settings";
+            if (string.Equals(command, CommandIds.About, StringComparison.OrdinalIgnoreCase)) return "about";
+            if (string.Equals(command, CommandIds.Conduit, StringComparison.OrdinalIgnoreCase)) return "conduit";
+            if (string.Equals(command, CommandIds.Tray100, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.Tray200, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.Tray400, StringComparison.OrdinalIgnoreCase)) return "tray";
+            if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)) return "line";
+            if (string.Equals(command, CommandIds.Arch, StringComparison.OrdinalIgnoreCase)) return "arch";
+            if (string.Equals(command, CommandIds.LegacyStatistics, StringComparison.OrdinalIgnoreCase)) return "stat";
             return "tool";
         }
 

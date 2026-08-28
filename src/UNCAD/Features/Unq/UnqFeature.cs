@@ -13,10 +13,8 @@ namespace UNCAD.Features.Unq
         Description = "选中线段生成桥架标注（红色桥架线+规格文字）")]
     public class UnqFeature : CommandBase
     {
-        [CommandMethod(CommandIds.Tray, CommandFlags.UsePickSet)]
         public void UncadTray() => Run(null);
 
-        [CommandMethod(CommandIds.TraySettings)]
         public void UncadTraySet() => SettingsFeature.Show(1);
 
         [CommandMethod(CommandIds.Tray100, CommandFlags.UsePickSet)]
@@ -31,7 +29,7 @@ namespace UNCAD.Features.Unq
         [CommandMethod(CommandIds.LegacyTray100, CommandFlags.UsePickSet)] public void Unq1() => UncadTray100();
         [CommandMethod(CommandIds.LegacyTray200, CommandFlags.UsePickSet)] public void Unq2() => UncadTray200();
         [CommandMethod(CommandIds.LegacyTray400, CommandFlags.UsePickSet)] public void Unq4() => UncadTray400();
-        [CommandMethod(CommandIds.LegacyTraySettings)] public void OpUnq() => UncadTraySet();
+        public void OpUnq() => UncadTraySet();
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);
 
@@ -39,6 +37,12 @@ namespace UNCAD.Features.Unq
         {
             string content = state as string
                 ?? Settings.Get(ConfigKeys.UnqText, "桥架200*100 10格");
+            // Legacy UNQ commands route through the same implementation, so diagnostics use
+            // the corresponding current U1Q name determined from the selected specification.
+            string commandName = content.IndexOf("100*", System.StringComparison.Ordinal) >= 0
+                ? CommandIds.Tray100
+                : content.IndexOf("400*", System.StringComparison.Ordinal) >= 0
+                    ? CommandIds.Tray400 : CommandIds.Tray200;
             double hgt = Settings.GetDouble(ConfigKeys.UnqHeight, 180.0);
             double lineOff = Settings.GetDouble(ConfigKeys.UnqLineOff, 15.0);
             double textOff = Settings.GetDouble(ConfigKeys.UnqTextOff, 0.0);
@@ -51,11 +55,11 @@ namespace UNCAD.Features.Unq
                         System.Globalization.CultureInfo.InvariantCulture)));
             if (ids == null || ids.Length == 0)
             {
-                ctx.Write("\n[UNC_TRAY] 未选择线段，已取消。");
+                ctx.Write("\n[" + commandName + "] 未选择线段，已取消。");
                 return;
             }
 
-            ConfigPrinter.Print(ctx, "UNC_TRAY",
+            ConfigPrinter.Print(ctx, commandName,
                 ("规格", "\"" + content + "\""),
                 ("高度", TextFormatter.FormatNum(hgt)),
                 ("红线偏移", TextFormatter.FormatNum(lineOff)),
@@ -74,8 +78,8 @@ namespace UNCAD.Features.Unq
 
             SelectionService.ClearPickFirst(ctx);
             ctx.Write(count > 0
-                ? "\n[UNC_TRAY] 桥架标注生成完成：" + count + " 条线段。"
-                : "\n[UNC_TRAY] 警告：未处理任何受支持的直线/二维多段线。");
+                ? "\n[" + commandName + "] 桥架标注生成完成：" + count + " 条线段。"
+                : "\n[" + commandName + "] 警告：未处理任何受支持的直线/二维多段线。");
         }
     }
 }

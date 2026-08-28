@@ -46,13 +46,13 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[UNC_UPDATE] 读取机台 Excel 失败: " + ex.Message);
-                Log.Error("UNC_UPDATE batch read machine excel failed", ex);
+                ctx.Write("\n[U1U] 读取机台 Excel 失败: " + ex.Message);
+                Log.Error("U1U batch read machine excel failed", ex);
                 return;
             }
             if (workbook.MachineIds.Count == 0 || workbook.ListItems.Count == 0)
             {
-                ctx.Write("\n[UNC_UPDATE] 机台 Excel 或内嵌固定清单没有可用数据。");
+                ctx.Write("\n[U1U] 机台 Excel 或内嵌固定清单没有可用数据。");
                 return;
             }
 
@@ -66,9 +66,9 @@ namespace UNCAD.Features.Fill
                 string message = "批量更新预检失败，图纸未修改：\r\n\r\n"
                     + string.Join("\r\n", errors.Take(20));
                 if (errors.Count > 20) message += "\r\n其余 " + (errors.Count - 20) + " 项请查看日志。";
-                MessageBox.Show(Owner(), message, "UNC_UPDATE 批量预检",
+                MessageBox.Show(Owner(), message, "U1U 批量预检",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                foreach (string error in errors) ctx.Write("\n[UNC_UPDATE] " + error);
+                foreach (string error in errors) ctx.Write("\n[U1U] " + error);
                 return;
             }
 
@@ -82,7 +82,7 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[UNC_UPDATE] Excel 自动记录路径不可用，图纸未修改: "
+                ctx.Write("\n[U1U] Excel 自动记录路径不可用，图纸未修改: "
                     + ex.Message);
                 return;
             }
@@ -99,7 +99,7 @@ namespace UNCAD.Features.Fill
             if (plans.Count > 15) summary.AppendLine("其余 " + (plans.Count - 15) + " 个图框...");
             summary.AppendLine();
             summary.Append("所有图框将在一个事务中写入，任一失败则整批回滚。");
-            if (MessageBox.Show(Owner(), summary.ToString(), "UNC_UPDATE 批量确认",
+            if (MessageBox.Show(Owner(), summary.ToString(), "U1U 批量确认",
                     MessageBoxButtons.OKCancel, MessageBoxIcon.Information,
                     MessageBoxDefaultButton.Button1) != DialogResult.OK) return;
 
@@ -148,10 +148,10 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Error("UNC_UPDATE batch write failed", ex);
-                ctx.Write("\n[UNC_UPDATE] 批量写入失败，整批已回滚: " + ex.Message);
+                Log.Error("U1U batch write failed", ex);
+                ctx.Write("\n[U1U] 批量写入失败，整批已回滚: " + ex.Message);
                 MessageBox.Show(Owner(), "批量写入失败，所有图框修改均已回滚。\r\n\r\n" + ex.Message,
-                    "UNC_UPDATE", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "U1U", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -163,16 +163,16 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Error("UNC_UPDATE automatic Excel update failed after CAD commit", ex);
+                Log.Error("U1U automatic Excel update failed after CAD commit", ex);
                 throw new InvalidOperationException("CAD 已批量更新，但 Excel 自动更新失败："
                     + ex.Message + "；目标文件 " + automaticExcelPath, ex);
             }
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[UNC_UPDATE] 批量完成：图框 " + plans.Count
+            ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性。");
-            ctx.Write("\n[UNC_UPDATE] Excel 已自动更新：新增 "
+            ctx.Write("\n[U1U] Excel 已自动更新：新增 "
                 + automaticExcel.AddedCount + " 条，覆盖 " + automaticExcel.ReplacedCount
                 + " 条，材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
                 + automaticExcel.FilePath);

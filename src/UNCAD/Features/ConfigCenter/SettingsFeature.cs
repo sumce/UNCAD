@@ -8,7 +8,7 @@ using UNCAD.Infra;
 namespace UNCAD.Features.ConfigCenter
 {
     /// <summary>
-    /// 配置中心 UNC_SET：所有功能的配置集中在一个页面（页签：线段/桥架/拱桥/统计）。
+    /// 配置中心 U1S：所有功能的配置集中在一个页面（页签：线段/桥架/拱桥/统计）。
     /// 各功能 SET 命令通过 Show(tabIndex) 打开对应页签。
     /// </summary>
     [Feature("settings", "配置中心",
@@ -32,15 +32,15 @@ namespace UNCAD.Features.ConfigCenter
                         System.Windows.Forms.DialogResult.OK)
                         return false;
                     dlg.Save();
-                    Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[UNC_SET] 配置已保存！");
+                    Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[U1S] 配置已保存！");
                     return true;
                 }
             }
             catch (System.Exception ex)
             {
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage(
-                    "\n[UNC_SET] 配置保存失败: " + ex.Message);
-                Log.Error("UNC_SET failed", ex);
+                    "\n[U1S] 配置保存失败: " + ex.Message);
+                Log.Error("U1S failed", ex);
                 return false;
             }
         }

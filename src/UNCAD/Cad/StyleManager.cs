@@ -15,7 +15,7 @@ namespace UNCAD.Cad
     {
         /// <summary>
         /// 获取图纸的 Standard 文字样式；极少数没有 Standard 的图纸回退到当前文字样式。
-        /// UNC_LINE / UNC_TRAY 用它保持与图纸默认文字外观一致。
+        /// U1L / U1Q 用它保持与图纸默认文字外观一致。
         /// </summary>
         public static ObjectId GetDrawingStandardStyle(CadContext ctx, Transaction tr)
         {
