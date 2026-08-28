@@ -68,31 +68,23 @@ namespace UNCAD.Features.Fill
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
 
-            string catalogPath = options.CatalogWorkbookPath;
-            if (catalogPath.Length > 0 && !File.Exists(catalogPath))
-            {
-                ctx.Write("\n[UNC_FILL] 固定清单 Excel 不存在: " + catalogPath
-                    + "（UNC_SET → Excel 填充 可修改）");
-                return;
-            }
-
-            // 阶段3：加载机台/盘柜数据和固定清单索引，外部文件异常在此终止。
+            // 阶段3：加载机台/盘柜数据（用户唯一的外部 Excel）和内嵌固定清单。
+            // 清单随插件版本固化，不再检查外部清单文件；资源缺失属于程序集缺陷。
             FillWorkbookSnapshot workbook;
             try
             {
-                workbook = FillWorkbookSnapshot.Load(path, catalogPath);
+                workbook = FillWorkbookSnapshot.Load(path);
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[UNC_FILL] 读取 Excel 失败: " + ex.Message);
-                Log.Error("UNC_FILL read excel failed", ex);
+                ctx.Write("\n[UNC_FILL] 读取机台 Excel 失败: " + ex.Message);
+                Log.Error("UNC_FILL read machine excel failed", ex);
                 return;
             }
             ctx.Write("\n[UNC_FILL] 机台数据 "
                 + (workbook.MachineCacheHit ? "已使用缓存" : "已重新加载")
-                + "；固定清单 "
-                + (workbook.CatalogCacheHit ? "已使用缓存" : "已重新加载")
-                + ": " + workbook.CatalogSourcePath);
+                + "：" + workbook.MachineSourcePath
+                + "；内嵌固定清单 " + workbook.CatalogItemCount + " 项。");
 
             List<string> machineIds = workbook.MachineIds;
             List<ListItem> listItems = workbook.ListItems;

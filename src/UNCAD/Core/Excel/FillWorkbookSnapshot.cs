@@ -15,16 +15,13 @@ namespace UNCAD.Core.Excel
         private readonly Dictionary<string, List<MachineRow>> _machineIndex;
 
         private FillWorkbookSnapshot(List<MachineRow> machineRows, List<ListItem> listItems,
-            string machineSourcePath, string catalogSourcePath, bool machineCacheHit,
-            bool catalogCacheHit)
+            string machineSourcePath, bool machineCacheHit)
         {
             _machineRows = machineRows;
             Catalog = new BoqCatalogIndex(listItems);
             ListItems = Catalog.Items;
             MachineSourcePath = machineSourcePath;
-            CatalogSourcePath = catalogSourcePath;
             MachineCacheHit = machineCacheHit;
-            CatalogCacheHit = catalogCacheHit;
             MachineIds = ExcelMachineReader.DistinctMachineIds(machineRows);
             _machineIndex = new Dictionary<string, List<MachineRow>>(StringComparer.OrdinalIgnoreCase);
             foreach (MachineRow row in machineRows)
@@ -44,26 +41,24 @@ namespace UNCAD.Core.Excel
         public List<ListItem> ListItems { get; }
         public BoqCatalogIndex Catalog { get; }
         public string MachineSourcePath { get; }
-        public string CatalogSourcePath { get; }
         public bool MachineCacheHit { get; }
-        public bool CatalogCacheHit { get; }
 
-        public static FillWorkbookSnapshot Load(string filePath)
-            => Load(filePath, null);
+        /// <summary>内嵌固定清单的项目数（数据随插件版本固化，不再有外部清单文件）。</summary>
+        public int CatalogItemCount => ListItems.Count;
 
-        public static FillWorkbookSnapshot Load(string machineFilePath, string catalogFilePath)
+        /// <summary>
+        /// 加载唯一的外部 Excel（机台/设备表）并合并内嵌固定清单。
+        /// 固定清单来自程序集资源，用户不需要也无法提供清单文件。
+        /// </summary>
+        public static FillWorkbookSnapshot Load(string machineFilePath)
         {
             string machinePath = Path.GetFullPath(machineFilePath ?? "");
-            string catalogPath = string.IsNullOrWhiteSpace(catalogFilePath)
-                ? machinePath
-                : Path.GetFullPath(catalogFilePath.Trim());
 
             List<MachineRow> machineRows = MachineCache.Load(
                 machinePath, out bool machineCacheHit);
-            List<ListItem> listItems = BoqCatalogCache.Load(
-                catalogPath, out bool catalogCacheHit);
+            List<ListItem> listItems = ListItemReader.ReadEmbedded();
             return new FillWorkbookSnapshot(machineRows, listItems, machinePath,
-                catalogPath, machineCacheHit, catalogCacheHit);
+                machineCacheHit);
         }
 
         private static List<MachineRow> LoadMachineRows(string path)

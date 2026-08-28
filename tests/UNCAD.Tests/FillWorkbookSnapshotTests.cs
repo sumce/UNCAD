@@ -9,47 +9,58 @@ namespace UNCAD.Tests
     public class FillWorkbookSnapshotTests
     {
         [Fact]
-        public void Load_CachesBothSourcesAndInvalidatesEachSourceOnChange()
+        public void Load_CachesMachineRowsAndMergesEmbeddedCatalog()
         {
             string machinePath = Path.Combine(Path.GetTempPath(),
                 "uncad_machine_source_" + Guid.NewGuid().ToString("N") + ".xlsx");
-            string catalogPath = Path.Combine(Path.GetTempPath(),
-                "uncad_catalog_source_" + Guid.NewGuid().ToString("N") + ".xlsx");
             try
             {
                 WriteMachine(machinePath, "设备A");
-                WriteCatalog(catalogPath, "8.3", "插座20~30A");
 
-                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
                 Assert.False(first.MachineCacheHit);
-                Assert.False(first.CatalogCacheHit);
                 Assert.Equal("设备A", Assert.Single(first.FindRows("CACHE01")).CircuitName);
-                Assert.Equal("8.3", Assert.Single(first.ListItems).Code);
+                Assert.True(first.CatalogItemCount > 0);
+                Assert.Contains(first.ListItems,
+                    item => item.Code == "3.3" && item.Alias1 == "32mm");
 
+                // 内嵌清单只随插件版本变化，不随机台文件缓存失效。
                 first.FindRows("CACHE01")[0].CircuitName = "缓存副本被修改";
-                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
                 Assert.True(second.MachineCacheHit);
-                Assert.True(second.CatalogCacheHit);
                 Assert.Equal("设备A", Assert.Single(second.FindRows("CACHE01")).CircuitName);
 
                 WriteMachine(machinePath, "设备B");
                 File.SetLastWriteTimeUtc(machinePath, DateTime.UtcNow.AddSeconds(5));
-                FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath, catalogPath);
+                FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath);
                 Assert.False(refreshedMachine.MachineCacheHit);
-                Assert.True(refreshedMachine.CatalogCacheHit);
-                Assert.Equal("设备B", Assert.Single(refreshedMachine.FindRows("CACHE01")).CircuitName);
-
-                WriteCatalog(catalogPath, "8.30", "插座20~30A（新版固定清单）");
-                File.SetLastWriteTimeUtc(catalogPath, DateTime.UtcNow.AddSeconds(5));
-                FillWorkbookSnapshot refreshedCatalog = FillWorkbookSnapshot.Load(machinePath, catalogPath);
-                Assert.True(refreshedCatalog.MachineCacheHit);
-                Assert.False(refreshedCatalog.CatalogCacheHit);
-                Assert.Equal("8.30", Assert.Single(refreshedCatalog.ListItems).Code);
+                Assert.Equal("设备B",
+                    Assert.Single(refreshedMachine.FindRows("CACHE01")).CircuitName);
             }
             finally
             {
                 if (File.Exists(machinePath)) File.Delete(machinePath);
-                if (File.Exists(catalogPath)) File.Delete(catalogPath);
+            }
+        }
+
+        [Fact]
+        public void Load_EmbeddedCatalogIsDefensivelyClonedPerSnapshot()
+        {
+            string machinePath = Path.Combine(Path.GetTempPath(),
+                "uncad_machine_clone_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                WriteMachine(machinePath, "设备A");
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
+                string original = first.ListItems[0].Code;
+                first.ListItems[0].Code = "被篡改";
+
+                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
+                Assert.Equal(original, second.ListItems[0].Code);
+            }
+            finally
+            {
+                if (File.Exists(machinePath)) File.Delete(machinePath);
             }
         }
 
@@ -69,24 +80,6 @@ namespace UNCAD.Tests
                 header.CreateCell(c).SetCellValue(headers[c]);
                 row.CreateCell(c).SetCellValue(values[c]);
             }
-            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
-                wb.Write(stream);
-            wb.Close();
-        }
-
-        private static void WriteCatalog(string path, string code, string feature)
-        {
-            var wb = new XSSFWorkbook();
-            var sheet = wb.CreateSheet("Sheet2");
-            string[] headers = { "编号", "项目名称", "项目特征", "单位", "", "规格" };
-            var header = sheet.CreateRow(0);
-            for (int c = 0; c < headers.Length; c++) header.CreateCell(c).SetCellValue(headers[c]);
-            var row = sheet.CreateRow(1);
-            row.CreateCell(0).SetCellValue(code);
-            row.CreateCell(1).SetCellValue("插座");
-            row.CreateCell(2).SetCellValue(feature);
-            row.CreateCell(3).SetCellValue("个");
-            row.CreateCell(5).SetCellValue("20~30A");
             using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
                 wb.Write(stream);
             wb.Close();

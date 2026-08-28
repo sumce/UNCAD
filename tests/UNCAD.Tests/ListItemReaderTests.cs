@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 using UNCAD.Core.Excel;
@@ -130,6 +132,42 @@ namespace UNCAD.Tests
                 workbook.Close();
                 if (File.Exists(path)) File.Delete(path);
             }
+        }
+
+        [Fact]
+        public void ParseEmbeddedTsv_RoundTripsEscapesAndKeepsBlankCategoriesBlank()
+        {
+            string tsv = "3.3\t线管\t镀锌穿线管\t1.名称:穿线管\\n2.说明:tab\\tinside\tm\t38mm\t32mm\n"
+                + "# 注释行不参与解析\n"
+                + "8.4\t\t变压器\t10KVA\t台\t\t\n";
+
+            List<ListItem> items = ListItemReader.ParseEmbeddedTsv(tsv);
+
+            Assert.Equal(2, items.Count);
+            Assert.Equal("线管", items[0].Category);
+            Assert.Contains("\n", items[0].Feature);
+            Assert.Contains("\t", items[0].Feature);
+            Assert.Equal("38mm", items[0].Alias);
+            Assert.Equal("32mm", items[0].Alias1);
+            // 没有"类"的不判定：空分类保持空字符串，而不是推断。
+            Assert.Equal("", items[1].Category);
+            Assert.Equal("变压器", items[1].Name);
+        }
+
+        [Fact]
+        public void ReadEmbedded_ExposesTheShippedFixedCatalogContract()
+        {
+            List<ListItem> items = ListItemReader.ReadEmbedded();
+
+            Assert.True(items.Count >= 100);
+            Assert.All(items, item => Assert.False(string.IsNullOrWhiteSpace(item.Code)));
+            Assert.All(items, item => Assert.False(string.IsNullOrWhiteSpace(item.Name)));
+
+            // ts.xlsx 第60行：输入 32mm 显式迁移到 3.3 / 38mm 材料。
+            ListItem rigid38 = items.Single(item => item.Code == "3.3");
+            Assert.Equal("镀锌穿线管", rigid38.Name);
+            Assert.Equal("38mm", rigid38.Alias);
+            Assert.Equal("32mm", rigid38.Alias1);
         }
 
         [Fact]

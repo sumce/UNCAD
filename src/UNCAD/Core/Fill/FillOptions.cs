@@ -43,12 +43,11 @@ namespace UNCAD.Core.Fill
         public const double MaximumTextHeight = 100000.0;
         public const double MaximumMmPerGrid = 100000.0;
 
-        private FillRuntimeOptions(string machineWorkbookPath, string catalogWorkbookPath,
-            int startRow, int clearRows, double textHeight, double mmPerGrid,
-            string bridgeInfo, FillPlanningOptions planning)
+        private FillRuntimeOptions(string machineWorkbookPath, int startRow, int clearRows,
+            double textHeight, double mmPerGrid, string bridgeInfo,
+            FillPlanningOptions planning)
         {
             MachineWorkbookPath = machineWorkbookPath;
-            CatalogWorkbookPath = catalogWorkbookPath;
             StartRow = startRow;
             ClearRows = clearRows;
             TextHeight = textHeight;
@@ -58,7 +57,6 @@ namespace UNCAD.Core.Fill
         }
 
         public string MachineWorkbookPath { get; }
-        public string CatalogWorkbookPath { get; }
         public int StartRow { get; }
         public int ClearRows { get; }
         public double TextHeight { get; }
@@ -67,12 +65,11 @@ namespace UNCAD.Core.Fill
         public FillPlanningOptions Planning { get; }
 
         public static FillRuntimeOptions Create(string machineWorkbookPath,
-            string catalogWorkbookPath, int startRow, int clearRows, double textHeight,
-            double mmPerGrid, string bridgeInfo, FillPlanningOptions planning)
+            int startRow, int clearRows, double textHeight, double mmPerGrid,
+            string bridgeInfo, FillPlanningOptions planning)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
-                (catalogWorkbookPath ?? "").Trim(),
                 Clamp(startRow, 1, MaximumStartRow, DefaultStartRow),
                 Clamp(clearRows, 1, MaximumClearRows, TableClearPolicy.DefaultRows),
                 PositiveWithin(textHeight, MaximumTextHeight,

@@ -42,8 +42,7 @@ namespace UNCAD.Infra
         public const string StyleWidth = "UNC_STYLE_WIDTH";      // 宽高比
 
         // Excel 填充（UNC_FILL）
-        public const string FillExcelPath = "UNC_FILL_EXCEL";    // 机台数据 Excel（每次重读 Sheet1）
-        public const string FillCatalogPath = "UNC_FILL_CATALOG_EXCEL"; // 固定 BOQ Excel（空=同文件 Sheet2）
+        public const string FillExcelPath = "UNC_FILL_EXCEL";    // 机台数据 Excel（用户唯一需要提供的文件）
         public const string FillTableRow = "UNC_FILL_TABLE_ROW"; // Table 起始行（1 基）
         public const string FillClearRows = "UNC_FILL_CLEAR_ROWS"; // 每次先清空的模板数据行数，默认 11
         public const string FillTextHeight = "UNC_FILL_TEXT_HEIGHT"; // 写入单元格文字高度，默认 500

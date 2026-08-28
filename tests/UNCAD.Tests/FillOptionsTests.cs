@@ -24,11 +24,10 @@ namespace UNCAD.Tests
         public void RuntimeOptions_ClampUnsafePersistedValues()
         {
             FillRuntimeOptions options = FillRuntimeOptions.Create(" source.xlsx ",
-                " catalog.xlsx ", -8, 999, -1, double.PositiveInfinity,
-                " bridge ", null);
+                -8, 999, -1, double.PositiveInfinity, " bridge ", null);
 
+            // 用户唯一提供的文件就是机台/设备表；不再存在清单路径配置。
             Assert.Equal("source.xlsx", options.MachineWorkbookPath);
-            Assert.Equal("catalog.xlsx", options.CatalogWorkbookPath);
             Assert.Equal(1, options.StartRow);
             Assert.Equal(TableClearPolicy.DefaultRows, options.ClearRows);
             Assert.Equal(TableFillFormatter.DefaultTextHeight, options.TextHeight);

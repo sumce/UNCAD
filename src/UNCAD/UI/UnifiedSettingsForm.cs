@@ -61,7 +61,6 @@ namespace UNCAD.UI
 
         // Excel 填充
         private readonly TextBox _fillExcel = new TextBox { Width = 310 };
-        private readonly TextBox _fillCatalog = new TextBox { Width = 310 };
         private readonly NumericUpDown _fillTblRow = IntegerBox(1m, 1m, 1000m);
         private readonly NumericUpDown _fillClearRows = IntegerBox(11m, 1m, 100m);
         private readonly NumericUpDown _fillTextHeight = NumberBox(500m, 1m, 100000m);
@@ -113,16 +112,11 @@ namespace UNCAD.UI
                 return;
             }
             _conduitDia.Text = diameter;
+            // 用户只需要提供机台/设备表；固定清单随插件内嵌，不再有清单路径校验。
             string machinePath = _fillExcel.Text.Trim();
-            string catalogPath = _fillCatalog.Text.Trim();
             if (machinePath.Length > 0 && !File.Exists(machinePath))
             {
                 ShowPathError(_fillExcel, "机台数据 Excel 不存在。");
-                return;
-            }
-            if (catalogPath.Length > 0 && !File.Exists(catalogPath))
-            {
-                ShowPathError(_fillCatalog, "固定清单 Excel 不存在。");
                 return;
             }
             DialogResult = DialogResult.OK;
@@ -179,7 +173,6 @@ namespace UNCAD.UI
 
             // Excel 填充
             _fillExcel.Text = Settings.Get(ConfigKeys.FillExcelPath, "");
-            _fillCatalog.Text = Settings.Get(ConfigKeys.FillCatalogPath, "");
             SetNumber(_fillTblRow, Settings.GetDouble(ConfigKeys.FillTableRow, 1.0));
             SetNumber(_fillClearRows, Settings.GetDouble(ConfigKeys.FillClearRows, 11.0));
             SetNumber(_fillTextHeight, Settings.GetDouble(ConfigKeys.FillTextHeight,
@@ -234,7 +227,6 @@ namespace UNCAD.UI
 
             // Excel 填充
             Settings.Set(ConfigKeys.FillExcelPath, _fillExcel.Text.Trim());
-            Settings.Set(ConfigKeys.FillCatalogPath, _fillCatalog.Text.Trim());
             Settings.Set(ConfigKeys.FillTableRow, ((int)_fillTblRow.Value)
                 .ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillClearRows, ((int)_fillClearRows.Value).ToString(CultureInfo.InvariantCulture));
@@ -400,15 +392,15 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(8);
+            var g = Grid(7);
+            // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
-            g.Controls.Add(Lbl("固定清单 Excel(空=同文件):"), 0, 1); g.Controls.Add(PathPicker(_fillCatalog), 1, 1);
-            g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 2); g.Controls.Add(_fillTblRow, 1, 2);
-            g.Controls.Add(Lbl("每次清空数据行数:"), 0, 3); g.Controls.Add(_fillClearRows, 1, 3);
-            g.Controls.Add(Lbl("表格文字高度:"), 0, 4); g.Controls.Add(_fillTextHeight, 1, 4);
-            g.Controls.Add(Lbl("软管默认长度 (m):"), 0, 5); g.Controls.Add(_fillFlexibleMeters, 1, 5);
-            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 6); g.Controls.Add(_fillBridge, 1, 6);
-            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 7); g.Controls.Add(FolderPicker(_submitFolder), 1, 7);
+            g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 1); g.Controls.Add(_fillTblRow, 1, 1);
+            g.Controls.Add(Lbl("每次清空数据行数:"), 0, 2); g.Controls.Add(_fillClearRows, 1, 2);
+            g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
+            g.Controls.Add(Lbl("软管默认长度 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
+            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
+            g.Controls.Add(Lbl("提交记录文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
             return Page("Excel 数据", g);
         }
 

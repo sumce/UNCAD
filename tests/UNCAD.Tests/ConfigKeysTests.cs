@@ -15,7 +15,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("1.8.1.0", info.Version);
+            Assert.Equal("1.8.2.0", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal("2026-08-28", info.UpdatedOn);
             Assert.Contains("正式版", info.Authorization);
@@ -30,10 +30,11 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void FillCatalogPath_IsIndependentFromMutableMachineSource()
+        public void EmbeddedCatalog_LeavesOnlyTheMachineWorkbookAsUserInput()
         {
-            Assert.NotEqual(ConfigKeys.FillExcelPath, ConfigKeys.FillCatalogPath);
-            Assert.Equal("UNC_FILL_CATALOG_EXCEL", ConfigKeys.FillCatalogPath);
+            // 固定清单已内嵌进插件；外部清单配置键必须保持不存在，防止再次暴露。
+            Assert.Equal("UNC_FILL_EXCEL", ConfigKeys.FillExcelPath);
+            Assert.Null(typeof(ConfigKeys).GetField("FillCatalogPath"));
         }
 
         [Fact]

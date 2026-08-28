@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -32,6 +33,83 @@ namespace UNCAD.Core.Excel
     /// </summary>
     public static class ListItemReader
     {
+        private const string EmbeddedCatalogResourceName =
+            "UNCAD.Resources.embedded_catalog.tsv";
+        private static readonly Lazy<List<ListItem>> EmbeddedCatalog =
+            new Lazy<List<ListItem>>(LoadEmbeddedCatalog, true);
+
+        /// <summary>
+        /// 内嵌固定清单：数据在编译期打包进插件，随版本发布，用户不再提供清单 Excel。
+        /// 返回防御性副本，调用方修改不会污染共享内嵌数据。
+        /// </summary>
+        public static List<ListItem> ReadEmbedded()
+            => CloneItems(EmbeddedCatalog.Value);
+
+        private static List<ListItem> LoadEmbeddedCatalog()
+        {
+            var assembly = typeof(ListItemReader).Assembly;
+            using (Stream stream = assembly.GetManifestResourceStream(
+                EmbeddedCatalogResourceName))
+            {
+                if (stream == null)
+                    throw new InvalidDataException("插件内嵌固定清单资源缺失: "
+                        + EmbeddedCatalogResourceName);
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    return ParseEmbeddedTsv(reader.ReadToEnd());
+            }
+        }
+
+        /// <summary>
+        /// 解析内嵌 TSV：每行 编码/类/项目名称/项目特征/单位/别名/别名1。
+        /// 转义规则与 scripts/GenerateEmbeddedCatalog.ps1 严格对称：\\ → \、\t → 制表符、
+        /// \r → 回车、\n → 换行。
+        /// </summary>
+        public static List<ListItem> ParseEmbeddedTsv(string tsv)
+        {
+            var result = new List<ListItem>();
+            foreach (string line in (tsv ?? "").Split('\n'))
+            {
+                string row = line.TrimEnd('\r');
+                if (row.Length == 0 || row.StartsWith("#", StringComparison.Ordinal)) continue;
+                string[] fields = row.Split('\t');
+                if (fields.Length != 7) continue;
+                result.Add(new ListItem
+                {
+                    Code = Unescape(fields[0]),
+                    Category = Unescape(fields[1]),
+                    Name = Unescape(fields[2]),
+                    Feature = Unescape(fields[3]),
+                    Unit = Unescape(fields[4]),
+                    Alias = Unescape(fields[5]),
+                    Alias1 = Unescape(fields[6])
+                });
+            }
+            return result;
+        }
+
+        private static string Unescape(string value)
+            => (value ?? "").Replace("\\\\", "\\").Replace("\\t", "\t")
+                .Replace("\\r", "\r").Replace("\\n", "\n");
+
+        private static List<ListItem> CloneItems(IEnumerable<ListItem> source)
+        {
+            var result = new List<ListItem>();
+            foreach (ListItem item in source ?? new List<ListItem>())
+            {
+                result.Add(new ListItem
+                {
+                    Category = item.Category,
+                    Code = item.Code,
+                    Name = item.Name,
+                    Feature = item.Feature,
+                    Unit = item.Unit,
+                    Alias = item.Alias,
+                    Alias1 = item.Alias1
+                });
+            }
+            return result;
+        }
+
         private sealed class ListColumns
         {
             public int Category;

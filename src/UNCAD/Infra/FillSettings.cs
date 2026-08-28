@@ -9,9 +9,9 @@ namespace UNCAD.Infra
             FillPlanningOptions planning = FillPlanningOptions.Create(
                 Settings.GetDouble(ConfigKeys.FillFlexibleConduitMeters,
                     FillPlanningOptions.DefaultFlexibleConduitMeters), false);
+            // 机台/设备表是用户唯一需要提供的 Excel；固定清单随插件内嵌发布。
             return FillRuntimeOptions.Create(
                 Settings.Get(ConfigKeys.FillExcelPath, ""),
-                Settings.Get(ConfigKeys.FillCatalogPath, ""),
                 SafeInt(Settings.GetDouble(ConfigKeys.FillTableRow,
                     FillRuntimeOptions.DefaultStartRow), FillRuntimeOptions.DefaultStartRow),
                 SafeInt(Settings.GetDouble(ConfigKeys.FillClearRows,

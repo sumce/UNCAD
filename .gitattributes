@@ -16,3 +16,4 @@
 *.jpeg binary
 *.xlsx binary
 *.dwg binary
+src/UNCAD/Resources/embedded_catalog.tsv whitespace=-trailing-space
