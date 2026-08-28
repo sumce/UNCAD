@@ -64,6 +64,31 @@ namespace UNCAD.Tests
             }
         }
 
+        [Fact]
+        public void Load_ReportsClearMessageWhenMachineWorkbookIsLocked()
+        {
+            string machinePath = Path.Combine(Path.GetTempPath(),
+                "uncad_machine_locked_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                WriteMachine(machinePath, "设备A");
+                using (var hold = new FileStream(machinePath, FileMode.Open,
+                    FileAccess.ReadWrite, FileShare.None))
+                {
+                    IOException error = Assert.Throws<IOException>(() =>
+                        FillWorkbookSnapshot.Load(machinePath));
+                    // WPS/Excel 占用时应提示用户，而不是笼统说“正在更新”。
+                    Assert.Contains("占用", error.Message);
+                }
+                FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath);
+                Assert.Equal("设备A", Assert.Single(after.FindRows("CACHE01")).CircuitName);
+            }
+            finally
+            {
+                if (File.Exists(machinePath)) File.Delete(machinePath);
+            }
+        }
+
         private static void WriteMachine(string path, string circuitName)
         {
             var wb = new XSSFWorkbook();

@@ -7,6 +7,11 @@ namespace UNCAD.Core.Excel
 {
     internal sealed class StableFileCache<T>
     {
+        private const int MaxAttempts = 10;
+
+        // 前几次快速重试，之后放慢等待，覆盖 WPS/Excel 自动保存等瞬时占用。
+        private static int BackoffMs(int attempt) => attempt < 3 ? 150 : 500;
+
         private sealed class Entry
         {
             public long Length;
@@ -45,7 +50,8 @@ namespace UNCAD.Core.Excel
                 }
 
                 Exception lastError = null;
-                for (int attempt = 0; attempt < 3; attempt++)
+                bool sawLock = false;
+                for (int attempt = 0; attempt < MaxAttempts; attempt++)
                 {
                     info.Refresh();
                     if (!info.Exists) throw new FileNotFoundException(_subject + "不存在。", path);
@@ -69,9 +75,14 @@ namespace UNCAD.Core.Excel
                         }
                     }
                     catch (InvalidDataException) { throw; }
+                    catch (IOException ex) { sawLock = true; lastError = ex; }
                     catch (Exception ex) { lastError = ex; }
-                    if (attempt < 2) Thread.Sleep(120);
+                    if (attempt < MaxAttempts - 1) Thread.Sleep(BackoffMs(attempt));
                 }
+                if (sawLock)
+                    throw new IOException(_subject
+                        + " 正被其他程序（如 WPS/Excel）占用或正在保存，请保存完成后重试。",
+                        lastError);
                 throw new IOException(_subject + "正在更新或无法稳定读取，请保存完成后重试。",
                     lastError);
             }
