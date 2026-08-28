@@ -11,13 +11,15 @@ namespace UNCAD.Tests
     public class BundleLoadingTests
     {
         private const string PreviousProductCode =
-            "{D801105A-CD8A-4892-AEE6-74723785BCD6}";
+            "{E97CC343-AA16-4ECA-9516-C44A4EFD37F4}";
 
         [Fact]
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
         {
             XElement package = LoadManifest();
-            Assert.Equal("1.5.2", (string)package.Attribute("AppVersion"));
+            Version version = typeof(CommandIds).Assembly.GetName().Version;
+            string expected = version.Major + "." + version.Minor + "." + version.Build;
+            Assert.Equal(expected, (string)package.Attribute("AppVersion"));
             string productCode = (string)package.Attribute("ProductCode");
             string upgradeCode = (string)package.Attribute("UpgradeCode");
             Assert.True(Guid.TryParse(productCode, out _));

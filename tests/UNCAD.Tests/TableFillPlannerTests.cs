@@ -59,6 +59,45 @@ namespace UNCAD.Tests
             Assert.Contains("\\P", rows[0].Description);
         }
 
+        [Fact]
+        public void Build_RigidConduit32_Uses38TemplateWhenCatalogHasNo32()
+        {
+            var items = new List<ListItem>
+            {
+                Item("3.3", "镀锌穿线管", "清单中的38mm线管模板", "m", "38mm"),
+                Item("3.7", "包塑金属软管", "不能误选软管", "m", "38mm")
+            };
+            CableStatResult stat = StatCalculator.Calculate(
+                new[] { "⌀32线管 3000mm" }, 250.0);
+
+            TableFillRow conduit = Assert.Single(TableFillPlanner.Build(
+                new MachineRow(), items, stat));
+
+            Assert.Equal(TableFillCategory.RigidConduit, conduit.Category);
+            Assert.Equal("3.3", conduit.Code);
+            Assert.Equal("镀锌穿线管", conduit.Name);
+            Assert.Equal("清单中的38mm线管模板", conduit.Description);
+            Assert.Equal("3", conduit.Quantity);
+        }
+
+        [Fact]
+        public void Build_RigidConduit32_PrefersExact32TemplateOver38Compatibility()
+        {
+            var items = new List<ListItem>
+            {
+                Item("3.3", "镀锌穿线管", "38mm模板", "m", "38mm"),
+                Item("3.32", "电线管", "32mm精确模板", "m", "32mm")
+            };
+            CableStatResult stat = StatCalculator.Calculate(
+                new[] { "Φ32 线管 2000MM" }, 250.0);
+
+            TableFillRow conduit = Assert.Single(TableFillPlanner.Build(
+                new MachineRow(), items, stat));
+
+            Assert.Equal("3.32", conduit.Code);
+            Assert.Equal("32mm精确模板", conduit.Description);
+        }
+
         [Theory]
         [InlineData("-", "电脑插座", "U220 1P3W 1P20A", null)]
         [InlineData("插座盘", "普通设备", "N220 1P3W 1P16A", "8.2")]
@@ -68,7 +107,9 @@ namespace UNCAD.Tests
         {
             var machine = new MachineRow
             {
-                Next = next, CircuitName = circuit, Detail = detail
+                Next = next,
+                CircuitName = circuit,
+                Detail = detail
             };
             List<TableFillRow> rows = TableFillPlanner.Build(
                 machine, Items(), new CableStatResult());
@@ -83,7 +124,8 @@ namespace UNCAD.Tests
         {
             var machine = new MachineRow
             {
-                Next = "I-Line盘", Detail = "N480 3P4W 3P250A"
+                Next = "I-Line盘",
+                Detail = "N480 3P4W 3P250A"
             };
 
             TableFillRow breaker = Assert.Single(TableFillPlanner.Build(
@@ -98,7 +140,8 @@ namespace UNCAD.Tests
         {
             var machine = new MachineRow
             {
-                Next = "母线插接口", Detail = "N480 3P4W 3P250A"
+                Next = "母线插接口",
+                Detail = "N480 3P4W 3P250A"
             };
 
             TableFillRow busPlug = Assert.Single(TableFillPlanner.Build(
@@ -121,7 +164,11 @@ namespace UNCAD.Tests
         {
             return new ListItem
             {
-                Code = code, Name = name, Feature = feature, Unit = unit, Spec = spec
+                Code = code,
+                Name = name,
+                Feature = feature,
+                Unit = unit,
+                Spec = spec
             };
         }
     }

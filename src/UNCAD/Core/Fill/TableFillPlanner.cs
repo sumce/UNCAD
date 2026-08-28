@@ -95,11 +95,7 @@ namespace UNCAD.Core.Fill
             foreach (ConduitStat conduit in stat.Conduits)
             {
                 string diameter = ExtractNumber(conduit.Spec);
-                string spec = diameter.Length > 0 ? diameter + "mm" : "";
-                ListItem item = items.FirstOrDefault(i => StartsWithCode(i, "3.")
-                    && (i.Name ?? "").IndexOf("穿线管", StringComparison.Ordinal) >= 0
-                    && (i.Name ?? "").IndexOf("软管", StringComparison.Ordinal) < 0
-                    && NormalizeSpec(i.Spec) == NormalizeSpec(spec));
+                ListItem item = FindRigidConduit(items, diameter);
                 rows.Add(FromItem(TableFillCategory.RigidConduit, 300 + index++, item,
                     conduit.Spec, "1.名称:" + conduit.Spec, "M",
                     TextFormatter.FormatNum(conduit.TotalM)));
@@ -178,6 +174,24 @@ namespace UNCAD.Core.Fill
         private static bool StartsWithCode(ListItem item, string prefix)
         {
             return (item?.Code ?? "").StartsWith(prefix, StringComparison.Ordinal);
+        }
+
+        private static ListItem FindRigidConduit(List<ListItem> items, string diameter)
+        {
+            if (string.IsNullOrWhiteSpace(diameter)) return null;
+            List<ListItem> rigid = items.Where(item => StartsWithCode(item, "3.")
+                && (item.Name ?? "").IndexOf("线管", StringComparison.Ordinal) >= 0
+                && (item.Name ?? "").IndexOf("软管", StringComparison.Ordinal) < 0)
+                .ToList();
+            ListItem exact = rigid.FirstOrDefault(item =>
+                NormalizeSpec(item.Spec) == NormalizeSpec(diameter + "mm"));
+            if (exact != null) return exact;
+
+            // 图纸沿用公称直径32，现有BOQ模板使用1-1/2英寸对应的38mm。
+            if (string.Equals(diameter, "32", StringComparison.Ordinal))
+                return rigid.FirstOrDefault(item =>
+                    NormalizeSpec(item.Spec) == NormalizeSpec("38mm"));
+            return null;
         }
 
         private static string NormalizeBridgeSpec(string value)
