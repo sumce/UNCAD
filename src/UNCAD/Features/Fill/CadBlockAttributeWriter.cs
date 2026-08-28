@@ -5,7 +5,6 @@ using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
-using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
 {
@@ -71,7 +70,10 @@ namespace UNCAD.Features.Fill
                         }
                         catch (Exception ex)
                         {
-                            Log.Warn("UNC_FILL DEVICENAME dynamic property failed: " + ex.Message);
+                            // 动态属性属于同一次填充事务；失败必须向上传播，让表格和全部块整体回滚。
+                            throw new InvalidOperationException(
+                                "设备块动态属性写入失败，已取消本次全部填充: "
+                                + property.PropertyName, ex);
                         }
                         break;
                     }
