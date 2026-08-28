@@ -4,7 +4,6 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
-using UNCAD.Core.Stat;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 
@@ -39,28 +38,24 @@ namespace UNCAD.Features.Fill
             return picked == null ? selection : Split(ctx, picked);
         }
 
-        public static CableStatResult CalculateStats(CadContext ctx, ObjectId[] textIds,
-            double mmPerGrid)
+        public static List<string> ReadStatisticsLines(CadContext ctx, ObjectId[] textIds,
+            bool includeText, bool includeMText)
         {
-            StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             var lines = new List<string>();
-            if (textIds != null && textIds.Length > 0)
+            if (textIds == null || textIds.Length == 0) return lines;
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                using (var tr = ctx.Db.TransactionManager.StartTransaction())
+                foreach (ObjectId id in textIds)
                 {
-                    foreach (ObjectId id in textIds)
-                    {
-                        var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
-                        if (settings.IncludeText && entity is DBText text)
-                            lines.Add(text.TextString);
-                        else if (settings.IncludeMText && entity is MText mtext)
-                            lines.AddRange(TextParser.SplitMTextLines(mtext.Contents));
-                    }
+                    var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                    if (includeText && entity is DBText text)
+                        lines.Add(TextParser.CleanMText(text.TextString));
+                    else if (includeMText && entity is MText mtext)
+                        lines.AddRange(TextParser.SplitMTextLines(mtext.Contents)
+                            .ConvertAll(TextParser.CleanMText));
                 }
             }
-            settings.Calculation.MmPerGrid = mmPerGrid;
-            return StatCalculator.Calculate(
-                lines.ConvertAll(TextParser.CleanMText), settings.Calculation);
+            return lines;
         }
 
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,

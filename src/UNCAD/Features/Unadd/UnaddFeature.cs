@@ -101,22 +101,31 @@ namespace UNCAD.Features.Unadd
                 new TypedValue(0, settings.SelectionFilter));
             if (ids == null) return null;
 
-            var rawLines = new List<string>();
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
-            {
-                foreach (var id in ids)
+            List<string> rawLines = ModuleRunner.Run(SummationModule.Descriptor,
+                "读取图中文字", () =>
                 {
-                    var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                    if (settings.IncludeText && ent is DBText t)
-                        rawLines.Add(t.TextString);
-                    else if (settings.IncludeMText && ent is MText mt)
-                        rawLines.AddRange(TextParser.SplitMTextLines(mt.Contents));
-                }
-                tr.Commit();
-            }
+                    var lines = new List<string>();
+                    using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+                    {
+                        foreach (var id in ids)
+                        {
+                            var entity = transaction.GetObject(id, OpenMode.ForRead) as Entity;
+                            if (settings.IncludeText && entity is DBText text)
+                                lines.Add(text.TextString);
+                            else if (settings.IncludeMText && entity is MText mtext)
+                                lines.AddRange(TextParser.SplitMTextLines(mtext.Contents));
+                        }
+                    }
+                    return lines;
+                });
 
-            var cleaned = rawLines.Select(TextParser.CleanMText).ToList();
-            return StatCalculator.Calculate(cleaned, settings.Calculation);
+            List<string> cleaned = rawLines.Select(TextParser.CleanMText).ToList();
+            SummationOutput output = ModuleRunner.Run(SummationModule.Descriptor,
+                "解析并求和", () => SummationModule.Execute(
+                    new SummationRequest(cleaned, settings.Calculation)));
+            ctx.Write("\n[SUM-STAT/求和统计] 来源 " + output.SourceLineCount
+                + " 行，命中 " + output.TotalMatchCount + " 行。");
+            return output.Statistics;
         }
 
         private static string SourceLabel(StatisticsSettingsSnapshot settings)

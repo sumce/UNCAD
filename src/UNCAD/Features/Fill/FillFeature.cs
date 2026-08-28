@@ -53,12 +53,13 @@ namespace UNCAD.Features.Fill
             }
 
             FillRuntimeOptions options = FillSettings.Current();
-            CableStatResult statistics = FillSelectionCollector.CalculateStats(ctx,
+            SummationOutput summation = FillStatisticsModule.Execute(ctx,
                 selection.TextIds, options.MmPerGrid);
+            CableStatResult statistics = summation.Statistics;
             if (updateMode && statistics.CableSum <= 0 && statistics.Bridges.Count == 0
                 && statistics.Conduits.Count == 0)
             {
-                ctx.Write("\n[UNC_FILL_UPDATE] 未框选到符合规则的电缆、桥架或线管长度文字，现有数据未修改。");
+                ctx.Write("\n[SUM-STAT/求和统计] 未框选到符合规则的电缆、桥架或线管长度文字，现有数据未修改。");
                 return;
             }
 
@@ -140,15 +141,10 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
-            List<TableFillRow> defaultRows = TableFillPlanner.Build(
+            TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
-            string defaultCableMeters = defaultRows.Find(row =>
-                row.Category == TableFillCategory.Cable)?.Quantity ?? "";
-            if (defaultCableMeters.Length == 0 && statistics.CableSum > 0)
-                defaultCableMeters = TextFormatter.FormatNum(statistics.CableSum);
-            FillReviewData review = FillReviewData.Create(
-                picked, defaultRows, options.Planning);
-            if (review.CableMeters.Length == 0) review.CableMeters = defaultCableMeters;
+            string defaultCableMeters = tablePlan.DefaultCableMeters;
+            FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
             using (var form = new FillReviewForm(review, catalog, options.Planning))
             {
                 if (form.ShowDialog(new WindowWrapper(
@@ -172,7 +168,7 @@ namespace UNCAD.Features.Fill
             FillWriteResult upstreamAxisResult, downstreamAxisResult;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                filled = CadTableFillWriter.Fill(ctx, transaction, selection.TableIds,
+                filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
                     startRow, clearRowCount, tableRows, textHeight);
                 if (filled < 0) return;
                 frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
@@ -197,7 +193,9 @@ namespace UNCAD.Features.Fill
                 + frameResult.Blocks + " 个块共 " + frameResult.Values + " 项；统计电缆 "
                 + TextFormatter.FormatNum(statistics.CableSum) + "M，桥架规格 "
                 + statistics.Bridges.Count + " 项，线管规格 " + statistics.Conduits.Count
-                + " 项；设备动态块更新 " + deviceResult.Blocks + " 个；上游信息 "
+                + " 项（SUM-STAT源 " + summation.SourceLineCount + " 行，命中 "
+                + summation.TotalMatchCount + " 行）；设备动态块更新 "
+                + deviceResult.Blocks + " 个；上游信息 "
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
         }
@@ -256,8 +254,9 @@ namespace UNCAD.Features.Fill
             preview.AppendLine("  下游轴位：" + row.DownstreamAxis + " ｜ 上游轴位："
                 + row.UpstreamAxis);
 
-            List<TableFillRow> plannedRows = TableFillPlanner.Build(
-                row, catalog, statistics, options.Planning);
+            List<TableFillRow> plannedRows = TableGenerationModule.Plan(
+                new TableGenerationRequest(row, catalog, statistics, options.Planning))
+                .CopyDefaultRows();
             preview.AppendLine("▼ 表格写入（覆盖，从 No." + options.StartRow + " 行开始，共 "
                 + plannedRows.Count + " 项，文字高度 "
                 + TextFormatter.FormatNum(options.TextHeight) + "）");

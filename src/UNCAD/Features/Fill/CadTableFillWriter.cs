@@ -35,7 +35,7 @@ namespace UNCAD.Features.Fill
                 if (table == null) continue;
                 if (table.Rows.Count < 2 || table.Columns.Count < 6)
                 {
-                    ctx.Write("\n[UNC_FILL] 表格格式不兼容：至少需要表头和 1 个数据行、共 6 列，本次未写入。");
+                    ctx.Write("\n[BOQ-TABLE/清单表格] 表格格式不兼容：至少需要表头和 1 个数据行、共 6 列，本次未写入。");
                     return -1;
                 }
                 table.UpgradeOpen();
@@ -45,7 +45,7 @@ namespace UNCAD.Features.Fill
                 int row = FirstDataRow(table) + (Math.Max(1, startRow) - 1);
                 if (row < 0 || row >= table.Rows.Count)
                 {
-                    ctx.Write("\n[UNC_FILL] 配置的起始数据行超出表格范围，本次未写入。");
+                    ctx.Write("\n[BOQ-TABLE/清单表格] 配置的起始数据行超出表格范围，本次未写入。");
                     return -1;
                 }
                 int guard = 0;
@@ -53,14 +53,14 @@ namespace UNCAD.Features.Fill
                     row++;
                 if (row >= table.Rows.Count)
                 {
-                    ctx.Write("\n[UNC_FILL] 起始位置之后没有可写入的数据行，本次未写入。");
+                    ctx.Write("\n[BOQ-TABLE/清单表格] 起始位置之后没有可写入的数据行，本次未写入。");
                     return -1;
                 }
                 int available = table.Rows.Count - row;
                 int rowsToClear = TableClearPolicy.ResolveRows(available, clearRowCount);
                 if (!TableClearPolicy.CanFit(plannedRows.Count, rowsToClear))
                 {
-                    ctx.Write("\n[UNC_FILL] 勾选清单超过模板清除范围：需要 " + plannedRows.Count
+                    ctx.Write("\n[BOQ-TABLE/清单表格] 勾选清单超过模板清除范围：需要 " + plannedRows.Count
                         + " 行，当前配置清除 " + rowsToClear
                         + " 行。请减少勾选或在配置中心增大清除行数。");
                     return -1;
