@@ -107,13 +107,21 @@ namespace UNCAD.Core.Fill
         {
             string diameter = (machine.Dia ?? "").Trim();
             if (diameter.Length == 0) diameter = InferSingleConduitDiameter(stat);
+            rows.Add(BuildFlexibleConduitRow(diameter, items));
+        }
+
+        public static TableFillRow BuildFlexibleConduitRow(
+            string diameter, List<ListItem> items)
+        {
+            diameter = (diameter ?? "").Trim();
+            items = items ?? new List<ListItem>();
             ListItem item = FindFlexibleConduit(items, diameter);
             string description = diameter.Length > 0
                 ? string.Format(FillTemplates.ConduitDesc, diameter)
                 : "1.名称:包塑金属软管";
-            rows.Add(FromItem(TableFillCategory.FlexibleConduit, 400, item,
+            return FromItem(TableFillCategory.FlexibleConduit, 400, item,
                 "包塑金属软管", description, "M",
-                TableFillFormatter.FlexibleConduitQuantity()));
+                TableFillFormatter.FlexibleConduitQuantity());
         }
 
         private static void AddNextEquipment(List<TableFillRow> rows,

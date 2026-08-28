@@ -56,6 +56,74 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Fact]
+        public void Dialog_SoftConduitDiameterEditRefreshesCatalogRow()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var rows = new List<TableFillRow>
+                    {
+                        new TableFillRow
+                        {
+                            Category = TableFillCategory.FlexibleConduit,
+                            Name = "38mm软管", Description = "38mm旧模板",
+                            Unit = "M", Quantity = "1.5", Code = "3.7"
+                        }
+                    };
+                    var catalog = new List<ListItem>
+                    {
+                        new ListItem
+                        {
+                            Code = "3.6", Name = "25mm软管",
+                            Feature = "25mm新模板", Unit = "m", Spec = "25mm"
+                        }
+                    };
+                    using (var form = new FillReviewForm(FillReviewData.Create(
+                        new MachineRow
+                        {
+                            MachineId = "M1",
+                            CircuitName = "设备A",
+                            Dia = "38"
+                        }, rows), catalog))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+                        TextBox diameter = FindTextBox(form, "38");
+                        Assert.NotNull(diameter);
+                        diameter.Text = "25";
+                        Application.DoEvents();
+
+                        FillReviewItem flexible = form.Data.FlexibleConduitItem();
+                        Assert.Equal("25", form.Data.Machine.Dia);
+                        Assert.Equal("3.6", flexible.Code);
+                        Assert.Equal("25mm新模板", flexible.Description);
+                        Assert.Equal("1.5", flexible.Quantity);
+                        DataGridView grid = Find<DataGridView>(form);
+                        Assert.Equal("3.6", grid.Rows[0].Cells["Code"].Value);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        private static TextBox FindTextBox(Control root, string text)
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child is TextBox box && box.Text == text) return box;
+                TextBox nested = FindTextBox(child, text);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
         private static T Find<T>(Control root) where T : Control
         {
             foreach (Control child in root.Controls)

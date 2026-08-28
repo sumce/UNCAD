@@ -141,7 +141,7 @@ namespace UNCAD.Features.Fill
                 defaultCableMeters = TextFormatter.FormatNum(statistics.CableSum);
             FillReviewData review = FillReviewData.Create(picked, defaultRows);
             if (review.CableMeters.Length == 0) review.CableMeters = defaultCableMeters;
-            using (var form = new FillReviewForm(review))
+            using (var form = new FillReviewForm(review, listItems))
             {
                 if (form.ShowDialog(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))

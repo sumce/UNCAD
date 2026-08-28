@@ -19,8 +19,12 @@ namespace UNCAD.Core.Fill
         {
             return new TableFillRow
             {
-                Category = Category, Name = Name ?? "", Description = Description ?? "",
-                Unit = Unit ?? "", Quantity = Quantity ?? "", Code = Code ?? ""
+                Category = Category,
+                Name = Name ?? "",
+                Description = Description ?? "",
+                Unit = Unit ?? "",
+                Quantity = Quantity ?? "",
+                Code = Code ?? ""
             };
         }
     }
@@ -38,9 +42,13 @@ namespace UNCAD.Core.Fill
             {
                 data.Items.Add(new FillReviewItem
                 {
-                    Included = true, Category = row.Category, Name = row.Name ?? "",
-                    Description = row.Description ?? "", Unit = row.Unit ?? "",
-                    Quantity = row.Quantity ?? "", Code = row.Code ?? ""
+                    Included = true,
+                    Category = row.Category,
+                    Name = row.Name ?? "",
+                    Description = row.Description ?? "",
+                    Unit = row.Unit ?? "",
+                    Quantity = row.Quantity ?? "",
+                    Code = row.Code ?? ""
                 });
             }
             data.CableMeters = data.CableItem()?.Quantity ?? "";
@@ -52,6 +60,10 @@ namespace UNCAD.Core.Fill
 
         public FillReviewItem CableItem()
             => Items.FirstOrDefault(item => item.Category == TableFillCategory.Cable);
+
+        public FillReviewItem FlexibleConduitItem()
+            => Items.FirstOrDefault(item =>
+                item.Category == TableFillCategory.FlexibleConduit);
 
         public void SetCableModel(string model)
         {
@@ -67,6 +79,25 @@ namespace UNCAD.Core.Fill
             CableMeters = (meters ?? "").Trim();
             FillReviewItem cable = CableItem();
             if (cable != null) cable.Quantity = CableMeters;
+        }
+
+        public FillReviewItem SetFlexibleConduitDiameter(
+            string diameter, List<ListItem> catalogItems)
+        {
+            string value = (diameter ?? "").Trim();
+            Machine.Dia = value;
+            FillReviewItem flexible = FlexibleConduitItem();
+            if (flexible == null) return null;
+
+            string quantity = flexible.Quantity;
+            TableFillRow planned = TableFillPlanner.BuildFlexibleConduitRow(
+                value, catalogItems);
+            flexible.Name = planned.Name;
+            flexible.Description = planned.Description;
+            flexible.Unit = planned.Unit;
+            flexible.Code = planned.Code;
+            flexible.Quantity = quantity;
+            return flexible;
         }
 
         public static string CategoryName(TableFillCategory category)
@@ -89,10 +120,17 @@ namespace UNCAD.Core.Fill
             source = source ?? new MachineRow();
             return new MachineRow
             {
-                Region = source.Region, MachineId = source.MachineId,
-                CircuitName = source.CircuitName, Cable = source.Cable, Fr = source.Fr,
-                Detail = source.Detail, Seq = source.Seq, Dia = source.Dia, Next = source.Next,
-                DownstreamAxis = source.DownstreamAxis, UpstreamAxis = source.UpstreamAxis
+                Region = source.Region,
+                MachineId = source.MachineId,
+                CircuitName = source.CircuitName,
+                Cable = source.Cable,
+                Fr = source.Fr,
+                Detail = source.Detail,
+                Seq = source.Seq,
+                Dia = source.Dia,
+                Next = source.Next,
+                DownstreamAxis = source.DownstreamAxis,
+                UpstreamAxis = source.UpstreamAxis
             };
         }
     }

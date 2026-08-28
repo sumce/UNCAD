@@ -52,6 +52,38 @@ namespace UNCAD.Tests
             Assert.Null(data.CableItem());
         }
 
+        [Fact]
+        public void FlexibleConduitDiameterEditor_RematchesCatalogAndPreservesQuantity()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow { Dia = "38" },
+                new[]
+                {
+                    new TableFillRow
+                    {
+                        Category = TableFillCategory.FlexibleConduit,
+                        Name = "旧软管", Description = "旧模板", Unit = "M",
+                        Quantity = "2.25", Code = "3.7"
+                    }
+                });
+            var catalog = new List<ListItem>
+            {
+                new ListItem
+                {
+                    Code = "3.6", Name = "25mm包塑金属软管",
+                    Feature = "Excel中的25mm软管模板", Unit = "m", Spec = "25mm"
+                }
+            };
+
+            FillReviewItem flexible = data.SetFlexibleConduitDiameter("25", catalog);
+
+            Assert.Equal("25", data.Machine.Dia);
+            Assert.Equal("3.6", flexible.Code);
+            Assert.Equal("25mm包塑金属软管", flexible.Name);
+            Assert.Equal("Excel中的25mm软管模板", flexible.Description);
+            Assert.Equal("M", flexible.Unit);
+            Assert.Equal("2.25", flexible.Quantity);
+        }
+
         [Theory]
         [InlineData(20, 11, 11)]
         [InlineData(7, 11, 7)]

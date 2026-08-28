@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
+using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Infra;
 
@@ -14,6 +15,7 @@ namespace UNCAD.UI
         private readonly FillReviewData _defaults;
         private readonly DataGridView _grid;
         private readonly Label _count;
+        private readonly List<ListItem> _catalogItems;
         private readonly TextBox _machine = Field();
         private readonly TextBox _region = Field();
         private readonly TextBox _circuit = Field();
@@ -28,9 +30,10 @@ namespace UNCAD.UI
         private readonly TextBox _detail = new TextBox { Dock = DockStyle.Fill, Multiline = true, ScrollBars = ScrollBars.Vertical };
         private bool _synchronizing;
 
-        public FillReviewForm(FillReviewData data)
+        public FillReviewForm(FillReviewData data, List<ListItem> catalogItems = null)
         {
             Data = data ?? throw new ArgumentNullException(nameof(data));
+            _catalogItems = catalogItems ?? new List<ListItem>();
             _defaults = FillReviewData.Create(Data.Machine,
                 Data.Items.Select(item => item.ToTableRow()));
 
@@ -47,8 +50,11 @@ namespace UNCAD.UI
             _grid = BuildGrid();
             var toolbar = new FlowLayoutPanel
             {
-                Dock = DockStyle.Top, Height = 38, FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false, Padding = new Padding(4, 4, 4, 2)
+                Dock = DockStyle.Top,
+                Height = 38,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(4, 4, 4, 2)
             };
             Button selectAll = CommandButton("全部勾选");
             Button clearAll = CommandButton("全部取消");
@@ -75,7 +81,9 @@ namespace UNCAD.UI
             ok.Click += Confirm;
             var buttons = new FlowLayoutPanel
             {
-                Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft,
+                Dock = DockStyle.Bottom,
+                AutoSize = true,
+                FlowDirection = FlowDirection.RightToLeft,
                 Padding = new Padding(0, 6, 4, 2)
             };
             buttons.Controls.Add(cancel);
@@ -90,6 +98,7 @@ namespace UNCAD.UI
             PopulateRows(Data.Items);
             _cable.TextChanged += CableModelChanged;
             _cableMeters.TextChanged += CableMetersChanged;
+            _diameter.TextChanged += FlexibleConduitDiameterChanged;
             _grid.CurrentCellDirtyStateChanged += (sender, args) =>
             {
                 if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
@@ -103,8 +112,11 @@ namespace UNCAD.UI
         {
             var layout = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 7,
-                Padding = new Padding(16, 16, 16, 8), AutoScroll = true
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 7,
+                Padding = new Padding(16, 16, 16, 8),
+                AutoScroll = true
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -140,10 +152,16 @@ namespace UNCAD.UI
         {
             var grid = new DataGridView
             {
-                Dock = DockStyle.Fill, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = true, AutoGenerateColumns = false, RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.CellSelect, MultiSelect = false,
-                BorderStyle = BorderStyle.FixedSingle, BackgroundColor = SystemColors.Window,
+                Dock = DockStyle.Fill,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = true,
+                AutoGenerateColumns = false,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.CellSelect,
+                MultiSelect = false,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackgroundColor = SystemColors.Window,
                 EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
             };
             grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
@@ -202,6 +220,14 @@ namespace UNCAD.UI
             Data.SetCableMeters(_cableMeters.Text);
             FillReviewItem cable = Data.CableItem();
             if (cable != null) RefreshItem(cable);
+        }
+
+        private void FlexibleConduitDiameterChanged(object sender, EventArgs e)
+        {
+            if (_synchronizing) return;
+            FillReviewItem flexible = Data.SetFlexibleConduitDiameter(
+                _diameter.Text, _catalogItems);
+            if (flexible != null) RefreshItem(flexible);
         }
 
         private void GridValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -273,7 +299,7 @@ namespace UNCAD.UI
             Data.Machine.Fr = _fr.Text.Trim();
             Data.Machine.Seq = _seq.Text.Trim();
             Data.Machine.Cable = _cable.Text.Trim();
-            Data.Machine.Dia = _diameter.Text.Trim();
+            Data.SetFlexibleConduitDiameter(_diameter.Text, _catalogItems);
             Data.Machine.DownstreamAxis = _downstream.Text.Trim();
             Data.Machine.UpstreamAxis = _upstream.Text.Trim();
             Data.Machine.Detail = _detail.Text.Trim();
@@ -298,8 +324,11 @@ namespace UNCAD.UI
             {
                 if (!ReferenceEquals(row.Tag, item)) continue;
                 _synchronizing = true;
+                row.Cells["Name"].Value = item.Name;
                 row.Cells["Description"].Value = item.Description;
+                row.Cells["Unit"].Value = item.Unit;
                 row.Cells["Quantity"].Value = item.Quantity;
+                row.Cells["Code"].Value = item.Code;
                 _synchronizing = false;
                 break;
             }
@@ -326,7 +355,9 @@ namespace UNCAD.UI
         private static Button CommandButton(string text) => new Button { Text = text, AutoSize = true, Height = 27 };
         private static Label LabelFor(string text) => new Label
         {
-            Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleRight
+            Text = text,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleRight
         };
 
         private static void AddPair(TableLayoutPanel layout, int row, string leftLabel,
