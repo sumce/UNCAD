@@ -171,6 +171,18 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ParseEmbeddedTsv_RejectsMalformedRowsInsteadOfSilentlyDroppingThem()
+        {
+            string malformed = "3.3\t线管\t镀锌穿线管\tm\t38mm\t32mm\n";
+
+            InvalidDataException error = Assert.Throws<InvalidDataException>(
+                () => ListItemReader.ParseEmbeddedTsv(malformed));
+
+            Assert.Contains("第 1 行", error.Message);
+            Assert.Contains("7 列", error.Message);
+        }
+
+        [Fact]
         public void FindCable_MatchesBySpec()
         {
             string path = CreateTempWorkbook();

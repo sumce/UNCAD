@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
@@ -41,13 +42,19 @@ namespace UNCAD.Core.Submission
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
                 throw new DirectoryNotFoundException("提交文件夹不存在: " + folder);
 
-            IWorkbook workbook = null;
+            // 先取得进程间锁，再读取基线，避免等待锁期间的合法更新被误判为冲突。
             FileStream updateLock = AcquireUpdateLock(fullPath);
+            IWorkbook workbook = null;
+            bool existedBeforeRead = false;
+            byte[] originalFingerprint = null;
             string temporary = Path.Combine(folder, "." + Path.GetFileName(fullPath)
                 + "." + Guid.NewGuid().ToString("N") + ".tmp");
             string backup = temporary + ".bak";
             try
             {
+                existedBeforeRead = File.Exists(fullPath);
+                originalFingerprint = existedBeforeRead
+                    ? ComputeFingerprint(fullPath) : null;
                 workbook = LoadOrCreate(fullPath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.CreateSheet(SheetName);
                 Dictionary<string, int> columns = EnsureHeader(workbook, sheet, Headers);
@@ -117,13 +124,21 @@ namespace UNCAD.Core.Submission
                     workbook.Write(stream);
                 workbook.Close();
                 workbook = null;
-                if (File.Exists(fullPath))
+                if (existedBeforeRead)
                 {
-                    File.Replace(temporary, fullPath, backup, true);
-                    TryDelete(backup);
+                    if (!File.Exists(fullPath))
+                        throw new IOException("提交表在读取期间被删除，未覆盖原文件。");
+                    if (!SameFingerprint(originalFingerprint, ComputeFingerprint(fullPath)))
+                        throw new IOException("提交表在读取期间发生外部修改，未覆盖最新内容。");
+                    ReplaceExisting(temporary, fullPath, backup, originalFingerprint);
                     backup = "";
                 }
-                else File.Move(temporary, fullPath);
+                else
+                {
+                    if (File.Exists(fullPath))
+                        throw new IOException("提交表在写入期间被其他程序创建，未覆盖该文件。");
+                    File.Move(temporary, fullPath);
+                }
 
                 return new SubmissionWriteResult
                 {
@@ -139,6 +154,66 @@ namespace UNCAD.Core.Submission
                 workbook?.Close();
                 updateLock.Dispose();
                 TryDelete(temporary);
+            }
+        }
+
+        // 计算完整文件指纹，避免只比较大小和时间导致外部修改漏检。
+        private static byte[] ComputeFingerprint(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
+            using (SHA256 sha256 = SHA256.Create())
+                return sha256.ComputeHash(stream);
+        }
+
+        private static bool SameFingerprint(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+                if (left[i] != right[i]) return false;
+            return true;
+        }
+
+        // 某些网络或重定向文件系统不支持 File.Replace，降级为带备份的移动替换。
+        private static void ReplaceExisting(string temporary, string target, string backup,
+            byte[] expectedFingerprint)
+        {
+            try
+            {
+                File.Replace(temporary, target, backup, true);
+                TryDelete(backup);
+                return;
+            }
+            catch (PlatformNotSupportedException)
+            {
+                // 继续使用可回滚的移动替换路径。
+            }
+            catch (NotSupportedException)
+            {
+                // 继续使用可回滚的移动替换路径。
+            }
+            catch (IOException)
+            {
+                // 网络文件系统可能以 IOException 表示不支持原子替换。
+            }
+
+            if (!SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
+                throw new IOException("提交表在替换期间发生外部修改，未覆盖最新内容。");
+
+            bool movedOriginal = false;
+            try
+            {
+                File.Move(target, backup);
+                movedOriginal = true;
+                File.Move(temporary, target);
+                TryDelete(backup);
+            }
+            catch
+            {
+                // 替换失败时尽力恢复原文件；恢复失败由调用方的最终异常明确暴露。
+                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
+                    File.Move(backup, target);
+                throw;
             }
         }
 
@@ -165,8 +240,9 @@ namespace UNCAD.Core.Submission
         private static IWorkbook LoadOrCreate(string path)
         {
             if (!File.Exists(path)) return new XSSFWorkbook();
+            // 允许其他读取者，但在解析期间拒绝外部写入和删除，避免读取撕裂。
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete)) return new XSSFWorkbook(stream);
+                FileShare.Read)) return new XSSFWorkbook(stream);
         }
 
         private static Dictionary<string, int> EnsureHeader(IWorkbook workbook, ISheet sheet,

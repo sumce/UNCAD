@@ -11,7 +11,7 @@ namespace UNCAD.Tests
     public class BundleLoadingTests
     {
         private const string PreviousProductCode =
-            "{05E0A1BF-EE38-46A5-A0C8-22F576D6F82C}";
+            "{23601FB5-199B-463D-B73F-A61798DB2074}";
 
         [Fact]
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
@@ -53,6 +53,27 @@ namespace UNCAD.Tests
             Assert.Contains("Unblock-BundleFiles $destination", script);
             Assert.Contains("current Windows user only", script);
             Assert.Contains("run UNC_RIBBON", script);
+        }
+
+        [Fact]
+        public void Installer_RecoversInterruptedInstallAndReportsRollbackFailure()
+        {
+            string script = File.ReadAllText(RepoFile("installer.ps1"));
+
+            Assert.Contains("Recover-InterruptedInstall $parent $destination", script);
+            Assert.Contains("Previous installation was restored and verified.", script);
+            Assert.Contains("安装失败且回滚未完成", script);
+            Assert.DoesNotContain("Move-Item -LiteralPath $backup -Destination $destination -ErrorAction SilentlyContinue", script);
+        }
+
+        [Fact]
+        public void Release_RejectsStaleOrMismatchedBuildOutput()
+        {
+            string script = File.ReadAllText(RepoFile("release.ps1"));
+
+            Assert.Contains("-NoBuild rejected: source is newer than UNCAD.dll", script);
+            Assert.Contains("Bundle UNCAD.dll does not match the verified build output", script);
+            Assert.Contains("Get-FileHash $buildOutput -Algorithm SHA256", script);
         }
 
         private static XElement LoadManifest()

@@ -3,9 +3,9 @@
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
     Description="UNC_FILL 填充与更新 / UNC_SUBMIT 数据提交 / 统计、标注与绘图工具"
-    AppVersion="1.8.6"
+    AppVersion="1.9.0"
     ProductType="Application"
-    ProductCode="{23601FB5-199B-463D-B73F-A61798DB2074}"
+    ProductCode="{CE3697B1-2914-436D-A104-EF245F5DE043}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
   <CompanyDetails Name="UNSIAO Work™ | 云邵出品" />
   <Components>

@@ -146,6 +146,36 @@ namespace UNCAD.Tests
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         }
 
+        [Fact]
+        public void Upsert_WhenWorkbookIsWriteLocked_ReleasesInternalLockForRetry()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_lock_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                SubmissionRecord record = Record("LOCK01", "设备A", "初始");
+                SubmissionWorkbookWriter.Upsert(path, record, DateTimeOffset.UtcNow);
+
+                using (var external = new FileStream(path, FileMode.Open, FileAccess.ReadWrite,
+                    FileShare.Read))
+                {
+                    Assert.Throws<IOException>(() => SubmissionWorkbookWriter.Upsert(
+                        path, Record("LOCK01", "设备A", "被锁定"), DateTimeOffset.UtcNow));
+                }
+
+                // 第一次失败必须释放 .uncad.lock，否则本次重试会等待并再次失败。
+                SubmissionWriteResult retry = SubmissionWorkbookWriter.Upsert(
+                    path, Record("LOCK01", "设备A", "重试成功"), DateTimeOffset.UtcNow);
+                Assert.True(retry.ReplacedExisting);
+            }
+            finally
+            {
+                if (Directory.Exists(folder)) Directory.Delete(folder, true);
+            }
+        }
+
         private static int Column(NPOI.SS.UserModel.ISheet sheet, string header)
         {
             NPOI.SS.UserModel.IRow row = sheet.GetRow(0);

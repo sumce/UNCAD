@@ -94,14 +94,16 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[UNC_FILL] Excel 中无机台ID数据。");
                 return;
             }
-            if (listItems.Count == 0
-                && MessageBox.Show(new WindowWrapper(
+            if (listItems.Count == 0)
+            {
+                // 固定清单为空代表插件资源或发布包损坏，不能让用户确认生成无编码项目。
+                MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                    "未读取到固定清单项目，所有自动生成行的项目编码都将留空。\r\n\r\n是否继续？",
-                    "UNC_FILL 固定清单异常", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
-                    != DialogResult.Yes)
+                    "插件内没有固定清单数据，已停止本次填充。请重新安装完整版本。",
+                    "UNC_FILL 固定清单异常", MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
                 return;
+            }
 
             string bridgeInfo = options.BridgeInfo;
             int startRow = options.StartRow;
@@ -234,7 +236,6 @@ namespace UNCAD.Features.Fill
         {
             // Multiple selected tables are written together, so the smallest resolved
             // capacity is the only value that can guarantee the atomic write will fit.
-            int zeroBasedStart = Math.Max(0, startRow - 1);
             int capacity = int.MaxValue;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -242,6 +243,8 @@ namespace UNCAD.Features.Fill
                 {
                     Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
                     if (table == null) continue;
+                    int firstDataRow = CadTableFillWriter.FirstDataRow(table);
+                    int zeroBasedStart = firstDataRow + Math.Max(1, startRow) - 1;
                     int available = Math.Max(0, table.Rows.Count - zeroBasedStart);
                     capacity = Math.Min(capacity,
                         TableClearPolicy.ResolveRows(available, configuredRows));

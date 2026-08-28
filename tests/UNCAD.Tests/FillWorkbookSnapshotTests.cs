@@ -77,7 +77,7 @@ namespace UNCAD.Tests
                 {
                     IOException error = Assert.Throws<IOException>(() =>
                         FillWorkbookSnapshot.Load(machinePath));
-                    // WPS/Excel 占用时应提示用户，而不是笼统说“正在更新”。
+                    // 文件被占用时应提示用户，而不是笼统说“正在更新”。
                     Assert.Contains("占用", error.Message);
                 }
                 FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath);

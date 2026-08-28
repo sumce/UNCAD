@@ -136,11 +136,20 @@ function Assert-TargetUnlocked {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         $blocked = $false
-        Get-ChildItem $Path -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -ErrorAction Stop)
+        }
+        catch {
+            throw "无法检查安装目录：$Path。请确认目录存在且当前账户有读写权限。原因：$($_.Exception.Message)"
+        }
+        $files | ForEach-Object {
             try {
                 $stream = [IO.File]::Open($_.FullName, [IO.FileMode]::Open,
                     [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
                 $stream.Close()
+            }
+            catch [UnauthorizedAccessException] {
+                throw "安装目录或文件没有读写权限：$($_.FullName)"
             }
             catch { $blocked = $true }
         }
@@ -158,6 +167,50 @@ function Assert-NoScopeConflict {
     }
 }
 
+function Recover-InterruptedInstall {
+    param([string]$Parent, [string]$Destination)
+
+    # 进程中断可能留下 installing/backup 目录；先恢复可验证的目录，再清理残留。
+    $candidates = @(
+        Get-ChildItem -LiteralPath $Parent -Directory -Filter "UNCAD.bundle.installing.*" -ErrorAction SilentlyContinue
+        Get-ChildItem -LiteralPath $Parent -Directory -Filter "UNCAD.bundle.backup.*" -ErrorAction SilentlyContinue
+    ) | Sort-Object LastWriteTime -Descending
+    if ($candidates.Count -eq 0) { return }
+
+    $destinationValid = $false
+    if (Test-Path $Destination) {
+        try { Get-PackageInfo $Destination | Out-Null; $destinationValid = $true } catch { }
+    }
+    if (-not $destinationValid) {
+        foreach ($candidate in $candidates) {
+            try {
+                Get-PackageInfo $candidate.FullName | Out-Null
+                if (Test-Path $Destination) {
+                    Assert-TargetUnlocked $Destination 60
+                    Remove-Item -LiteralPath $Destination -Recurse -Force
+                }
+                Move-Item -LiteralPath $candidate.FullName -Destination $Destination
+                Get-PackageInfo $Destination | Out-Null
+                Write-SetupLog "Recovered interrupted installation from $($candidate.Name)." Yellow
+                $destinationValid = $true
+                break
+            }
+            catch {
+                Write-SetupLog "Ignored invalid recovery candidate $($candidate.FullName): $($_.Exception.Message)" DarkYellow
+            }
+        }
+    }
+
+    if ($destinationValid) {
+        foreach ($candidate in $candidates) {
+            if (Test-Path $candidate.FullName) {
+                try { Remove-Item -LiteralPath $candidate.FullName -Recurse -Force }
+                catch { Write-SetupLog "Could not remove stale installer directory $($candidate.FullName): $($_.Exception.Message)" DarkYellow }
+            }
+        }
+    }
+}
+
 function Install-Bundle {
     param([ValidateSet("User", "Machine")][string]$Scope)
     Assert-AutoCADClosed
@@ -169,6 +222,7 @@ function Install-Bundle {
     $destination = if ($Scope -eq "User") { $UserBundle } else { $MachineBundle }
     $parent = Split-Path -Parent $destination
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    Recover-InterruptedInstall $parent $destination
     Assert-TargetUnlocked $destination
     $stage = Join-Path $parent ("UNCAD.bundle.installing." + $PID)
     $backup = Join-Path $parent ("UNCAD.bundle.backup." + (Get-Date -Format "yyyyMMddHHmmss"))
@@ -204,19 +258,35 @@ function Install-Bundle {
         Write-SetupLog "Restart AutoCAD 2022. If the tab is hidden, run UNC_RIBBON." Green
     }
     catch {
-        if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
+        $failure = $_
+        $rollbackErrors = New-Object System.Collections.Generic.List[string]
+        try {
+            if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop }
+        }
+        catch { $rollbackErrors.Add("清理临时目录失败：$($_.Exception.Message)") }
         if ($newPlaced -and (Test-Path $destination)) {
-            Remove-Item $destination -Recurse -Force -ErrorAction SilentlyContinue
+            try { Remove-Item -LiteralPath $destination -Recurse -Force -ErrorAction Stop }
+            catch { $rollbackErrors.Add("清理新安装目录失败：$($_.Exception.Message)") }
         }
         if ($oldMoved -and (Test-Path $backup)) {
-            try { Assert-TargetUnlocked $backup 60 } catch { }
-            Move-Item -LiteralPath $backup -Destination $destination -ErrorAction SilentlyContinue
-            try { Get-PackageInfo $destination | Out-Null } catch {
-                Write-SetupLog "回滚不完整：$destination 缺少文件，请手动删除该目录后重新安装。" Red
+            try {
+                Assert-TargetUnlocked $backup 60
+                if (Test-Path $destination) {
+                    Assert-TargetUnlocked $destination 60
+                    Remove-Item -LiteralPath $destination -Recurse -Force -ErrorAction Stop
+                }
+                Move-Item -LiteralPath $backup -Destination $destination -ErrorAction Stop
+                Get-PackageInfo $destination | Out-Null
+                Write-SetupLog "Previous installation was restored and verified." Yellow
             }
-            Write-SetupLog "Previous installation was restored." Yellow
+            catch { $rollbackErrors.Add("回滚失败：$($_.Exception.Message)") }
         }
-        throw
+        if ($rollbackErrors.Count -gt 0) {
+            $details = $rollbackErrors -join "；"
+            Write-SetupLog "安装失败且回滚未完成：$details" Red
+            throw "安装失败：$($failure.Exception.Message)。$details"
+        }
+        throw $failure
     }
 }
 

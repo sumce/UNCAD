@@ -171,7 +171,8 @@ namespace UNCAD.Features.Fill
             }
         }
 
-        private static int FirstDataRow(Table table)
+        // FillFeature 的容量预检必须使用同一套表头定位规则，避免预检与写入落在不同数据行。
+        internal static int FirstDataRow(Table table)
         {
             int rows = table.Rows.Count;
             int limit = Math.Min(rows, 10);

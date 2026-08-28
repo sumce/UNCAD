@@ -67,22 +67,30 @@ namespace UNCAD.Core.Excel
         public static List<ListItem> ParseEmbeddedTsv(string tsv)
         {
             var result = new List<ListItem>();
-            foreach (string line in (tsv ?? "").Split('\n'))
+            string[] lines = (tsv ?? "").Split('\n');
+            for (int index = 0; index < lines.Length; index++)
             {
-                string row = line.TrimEnd('\r');
+                string row = lines[index].TrimEnd('\r');
                 if (row.Length == 0 || row.StartsWith("#", StringComparison.Ordinal)) continue;
                 string[] fields = row.Split('\t');
-                if (fields.Length != 7) continue;
-                result.Add(new ListItem
+                if (fields.Length != 7)
+                    throw new InvalidDataException("内嵌固定清单第 " + (index + 1)
+                        + " 行必须包含 7 列，实际为 " + fields.Length + " 列。");
+
+                ListItem item = new ListItem
                 {
-                    Code = Unescape(fields[0]),
-                    Category = Unescape(fields[1]),
-                    Name = Unescape(fields[2]),
-                    Feature = Unescape(fields[3]),
-                    Unit = Unescape(fields[4]),
-                    Alias = Unescape(fields[5]),
-                    Alias1 = Unescape(fields[6])
-                });
+                    Code = Unescape(fields[0]).Trim(),
+                    Category = Unescape(fields[1]).Trim(),
+                    Name = Unescape(fields[2]).Trim(),
+                    Feature = Unescape(fields[3]).Trim(),
+                    Unit = Unescape(fields[4]).Trim(),
+                    Alias = Unescape(fields[5]).Trim(),
+                    Alias1 = Unescape(fields[6]).Trim()
+                };
+                if (item.Code.Length == 0 || item.Name.Length == 0)
+                    throw new InvalidDataException("内嵌固定清单第 " + (index + 1)
+                        + " 行缺少项目编码或项目名称。");
+                result.Add(item);
             }
             return result;
         }
