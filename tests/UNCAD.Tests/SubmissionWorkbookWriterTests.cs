@@ -147,6 +147,84 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void UpsertMany_InsertsSeveralFramesInOneWorkbookWrite()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_batch_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                SubmissionBatchWriteResult result = SubmissionWorkbookWriter.UpsertMany(path,
+                    new[] { Record("M01", "设备A", "A"), Record("M02", "设备B", "B") },
+                    new DateTimeOffset(2026, 8, 3, 9, 0, 0, TimeSpan.Zero));
+
+                Assert.Equal(2, result.AddedCount);
+                Assert.Equal(0, result.ReplacedCount);
+                Assert.Equal(2, result.Records.Count);
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    var workbook = new XSSFWorkbook(stream);
+                    try
+                    {
+                        Assert.Equal(2, workbook.GetSheet(
+                            SubmissionWorkbookWriter.SheetName).LastRowNum);
+                        Assert.Equal(4, workbook.GetSheet(
+                            SubmissionWorkbookWriter.DetailSheetName).LastRowNum);
+                    }
+                    finally { workbook.Close(); }
+                }
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void UpsertMany_MixesReplacementAndInsertAndPreservesOriginalSubmission()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_batch_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                SubmissionWriteResult original = SubmissionWorkbookWriter.Upsert(path,
+                    Record("M01", "设备A", "旧"),
+                    new DateTimeOffset(2026, 8, 1, 8, 0, 0, TimeSpan.Zero));
+                SubmissionBatchWriteResult result = SubmissionWorkbookWriter.UpsertMany(path,
+                    new[] { Record("M01", "设备A", "新"), Record("M02", "设备B", "新增") },
+                    new DateTimeOffset(2026, 8, 4, 9, 0, 0, TimeSpan.Zero));
+
+                Assert.Equal(1, result.AddedCount);
+                Assert.Equal(1, result.ReplacedCount);
+                Assert.Equal(original.SubmittedAt, result.Records[0].SubmittedAt);
+                Assert.NotEqual(result.Records[0].SubmittedAt, result.UpdatedAt);
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void UpsertMany_RejectsDuplicateInputBeforeChangingWorkbook()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_batch_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                SubmissionWorkbookWriter.Upsert(path, Record("BASE", "设备", "基线"),
+                    DateTimeOffset.UtcNow);
+                byte[] before = File.ReadAllBytes(path);
+
+                // Normalized duplicate keys must fail before acquiring or mutating the target.
+                Assert.Throws<InvalidDataException>(() => SubmissionWorkbookWriter.UpsertMany(path,
+                    new[] { Record("M01", "设备A", "A"), Record(" m01 ", "设备A", "B") },
+                    DateTimeOffset.UtcNow));
+                Assert.Equal(before, File.ReadAllBytes(path));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
         public void Upsert_WhenWorkbookIsWriteLocked_ReleasesInternalLockForRetry()
         {
             string folder = Path.Combine(Path.GetTempPath(),

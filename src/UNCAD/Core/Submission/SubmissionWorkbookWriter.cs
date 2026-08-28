@@ -157,6 +157,166 @@ namespace UNCAD.Core.Submission
             }
         }
 
+        /// <summary>
+        /// Updates several frame records through one target lock, one workbook load and one final
+        /// replacement. All input is validated before the target workbook can be modified.
+        /// </summary>
+        public static SubmissionBatchWriteResult UpsertMany(string filePath,
+            IEnumerable<SubmissionRecord> sourceRecords, DateTimeOffset submittedNow)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("提交文件路径为空。", nameof(filePath));
+            List<SubmissionRecord> records = (sourceRecords ?? Enumerable.Empty<SubmissionRecord>())
+                .ToList();
+            if (records.Count == 0) throw new ArgumentException("没有可提交的图框记录。", nameof(sourceRecords));
+
+            var inputKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (SubmissionRecord record in records)
+            {
+                if (record == null) throw new ArgumentException("提交记录不能为空。", nameof(sourceRecords));
+                if (string.IsNullOrWhiteSpace(record.MachineId)
+                    || string.IsNullOrWhiteSpace(record.DeviceName))
+                    throw new InvalidDataException("机台ID和设备名称不能为空。");
+                string key = record.MachineId.Trim() + "" + record.DeviceName.Trim();
+                if (!inputKeys.Add(key))
+                    throw new InvalidDataException("批量提交包含重复机台/设备："
+                        + record.MachineId.Trim() + " / " + record.DeviceName.Trim());
+            }
+
+            string fullPath = Path.GetFullPath(filePath);
+            string folder = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+                throw new DirectoryNotFoundException("提交文件夹不存在: " + folder);
+
+            FileStream updateLock = AcquireUpdateLock(fullPath);
+            IWorkbook workbook = null;
+            bool existedBeforeRead = false;
+            byte[] originalFingerprint = null;
+            string temporary = Path.Combine(folder, "." + Path.GetFileName(fullPath)
+                + "." + Guid.NewGuid().ToString("N") + ".tmp");
+            string backup = temporary + ".bak";
+            try
+            {
+                existedBeforeRead = File.Exists(fullPath);
+                originalFingerprint = existedBeforeRead ? ComputeFingerprint(fullPath) : null;
+                workbook = LoadOrCreate(fullPath);
+                ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.CreateSheet(SheetName);
+                Dictionary<string, int> columns = EnsureHeader(workbook, sheet, Headers);
+                MigrateLegacyCableColumns(sheet, columns);
+                ISheet detailSheet = workbook.GetSheet(DetailSheetName)
+                    ?? workbook.CreateSheet(DetailSheetName);
+                Dictionary<string, int> detailColumns = EnsureHeader(
+                    workbook, detailSheet, DetailHeaders);
+                string now = submittedNow.ToLocalTime().ToString(
+                    "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+                var batch = new SubmissionBatchWriteResult
+                {
+                    FilePath = fullPath,
+                    UpdatedAt = now
+                };
+
+                foreach (SubmissionRecord record in records)
+                {
+                    var duplicateRows = new List<int>();
+                    string originalSubmitted = "";
+                    for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+                    {
+                        IRow row = sheet.GetRow(rowIndex);
+                        if (!SameKey(row, columns, record)) continue;
+                        duplicateRows.Add(rowIndex);
+                        string value = CellText(row.GetCell(columns["提交时间"]));
+                        if (originalSubmitted.Length == 0 && value.Length > 0)
+                            originalSubmitted = value;
+                    }
+                    for (int i = duplicateRows.Count - 1; i >= 0; i--)
+                        RemoveRow(sheet, duplicateRows[i]);
+                    for (int rowIndex = detailSheet.LastRowNum; rowIndex >= 1; rowIndex--)
+                        if (SameKey(detailSheet.GetRow(rowIndex), detailColumns, record))
+                            RemoveRow(detailSheet, rowIndex);
+
+                    string submitted = originalSubmitted.Length > 0 ? originalSubmitted : now;
+                    IRow target = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
+                    Set(target, columns, "机台ID", record.MachineId);
+                    Set(target, columns, "设备名称", record.DeviceName);
+                    Set(target, columns, "盘柜类型", record.PanelType);
+                    Set(target, columns, "电缆型号", record.Cable);
+                    Set(target, columns, "设备原电缆型号", record.OriginalCable);
+                    Set(target, columns, "清单电缆型号", record.Cable);
+                    Set(target, columns, "电缆米数", record.CableMeters);
+                    Set(target, columns, "FR", record.Fr);
+                    Set(target, columns, "配电详情", record.Detail);
+                    Set(target, columns, "软管直径", record.Diameter);
+                    Set(target, columns, "软管米数", record.FlexibleConduitMeters);
+                    Set(target, columns, "桥架信息", record.BridgeInfo);
+                    Set(target, columns, "桥架米数", record.BridgeMeters);
+                    Set(target, columns, "线管信息", record.ConduitInfo);
+                    Set(target, columns, "线管米数", record.ConduitMeters);
+                    Set(target, columns, "下游轴位", record.DownstreamAxis);
+                    Set(target, columns, "上游轴位", record.UpstreamAxis);
+                    Set(target, columns, "提交时间", submitted);
+                    Set(target, columns, "更新时间", now);
+
+                    foreach (SubmissionMaterial material in record.Materials
+                        ?? new List<SubmissionMaterial>())
+                    {
+                        IRow detail = detailSheet.CreateRow(Math.Max(1, detailSheet.LastRowNum + 1));
+                        Set(detail, detailColumns, "机台ID", record.MachineId);
+                        Set(detail, detailColumns, "设备名称", record.DeviceName);
+                        Set(detail, detailColumns, "序号", material.Number);
+                        Set(detail, detailColumns, "材料名称", material.Name);
+                        Set(detail, detailColumns, "特征描述", material.Description);
+                        Set(detail, detailColumns, "单位", material.Unit);
+                        Set(detail, detailColumns, "数量", material.Quantity);
+                        Set(detail, detailColumns, "项目编码", material.Code);
+                        Set(detail, detailColumns, "提交时间", submitted);
+                        Set(detail, detailColumns, "更新时间", now);
+                    }
+
+                    var item = new SubmissionWriteResult
+                    {
+                        ReplacedExisting = duplicateRows.Count > 0,
+                        RemovedDuplicates = duplicateRows.Count,
+                        FilePath = fullPath,
+                        SubmittedAt = submitted,
+                        UpdatedAt = now
+                    };
+                    batch.Records.Add(item);
+                    if (item.ReplacedExisting) batch.ReplacedCount++;
+                    else batch.AddedCount++;
+                    batch.RemovedDuplicates += item.RemovedDuplicates;
+                }
+
+                ApplyWidths(sheet, columns);
+                ApplyWidths(detailSheet, detailColumns);
+                using (var stream = new FileStream(temporary, FileMode.CreateNew,
+                    FileAccess.Write, FileShare.None)) workbook.Write(stream);
+                workbook.Close();
+                workbook = null;
+
+                if (existedBeforeRead)
+                {
+                    if (!File.Exists(fullPath))
+                        throw new IOException("提交表在读取期间被删除，未覆盖原文件。");
+                    if (!SameFingerprint(originalFingerprint, ComputeFingerprint(fullPath)))
+                        throw new IOException("提交表在读取期间发生外部修改，未覆盖最新内容。");
+                    ReplaceExisting(temporary, fullPath, backup, originalFingerprint);
+                }
+                else
+                {
+                    if (File.Exists(fullPath))
+                        throw new IOException("提交表在写入期间被其他程序创建，未覆盖该文件。");
+                    File.Move(temporary, fullPath);
+                }
+                return batch;
+            }
+            finally
+            {
+                workbook?.Close();
+                updateLock.Dispose();
+                TryDelete(temporary);
+            }
+        }
+
         // 计算完整文件指纹，避免只比较大小和时间导致外部修改漏检。
         private static byte[] ComputeFingerprint(string path)
         {
@@ -321,7 +481,8 @@ namespace UNCAD.Core.Submission
         }
 
         private static bool SameKey(IRow row, Dictionary<string, int> columns, SubmissionRecord record)
-            => string.Equals(CellText(row.GetCell(columns["机台ID"])), record.MachineId.Trim(), StringComparison.OrdinalIgnoreCase)
+            => row != null
+                && string.Equals(CellText(row.GetCell(columns["机台ID"])), record.MachineId.Trim(), StringComparison.OrdinalIgnoreCase)
                 && string.Equals(CellText(row.GetCell(columns["设备名称"])), record.DeviceName.Trim(), StringComparison.OrdinalIgnoreCase);
 
         private static void RemoveRow(ISheet sheet, int index)

@@ -4,6 +4,8 @@ namespace UNCAD.Features.Fill
 {
     internal sealed class FillSelection
     {
+        // Retain the raw selection so update mode can use selected frames as spatial anchors.
+        public ObjectId[] SourceIds { get; set; } = new ObjectId[0];
         public ObjectId[] TableIds { get; set; } = new ObjectId[0];
         public ObjectId[] TextIds { get; set; } = new ObjectId[0];
         public ObjectId[] FrameBlockIds { get; set; } = new ObjectId[0];

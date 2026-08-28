@@ -42,6 +42,23 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[UNC_FILL] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
                 return;
             }
+            if (updateMode)
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selection.SourceIds);
+                if (regions.SelectedFrameCount > 1)
+                {
+                    if (regions.Errors.Count > 0)
+                    {
+                        foreach (string error in regions.Errors)
+                            ctx.Write("\n[UNC_FILL_UPDATE] 图框分区失败: " + error);
+                        return;
+                    }
+                    // Only multi-frame update replaces the explicit selection with spatial groups.
+                    // A single frame retains the established interactive update behavior.
+                    BatchFillUpdateCoordinator.Execute(ctx, regions.Groups);
+                    return;
+                }
+            }
             if (!selection.HasWriteTargets)
             {
                 ctx.Write("\n[UNC_FILL] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
@@ -234,7 +251,7 @@ namespace UNCAD.Features.Fill
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
         }
 
-        private static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
+        internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
             int startRow, int configuredRows)
         {
             // Multiple selected tables are written together, so the smallest resolved
@@ -246,9 +263,9 @@ namespace UNCAD.Features.Fill
                 {
                     Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
                     if (table == null) continue;
-                    int firstDataRow = CadTableFillWriter.FirstDataRow(table);
-                    int zeroBasedStart = firstDataRow + Math.Max(1, startRow) - 1;
-                    int available = Math.Max(0, table.Rows.Count - zeroBasedStart);
+                    int zeroBasedStart = CadTableFillWriter.ResolveWriteStartRow(table, startRow);
+                    int available = zeroBasedStart < 0
+                        ? 0 : table.Rows.Count - zeroBasedStart;
                     capacity = Math.Min(capacity,
                         TableClearPolicy.ResolveRows(available, configuredRows));
                 }
@@ -301,7 +318,7 @@ namespace UNCAD.Features.Fill
                 statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
         }
 
-        private static string ResolveMachineWorkbookPath(
+        internal static string ResolveMachineWorkbookPath(
             CadContext ctx, string configuredPath)
         {
             string path = (configuredPath ?? "").Trim();

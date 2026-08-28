@@ -85,7 +85,7 @@ namespace UNCAD.Features.Fill
                 powers, composites, devices, out identity, out error);
         }
 
-        private static FillSelection Split(CadContext ctx, ObjectId[] ids)
+        internal static FillSelection Split(CadContext ctx, ObjectId[] ids)
         {
             var tables = new List<ObjectId>();
             var texts = new List<ObjectId>();
@@ -125,6 +125,7 @@ namespace UNCAD.Features.Fill
 
             return new FillSelection
             {
+                SourceIds = ids ?? new ObjectId[0],
                 TableIds = tables.ToArray(),
                 TextIds = texts.ToArray(),
                 FrameBlockIds = frames.ToArray(),

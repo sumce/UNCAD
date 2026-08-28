@@ -86,4 +86,15 @@ namespace UNCAD.Core.Submission
         public string SubmittedAt { get; set; }
         public string UpdatedAt { get; set; }
     }
+
+    /// <summary>Results from one lock/load/write cycle containing several frame records.</summary>
+    public sealed class SubmissionBatchWriteResult
+    {
+        public string FilePath { get; set; } = "";
+        public string UpdatedAt { get; set; } = "";
+        public List<SubmissionWriteResult> Records { get; } = new List<SubmissionWriteResult>();
+        public int AddedCount { get; set; }
+        public int ReplacedCount { get; set; }
+        public int RemovedDuplicates { get; set; }
+    }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
@@ -27,8 +29,41 @@ namespace UNCAD.Features.Submit
                 new TypedValue(0, "ACAD_TABLE,INSERT,TEXT,MTEXT"));
             if (ids == null || ids.Length == 0) return;
 
-            SubmissionRecord record;
-            try { record = SubmissionRecordExtractor.Extract(ReadSelection(ctx, ids)); }
+            FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, ids);
+            if (regions.SelectedFrameCount > 1 && regions.Errors.Count > 0)
+            {
+                foreach (string error in regions.Errors)
+                    ctx.Write("\n[UNC_SUBMIT] 图框分区失败: " + error);
+                return;
+            }
+
+            var records = new List<SubmissionRecord>();
+            try
+            {
+                if (regions.SelectedFrameCount > 1)
+                {
+                    // A wide selection can include unrelated blocks. Multiple selected frames
+                    // are authoritative containers, so each record reads only its own region.
+                    foreach (FrameRegionGroup group in regions.Groups)
+                    {
+                        try
+                        {
+                            records.Add(SubmissionRecordExtractor.Extract(
+                                ReadSelection(ctx, group.EntityIds.ToArray())));
+                        }
+                        catch (System.Exception ex)
+                        {
+                            throw new InvalidDataException("图框 " + group.Handle + "：" + ex.Message, ex);
+                        }
+                    }
+                }
+                else
+                {
+                    // A single frame keeps the established explicit-selection contract. Spatial
+                    // regrouping exists only to separate multiple frame_20260812 records.
+                    records.Add(SubmissionRecordExtractor.Extract(ReadSelection(ctx, ids)));
+                }
+            }
             catch (System.Exception ex)
             {
                 ctx.Write("\n[UNC_SUBMIT] 读取失败: " + ex.Message);
@@ -45,8 +80,7 @@ namespace UNCAD.Features.Submit
                     ShowNewFolderButton = true
                 })
                 {
-                    if (dialog.ShowDialog(new WindowWrapper(AcApplication.MainWindow.Handle))
-                        != DialogResult.OK) return;
+                    if (dialog.ShowDialog(Owner()) != DialogResult.OK) return;
                     folder = dialog.SelectedPath;
                 }
                 Settings.Set(ConfigKeys.SubmitFolder, folder);
@@ -54,41 +88,78 @@ namespace UNCAD.Features.Submit
             }
 
             string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
-            var owner = new WindowWrapper(AcApplication.MainWindow.Handle);
-            if (record.Materials.Count == 0
-                && MessageBox.Show(owner, BuildNoMaterialsMessage(record),
-                    "UNC_SUBMIT 清单明细异常", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
-                    != DialogResult.Yes)
-                return;
-            string cableSummary = string.Equals(record.OriginalCable, record.Cable,
-                StringComparison.OrdinalIgnoreCase)
-                ? Display(record.Cable)
-                : Display(record.OriginalCable) + " → 清单替代 " + Display(record.Cable);
-            string summary = "机台ID: " + record.MachineId
-                + "\n设备名称: " + record.DeviceName
-                + "\n盘柜类型: " + record.PanelType
-                + "\n电缆: " + cableSummary + " / " + Meters(record.CableMeters)
-                + "\n软管: " + (record.Diameter.Length > 0 ? "Φ" + record.Diameter : "无")
-                + " / " + Meters(record.FlexibleConduitMeters)
-                + "\n桥架: " + Meters(record.BridgeMeters)
-                + "\n线管: " + Meters(record.ConduitMeters)
-                + "\n清单明细: " + record.Materials.Count + " 项"
-                + "\n\n提交到:\n" + path;
-            if (MessageBox.Show(owner, summary,
-                "确认提交", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
+            var owner = Owner();
+            List<SubmissionRecord> withoutMaterials = records.Where(record =>
+                record.Materials.Count == 0).ToList();
+            if (withoutMaterials.Count > 0)
+            {
+                string warning = records.Count == 1
+                    ? BuildNoMaterialsMessage(records[0])
+                    : "以下 " + withoutMaterials.Count + " 个图框没有读取到清单明细：\r\n"
+                        + string.Join("\r\n", withoutMaterials.Take(15).Select(record =>
+                            record.MachineId + " / " + record.DeviceName))
+                        + "\r\n\r\n继续后这些图框只导出设备汇总。是否继续？";
+                if (MessageBox.Show(owner, warning, "UNC_SUBMIT 清单明细异常",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                        MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            }
+
+            string summary;
+            if (records.Count == 1)
+            {
+                SubmissionRecord record = records[0];
+                string cableSummary = string.Equals(record.OriginalCable, record.Cable,
+                    StringComparison.OrdinalIgnoreCase)
+                    ? Display(record.Cable)
+                    : Display(record.OriginalCable) + " → 清单替代 " + Display(record.Cable);
+                summary = "机台ID: " + record.MachineId
+                    + "\n设备名称: " + record.DeviceName
+                    + "\n盘柜类型: " + record.PanelType
+                    + "\n电缆: " + cableSummary + " / " + Meters(record.CableMeters)
+                    + "\n软管: " + (record.Diameter.Length > 0 ? "Φ" + record.Diameter : "无")
+                    + " / " + Meters(record.FlexibleConduitMeters)
+                    + "\n桥架: " + Meters(record.BridgeMeters)
+                    + "\n线管: " + Meters(record.ConduitMeters)
+                    + "\n清单明细: " + record.Materials.Count + " 项"
+                    + "\n\n提交到:\n" + path;
+            }
+            else
+            {
+                summary = "将按 frame_20260812 边界提交 " + records.Count + " 个图框。\n"
+                    + "清单明细共 " + records.Sum(record => record.Materials.Count) + " 项。\n\n"
+                    + string.Join("\n", records.Take(15).Select(record =>
+                        record.MachineId + " / " + record.DeviceName))
+                    + (records.Count > 15 ? "\n其余 " + (records.Count - 15) + " 个图框..." : "")
+                    + "\n\n全部记录将一次写入:\n" + path;
+            }
+            if (MessageBox.Show(owner, summary, records.Count == 1 ? "UNC_SUBMIT 确认提交" : "UNC_SUBMIT 批量确认",
+                    MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
 
             try
             {
-                SubmissionWriteResult result = SubmissionWorkbookWriter.Upsert(
-                    path, record, DateTimeOffset.Now);
+                if (records.Count == 1)
+                {
+                    SubmissionRecord record = records[0];
+                    SubmissionWriteResult result = SubmissionWorkbookWriter.Upsert(
+                        path, record, DateTimeOffset.Now);
+                    ctx.Write("\n[UNC_SUBMIT] " + (result.ReplacedExisting
+                        ? "已覆盖原记录（清理 " + result.RemovedDuplicates + " 条重复数据）"
+                        : "已新增记录") + ": " + record.MachineId + " / " + record.DeviceName
+                        + "；清单明细 " + record.Materials.Count + " 项已写入“"
+                        + SubmissionWorkbookWriter.DetailSheetName + "”；更新时间 "
+                        + result.UpdatedAt + "；文件 " + result.FilePath);
+                }
+                else
+                {
+                    SubmissionBatchWriteResult result = SubmissionWorkbookWriter.UpsertMany(
+                        path, records, DateTimeOffset.Now);
+                    ctx.Write("\n[UNC_SUBMIT] 批量完成：新增 " + result.AddedCount
+                        + " 条，覆盖 " + result.ReplacedCount + " 条，清理重复 "
+                        + result.RemovedDuplicates + " 条；清单明细 "
+                        + records.Sum(record => record.Materials.Count) + " 项；文件 "
+                        + result.FilePath);
+                }
                 SelectionService.ClearPickFirst(ctx);
-                ctx.Write("\n[UNC_SUBMIT] " + (result.ReplacedExisting
-                    ? "已覆盖原记录（清理 " + result.RemovedDuplicates + " 条重复数据）"
-                    : "已新增记录") + ": " + record.MachineId + " / " + record.DeviceName
-                    + "；清单明细 " + record.Materials.Count + " 项已写入“"
-                    + SubmissionWorkbookWriter.DetailSheetName + "”；更新时间 "
-                    + result.UpdatedAt + "；文件 " + result.FilePath);
             }
             catch (IOException ex)
             {
@@ -103,6 +174,14 @@ namespace UNCAD.Features.Submit
         }
 
         /// <summary>把“没有读到清单明细”变成可诊断的提示：区分没框到表、表是空的、数据列缺失。</summary>
+        private static WindowWrapper Owner()
+        {
+            // Core Console has no main window; normal AutoCAD keeps the dialog parented.
+            IntPtr handle = AcApplication.MainWindow == null
+                ? IntPtr.Zero : AcApplication.MainWindow.Handle;
+            return new WindowWrapper(handle);
+        }
+
         private static string BuildNoMaterialsMessage(SubmissionRecord record)
         {
             string detail;
@@ -145,8 +224,10 @@ namespace UNCAD.Features.Submit
                 foreach (ObjectId id in ids)
                 {
                     Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    if (entity is BlockReference block) ReadBlock(transaction, block, source);
-                    else if (entity is Table table) ReadTable(table, source);
+                    // AutoCAD Table inherits BlockReference, so the table branch must come first.
+                    // Reversing this order silently drops all BOQ material rows from submissions.
+                    if (entity is Table table) ReadTable(table, source);
+                    else if (entity is BlockReference block) ReadBlock(transaction, block, source);
                     else if (entity is DBText || entity is MText) source.TextEntityCount++;
                 }
             }

@@ -15,9 +15,9 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("1.9.2.0", info.Version);
+            Assert.Equal("1.9.3.0", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
-            Assert.Equal("2026-08-28", info.UpdatedOn);
+            Assert.Equal("2026-08-29", info.UpdatedOn);
             Assert.Contains("正式版", info.Authorization);
             Assert.Equal("UNSIAO.Ltd", Branding.Developer);
         }

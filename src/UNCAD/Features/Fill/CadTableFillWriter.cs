@@ -42,16 +42,8 @@ namespace UNCAD.Features.Fill
                 double[] rowHeights = CaptureRowHeights(table);
                 double[] columnWidths = CaptureColumnWidths(table);
 
-                int row = FirstDataRow(table) + (Math.Max(1, startRow) - 1);
-                if (row < 0 || row >= table.Rows.Count)
-                {
-                    ctx.Write("\n[BOQ-TABLE/清单表格] 配置的起始数据行超出表格范围，本次未写入。");
-                    return -1;
-                }
-                int guard = 0;
-                while (row < table.Rows.Count && IsHeaderLike(table, row) && guard++ < 8)
-                    row++;
-                if (row >= table.Rows.Count)
+                int row = ResolveWriteStartRow(table, startRow);
+                if (row < 0)
                 {
                     ctx.Write("\n[BOQ-TABLE/清单表格] 起始位置之后没有可写入的数据行，本次未写入。");
                     return -1;
@@ -169,6 +161,16 @@ namespace UNCAD.Features.Fill
                         + ex.Message);
                 }
             }
+        }
+
+        // Capacity preflight and the actual transaction must resolve the same final data row.
+        internal static int ResolveWriteStartRow(Table table, int startRow)
+        {
+            int row = FirstDataRow(table) + Math.Max(1, startRow) - 1;
+            int guard = 0;
+            while (row >= 0 && row < table.Rows.Count
+                && IsHeaderLike(table, row) && guard++ < 8) row++;
+            return row >= 0 && row < table.Rows.Count ? row : -1;
         }
 
         // FillFeature 的容量预检必须使用同一套表头定位规则，避免预检与写入落在不同数据行。
