@@ -104,59 +104,33 @@ namespace UNCAD.Features.DwgExport
             IReadOnlyList<DwgFramePlacement> layout, string machineId)
         {
             string temporary = target + "." + Guid.NewGuid().ToString("N") + ".dwg";
-            Database output = null;
             try
             {
+                var sourceIds = new ObjectIdCollection();
+                var seen = new HashSet<ObjectId>();
                 foreach (DwgFramePlacement placement in layout)
                 {
                     DwgExportFrame frame = placement.Item as DwgExportFrame;
                     if (frame == null) throw new InvalidOperationException("DWG 导出布局对象无效。");
-                    var sourceIds = new ObjectIdCollection();
                     foreach (ObjectId id in frame.Group.EntityIds)
-                        sourceIds.Add(id);
-                    if (sourceIds.Count == 0) continue;
-
-                    // Use the first self-contained Wblock as the output database itself. This avoids
-                    // the blank database's default Standard/txt style overriding the source style.
-                    Database frameDatabase = sourceDatabase.Wblock(sourceIds, Point3d.Origin);
-                    TransformFrame(frameDatabase, placement);
-                    if (output == null)
-                    {
-                        output = frameDatabase;
-                        continue;
-                    }
-                    try
-                    {
-                        var frameIds = new ObjectIdCollection();
-                        using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
-                        {
-                            BlockTableRecord space = transaction.GetObject(
-                                frameDatabase.CurrentSpaceId, OpenMode.ForRead) as BlockTableRecord;
-                            foreach (ObjectId id in space)
-                                frameIds.Add(id);
-                            transaction.Commit();
-                        }
-                        var mapping = new IdMapping();
-                        frameDatabase.WblockCloneObjects(frameIds, output.CurrentSpaceId,
-                            mapping, DuplicateRecordCloning.Ignore, false);
-                    }
-                    finally
-                    {
-                        frameDatabase.Dispose();
-                    }
+                        if (seen.Add(id)) sourceIds.Add(id);
                 }
-                if (output == null)
+                if (sourceIds.Count == 0)
                     throw new InvalidDataException("没有可导出的图框实体。");
-                AddMachineMetadata(output, layout[0], machineId);
-                output.SaveAs(temporary, DwgVersion.Current);
-                output.Dispose();
-                output = null;
+
+                // One Wblock for the whole machine keeps all selected geometry and all source
+                // dependent styles in one database, avoiding cross-database ObjectId errors.
+                using (Database output = sourceDatabase.Wblock(sourceIds, Point3d.Origin))
+                {
+                    TransformExportedFrames(output, layout);
+                    AddMachineMetadata(output, layout[0], machineId);
+                    output.SaveAs(temporary, DwgVersion.Current);
+                }
                 ReplaceFile(temporary, target);
                 temporary = null;
             }
             finally
             {
-                output?.Dispose();
                 try { if (!string.IsNullOrWhiteSpace(temporary) && File.Exists(temporary)) File.Delete(temporary); }
                 catch { }
             }
@@ -244,20 +218,54 @@ namespace UNCAD.Features.DwgExport
             }
         }
 
-        private static void TransformFrame(Database frameDatabase, DwgFramePlacement placement)
+        private static void TransformExportedFrames(Database database,
+            IReadOnlyList<DwgFramePlacement> layout)
         {
-            using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
-                BlockTableRecord space = transaction.GetObject(frameDatabase.CurrentSpaceId,
+                BlockTableRecord space = transaction.GetObject(database.CurrentSpaceId,
                     OpenMode.ForRead) as BlockTableRecord;
-                Matrix3d displacement = Matrix3d.Displacement(new Vector3d(
-                    placement.TranslationX, placement.TranslationY, 0d));
                 foreach (ObjectId id in space)
                 {
                     Entity entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                    entity?.TransformBy(displacement);
+                    if (!TryExportAnchor(entity, out Point3d anchor)) continue;
+                    DwgFramePlacement owner = null;
+                    foreach (DwgFramePlacement candidate in layout)
+                    {
+                        if (candidate.Item.Boundary.Contains(anchor.X, anchor.Y))
+                        {
+                            owner = candidate;
+                            break;
+                        }
+                    }
+                    if (owner == null) continue;
+                    entity.TransformBy(Matrix3d.Displacement(new Vector3d(
+                        owner.TranslationX, owner.TranslationY, 0d)));
                 }
                 transaction.Commit();
+            }
+        }
+
+        private static bool TryExportAnchor(Entity entity, out Point3d anchor)
+        {
+            if (entity is BlockReference block)
+            {
+                anchor = block.Position;
+                return true;
+            }
+            try
+            {
+                Extents3d extents = entity.GeometricExtents;
+                anchor = new Point3d(
+                    (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
+                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
+                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
+                return true;
+            }
+            catch
+            {
+                anchor = Point3d.Origin;
+                return false;
             }
         }
 
