@@ -10,6 +10,7 @@ namespace UNCAD.Features.Fill
         public ObjectId[] TextIds { get; set; } = new ObjectId[0];
         public ObjectId[] FrameBlockIds { get; set; } = new ObjectId[0];
         public ObjectId[] DeviceBlockIds { get; set; } = new ObjectId[0];
+        public ObjectId[] RuanguanBlockIds { get; set; } = new ObjectId[0];
         public ObjectId[] UpstreamInfoBlockIds { get; set; } = new ObjectId[0];
         public ObjectId[] UpstreamAxisBlockIds { get; set; } = new ObjectId[0];
         public ObjectId[] DownstreamAxisBlockIds { get; set; } = new ObjectId[0];

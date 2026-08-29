@@ -179,6 +179,7 @@ namespace UNCAD.Features.Fill
             }
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
+            ApplyRuanguanLength(ctx, selection, review);
             ResolveMissingCableCatalog(review, catalog);
             // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
             using (var form = new FillReviewForm(review, catalog, options.Planning))
@@ -320,6 +321,24 @@ namespace UNCAD.Features.Fill
                 }
             }
             return capacity == int.MaxValue ? 0 : capacity;
+        }
+
+        internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+            FillReviewData review)
+        {
+            FillReviewItem flexible = review?.FlexibleConduitItem();
+            if (flexible == null) return;
+            string meters = FillSelectionCollector.ReadRuanguanLengthMeters(ctx,
+                selection?.RuanguanBlockIds);
+            if (meters.Length == 0)
+            {
+                // Ruanguan is the only source of hose length; absent/invalid values mean no hose row.
+                review.RemoveItem(flexible);
+                ctx.Write("\n[U1U] 未找到 Ruanguan 有效软管长度，已不加入软管清单。");
+                return;
+            }
+            flexible.Quantity = meters;
+            ctx.Write("\n[U1U] Ruanguan 软管长度: " + meters + "M。");
         }
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,

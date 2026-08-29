@@ -241,6 +241,7 @@ namespace UNCAD.Features.Fill
             tablePlan = new TableGenerationOutput(UpdateOutletPolicy.PreserveExisting(
                 tablePlan.CopyDefaultRows(), existingOutlets), tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
+            FillFeature.ApplyRuanguanLength(ctx, selection, review);
             List<FillReviewItem> unresolved = review.Items.Where(item =>
                 item.RequiresCatalogConfirmation).ToList();
             if (unresolved.Count > 0)

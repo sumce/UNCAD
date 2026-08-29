@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using UNCAD.Cad;
@@ -11,6 +13,9 @@ namespace UNCAD.Features.Fill
 {
     internal static class FillSelectionCollector
     {
+        private static readonly Regex MillimeterLength = new Regex(
+            @"(?<![0-9.])([0-9]+(?:[.,][0-9]+)?)\s*mm\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
         public static FillSelection Collect(CadContext ctx)
         {
             var selection = new FillSelection();
@@ -58,6 +63,46 @@ namespace UNCAD.Features.Fill
             return lines;
         }
 
+        public static string ReadRuanguanLengthMeters(CadContext ctx, ObjectId[] blockIds)
+        {
+            if (ctx == null || blockIds == null || blockIds.Length == 0) return "";
+            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in blockIds)
+                {
+                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                    if (block == null) continue;
+                    foreach (ObjectId attributeId in block.AttributeCollection)
+                    {
+                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
+                            as AttributeReference;
+                        string value = attribute?.TextString ?? "";
+                        string meters = ParseRuanguanMeters(value);
+                        if (meters.Length > 0) return meters;
+                    }
+                    if (!block.IsDynamicBlock) continue;
+                    foreach (DynamicBlockReferenceProperty property
+                        in block.DynamicBlockReferencePropertyCollection)
+                    {
+                        string meters = ParseRuanguanMeters(Convert.ToString(property.Value));
+                        if (meters.Length > 0) return meters;
+                    }
+                }
+                tr.Commit();
+            }
+            return "";
+        }
+
+        private static string ParseRuanguanMeters(string value)
+        {
+            Match match = MillimeterLength.Match(value ?? "");
+            if (!match.Success) return "";
+            string numeric = match.Groups[1].Value.Replace(',', '.');
+            if (!double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out double millimeters) || millimeters <= 0) return "";
+            return TextFormatter.FormatNum(millimeters / 1000d);
+        }
+
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,
             out ExistingFillIdentity identity, out string error)
         {
@@ -91,6 +136,7 @@ namespace UNCAD.Features.Fill
             var texts = new List<ObjectId>();
             var frames = new List<ObjectId>();
             var devices = new List<ObjectId>();
+            var ruanguan = new List<ObjectId>();
             var upstreamInfo = new List<ObjectId>();
             var upstreamAxis = new List<ObjectId>();
             var downstreamAxis = new List<ObjectId>();
@@ -108,6 +154,8 @@ namespace UNCAD.Features.Fill
                             if (IsFillTargetBlock(tr, block)) frames.Add(id);
                             if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
                                 devices.Add(id);
+                            if (IsRuanguanBlock(tr, block))
+                                ruanguan.Add(id);
                             if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
                                 upstreamInfo.Add(id);
                             if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
@@ -130,10 +178,28 @@ namespace UNCAD.Features.Fill
                 TextIds = texts.ToArray(),
                 FrameBlockIds = frames.ToArray(),
                 DeviceBlockIds = devices.ToArray(),
+                RuanguanBlockIds = ruanguan.ToArray(),
                 UpstreamInfoBlockIds = upstreamInfo.ToArray(),
                 UpstreamAxisBlockIds = upstreamAxis.ToArray(),
                 DownstreamAxisBlockIds = downstreamAxis.ToArray()
             };
+        }
+
+        private static bool IsRuanguanBlock(Transaction tr, BlockReference block)
+        {
+            try
+            {
+                ObjectId definitionId = block.IsDynamicBlock
+                    ? block.DynamicBlockTableRecord : block.BlockTableRecord;
+                var definition = tr.GetObject(definitionId, OpenMode.ForRead, true)
+                    as BlockTableRecord;
+                return definition != null && string.Equals(definition.Name, "Ruanguan",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool IsFillTargetBlock(Transaction tr, BlockReference block)
