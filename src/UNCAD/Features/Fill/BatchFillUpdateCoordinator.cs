@@ -78,11 +78,12 @@ namespace UNCAD.Features.Fill
                 AutomaticSubmissionService.ValidateIdentityKeys(plans.Select(plan =>
                     new KeyValuePair<string, string>(plan.Machine.MachineId,
                         plan.Machine.CircuitName)));
-                automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath();
+                automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
+                    plans.Select(plan => plan.Machine.MachineId));
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[U1U] Excel 自动记录路径不可用，图纸未修改: "
+                ctx.Write("\n[U1U] BOQ 输出路径不可用，图纸未修改: "
                     + ex.Message);
                 return;
             }
@@ -163,19 +164,18 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Error("U1U automatic Excel update failed after CAD commit", ex);
-                throw new InvalidOperationException("CAD 已批量更新，但 Excel 自动更新失败："
+                Log.Error("U1U automatic BOQ output failed after CAD commit", ex);
+                throw new InvalidOperationException("CAD 已批量更新，但 BOQ 自动输出失败："
                     + ex.Message + "；目标文件 " + automaticExcelPath, ex);
             }
 
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
-                + " 个共更新 " + attributeValues + " 项属性。");
-            ctx.Write("\n[U1U] Excel 已自动更新：提交历史新增 "
-                + automaticExcel.AddedCount + " 条，最新数据替换 " + automaticExcel.ReplacedCount
-                + " 条，当前材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
-                + automaticExcel.FilePath);
+                + " 个共更新 " + attributeValues + " 项属性。"
+                + " BOQ 文件处理 " + automaticExcel.AddedCount + " 条，覆盖 "
+                + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath);
+
         }
 
         private static void Preflight(CadContext ctx, FrameRegionGroup region,

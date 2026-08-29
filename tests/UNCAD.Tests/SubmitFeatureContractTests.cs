@@ -33,8 +33,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("CommandMethod", service);
             Assert.Contains("AutomaticSubmissionService.Write", fill);
             Assert.Contains("AutomaticSubmissionService.Write", batch);
-            Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 Excel", fill);
-            Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 Excel", batch);
+            Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 BOQ", fill);
+            Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 BOQ", batch);
         }
 
         private static string RepoFile(params string[] parts)

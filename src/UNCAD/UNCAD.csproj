@@ -29,6 +29,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Update="BOQ模板.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="BOQ_Template.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="AcMgd">
       <HintPath>$(AutoCADDir)\AcMgd.dll</HintPath>
       <Private>False</Private>

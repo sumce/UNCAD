@@ -20,28 +20,32 @@ namespace UNCAD.Features.Submit
     }
 
     /// <summary>
-    /// Synchronizes the CAD state produced by U1F/U1U into UNCAD_Submissions.xlsx.
+    /// Synchronizes the CAD state produced by U1F/U1U into one BOQ workbook per machine.
     /// This is deliberately not an AutoCAD command: successful fill/update owns the Excel write.
     /// </summary>
     internal static class AutomaticSubmissionService
     {
-        public static string PrepareTargetPath()
+        public static string PrepareTargetPath(IEnumerable<string> machineIds = null)
         {
             string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
             string folder = configured;
             if (folder.Length == 0)
                 folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 Excel 自动记录文件夹，请先在 U1S 中设置。");
+                throw new DirectoryNotFoundException("无法确定 BOQ 输出文件夹，请先在 U1S 中设置。");
 
             Directory.CreateDirectory(folder);
             if (!Directory.Exists(folder))
-                throw new DirectoryNotFoundException("Excel 自动记录文件夹不存在: " + folder);
+                throw new DirectoryNotFoundException("BOQ 输出文件夹不存在: " + folder);
             if (!string.Equals(configured, folder, StringComparison.OrdinalIgnoreCase))
                 Settings.Set(ConfigKeys.SubmitFolder, folder);
-            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
-            SubmissionWorkbookWriter.ValidateTargetForUpdate(path);
-            return path;
+            string template = BoqWorkbookWriter.ResolveTemplatePath();
+            foreach (string machineId in machineIds ?? Enumerable.Empty<string>())
+            {
+                string target = BoqWorkbookWriter.BuildTargetPath(folder, machineId);
+                BoqWorkbookWriter.ValidateTargetForUpdate(target, template);
+            }
+            return folder;
         }
 
         public static void ValidateIdentityKeys(
@@ -85,27 +89,26 @@ namespace UNCAD.Features.Submit
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
 
+            string outputRoot = Path.GetDirectoryName(Path.GetFullPath(filePath));
+            string template = BoqWorkbookWriter.ResolveTemplatePath();
+            var outputPaths = records.Select(record =>
+                BoqWorkbookWriter.BuildTargetPath(outputRoot, record.MachineId))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var result = new AutomaticSubmissionWriteResult
             {
-                FilePath = filePath,
+                FilePath = string.Join("; ", outputPaths),
                 RecordCount = records.Count,
                 MaterialCount = records.Sum(record => record.Materials.Count)
             };
-            if (records.Count == 1)
+            // 每个机台独立写入正式 BOQ 模板，多个图框的工程量按项目编码汇总。
+            foreach (IGrouping<string, SubmissionRecord> machineGroup in records
+                .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
             {
-                SubmissionWriteResult single = SubmissionWorkbookWriter.Upsert(
-                    filePath, records[0], DateTimeOffset.Now);
-                // Every run appends one submission-history row; replacement describes the
-                // latest-detail view for an identity that already existed.
-                result.AddedCount = 1;
-                result.ReplacedCount = single.ReplacedExisting ? 1 : 0;
-            }
-            else
-            {
-                SubmissionBatchWriteResult batch = SubmissionWorkbookWriter.UpsertMany(
-                    filePath, records, DateTimeOffset.Now);
-                result.AddedCount = batch.AddedCount;
-                result.ReplacedCount = batch.ReplacedCount;
+                string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
+                bool existed = File.Exists(target);
+                BoqWorkbookWriter.Write(target, template, machineGroup);
+                result.AddedCount += machineGroup.Count();
+                if (existed) result.ReplacedCount++;
             }
             return result;
         }

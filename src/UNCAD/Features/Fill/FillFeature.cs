@@ -229,11 +229,15 @@ namespace UNCAD.Features.Fill
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
             string automaticExcelPath;
-            try { automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(); }
+            try
+            {
+                automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
+                    new[] { picked.MachineId });
+            }
             catch (System.Exception ex)
             {
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] Excel 自动记录路径不可用，图纸未修改: " + ex.Message);
+                    + "] BOQ 输出路径不可用，图纸未修改: " + ex.Message);
                 return;
             }
 
@@ -272,8 +276,8 @@ namespace UNCAD.Features.Fill
             catch (System.Exception ex)
             {
                 Log.Error((updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + " automatic Excel update failed after CAD commit", ex);
-                throw new InvalidOperationException("CAD 已更新，但 Excel 自动更新失败："
+                    + " automatic BOQ output failed after CAD commit", ex);
+                throw new InvalidOperationException("CAD 已更新，但 BOQ 自动输出失败："
                     + ex.Message + "；目标文件 " + automaticExcelPath, ex);
             }
 
@@ -289,9 +293,9 @@ namespace UNCAD.Features.Fill
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                + "] Excel 已自动更新：提交历史新增 " + automaticExcel.AddedCount
-                + " 条，最新数据替换 " + automaticExcel.ReplacedCount + " 条，当前材料明细 "
-                + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
+                + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
+                + " 条，覆盖文件 " + automaticExcel.ReplacedCount
+                + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
         }
 
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
