@@ -26,7 +26,7 @@ namespace UNCAD.Features.DwgExport
                 return;
             }
 
-            FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selected);
+            FrameRegionCollection regions = FrameRegionCollector.CollectForExport(ctx, selected);
             if (regions.Errors.Count > 0)
             {
                 foreach (string error in regions.Errors)

@@ -35,6 +35,14 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
 
         public static FrameRegionCollection Collect(CadContext ctx, ObjectId[] selectedIds)
+            => CollectCore(ctx, selectedIds, false);
+
+        /// <summary>Collects every model-space entity for style-preserving DWG export.</summary>
+        public static FrameRegionCollection CollectForExport(CadContext ctx, ObjectId[] selectedIds)
+            => CollectCore(ctx, selectedIds, true);
+
+        private static FrameRegionCollection CollectCore(CadContext ctx, ObjectId[] selectedIds,
+            bool includeAllEntities)
         {
             var result = new FrameRegionCollection();
             if (ctx == null || selectedIds == null || selectedIds.Length == 0) return result;
@@ -68,7 +76,7 @@ namespace UNCAD.Cad
                 {
                     if (selectedFrames.Contains(id)) continue;
                     Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    if (!TryAnchor(entity, out Point3d anchor)) continue;
+                    if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
 
                     List<FrameRegionGroup> owners = result.Groups.Where(group =>
                         group.Boundary.Contains(anchor.X, anchor.Y)).ToList();
@@ -208,13 +216,16 @@ namespace UNCAD.Cad
         }
 
         private static bool TryAnchor(Entity entity, out Point3d anchor)
+            => TryAnchor(entity, out anchor, false);
+
+        private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)
         {
             if (entity is BlockReference block)
             {
                 anchor = block.Position;
                 return true;
             }
-            if (!(entity is Table) && !(entity is DBText) && !(entity is MText))
+            if (!includeAllEntities && !(entity is Table) && !(entity is DBText) && !(entity is MText))
             {
                 anchor = Point3d.Origin;
                 return false;
@@ -231,7 +242,7 @@ namespace UNCAD.Cad
             }
             catch
             {
-                // Degenerate text without valid extents cannot be assigned safely to a frame.
+                // An entity without valid extents cannot be assigned safely to a frame.
                 anchor = Point3d.Origin;
                 return false;
             }
