@@ -37,6 +37,7 @@ namespace UNCAD.Tests
             Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 BOQ", batch);
             Assert.Contains("string outputRoot = Path.GetFullPath(filePath);", service);
             Assert.DoesNotContain("Path.GetDirectoryName(Path.GetFullPath(filePath))", service);
+            Assert.DoesNotContain("批量图框包含重复的机台/设备", service);
         }
 
         private static string RepoFile(params string[] parts)

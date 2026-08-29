@@ -51,7 +51,6 @@ namespace UNCAD.Features.Submit
         public static void ValidateIdentityKeys(
             IEnumerable<KeyValuePair<string, string>> identities)
         {
-            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, string> identity in identities
                 ?? Enumerable.Empty<KeyValuePair<string, string>>())
             {
@@ -59,9 +58,6 @@ namespace UNCAD.Features.Submit
                 string deviceName = (identity.Value ?? "").Trim();
                 if (machineId.Length == 0 || deviceName.Length == 0)
                     throw new InvalidDataException("机台ID和设备名称不能为空。");
-                if (!keys.Add(machineId + "\u001f" + deviceName))
-                    throw new InvalidDataException("批量图框包含重复的机台/设备："
-                        + machineId + " / " + deviceName + "。");
             }
         }
 
