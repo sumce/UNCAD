@@ -65,8 +65,61 @@ namespace UNCAD.Tests
                 {
                     var resultWorkbook = new XSSFWorkbook(stream);
                     ISheet sheet = resultWorkbook.GetSheet("Sheet1");
-                    Assert.Equal(12d, sheet.GetRow(0).GetCell(4).NumericCellValue);
-                    Assert.Equal(4.5d, sheet.GetRow(1).GetCell(4).NumericCellValue);
+                    Assert.Equal(12d, sheet.GetRow(0).GetCell(11).NumericCellValue);
+                    Assert.Equal(4.5d, sheet.GetRow(1).GetCell(11).NumericCellValue);
+                    Assert.Equal("SUM(L1:L1)", sheet.GetRow(0).GetCell(4).CellFormula);
+                    resultWorkbook.Close();
+                }
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void Write_UpdatesOneDeviceColumnAndPreservesOtherDevices()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_boq_devices_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string template = Path.Combine(root, "template.xlsx");
+            string target = Path.Combine(root, "[BOQ]MACHINE01.xlsx");
+            try
+            {
+                var workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                sheet.CreateRow(0).CreateCell(0).SetCellValue("1.1");
+                sheet.GetRow(0).CreateCell(4).SetCellValue(0d);
+                using (var stream = new FileStream(template, FileMode.CreateNew))
+                    workbook.Write(stream);
+                workbook.Close();
+
+                BoqWorkbookWriter.Write(target, template, new[]
+                {
+                    new SubmissionRecord
+                    {
+                        MachineId = "MACHINE01", DeviceName = "设备A",
+                        Materials = new List<SubmissionMaterial>
+                        { new SubmissionMaterial { Code = "1.1", Quantity = "12" } }
+                    }
+                });
+                BoqWorkbookWriter.Write(target, template, new[]
+                {
+                    new SubmissionRecord
+                    {
+                        MachineId = "MACHINE01", DeviceName = "设备B",
+                        Materials = new List<SubmissionMaterial>
+                        { new SubmissionMaterial { Code = "1.1", Quantity = "3" } }
+                    }
+                });
+
+                using (var stream = new FileStream(target, FileMode.Open, FileAccess.Read))
+                {
+                    var resultWorkbook = new XSSFWorkbook(stream);
+                    ISheet result = resultWorkbook.GetSheet("Sheet1");
+                    Assert.Equal("设备A", result.GetRow(4).GetCell(11).StringCellValue);
+                    Assert.Equal("设备B", result.GetRow(4).GetCell(12).StringCellValue);
+                    Assert.Equal(12d, result.GetRow(0).GetCell(11).NumericCellValue);
+                    Assert.Equal(3d, result.GetRow(0).GetCell(12).NumericCellValue);
+                    Assert.Equal("SUM(L1:M1)", result.GetRow(0).GetCell(4).CellFormula);
                     resultWorkbook.Close();
                 }
             }

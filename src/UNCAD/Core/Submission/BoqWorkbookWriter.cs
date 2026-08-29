@@ -14,6 +14,9 @@ namespace UNCAD.Core.Submission
     {
         public const string SheetName = "Sheet1";
         public const string OutputPrefix = "[BOQ]";
+        private const int FirstDeviceColumn = 11;
+        private const int DeviceHeaderGroupRow = 3;
+        private const int DeviceHeaderNamesRow = 4;
         public const string TemplateFileName = "BOQ模板.xlsx";
         private static readonly Regex ItemCodePattern = new Regex(
             @"^\d+\.\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -86,13 +89,10 @@ namespace UNCAD.Core.Submission
         {
             if (string.IsNullOrWhiteSpace(targetPath))
                 throw new ArgumentException("BOQ 输出文件路径为空。", nameof(targetPath));
-            List<SubmissionMaterial> materials = (records ?? Enumerable.Empty<SubmissionRecord>())
-                .Where(record => record != null)
-                .SelectMany(record => record.Materials ?? new List<SubmissionMaterial>())
-                .ToList();
-            if (materials.Count == 0)
+            List<SubmissionRecord> sourceRecords = (records ?? Enumerable.Empty<SubmissionRecord>())
+                .Where(record => record != null).ToList();
+            if (!sourceRecords.Any(record => record.Materials != null && record.Materials.Count > 0))
                 throw new InvalidDataException("没有可写入 BOQ 的清单材料。");
-
             string fullPath = Path.GetFullPath(targetPath);
             string folder = Path.GetDirectoryName(fullPath);
             Directory.CreateDirectory(folder);
@@ -103,27 +103,31 @@ namespace UNCAD.Core.Submission
                 workbook = Load(fullPath, templatePath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
                 Dictionary<string, int> rows = FindItemRows(sheet);
-                Dictionary<string, decimal> quantities = new Dictionary<string, decimal>(
-                    StringComparer.OrdinalIgnoreCase);
-                foreach (SubmissionMaterial material in materials)
+                Dictionary<string, int> deviceColumns = FindDeviceColumns(sheet);
+                foreach (IGrouping<string, SubmissionRecord> deviceGroup in sourceRecords
+                    .Where(record => record != null)
+                    .GroupBy(record => (record.DeviceName ?? "").Trim(),
+                        StringComparer.OrdinalIgnoreCase))
                 {
-                    string code = (material.Code ?? material.Number ?? "").Trim();
-                    if (code.Length == 0)
-                        throw new InvalidDataException("BOQ 材料缺少项目编码，不能猜测固定清单项目。");
-                    if (!rows.ContainsKey(code))
-                        throw new InvalidDataException("固定 BOQ 模板不存在项目编码：" + code);
-                    if (!TryParseQuantity(material.Quantity, out decimal quantity))
-                        throw new InvalidDataException("BOQ 项目 " + code + " 的工程量不是有效数字："
-                            + (material.Quantity ?? ""));
-                    quantities[code] = quantities.TryGetValue(code, out decimal old)
-                        ? old + quantity : quantity;
+                    if (deviceGroup.Key.Length == 0)
+                        throw new InvalidDataException("BOQ 设备名称不能为空，不能创建设备列。");
+                    int deviceColumn = GetOrCreateDeviceColumn(sheet, deviceColumns, deviceGroup.Key);
+                    Dictionary<string, decimal> deviceQuantities = ReadQuantities(
+                        deviceGroup, rows);
+                    // 只清空当前设备列；同一机台其他设备列必须完整保留。
+                    foreach (KeyValuePair<string, int> item in rows)
+                        SetNumber(GetOrCreateCell(sheet.GetRow(item.Value), deviceColumn), 0m);
+                    foreach (KeyValuePair<string, decimal> item in deviceQuantities)
+                        SetNumber(GetOrCreateCell(sheet.GetRow(rows[item.Key]), deviceColumn), item.Value);
                 }
-
-                // 先清空所有明细数量，再写入本次机台最新清单，保留模板公式行。
+                int lastDeviceColumn = deviceColumns.Values.Max();
+                string firstColumn = ColumnName(FirstDeviceColumn);
+                string lastColumn = ColumnName(lastDeviceColumn);
                 foreach (KeyValuePair<string, int> item in rows)
-                    SetNumber(sheet.GetRow(item.Value).GetCell(4), 0m);
-                foreach (KeyValuePair<string, decimal> item in quantities)
-                    SetNumber(sheet.GetRow(rows[item.Key]).GetCell(4), item.Value);
+                    sheet.GetRow(item.Value).GetCell(4).SetCellFormula(
+                        "SUM(" + firstColumn + (item.Value + 1) + ":" + lastColumn
+                        + (item.Value + 1) + ")");
+                ((XSSFWorkbook)workbook).SetForceFormulaRecalculation(true);
 
                 using (var stream = new FileStream(temporary, FileMode.CreateNew,
                     FileAccess.Write, FileShare.None))
@@ -148,6 +152,101 @@ namespace UNCAD.Core.Submission
                 throw new FileNotFoundException("BOQ 模板不存在。", source);
             using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
                 return new XSSFWorkbook(stream);
+        }
+
+        private static Dictionary<string, int> FindDeviceColumns(ISheet sheet)
+        {
+            var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            IRow header = GetOrCreateRow(sheet, DeviceHeaderNamesRow);
+            int lastCell = Math.Max(FirstDeviceColumn, (int)header.LastCellNum);
+            for (int column = FirstDeviceColumn; column < lastCell; column++)
+            {
+                string device = CellText(header.GetCell(column));
+                if (device.Length == 0) continue;
+                if (result.ContainsKey(device))
+                    throw new InvalidDataException("BOQ 模板存在重复设备列：" + device);
+                result[device] = column;
+            }
+            return result;
+        }
+
+        private static int GetOrCreateDeviceColumn(ISheet sheet,
+            Dictionary<string, int> deviceColumns, string deviceName)
+        {
+            if (deviceColumns.TryGetValue(deviceName, out int existing)) return existing;
+            int column = FirstDeviceColumn;
+            while (deviceColumns.Values.Contains(column)) column++;
+            IRow groupHeader = GetOrCreateRow(sheet, DeviceHeaderGroupRow);
+            IRow namesHeader = GetOrCreateRow(sheet, DeviceHeaderNamesRow);
+            ICell groupCell = groupHeader.GetCell(column) ?? groupHeader.CreateCell(column);
+            ICell nameCell = namesHeader.GetCell(column) ?? namesHeader.CreateCell(column);
+            ICell groupStyle = groupHeader.GetCell(10);
+            ICell nameStyle = namesHeader.GetCell(10);
+            if (groupStyle != null) groupCell.CellStyle = groupStyle.CellStyle;
+            if (nameStyle != null) nameCell.CellStyle = nameStyle.CellStyle;
+            nameCell.SetCellValue(deviceName);
+            groupCell.SetCellValue("各设备工程量");
+            sheet.SetColumnWidth(column, Math.Max((int)sheet.GetColumnWidth(10), 18 * 256));
+            deviceColumns[deviceName] = column;
+            int lastColumn = deviceColumns.Values.Max();
+            for (int mergeIndex = sheet.NumMergedRegions - 1; mergeIndex >= 0; mergeIndex--)
+            {
+                NPOI.SS.Util.CellRangeAddress range = sheet.GetMergedRegion(mergeIndex);
+                if (range.FirstRow == DeviceHeaderGroupRow
+                    && range.LastRow == DeviceHeaderGroupRow
+                    && range.FirstColumn >= FirstDeviceColumn)
+                    sheet.RemoveMergedRegion(mergeIndex);
+            }
+            if (lastColumn > FirstDeviceColumn)
+                sheet.AddMergedRegion(new NPOI.SS.Util.CellRangeAddress(
+                    DeviceHeaderGroupRow, DeviceHeaderGroupRow,
+                    FirstDeviceColumn, lastColumn));
+            return column;
+        }
+
+        private static Dictionary<string, decimal> ReadQuantities(
+            IEnumerable<SubmissionRecord> records, Dictionary<string, int> rows)
+        {
+            var quantities = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            foreach (SubmissionRecord record in records)
+            {
+                foreach (SubmissionMaterial material in record.Materials
+                    ?? new List<SubmissionMaterial>())
+                {
+                    string code = (material.Code ?? material.Number ?? "").Trim();
+                    if (code.Length == 0)
+                        throw new InvalidDataException("BOQ 材料缺少项目编码，不能猜测固定清单项目。");
+                    if (!rows.ContainsKey(code))
+                        throw new InvalidDataException("固定 BOQ 模板不存在项目编码：" + code);
+                    if (!TryParseQuantity(material.Quantity, out decimal quantity))
+                        throw new InvalidDataException("BOQ 项目 " + code + " 的工程量不是有效数字："
+                            + (material.Quantity ?? ""));
+                    quantities[code] = quantities.TryGetValue(code, out decimal old)
+                        ? old + quantity : quantity;
+                }
+            }
+            if (quantities.Count == 0)
+                throw new InvalidDataException("设备没有可写入 BOQ 的清单材料。");
+            return quantities;
+        }
+
+        private static IRow GetOrCreateRow(ISheet sheet, int rowIndex)
+            => sheet.GetRow(rowIndex) ?? sheet.CreateRow(rowIndex);
+
+        private static ICell GetOrCreateCell(IRow row, int column)
+            => row.GetCell(column) ?? row.CreateCell(column);
+
+        private static string ColumnName(int column)
+        {
+            string result = "";
+            int value = column + 1;
+            while (value > 0)
+            {
+                int remainder = (value - 1) % 26;
+                result = (char)('A' + remainder) + result;
+                value = (value - 1) / 26;
+            }
+            return result;
         }
 
         private static Dictionary<string, int> FindItemRows(ISheet sheet)
