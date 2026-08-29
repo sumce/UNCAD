@@ -184,7 +184,9 @@ namespace UNCAD.Features.DwgExport
                 ObjectId textStyle = styles.Has("Standard") ? styles["Standard"] : database.Textstyle;
                 double left = firstPlacement.TranslationX + firstPlacement.Item.Boundary.MinX;
                 double bottom = firstPlacement.TranslationY + firstPlacement.Item.Boundary.MinY;
-                double titleX = left - 10000d;
+                // Keep the text block's right edge outside the first frame; explicit DBText modes
+                // prevent AutoCAD from falling back to the default left/baseline anchor.
+                double titleX = left - Math.Max(10000d, firstPlacement.Item.Boundary.Width * 0.05d);
                 double titleY = bottom + Math.Max(firstPlacement.Item.Boundary.Height * 0.65d, 90000d);
                 const double metadataHeight = 6000d;
                 const double metadataGap = 9000d;
@@ -227,6 +229,8 @@ namespace UNCAD.Features.DwgExport
             text.TextStyleId = textStyle;
             text.Layer = "0";
             text.Justify = AttachmentPoint.BottomRight;
+            text.HorizontalMode = TextHorizontalMode.TextRight;
+            text.VerticalMode = TextVerticalMode.TextBase;
             text.AlignmentPoint = anchor;
             space.AppendEntity(text);
             transaction.AddNewlyCreatedDBObject(text, true);
