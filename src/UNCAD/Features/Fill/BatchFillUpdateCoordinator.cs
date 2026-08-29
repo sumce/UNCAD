@@ -219,6 +219,18 @@ namespace UNCAD.Features.Fill
                 errors.Add(prefix + matchError);
                 return;
             }
+            prefix = "机台 " + machine.MachineId + "；设备 " + machine.CircuitName
+                + "；图框 " + region.Handle + "：";
+            try
+            {
+                // Batch U1U must use the current CAD table as the cable fallback before planning.
+                FillFeature.ResolveUpdateCableFromExistingTable(ctx, selection, machine, workbook.Catalog);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(prefix + ex.Message);
+                return;
+            }
 
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);

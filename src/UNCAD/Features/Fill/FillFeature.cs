@@ -322,7 +322,7 @@ namespace UNCAD.Features.Fill
             return capacity == int.MaxValue ? 0 : capacity;
         }
 
-        private static void ResolveUpdateCableFromExistingTable(CadContext ctx,
+        internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
             FillSelection selection, MachineRow picked, BoqCatalogIndex catalog)
         {
             string originalModel = (picked.Cable ?? "").Trim();
