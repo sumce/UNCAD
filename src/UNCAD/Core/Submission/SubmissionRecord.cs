@@ -81,7 +81,7 @@ namespace UNCAD.Core.Submission
     public sealed class SubmissionWriteResult
     {
         public bool ReplacedExisting { get; set; }
-        public int RemovedDuplicates { get; set; }
+        public int RemovedDetailRows { get; set; }
         public string FilePath { get; set; }
         public string SubmittedAt { get; set; }
         public string UpdatedAt { get; set; }
@@ -95,6 +95,6 @@ namespace UNCAD.Core.Submission
         public List<SubmissionWriteResult> Records { get; } = new List<SubmissionWriteResult>();
         public int AddedCount { get; set; }
         public int ReplacedCount { get; set; }
-        public int RemovedDuplicates { get; set; }
+        public int RemovedDetailRows { get; set; }
     }
 }

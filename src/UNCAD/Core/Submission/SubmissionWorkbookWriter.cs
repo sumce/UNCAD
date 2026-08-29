@@ -94,23 +94,28 @@ namespace UNCAD.Core.Submission
                     ?? workbook.CreateSheet(DetailSheetName);
                 Dictionary<string, int> detailColumns = EnsureHeader(
                     workbook, detailSheet, DetailHeaders);
-                var duplicateRows = new List<int>();
-                string originalSubmitted = "";
+                CompactLegacyDetailRows(detailSheet, detailColumns);
+                // 提交记录是不可删除的历史日志；同一机台/设备是否出现过只影响“最新数据替换”计数。
+                bool hadExistingSubmission = false;
                 for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
                 {
-                    IRow row = sheet.GetRow(rowIndex);
-                    if (row == null || !SameKey(row, columns, record)) continue;
-                    duplicateRows.Add(rowIndex);
-                    string value = CellText(row.GetCell(columns["提交时间"]));
-                    if (originalSubmitted.Length == 0 && value.Length > 0) originalSubmitted = value;
+                    if (SameKey(sheet.GetRow(rowIndex), columns, record))
+                    {
+                        hadExistingSubmission = true;
+                        break;
+                    }
                 }
-                for (int i = duplicateRows.Count - 1; i >= 0; i--) RemoveRow(sheet, duplicateRows[i]);
+                // 清单明细是当前状态视图：同一机台/设备更新时先移除全部旧材料行。
+                int removedDetailRows = 0;
                 for (int rowIndex = detailSheet.LastRowNum; rowIndex >= 1; rowIndex--)
-                    if (SameKey(detailSheet.GetRow(rowIndex), detailColumns, record))
-                        RemoveRow(detailSheet, rowIndex);
+                {
+                    if (!SameKey(detailSheet.GetRow(rowIndex), detailColumns, record)) continue;
+                    RemoveRow(detailSheet, rowIndex);
+                    removedDetailRows++;
+                }
 
                 string now = submittedNow.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-                string submitted = originalSubmitted.Length > 0 ? originalSubmitted : now;
+                string submitted = now;
                 IRow target = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
                 Set(target, columns, "机台ID", record.MachineId);
                 Set(target, columns, "设备名称", record.DeviceName);
@@ -133,21 +138,9 @@ namespace UNCAD.Core.Submission
                 Set(target, columns, "提交时间", submitted);
                 Set(target, columns, "更新时间", now);
 
-                foreach (SubmissionMaterial material in record.Materials
-                    ?? new List<SubmissionMaterial>())
-                {
-                    IRow detail = detailSheet.CreateRow(Math.Max(1, detailSheet.LastRowNum + 1));
-                    Set(detail, detailColumns, "机台ID", record.MachineId);
-                    Set(detail, detailColumns, "设备名称", record.DeviceName);
-                    Set(detail, detailColumns, "序号", material.Number);
-                    Set(detail, detailColumns, "材料名称", material.Name);
-                    Set(detail, detailColumns, "特征描述", material.Description);
-                    Set(detail, detailColumns, "单位", material.Unit);
-                    Set(detail, detailColumns, "数量", material.Quantity);
-                    Set(detail, detailColumns, "项目编码", material.Code);
-                    Set(detail, detailColumns, "提交时间", submitted);
-                    Set(detail, detailColumns, "更新时间", now);
-                }
+                WriteCompactDetailRow(detailSheet, detailColumns, record, submitted, now);
+                GroupRowsByMachineId(sheet, columns);
+                GroupRowsByMachineId(detailSheet, detailColumns);
                 ApplyWidths(sheet, columns);
                 ApplyWidths(detailSheet, detailColumns);
 
@@ -173,8 +166,8 @@ namespace UNCAD.Core.Submission
 
                 return new SubmissionWriteResult
                 {
-                    ReplacedExisting = duplicateRows.Count > 0,
-                    RemovedDuplicates = duplicateRows.Count,
+                    ReplacedExisting = hadExistingSubmission,
+                    RemovedDetailRows = removedDetailRows,
                     FilePath = fullPath,
                     SubmittedAt = submitted,
                     UpdatedAt = now
@@ -238,6 +231,7 @@ namespace UNCAD.Core.Submission
                     ?? workbook.CreateSheet(DetailSheetName);
                 Dictionary<string, int> detailColumns = EnsureHeader(
                     workbook, detailSheet, DetailHeaders);
+                CompactLegacyDetailRows(detailSheet, detailColumns);
                 string now = submittedNow.ToLocalTime().ToString(
                     "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
                 var batch = new SubmissionBatchWriteResult
@@ -248,24 +242,25 @@ namespace UNCAD.Core.Submission
 
                 foreach (SubmissionRecord record in records)
                 {
-                    var duplicateRows = new List<int>();
-                    string originalSubmitted = "";
+                    // 汇总表追加每次提交历史；明细表仅保留该机台/设备的最新材料版本。
+                    bool hadExistingSubmission = false;
                     for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
                     {
-                        IRow row = sheet.GetRow(rowIndex);
-                        if (!SameKey(row, columns, record)) continue;
-                        duplicateRows.Add(rowIndex);
-                        string value = CellText(row.GetCell(columns["提交时间"]));
-                        if (originalSubmitted.Length == 0 && value.Length > 0)
-                            originalSubmitted = value;
+                        if (SameKey(sheet.GetRow(rowIndex), columns, record))
+                        {
+                            hadExistingSubmission = true;
+                            break;
+                        }
                     }
-                    for (int i = duplicateRows.Count - 1; i >= 0; i--)
-                        RemoveRow(sheet, duplicateRows[i]);
+                    int removedDetailRows = 0;
                     for (int rowIndex = detailSheet.LastRowNum; rowIndex >= 1; rowIndex--)
-                        if (SameKey(detailSheet.GetRow(rowIndex), detailColumns, record))
-                            RemoveRow(detailSheet, rowIndex);
+                    {
+                        if (!SameKey(detailSheet.GetRow(rowIndex), detailColumns, record)) continue;
+                        RemoveRow(detailSheet, rowIndex);
+                        removedDetailRows++;
+                    }
 
-                    string submitted = originalSubmitted.Length > 0 ? originalSubmitted : now;
+                    string submitted = now;
                     IRow target = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
                     Set(target, columns, "机台ID", record.MachineId);
                     Set(target, columns, "设备名称", record.DeviceName);
@@ -287,36 +282,26 @@ namespace UNCAD.Core.Submission
                     Set(target, columns, "提交时间", submitted);
                     Set(target, columns, "更新时间", now);
 
-                    foreach (SubmissionMaterial material in record.Materials
-                        ?? new List<SubmissionMaterial>())
-                    {
-                        IRow detail = detailSheet.CreateRow(Math.Max(1, detailSheet.LastRowNum + 1));
-                        Set(detail, detailColumns, "机台ID", record.MachineId);
-                        Set(detail, detailColumns, "设备名称", record.DeviceName);
-                        Set(detail, detailColumns, "序号", material.Number);
-                        Set(detail, detailColumns, "材料名称", material.Name);
-                        Set(detail, detailColumns, "特征描述", material.Description);
-                        Set(detail, detailColumns, "单位", material.Unit);
-                        Set(detail, detailColumns, "数量", material.Quantity);
-                        Set(detail, detailColumns, "项目编码", material.Code);
-                        Set(detail, detailColumns, "提交时间", submitted);
-                        Set(detail, detailColumns, "更新时间", now);
-                    }
+                    WriteCompactDetailRow(detailSheet, detailColumns, record, submitted, now);
 
                     var item = new SubmissionWriteResult
                     {
-                        ReplacedExisting = duplicateRows.Count > 0,
-                        RemovedDuplicates = duplicateRows.Count,
+                        ReplacedExisting = hadExistingSubmission,
+                        RemovedDetailRows = removedDetailRows,
                         FilePath = fullPath,
                         SubmittedAt = submitted,
                         UpdatedAt = now
                     };
                     batch.Records.Add(item);
+                    // Every execution adds one immutable history row; replacement counts describe
+                    // identities whose latest-detail view was refreshed.
+                    batch.AddedCount++;
                     if (item.ReplacedExisting) batch.ReplacedCount++;
-                    else batch.AddedCount++;
-                    batch.RemovedDuplicates += item.RemovedDuplicates;
+                    batch.RemovedDetailRows += item.RemovedDetailRows;
                 }
 
+                GroupRowsByMachineId(sheet, columns);
+                GroupRowsByMachineId(detailSheet, detailColumns);
                 ApplyWidths(sheet, columns);
                 ApplyWidths(detailSheet, detailColumns);
                 using (var stream = new FileStream(temporary, FileMode.CreateNew,
@@ -511,10 +496,246 @@ namespace UNCAD.Core.Submission
             return style;
         }
 
+        /// <summary>Writes all materials into aligned multiline cells so one device occupies one row.</summary>
+        private static void WriteCompactDetailRow(ISheet sheet, Dictionary<string, int> columns,
+            SubmissionRecord record, string submitted, string updated)
+        {
+            List<SubmissionMaterial> materials = record.Materials ?? new List<SubmissionMaterial>();
+            IRow row = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
+            Set(row, columns, "机台ID", record.MachineId);
+            Set(row, columns, "设备名称", record.DeviceName);
+            Set(row, columns, "序号", JoinMaterials(materials, item => item.Number));
+            Set(row, columns, "材料名称", JoinMaterials(materials, item => item.Name));
+            Set(row, columns, "特征描述", JoinMaterials(materials, item => item.Description));
+            Set(row, columns, "单位", JoinMaterials(materials, item => item.Unit));
+            Set(row, columns, "数量", JoinMaterials(materials, item => item.Quantity));
+            Set(row, columns, "项目编码", JoinMaterials(materials, item => item.Code));
+            Set(row, columns, "提交时间", submitted);
+            Set(row, columns, "更新时间", updated);
+            foreach (string header in new[] { "序号", "材料名称", "特征描述", "单位", "数量", "项目编码" })
+                EnableWrapText(row.GetCell(columns[header]));
+            // Keep the compact row readable without allowing very large BOQs to create extreme heights.
+            row.Height = (short)Math.Min(short.MaxValue, Math.Max(1, materials.Count) * 300);
+        }
+
+        private static string JoinMaterials(IEnumerable<SubmissionMaterial> materials,
+            Func<SubmissionMaterial, string> selector)
+            => string.Join("\n", (materials ?? Enumerable.Empty<SubmissionMaterial>())
+                .Select(item => (selector(item) ?? "").Trim()));
+
+        /// <summary>
+        /// Migrates the old one-material-per-row layout. The first row retains custom cells and
+        /// formatting; known material columns are combined in their original order.
+        /// </summary>
+        private static void CompactLegacyDetailRows(ISheet sheet, Dictionary<string, int> columns)
+        {
+            var groups = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+            for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+            {
+                IRow row = sheet.GetRow(rowIndex);
+                if (row == null) continue;
+                string machine = CellText(row.GetCell(columns["机台ID"]));
+                string device = CellText(row.GetCell(columns["设备名称"]));
+                if (machine.Length == 0 || device.Length == 0) continue;
+                string key = machine + "\u001f" + device;
+                if (!groups.TryGetValue(key, out List<int> indexes))
+                    groups[key] = indexes = new List<int>();
+                indexes.Add(rowIndex);
+            }
+
+            foreach (List<int> indexes in groups.Values.Where(group => group.Count > 1)
+                .OrderByDescending(group => group[0]))
+            {
+                List<IRow> sourceRows = indexes.Select(sheet.GetRow).Where(row => row != null).ToList();
+                if (sourceRows.Count < 2) continue;
+                bool legacyMaterialRows = LooksLikeLegacyMaterialRows(sourceRows, columns);
+                IRow retained = legacyMaterialRows ? sourceRows[0]
+                    : SelectLatestDetailRow(sourceRows, columns);
+                var snapshot = RowSnapshot.Capture(retained,
+                    CellText(retained.GetCell(columns["机台ID"])), retained.RowNum);
+                var combined = new Dictionary<string, string>();
+                if (legacyMaterialRows)
+                {
+                    foreach (string header in MaterialDetailHeaders)
+                        combined[header] = string.Join("\n", sourceRows
+                            .Select(row => CellText(row.GetCell(columns[header]))));
+                }
+
+                for (int index = indexes.Count - 1; index >= 0; index--)
+                    RemoveRow(sheet, indexes[index]);
+                IRow target = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
+                snapshot.WriteTo(target);
+                if (legacyMaterialRows)
+                {
+                    foreach (KeyValuePair<string, string> value in combined)
+                    {
+                        Set(target, columns, value.Key, value.Value);
+                        EnableWrapText(target.GetCell(columns[value.Key]));
+                    }
+                    target.Height = (short)Math.Min(short.MaxValue, sourceRows.Count * 300);
+                }
+            }
+        }
+
+        private static readonly string[] MaterialDetailHeaders =
+        {
+            "序号", "材料名称", "特征描述", "单位", "数量", "项目编码"
+        };
+
+        private static bool LooksLikeLegacyMaterialRows(List<IRow> rows,
+            Dictionary<string, int> columns)
+        {
+            // Old layout has one scalar, uniquely numbered material per row and one shared timestamp.
+            // Any multiline value or differing timestamp means these are competing compact versions.
+            if (rows.Any(row => MaterialDetailHeaders.Any(header =>
+                CellText(row.GetCell(columns[header])).IndexOfAny(new[] { '\r', '\n' }) >= 0)))
+                return false;
+            List<string> numbers = rows.Select(row =>
+                CellText(row.GetCell(columns["序号"]))).ToList();
+            if (numbers.Any(value => value.Length == 0)
+                || numbers.Distinct(StringComparer.OrdinalIgnoreCase).Count() != rows.Count)
+                return false;
+            List<string> times = rows.Select(row => LatestDetailTime(row, columns))
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return times.Count <= 1;
+        }
+
+        private static IRow SelectLatestDetailRow(List<IRow> rows,
+            Dictionary<string, int> columns)
+            => rows.OrderBy(row => LatestDetailTime(row, columns), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.RowNum).Last();
+
+        private static string LatestDetailTime(IRow row, Dictionary<string, int> columns)
+        {
+            string updated = CellText(row.GetCell(columns["更新时间"]));
+            return updated.Length > 0 ? updated
+                : CellText(row.GetCell(columns["提交时间"]));
+        }
+
+        private static void EnableWrapText(ICell cell)
+        {
+            if (cell == null) return;
+            ICellStyle style = cell.Sheet.Workbook.CreateCellStyle();
+            if (cell.CellStyle != null) style.CloneStyleFrom(cell.CellStyle);
+            style.WrapText = true;
+            style.VerticalAlignment = VerticalAlignment.Top;
+            cell.CellStyle = style;
+        }
+
         private static bool SameKey(IRow row, Dictionary<string, int> columns, SubmissionRecord record)
             => row != null
                 && string.Equals(CellText(row.GetCell(columns["机台ID"])), record.MachineId.Trim(), StringComparison.OrdinalIgnoreCase)
                 && string.Equals(CellText(row.GetCell(columns["设备名称"])), record.DeviceName.Trim(), StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Rewrites data rows in a stable machine-ID order. Rows for one machine become contiguous,
+        /// while submission chronology and material order inside that machine remain unchanged.
+        /// </summary>
+        private static void GroupRowsByMachineId(ISheet sheet, Dictionary<string, int> columns)
+        {
+            var rows = new List<RowSnapshot>();
+            for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+            {
+                IRow row = sheet.GetRow(rowIndex);
+                if (row == null) continue;
+                rows.Add(RowSnapshot.Capture(row, CellText(row.GetCell(columns["机台ID"])),
+                    rowIndex));
+            }
+            List<RowSnapshot> ordered = rows
+                .OrderBy(row => row.MachineId.Length == 0 ? 1 : 0)
+                .ThenBy(row => row.MachineId, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(row => row.OriginalIndex)
+                .ToList();
+            if (rows.Select(row => row.OriginalIndex).SequenceEqual(
+                ordered.Select(row => row.OriginalIndex))) return;
+
+            // Snapshot first so formulas, numeric values, styles and user-added columns survive grouping.
+            for (int rowIndex = sheet.LastRowNum; rowIndex >= 1; rowIndex--)
+            {
+                IRow row = sheet.GetRow(rowIndex);
+                if (row != null) sheet.RemoveRow(row);
+            }
+            for (int index = 0; index < ordered.Count; index++)
+                ordered[index].WriteTo(sheet.CreateRow(index + 1));
+        }
+
+        private sealed class RowSnapshot
+        {
+            public string MachineId { get; private set; }
+            public int OriginalIndex { get; private set; }
+            private short Height { get; set; }
+            private bool ZeroHeight { get; set; }
+            private List<CellSnapshot> Cells { get; } = new List<CellSnapshot>();
+
+            public static RowSnapshot Capture(IRow row, string machineId, int originalIndex)
+            {
+                var snapshot = new RowSnapshot
+                {
+                    MachineId = machineId ?? "",
+                    OriginalIndex = originalIndex,
+                    Height = row.Height,
+                    ZeroHeight = row.ZeroHeight
+                };
+                for (int column = 0; column < row.LastCellNum; column++)
+                {
+                    ICell cell = row.GetCell(column);
+                    if (cell != null) snapshot.Cells.Add(CellSnapshot.Capture(cell));
+                }
+                return snapshot;
+            }
+
+            public void WriteTo(IRow row)
+            {
+                row.Height = Height;
+                row.ZeroHeight = ZeroHeight;
+                foreach (CellSnapshot cell in Cells) cell.WriteTo(row);
+            }
+        }
+
+        private sealed class CellSnapshot
+        {
+            private int Column { get; set; }
+            private CellType Type { get; set; }
+            private object Value { get; set; }
+            private ICellStyle Style { get; set; }
+
+            public static CellSnapshot Capture(ICell cell)
+            {
+                object value;
+                switch (cell.CellType)
+                {
+                    case CellType.Boolean: value = cell.BooleanCellValue; break;
+                    case CellType.Numeric: value = cell.NumericCellValue; break;
+                    case CellType.Formula: value = cell.CellFormula; break;
+                    case CellType.Error: value = cell.ErrorCellValue; break;
+                    case CellType.Blank: value = null; break;
+                    default: value = cell.StringCellValue ?? ""; break;
+                }
+                return new CellSnapshot
+                {
+                    Column = cell.ColumnIndex,
+                    Type = cell.CellType,
+                    Value = value,
+                    Style = cell.CellStyle
+                };
+            }
+
+            public void WriteTo(IRow row)
+            {
+                ICell cell = row.CreateCell(Column, Type);
+                if (Style != null) cell.CellStyle = Style;
+                switch (Type)
+                {
+                    case CellType.Boolean: cell.SetCellValue((bool)Value); break;
+                    case CellType.Numeric: cell.SetCellValue((double)Value); break;
+                    case CellType.Formula: cell.SetCellFormula((string)Value); break;
+                    case CellType.Error: cell.SetCellErrorValue((byte)Value); break;
+                    case CellType.Blank: break;
+                    default: cell.SetCellValue((string)Value ?? ""); break;
+                }
+            }
+        }
 
         private static void RemoveRow(ISheet sheet, int index)
         {
@@ -524,7 +745,8 @@ namespace UNCAD.Core.Submission
         }
 
         private static void Set(IRow row, Dictionary<string, int> columns, string header, string value)
-            => row.CreateCell(columns[header]).SetCellValue((value ?? "").Trim());
+            => row.GetCell(columns[header], MissingCellPolicy.CREATE_NULL_AS_BLANK)
+                .SetCellValue((value ?? "").Trim());
 
         private static string CellText(ICell cell)
             => (cell?.ToString() ?? "").Trim();

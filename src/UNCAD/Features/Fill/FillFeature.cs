@@ -165,6 +165,16 @@ namespace UNCAD.Features.Fill
             // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
             TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
+            var preservedOutlets = new List<TableFillRow>();
+            if (updateMode)
+            {
+                // U1U treats the CAD table as authoritative for outlets. It preserves an existing
+                // outlet verbatim and never recreates one that the user removed from the drawing.
+                preservedOutlets = CadExistingOutletReader.Read(ctx, selection.TableIds,
+                    startRow, clearRowCount);
+                tablePlan = new TableGenerationOutput(UpdateOutletPolicy.PreserveExisting(
+                    tablePlan.CopyDefaultRows(), preservedOutlets), tablePlan.DefaultCableMeters);
+            }
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
             ResolveMissingCableCatalog(review, catalog);
@@ -180,6 +190,11 @@ namespace UNCAD.Features.Fill
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
+            if (updateMode)
+            {
+                // Reapply after the dialog so U1U cannot alter outlet values through review edits.
+                tableRows = UpdateOutletPolicy.PreserveExisting(tableRows, preservedOutlets);
+            }
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
             Log.Info("U1F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
@@ -274,8 +289,8 @@ namespace UNCAD.Features.Fill
                 + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                + "] Excel 已自动更新：新增 " + automaticExcel.AddedCount
-                + " 条，覆盖 " + automaticExcel.ReplacedCount + " 条，材料明细 "
+                + "] Excel 已自动更新：提交历史新增 " + automaticExcel.AddedCount
+                + " 条，最新数据替换 " + automaticExcel.ReplacedCount + " 条，当前材料明细 "
                 + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
         }
 

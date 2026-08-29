@@ -172,9 +172,9 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性。");
-            ctx.Write("\n[U1U] Excel 已自动更新：新增 "
-                + automaticExcel.AddedCount + " 条，覆盖 " + automaticExcel.ReplacedCount
-                + " 条，材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
+            ctx.Write("\n[U1U] Excel 已自动更新：提交历史新增 "
+                + automaticExcel.AddedCount + " 条，最新数据替换 " + automaticExcel.ReplacedCount
+                + " 条，当前材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
                 + automaticExcel.FilePath);
         }
 
@@ -222,6 +222,12 @@ namespace UNCAD.Features.Fill
 
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);
+            // Batch U1U follows the same outlet rule as single-frame U1U: CAD decides whether
+            // an outlet exists, and its current values are carried forward without regeneration.
+            List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(
+                ctx, selection.TableIds, options.StartRow, options.ClearRows);
+            tablePlan = new TableGenerationOutput(UpdateOutletPolicy.PreserveExisting(
+                tablePlan.CopyDefaultRows(), existingOutlets), tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
             List<FillReviewItem> unresolved = review.Items.Where(item =>
                 item.RequiresCatalogConfirmation).ToList();

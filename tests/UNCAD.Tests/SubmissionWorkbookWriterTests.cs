@@ -9,7 +9,7 @@ namespace UNCAD.Tests
     public class SubmissionWorkbookWriterTests
     {
         [Fact]
-        public void Upsert_ReplacesSameMachineDeviceAndPreservesFirstSubmissionTime()
+        public void Upsert_PreservesSubmissionHistoryAndReplacesLatestDetails()
         {
             string folder = Path.Combine(Path.GetTempPath(), "uncad_submit_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(folder);
@@ -26,9 +26,9 @@ namespace UNCAD.Tests
                 SubmissionWriteResult updated = SubmissionWorkbookWriter.Upsert(path, latest,
                     new DateTimeOffset(2026, 8, 2, 11, 30, 0, TimeSpan.Zero));
                 Assert.True(updated.ReplacedExisting);
-                Assert.Equal(1, updated.RemovedDuplicates);
-                Assert.Equal(created.SubmittedAt, updated.SubmittedAt);
-                Assert.NotEqual(updated.SubmittedAt, updated.UpdatedAt);
+                Assert.Equal(1, updated.RemovedDetailRows);
+                Assert.NotEqual(created.SubmittedAt, updated.SubmittedAt);
+                Assert.Equal(updated.SubmittedAt, updated.UpdatedAt);
 
                 using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
                 {
@@ -36,25 +36,30 @@ namespace UNCAD.Tests
                     try
                     {
                         var sheet = workbook.GetSheet(SubmissionWorkbookWriter.SheetName);
-                        Assert.Equal(1, sheet.LastRowNum);
-                        var row = sheet.GetRow(1);
-                        Assert.Equal("M01", row.GetCell(Column(sheet, "机台ID")).StringCellValue);
-                        Assert.Equal("设备A", row.GetCell(Column(sheet, "设备名称")).StringCellValue);
-                        Assert.Equal("插座盘", row.GetCell(Column(sheet, "盘柜类型")).StringCellValue);
-                        Assert.Equal("新详情", row.GetCell(Column(sheet, "配电详情")).StringCellValue);
-                        Assert.Equal("16.4", row.GetCell(Column(sheet, "电缆米数")).StringCellValue);
-                        Assert.Equal("2", row.GetCell(Column(sheet, "软管米数")).StringCellValue);
-                        Assert.Equal("4", row.GetCell(Column(sheet, "桥架米数")).StringCellValue);
-                        Assert.Equal("5", row.GetCell(Column(sheet, "线管米数")).StringCellValue);
-                        Assert.Equal(created.SubmittedAt, row.GetCell(Column(sheet, "提交时间")).StringCellValue);
-                        Assert.Equal(updated.UpdatedAt, row.GetCell(Column(sheet, "更新时间")).StringCellValue);
+                        Assert.Equal(2, sheet.LastRowNum);
+                        var oldRow = sheet.GetRow(1);
+                        var latestRow = sheet.GetRow(2);
+                        Assert.Equal("旧详情", oldRow.GetCell(Column(sheet, "配电详情")).StringCellValue);
+                        Assert.Equal(created.SubmittedAt, oldRow.GetCell(Column(sheet, "提交时间")).StringCellValue);
+                        Assert.Equal("M01", latestRow.GetCell(Column(sheet, "机台ID")).StringCellValue);
+                        Assert.Equal("设备A", latestRow.GetCell(Column(sheet, "设备名称")).StringCellValue);
+                        Assert.Equal("插座盘", latestRow.GetCell(Column(sheet, "盘柜类型")).StringCellValue);
+                        Assert.Equal("新详情", latestRow.GetCell(Column(sheet, "配电详情")).StringCellValue);
+                        Assert.Equal("16.4", latestRow.GetCell(Column(sheet, "电缆米数")).StringCellValue);
+                        Assert.Equal("2", latestRow.GetCell(Column(sheet, "软管米数")).StringCellValue);
+                        Assert.Equal("4", latestRow.GetCell(Column(sheet, "桥架米数")).StringCellValue);
+                        Assert.Equal("5", latestRow.GetCell(Column(sheet, "线管米数")).StringCellValue);
+                        Assert.Equal(updated.SubmittedAt, latestRow.GetCell(Column(sheet, "提交时间")).StringCellValue);
+                        Assert.Equal(updated.UpdatedAt, latestRow.GetCell(Column(sheet, "更新时间")).StringCellValue);
 
                         var details = workbook.GetSheet(SubmissionWorkbookWriter.DetailSheetName);
-                        Assert.Equal(2, details.LastRowNum);
-                        Assert.Equal("电缆", details.GetRow(1)
+                        Assert.Equal(1, details.LastRowNum);
+                        Assert.Equal("电缆\n包塑金属软管", details.GetRow(1)
                             .GetCell(Column(details, "材料名称")).StringCellValue);
-                        Assert.Equal("16.4", details.GetRow(1)
+                        Assert.Equal("16.4\n2", details.GetRow(1)
                             .GetCell(Column(details, "数量")).StringCellValue);
+                        Assert.Equal("1.1\n3.1", details.GetRow(1)
+                            .GetCell(Column(details, "项目编码")).StringCellValue);
                     }
                     finally { workbook.Close(); }
                 }
@@ -120,23 +125,24 @@ namespace UNCAD.Tests
                     {
                         var sheet = workbook.GetSheet(SubmissionWorkbookWriter.SheetName);
                         Assert.Equal(2, sheet.LastRowNum);
-                        Assert.Equal("OLD", sheet.GetRow(1).GetCell(Column(sheet, "机台ID")).StringCellValue);
-                        Assert.Equal("旧设备", sheet.GetRow(1).GetCell(Column(sheet, "设备名称")).StringCellValue);
+                        NPOI.SS.UserModel.IRow oldRow = FindRow(sheet, "OLD");
+                        NPOI.SS.UserModel.IRow newRow = FindRow(sheet, "NEW");
+                        Assert.Equal("旧设备", oldRow.GetCell(Column(sheet, "设备名称")).StringCellValue);
                         foreach (string header in SubmissionWorkbookWriter.Headers)
                             Assert.True(Column(sheet, header) >= 0);
                         Assert.True(Column(sheet, "设备原电缆型号") >= 0);
                         Assert.True(Column(sheet, "清单电缆型号") >= 0);
-                        Assert.Equal("LEGACY-CABLE", sheet.GetRow(1)
+                        Assert.Equal("LEGACY-CABLE", oldRow
                             .GetCell(Column(sheet, "设备原电缆型号")).StringCellValue);
-                        Assert.Equal("LEGACY-CABLE", sheet.GetRow(1)
+                        Assert.Equal("LEGACY-CABLE", oldRow
                             .GetCell(Column(sheet, "清单电缆型号")).StringCellValue);
-                        Assert.Equal("ZB-YJVR-3*2.5", sheet.GetRow(2)
+                        Assert.Equal("ZB-YJVR-3*2.5", newRow
                             .GetCell(Column(sheet, "电缆型号")).StringCellValue);
-                        Assert.Equal("ORIGINAL-CABLE", sheet.GetRow(2)
+                        Assert.Equal("ORIGINAL-CABLE", newRow
                             .GetCell(Column(sheet, "设备原电缆型号")).StringCellValue);
-                        Assert.Equal("16.4", sheet.GetRow(2).GetCell(Column(sheet, "电缆米数")).StringCellValue);
+                        Assert.Equal("16.4", newRow.GetCell(Column(sheet, "电缆米数")).StringCellValue);
                         var details = workbook.GetSheet(SubmissionWorkbookWriter.DetailSheetName);
-                        Assert.Equal(2, details.LastRowNum);
+                        Assert.Equal(1, details.LastRowNum);
                         foreach (string header in SubmissionWorkbookWriter.DetailHeaders)
                             Assert.True(Column(details, header) >= 0);
                     }
@@ -169,7 +175,7 @@ namespace UNCAD.Tests
                     {
                         Assert.Equal(2, workbook.GetSheet(
                             SubmissionWorkbookWriter.SheetName).LastRowNum);
-                        Assert.Equal(4, workbook.GetSheet(
+                        Assert.Equal(2, workbook.GetSheet(
                             SubmissionWorkbookWriter.DetailSheetName).LastRowNum);
                     }
                     finally { workbook.Close(); }
@@ -179,7 +185,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void UpsertMany_MixesReplacementAndInsertAndPreservesOriginalSubmission()
+        public void UpsertMany_AddsHistoryAndRefreshesExistingLatestDetails()
         {
             string folder = Path.Combine(Path.GetTempPath(),
                 "uncad_submit_batch_" + Guid.NewGuid().ToString("N"));
@@ -194,10 +200,23 @@ namespace UNCAD.Tests
                     new[] { Record("M01", "设备A", "新"), Record("M02", "设备B", "新增") },
                     new DateTimeOffset(2026, 8, 4, 9, 0, 0, TimeSpan.Zero));
 
-                Assert.Equal(1, result.AddedCount);
+                Assert.Equal(2, result.AddedCount);
                 Assert.Equal(1, result.ReplacedCount);
-                Assert.Equal(original.SubmittedAt, result.Records[0].SubmittedAt);
-                Assert.NotEqual(result.Records[0].SubmittedAt, result.UpdatedAt);
+                Assert.NotEqual(original.SubmittedAt, result.Records[0].SubmittedAt);
+                Assert.Equal(result.Records[0].SubmittedAt, result.UpdatedAt);
+
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    var workbook = new XSSFWorkbook(stream);
+                    try
+                    {
+                        Assert.Equal(3, workbook.GetSheet(
+                            SubmissionWorkbookWriter.SheetName).LastRowNum);
+                        Assert.Equal(2, workbook.GetSheet(
+                            SubmissionWorkbookWriter.DetailSheetName).LastRowNum);
+                    }
+                    finally { workbook.Close(); }
+                }
             }
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         }
@@ -220,6 +239,171 @@ namespace UNCAD.Tests
                     new[] { Record("M01", "设备A", "A"), Record(" m01 ", "设备A", "B") },
                     DateTimeOffset.UtcNow));
                 Assert.Equal(before, File.ReadAllBytes(path));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void Upsert_GroupsSameMachineRowsAndKeepsOnlyLatestDeviceDetails()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_group_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                DateTimeOffset time = new DateTimeOffset(2026, 8, 5, 8, 0, 0, TimeSpan.Zero);
+                SubmissionWorkbookWriter.Upsert(path, Record("M02", "设备A", "旧A"), time);
+                SubmissionWorkbookWriter.Upsert(path, Record("M01", "设备X", "X"), time.AddMinutes(1));
+                SubmissionWorkbookWriter.Upsert(path, Record("M02", "设备B", "B"), time.AddMinutes(2));
+                SubmissionWorkbookWriter.Upsert(path, Record("M02", "设备A", "新A"), time.AddMinutes(3));
+
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    var workbook = new XSSFWorkbook(stream);
+                    try
+                    {
+                        NPOI.SS.UserModel.ISheet history = workbook.GetSheet(
+                            SubmissionWorkbookWriter.SheetName);
+                        int historyMachine = Column(history, "机台ID");
+                        Assert.Equal(new[] { "M01", "M02", "M02", "M02" }, new[]
+                        {
+                            history.GetRow(1).GetCell(historyMachine).StringCellValue,
+                            history.GetRow(2).GetCell(historyMachine).StringCellValue,
+                            history.GetRow(3).GetCell(historyMachine).StringCellValue,
+                            history.GetRow(4).GetCell(historyMachine).StringCellValue
+                        });
+                        Assert.Equal("旧A", history.GetRow(2)
+                            .GetCell(Column(history, "配电详情")).StringCellValue);
+                        Assert.Equal("新A", history.GetRow(4)
+                            .GetCell(Column(history, "配电详情")).StringCellValue);
+
+                        NPOI.SS.UserModel.ISheet details = workbook.GetSheet(
+                            SubmissionWorkbookWriter.DetailSheetName);
+                        int detailMachine = Column(details, "机台ID");
+                        Assert.Equal(3, details.LastRowNum);
+                        Assert.Equal(new[] { "M01", "M02", "M02" }, new[]
+                        {
+                            details.GetRow(1).GetCell(detailMachine).StringCellValue,
+                            details.GetRow(2).GetCell(detailMachine).StringCellValue,
+                            details.GetRow(3).GetCell(detailMachine).StringCellValue
+                        });
+                        int deviceColumn = Column(details, "设备名称");
+                        Assert.Equal(new[] { "设备B", "设备A" }, new[]
+                        {
+                            details.GetRow(2).GetCell(deviceColumn).StringCellValue,
+                            details.GetRow(3).GetCell(deviceColumn).StringCellValue
+                        });
+                    }
+                    finally { workbook.Close(); }
+                }
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void Upsert_CompactsLegacyMaterialRowsIntoOneDeviceRow()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_compact_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                var legacy = new XSSFWorkbook();
+                try
+                {
+                    var details = legacy.CreateSheet(SubmissionWorkbookWriter.DetailSheetName);
+                    var header = details.CreateRow(0);
+                    for (int column = 0; column < SubmissionWorkbookWriter.DetailHeaders.Length; column++)
+                        header.CreateCell(column).SetCellValue(
+                            SubmissionWorkbookWriter.DetailHeaders[column]);
+                    for (int rowIndex = 1; rowIndex <= 2; rowIndex++)
+                    {
+                        var row = details.CreateRow(rowIndex);
+                        row.CreateCell(0).SetCellValue("OLD");
+                        row.CreateCell(1).SetCellValue("旧设备");
+                        row.CreateCell(2).SetCellValue(rowIndex.ToString());
+                        row.CreateCell(3).SetCellValue(rowIndex == 1 ? "电缆" : "软管");
+                        row.CreateCell(6).SetCellValue(rowIndex == 1 ? "10" : "2");
+                    }
+                    using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+                        legacy.Write(stream);
+                }
+                finally { legacy.Close(); }
+
+                SubmissionWorkbookWriter.UpsertMany(path,
+                    new[] { Record("NEW", "新设备", "详情") }, DateTimeOffset.UtcNow);
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    var workbook = new XSSFWorkbook(stream);
+                    try
+                    {
+                        var details = workbook.GetSheet(SubmissionWorkbookWriter.DetailSheetName);
+                        Assert.Equal(2, details.LastRowNum);
+                        NPOI.SS.UserModel.IRow oldRow = FindRow(details, "OLD");
+                        Assert.Equal("电缆\n软管", oldRow
+                            .GetCell(Column(details, "材料名称")).StringCellValue);
+                        Assert.Equal("10\n2", oldRow
+                            .GetCell(Column(details, "数量")).StringCellValue);
+                    }
+                    finally { workbook.Close(); }
+                }
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void Upsert_DuplicateCompactRowsKeepOnlyLatestVersion()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_submit_latest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, SubmissionWorkbookWriter.DefaultFileName);
+            try
+            {
+                var source = new XSSFWorkbook();
+                try
+                {
+                    var details = source.CreateSheet(SubmissionWorkbookWriter.DetailSheetName);
+                    var header = details.CreateRow(0);
+                    for (int column = 0; column < SubmissionWorkbookWriter.DetailHeaders.Length; column++)
+                        header.CreateCell(column).SetCellValue(
+                            SubmissionWorkbookWriter.DetailHeaders[column]);
+                    string[] names = { "旧电缆\n旧软管", "新断路器\n新插座" };
+                    string[] times = { "2026-08-01 10:00:00", "2026-08-02 10:00:00" };
+                    for (int rowIndex = 1; rowIndex <= 2; rowIndex++)
+                    {
+                        var row = details.CreateRow(rowIndex);
+                        row.CreateCell(0).SetCellValue("OLD");
+                        row.CreateCell(1).SetCellValue("旧设备");
+                        row.CreateCell(2).SetCellValue("1\n2");
+                        row.CreateCell(3).SetCellValue(names[rowIndex - 1]);
+                        row.CreateCell(8).SetCellValue(times[rowIndex - 1]);
+                        row.CreateCell(9).SetCellValue(times[rowIndex - 1]);
+                    }
+                    using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+                        source.Write(stream);
+                }
+                finally { source.Close(); }
+
+                SubmissionWorkbookWriter.Upsert(path, Record("NEW", "新设备", "详情"),
+                    DateTimeOffset.UtcNow);
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+                {
+                    var workbook = new XSSFWorkbook(stream);
+                    try
+                    {
+                        var details = workbook.GetSheet(SubmissionWorkbookWriter.DetailSheetName);
+                        Assert.Equal(2, details.LastRowNum);
+                        NPOI.SS.UserModel.IRow retained = FindRow(details, "OLD");
+                        Assert.Equal("新断路器\n新插座", retained
+                            .GetCell(Column(details, "材料名称")).StringCellValue);
+                        Assert.Equal("2026-08-02 10:00:00", retained
+                            .GetCell(Column(details, "更新时间")).StringCellValue);
+                    }
+                    finally { workbook.Close(); }
+                }
             }
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         }
@@ -284,6 +468,19 @@ namespace UNCAD.Tests
             {
                 if (Directory.Exists(folder)) Directory.Delete(folder, true);
             }
+        }
+
+        private static NPOI.SS.UserModel.IRow FindRow(
+            NPOI.SS.UserModel.ISheet sheet, string machineId)
+        {
+            int machineColumn = Column(sheet, "机台ID");
+            for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
+            {
+                NPOI.SS.UserModel.IRow row = sheet.GetRow(rowIndex);
+                if (string.Equals(row?.GetCell(machineColumn)?.StringCellValue, machineId,
+                    StringComparison.OrdinalIgnoreCase)) return row;
+            }
+            throw new InvalidDataException("Missing machine row: " + machineId);
         }
 
         private static int Column(NPOI.SS.UserModel.ISheet sheet, string header)

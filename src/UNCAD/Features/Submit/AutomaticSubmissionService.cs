@@ -95,7 +95,9 @@ namespace UNCAD.Features.Submit
             {
                 SubmissionWriteResult single = SubmissionWorkbookWriter.Upsert(
                     filePath, records[0], DateTimeOffset.Now);
-                result.AddedCount = single.ReplacedExisting ? 0 : 1;
+                // Every run appends one submission-history row; replacement describes the
+                // latest-detail view for an identity that already existed.
+                result.AddedCount = 1;
                 result.ReplacedCount = single.ReplacedExisting ? 1 : 0;
             }
             else
