@@ -89,7 +89,8 @@ namespace UNCAD.Features.Submit
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
 
-            string outputRoot = Path.GetDirectoryName(Path.GetFullPath(filePath));
+            // PrepareTargetPath returns the selected root directory, not a file path.
+            string outputRoot = Path.GetFullPath(filePath);
             string template = BoqWorkbookWriter.ResolveTemplatePath();
             var outputPaths = records.Select(record =>
                 BoqWorkbookWriter.BuildTargetPath(outputRoot, record.MachineId))

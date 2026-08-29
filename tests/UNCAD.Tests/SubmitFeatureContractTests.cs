@@ -35,6 +35,8 @@ namespace UNCAD.Tests
             Assert.Contains("AutomaticSubmissionService.Write", batch);
             Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 BOQ", fill);
             Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 BOQ", batch);
+            Assert.Contains("string outputRoot = Path.GetFullPath(filePath);", service);
+            Assert.DoesNotContain("Path.GetDirectoryName(Path.GetFullPath(filePath))", service);
         }
 
         private static string RepoFile(params string[] parts)
