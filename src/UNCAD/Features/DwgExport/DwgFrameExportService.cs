@@ -104,46 +104,58 @@ namespace UNCAD.Features.DwgExport
             IReadOnlyList<DwgFramePlacement> layout)
         {
             string temporary = target + "." + Guid.NewGuid().ToString("N") + ".dwg";
+            Database output = null;
             try
             {
-                using (var output = new Database(true, true))
+                foreach (DwgFramePlacement placement in layout)
                 {
-                    foreach (DwgFramePlacement placement in layout)
-                    {
-                        DwgExportFrame frame = placement.Item as DwgExportFrame;
-                        if (frame == null) throw new InvalidOperationException("DWG 导出布局对象无效。");
-                        var sourceIds = new ObjectIdCollection();
-                        foreach (ObjectId id in frame.Group.EntityIds)
-                            sourceIds.Add(id);
-                        if (sourceIds.Count == 0) continue;
+                    DwgExportFrame frame = placement.Item as DwgExportFrame;
+                    if (frame == null) throw new InvalidOperationException("DWG 导出布局对象无效。");
+                    var sourceIds = new ObjectIdCollection();
+                    foreach (ObjectId id in frame.Group.EntityIds)
+                        sourceIds.Add(id);
+                    if (sourceIds.Count == 0) continue;
 
-                        // Wblock first creates a self-contained frame with its layers, linetypes,
-                        // text styles, block definitions and other dependent symbol records.
-                        using (Database frameDatabase = sourceDatabase.Wblock(
-                            sourceIds, Point3d.Origin))
-                        {
-                            TransformFrame(frameDatabase, placement);
-                            var frameIds = new ObjectIdCollection();
-                            using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
-                            {
-                                BlockTableRecord space = transaction.GetObject(
-                                    frameDatabase.CurrentSpaceId, OpenMode.ForRead) as BlockTableRecord;
-                                foreach (ObjectId id in space)
-                                    frameIds.Add(id);
-                                transaction.Commit();
-                            }
-                            var mapping = new IdMapping();
-                            frameDatabase.WblockCloneObjects(frameIds, output.CurrentSpaceId,
-                                mapping, DuplicateRecordCloning.Ignore, false);
-                        }
+                    // Use the first self-contained Wblock as the output database itself. This avoids
+                    // the blank database's default Standard/txt style overriding the source style.
+                    Database frameDatabase = sourceDatabase.Wblock(sourceIds, Point3d.Origin);
+                    TransformFrame(frameDatabase, placement);
+                    if (output == null)
+                    {
+                        output = frameDatabase;
+                        continue;
                     }
-                    output.SaveAs(temporary, DwgVersion.Current);
+                    try
+                    {
+                        var frameIds = new ObjectIdCollection();
+                        using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
+                        {
+                            BlockTableRecord space = transaction.GetObject(
+                                frameDatabase.CurrentSpaceId, OpenMode.ForRead) as BlockTableRecord;
+                            foreach (ObjectId id in space)
+                                frameIds.Add(id);
+                            transaction.Commit();
+                        }
+                        var mapping = new IdMapping();
+                        frameDatabase.WblockCloneObjects(frameIds, output.CurrentSpaceId,
+                            mapping, DuplicateRecordCloning.Ignore, false);
+                    }
+                    finally
+                    {
+                        frameDatabase.Dispose();
+                    }
                 }
+                if (output == null)
+                    throw new InvalidDataException("没有可导出的图框实体。");
+                output.SaveAs(temporary, DwgVersion.Current);
+                output.Dispose();
+                output = null;
                 ReplaceFile(temporary, target);
                 temporary = null;
             }
             finally
             {
+                output?.Dispose();
                 try { if (!string.IsNullOrWhiteSpace(temporary) && File.Exists(temporary)) File.Delete(temporary); }
                 catch { }
             }
