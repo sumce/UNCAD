@@ -54,8 +54,8 @@ namespace UNCAD.Infra
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
-        // 自动记录 Excel；沿用旧键名以迁移现有用户设置。
-        public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动记录文件夹
+        // BOQ 与 DWG 自动输出目录；沿用旧键名以迁移已有用户设置。
+        public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";

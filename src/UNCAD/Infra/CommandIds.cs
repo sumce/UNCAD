@@ -11,6 +11,7 @@ namespace UNCAD.Infra
         public const string Fill = "U1F";
         public const string FillUpdate = "U1U";
         public const string Settings = "U1S";
+        public const string DwgExport = "U1DWG";
         public const string About = "U1A";
         public const string Conduit = "U1C";
         public const string Tray100 = "U1Q1";
@@ -36,7 +37,8 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings
+            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings,
+            DwgExport
         };
 
         public static IReadOnlyList<string> Legacy { get; } = new[]
@@ -47,7 +49,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings,
+            Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Conduit, About, Settings, DwgExport,
             LegacyLine, LegacyArch, LegacyTray100, LegacyTray200, LegacyTray400, LegacyStatistics
         };
     }

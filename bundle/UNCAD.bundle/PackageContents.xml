@@ -26,6 +26,7 @@
         <Command Global="U1C" />
         <Command Global="U1A" />
         <Command Global="U1S" />
+        <Command Global="U1DWG" />
         <Command Global="UNL" />
         <Command Global="UNR" />
         <Command Global="UNQ1" />

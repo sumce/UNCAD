@@ -400,7 +400,7 @@ namespace UNCAD.UI
             g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
             g.Controls.Add(Lbl("软管默认长度 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
             g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
-            g.Controls.Add(Lbl("自动记录文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
+            g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
             return Page("Excel 数据", g);
         }
 
@@ -411,7 +411,7 @@ namespace UNCAD.UI
             {
                 using (var dialog = new FolderBrowserDialog
                 {
-                    Description = "选择 U1F / U1U 自动记录文件夹",
+                    Description = "选择 U1F / U1U / U1DWG 自动输出文件夹",
                     ShowNewFolderButton = true,
                     SelectedPath = Directory.Exists(target.Text.Trim()) ? target.Text.Trim() : ""
                 })

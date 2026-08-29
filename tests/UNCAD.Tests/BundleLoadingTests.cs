@@ -55,6 +55,7 @@ namespace UNCAD.Tests
             Assert.Contains("current Windows user only", script);
             Assert.Contains("use AutoCAD RIBBON if hidden", script);
             Assert.Contains("$unexpectedCommands", script);
+            Assert.Contains("\"U1DWG\"", script);
         }
 
         [Fact]

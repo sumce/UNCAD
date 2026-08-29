@@ -12,12 +12,12 @@ namespace UNCAD.Tests
             Assert.Equal(new[]
             {
                 "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4",
-                "U1F", "U1U", "U1C", "U1A", "U1S"
+                "U1F", "U1U", "U1C", "U1A", "U1S", "U1DWG"
             }, CommandIds.Canonical);
             Assert.Equal(new[] { "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD" },
                 CommandIds.Legacy);
-            Assert.Equal(16, CommandIds.Registered.Count);
-            Assert.Equal(16, CommandIds.Registered.Distinct(
+            Assert.Equal(17, CommandIds.Registered.Count);
+            Assert.Equal(17, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
             Assert.DoesNotContain(CommandIds.Registered, command =>
                 command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));

@@ -10,14 +10,14 @@ namespace UNCAD.Tests
     public class RibbonCatalogTests
     {
         [Fact]
-        public void PrimaryLayout_HasFourPanelsAndNineTaskOrientedControls()
+        public void PrimaryLayout_HasFourPanelsAndTenTaskOrientedControls()
         {
             Assert.Equal(new[] { "UNSIAO Work™", "标注", "绘制", "统计" },
                 RibbonCatalog.Panels.Select(panel => panel.Title));
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(9, primary.Length);
+            Assert.Equal(10, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));

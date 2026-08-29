@@ -58,6 +58,8 @@ namespace UNCAD.UI
                         "根据机台和回路数据生成清单，并自动记录 Excel"),
                     RibbonItemDefinition.Button("批量更新", CommandIds.FillUpdate,
                         "按图框批量更新已填清单，并自动记录 Excel"),
+                    RibbonItemDefinition.Button("DWG导出", CommandIds.DwgExport,
+                        "按机台ID导出图框内容并横向排列"),
                     RibbonItemDefinition.Button("设置", CommandIds.Settings,
                         "集中设置数据源、文字和绘图参数"),
                     RibbonItemDefinition.Button("关于", CommandIds.About,
