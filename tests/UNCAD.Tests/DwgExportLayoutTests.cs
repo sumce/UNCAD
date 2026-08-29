@@ -27,6 +27,25 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Arrange_AllowsTwoFramesWithSameDeviceName()
+        {
+            var items = new[]
+            {
+                new DwgFrameLayoutItem("M1", "同名设备",
+                    new FrameRectangle("first", 0, 0, 1000, 500)),
+                new DwgFrameLayoutItem("M1", "同名设备",
+                    new FrameRectangle("second", 2000, 0, 3000, 500))
+            };
+
+            IReadOnlyList<DwgFramePlacement> result = DwgExportLayout.Arrange(items);
+
+            Assert.Equal(2, result.Count);
+            Assert.Equal("同名设备", result[0].Item.DeviceName);
+            Assert.Equal("同名设备", result[1].Item.DeviceName);
+            Assert.Equal(11000d, result[1].TranslationX + items[1].Boundary.MinX);
+        }
+
+        [Fact]
         public void Arrange_Supports31FramesThroughApColumnEquivalentWidth()
         {
             var items = Enumerable.Range(1, 31).Select(index =>

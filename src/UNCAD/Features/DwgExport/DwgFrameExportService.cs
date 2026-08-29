@@ -60,11 +60,8 @@ namespace UNCAD.Features.DwgExport
             foreach (IGrouping<string, DwgExportFrame> machine in frames
                 .GroupBy(frame => frame.MachineId, StringComparer.OrdinalIgnoreCase))
             {
-                var devices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (DwgExportFrame frame in machine)
-                    if (!devices.Add(frame.DeviceName))
-                        throw new InvalidDataException("机台 " + machine.Key
-                            + " 存在重复设备名称：" + frame.DeviceName + "。");
+                // Device names are labels, not unique keys. Two physical frames may intentionally
+                // share the same name, so every selected frame remains an independent export item.
                 string machineFolder = Path.Combine(outputRoot, machine.Key);
                 Directory.CreateDirectory(machineFolder);
                 string target = Path.Combine(machineFolder, machine.Key + ".dwg");
