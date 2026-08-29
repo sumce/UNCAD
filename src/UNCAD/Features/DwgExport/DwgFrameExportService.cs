@@ -66,7 +66,7 @@ namespace UNCAD.Features.DwgExport
                 Directory.CreateDirectory(machineFolder);
                 string target = Path.Combine(machineFolder, machine.Key + ".dwg");
                 IReadOnlyList<DwgFramePlacement> layout = DwgExportLayout.Arrange(machine);
-                WriteMachine(ctx.Db, target, layout);
+                WriteMachine(ctx.Db, target, layout, machine.Key);
                 paths.Add(target);
             }
             return new DwgExportResult
@@ -101,7 +101,7 @@ namespace UNCAD.Features.DwgExport
         }
 
         private static void WriteMachine(Database sourceDatabase, string target,
-            IReadOnlyList<DwgFramePlacement> layout)
+            IReadOnlyList<DwgFramePlacement> layout, string machineId)
         {
             string temporary = target + "." + Guid.NewGuid().ToString("N") + ".dwg";
             Database output = null;
@@ -147,6 +147,7 @@ namespace UNCAD.Features.DwgExport
                 }
                 if (output == null)
                     throw new InvalidDataException("没有可导出的图框实体。");
+                AddMachineMetadata(output, layout[0], machineId);
                 output.SaveAs(temporary, DwgVersion.Current);
                 output.Dispose();
                 output = null;
@@ -158,6 +159,88 @@ namespace UNCAD.Features.DwgExport
                 output?.Dispose();
                 try { if (!string.IsNullOrWhiteSpace(temporary) && File.Exists(temporary)) File.Delete(temporary); }
                 catch { }
+            }
+        }
+
+        private static void AddMachineMetadata(Database database,
+            DwgFramePlacement firstPlacement, string machineId)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord space = transaction.GetObject(database.CurrentSpaceId,
+                    OpenMode.ForWrite) as BlockTableRecord;
+                TextStyleTable styles = transaction.GetObject(database.TextStyleTableId,
+                    OpenMode.ForRead) as TextStyleTable;
+                ObjectId textStyle = styles.Has("Standard") ? styles["Standard"] : database.Textstyle;
+                double left = firstPlacement.TranslationX + firstPlacement.Item.Boundary.MinX;
+                double bottom = firstPlacement.TranslationY + firstPlacement.Item.Boundary.MinY;
+                double titleX = left - 10000d;
+                double titleY = bottom + Math.Max(firstPlacement.Item.Boundary.Height * 0.65d, 90000d);
+                const double metadataHeight = 6000d;
+                const double metadataGap = 9000d;
+                AddMetadataText(space, transaction, machineId,
+                    new Point3d(titleX, titleY, 0d), 25000d, textStyle);
+                AddMetadataText(space, transaction, "UNSIAO Work™",
+                    new Point3d(titleX, titleY - 35000d, 0d), metadataHeight, textStyle);
+                AddMetadataText(space, transaction,
+                    "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    new Point3d(titleX, titleY - 35000d - metadataGap, 0d),
+                    metadataHeight, textStyle);
+                AddMetadataText(space, transaction,
+                    "Software Version: " + AboutInfo.Current().Version,
+                    new Point3d(titleX, titleY - 35000d - metadataGap * 2d, 0d),
+                    metadataHeight, textStyle);
+                AddMetadataText(space, transaction,
+                    "Windows User: " + Environment.UserName,
+                    new Point3d(titleX, titleY - 35000d - metadataGap * 3d, 0d),
+                    metadataHeight, textStyle);
+                transaction.Commit();
+            }
+            SetFirstFrameView(database, firstPlacement);
+        }
+
+        private static void AddMetadataText(BlockTableRecord space, Transaction transaction,
+            string value, Point3d anchor, double height, ObjectId textStyle)
+        {
+            var text = new DBText
+            {
+                TextString = value ?? "",
+                Height = height,
+                TextStyleId = textStyle,
+                Layer = "0",
+                Justify = AttachmentPoint.BottomRight,
+                AlignmentPoint = anchor
+            };
+            space.AppendEntity(text);
+            transaction.AddNewlyCreatedDBObject(text, true);
+        }
+
+        private static void SetFirstFrameView(Database database, DwgFramePlacement firstPlacement)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                ViewportTable table = transaction.GetObject(database.ViewportTableId,
+                    OpenMode.ForRead) as ViewportTable;
+                if (table == null || !table.Has("*Active"))
+                {
+                    transaction.Commit();
+                    return;
+                }
+                ViewportTableRecord view = transaction.GetObject(table["*Active"],
+                    OpenMode.ForWrite) as ViewportTableRecord;
+                if (view == null)
+                {
+                    transaction.Commit();
+                    return;
+                }
+                double left = firstPlacement.TranslationX + firstPlacement.Item.Boundary.MinX;
+                double bottom = firstPlacement.TranslationY + firstPlacement.Item.Boundary.MinY;
+                view.CenterPoint = new Point2d(
+                    left + firstPlacement.Item.Boundary.Width / 2d,
+                    bottom + firstPlacement.Item.Boundary.Height / 2d);
+                view.Width = Math.Max(1d, firstPlacement.Item.Boundary.Width * 1.25d);
+                view.Height = Math.Max(1d, firstPlacement.Item.Boundary.Height * 1.25d);
+                transaction.Commit();
             }
         }
 
