@@ -18,7 +18,7 @@ namespace UNCAD.Tests
         {
             XElement package = LoadManifest();
             Version version = typeof(CommandIds).Assembly.GetName().Version;
-            string expected = version.Major + "." + version.Minor + "." + version.Build;
+            string expected = version.ToString();
             Assert.Equal(expected, (string)package.Attribute("AppVersion"));
             string productCode = (string)package.Attribute("ProductCode");
             string upgradeCode = (string)package.Attribute("UpgradeCode");

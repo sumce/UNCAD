@@ -3,7 +3,7 @@
     AutodeskProduct="AutoCAD"
     Name="UNCAD · UNSIAO Work™"
     Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
-    AppVersion="1.9.7"
+    AppVersion="1.9.7.1"
     ProductType="Application"
     ProductCode="{523252D0-54CF-46C3-8AB0-2943BAE99995}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">

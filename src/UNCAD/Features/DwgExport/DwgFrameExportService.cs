@@ -113,18 +113,54 @@ namespace UNCAD.Features.DwgExport
                     DwgExportFrame frame = placement.Item as DwgExportFrame;
                     if (frame == null) throw new InvalidOperationException("DWG 导出布局对象无效。");
                     foreach (ObjectId id in frame.Group.EntityIds)
+                    {
+                        if (id.IsNull || !id.IsValid)
+                            throw new InvalidDataException("图框包含无效实体ID。");
+                        if (id.Database != sourceDatabase)
+                            throw new InvalidOperationException("图框实体不属于当前源图数据库。");
                         if (seen.Add(id)) sourceIds.Add(id);
+                    }
                 }
                 if (sourceIds.Count == 0)
                     throw new InvalidDataException("没有可导出的图框实体。");
 
                 // One Wblock for the whole machine keeps all selected geometry and all source
                 // dependent styles in one database, avoiding cross-database ObjectId errors.
-                using (Database output = sourceDatabase.Wblock(sourceIds, Point3d.Origin))
+                Database output;
+                try
                 {
-                    TransformExportedFrames(output, layout);
-                    AddMachineMetadata(output, layout[0], machineId);
-                    output.SaveAs(temporary, DwgVersion.Current);
+                    output = sourceDatabase.Wblock(sourceIds, Point3d.Origin);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("U1DWG Wblock源实体失败：" + ex.Message, ex);
+                }
+                using (output)
+                {
+                    try
+                    {
+                        TransformExportedFrames(output, layout);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException("U1DWG排列图框失败：" + ex.Message, ex);
+                    }
+                    try
+                    {
+                        AddMachineMetadata(output, layout[0], machineId);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException("U1DWG写入机台信息失败：" + ex.Message, ex);
+                    }
+                    try
+                    {
+                        output.SaveAs(temporary, DwgVersion.Current);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException("U1DWG保存DWG失败：" + ex.Message, ex);
+                    }
                 }
                 ReplaceFile(temporary, target);
                 temporary = null;

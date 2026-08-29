@@ -97,7 +97,8 @@ function Get-PackageInfo {
     }
     $version = [string]$package.AppVersion
     $fileVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($modulePath).FileVersion
-    if ($fileVersion -ne ($version + ".0")) {
+    # Accept exact four-part patch versions such as 1.9.7.1; retain compatibility with three-part packages.
+    if ($fileVersion -ne $version -and $fileVersion -ne ($version + ".0")) {
         throw "Version mismatch: Package=$version, DLL=$fileVersion"
     }
     [pscustomobject]@{
