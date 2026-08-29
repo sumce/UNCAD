@@ -206,21 +206,28 @@ namespace UNCAD.Features.DwgExport
                     metadataHeight, textStyle);
                 transaction.Commit();
             }
-            SetFirstFrameView(database, firstPlacement);
+            try
+            {
+                SetFirstFrameView(database, firstPlacement);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("首框视图设置失败：" + ex.Message, ex);
+            }
         }
 
         private static void AddMetadataText(BlockTableRecord space, Transaction transaction,
             string value, Point3d anchor, double height, ObjectId textStyle)
         {
-            var text = new DBText
-            {
-                TextString = value ?? "",
-                Height = height,
-                TextStyleId = textStyle,
-                Layer = "0",
-                Justify = AttachmentPoint.BottomRight,
-                AlignmentPoint = anchor
-            };
+            var text = new DBText();
+            // Bind the new entity to the Wblock database before assigning database-owned IDs.
+            text.SetDatabaseDefaults(space.Database);
+            text.TextString = value ?? "";
+            text.Height = height;
+            text.TextStyleId = textStyle;
+            text.Layer = "0";
+            text.Justify = AttachmentPoint.BottomRight;
+            text.AlignmentPoint = anchor;
             space.AppendEntity(text);
             transaction.AddNewlyCreatedDBObject(text, true);
         }
