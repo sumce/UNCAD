@@ -113,29 +113,31 @@ namespace UNCAD.Features.DwgExport
                 {
                     foreach (DwgFramePlacement placement in layout)
                     {
-                        var sourceIds = new ObjectIdCollection();
                         DwgExportFrame frame = placement.Item as DwgExportFrame;
                         if (frame == null) throw new InvalidOperationException("DWG 导出布局对象无效。");
+                        var sourceIds = new ObjectIdCollection();
                         foreach (ObjectId id in frame.Group.EntityIds)
                             sourceIds.Add(id);
                         if (sourceIds.Count == 0) continue;
 
-                        var mapping = new IdMapping();
-                        sourceDatabase.WblockCloneObjects(sourceIds, output.CurrentSpaceId,
-                            mapping, DuplicateRecordCloning.Ignore, false);
-                        using (Transaction transaction = output.TransactionManager.StartTransaction())
+                        // Wblock first creates a self-contained frame with its layers, linetypes,
+                        // text styles, block definitions and other dependent symbol records.
+                        using (Database frameDatabase = sourceDatabase.Wblock(
+                            sourceIds, Point3d.Origin))
                         {
-                            foreach (ObjectId sourceId in frame.Group.EntityIds)
+                            TransformFrame(frameDatabase, placement);
+                            var frameIds = new ObjectIdCollection();
+                            using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
                             {
-                                if (!mapping.Contains(sourceId)) continue;
-                                IdPair pair = mapping[sourceId];
-                                if (!pair.IsCloned) continue;
-                                Entity entity = transaction.GetObject(pair.Value, OpenMode.ForWrite, false)
-                                    as Entity;
-                                entity?.TransformBy(Matrix3d.Displacement(new Vector3d(
-                                    placement.TranslationX, placement.TranslationY, 0d)));
+                                BlockTableRecord space = transaction.GetObject(
+                                    frameDatabase.CurrentSpaceId, OpenMode.ForRead) as BlockTableRecord;
+                                foreach (ObjectId id in space)
+                                    frameIds.Add(id);
+                                transaction.Commit();
                             }
-                            transaction.Commit();
+                            var mapping = new IdMapping();
+                            frameDatabase.WblockCloneObjects(frameIds, output.CurrentSpaceId,
+                                mapping, DuplicateRecordCloning.Ignore, false);
                         }
                     }
                     output.SaveAs(temporary, DwgVersion.Current);
@@ -147,6 +149,23 @@ namespace UNCAD.Features.DwgExport
             {
                 try { if (!string.IsNullOrWhiteSpace(temporary) && File.Exists(temporary)) File.Delete(temporary); }
                 catch { }
+            }
+        }
+
+        private static void TransformFrame(Database frameDatabase, DwgFramePlacement placement)
+        {
+            using (Transaction transaction = frameDatabase.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord space = transaction.GetObject(frameDatabase.CurrentSpaceId,
+                    OpenMode.ForRead) as BlockTableRecord;
+                Matrix3d displacement = Matrix3d.Displacement(new Vector3d(
+                    placement.TranslationX, placement.TranslationY, 0d));
+                foreach (ObjectId id in space)
+                {
+                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
+                    entity?.TransformBy(displacement);
+                }
+                transaction.Commit();
             }
         }
 
