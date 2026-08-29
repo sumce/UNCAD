@@ -127,6 +127,15 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ExtractTableCableModel_ReadsUserSelectedModelFromExistingTable()
+        {
+            var source = new SubmissionSourceData();
+            source.AddTableRow("1", "多芯电缆 XLPE", "3*25", "M", "12", "1.1");
+
+            Assert.Equal("3*25", SubmissionRecordExtractor.ExtractTableCableModel(source));
+        }
+
+        [Fact]
         public void Extract_PrefersCurrentEditedTableValuesOverOldFrameAttributes()
         {
             var source = new SubmissionSourceData();

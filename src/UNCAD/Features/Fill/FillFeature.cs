@@ -10,6 +10,7 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
+using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
@@ -144,6 +145,7 @@ namespace UNCAD.Features.Fill
                     ctx.Write("\n[U1U] " + matchError);
                     return;
                 }
+                ResolveUpdateCableFromExistingTable(ctx, selection, picked, catalog);
                 ctx.Write("\n[U1U] 已自动读取: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
@@ -318,6 +320,28 @@ namespace UNCAD.Features.Fill
                 }
             }
             return capacity == int.MaxValue ? 0 : capacity;
+        }
+
+        private static void ResolveUpdateCableFromExistingTable(CadContext ctx,
+            FillSelection selection, MachineRow picked, BoqCatalogIndex catalog)
+        {
+            string originalModel = (picked.Cable ?? "").Trim();
+            if (catalog.FindCable(originalModel) != null) return;
+
+            SubmissionSourceData tableSource = CadSubmissionReader.Read(ctx, selection.TableIds);
+            string tableModel = SubmissionRecordExtractor.ExtractTableCableModel(tableSource);
+            if (tableModel.Length > 0 && catalog.FindCable(tableModel) != null)
+            {
+                picked.Cable = tableModel;
+                ctx.Write("\n[U1U] 原始电缆型号“" + originalModel
+                    + "”无法匹配固定清单，已使用现有清单型号“" + tableModel + "”。");
+                return;
+            }
+
+            string tableValue = tableModel.Length > 0 ? tableModel : "未读取到";
+            throw new InvalidDataException("U1U 电缆型号无法匹配固定清单：原始型号“"
+                + originalModel + "”；现有清单型号“" + tableValue
+                + "”也无法匹配。请先在图框清单中选择固定清单电缆型号。");
         }
 
         private static void ResolveMissingCableCatalog(FillReviewData review,

@@ -104,7 +104,8 @@ namespace UNCAD.Core.Submission
             return CableSuffix.Replace(cable.Trim(), "");
         }
 
-        private static string ExtractTableCableModel(SubmissionSourceData source)
+        /// <summary>Reads the currently drawn cable model from the existing BOQ table.</summary>
+        public static string ExtractTableCableModel(SubmissionSourceData source)
         {
             foreach (List<string> row in source.TableRows.Where(IsCableRow))
             {
