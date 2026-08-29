@@ -87,6 +87,26 @@ namespace UNCAD.Tests
             Assert.Single(index.Cables);
         }
 
+        [Fact]
+        public void CableFeatureMatching_UsesProjectFeatureAndReturnsCanonicalAlias()
+        {
+            ListItem item = new ListItem
+            {
+                Category = "电缆",
+                Code = "1.1",
+                Name = "多芯电缆 XLPE",
+                Feature = "1.名称:0.6/1kV-YJVR-2.5mm2*3C 多芯电缆\n2.配线形式:穿管或桥架敷设",
+                Alias = "3*2.5"
+            };
+            var index = new BoqCatalogIndex(new[] { item });
+
+            ListItem matched = index.FindCableByFeature(
+                "1.名称:o.6/1kV-YJVR-2.5mm²*3C 多芯电缆\\P2.配线形式:穿管或桥架敷设");
+
+            Assert.Same(item, matched);
+            Assert.Equal("3*2.5", matched.Alias);
+        }
+
         private static ListItem Item(string code, string name, string alias, string category)
             => new ListItem { Category = category, Code = code, Name = name, Alias = alias };
     }

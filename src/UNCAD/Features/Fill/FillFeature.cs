@@ -329,18 +329,22 @@ namespace UNCAD.Features.Fill
             if (catalog.FindCable(originalModel) != null) return;
 
             SubmissionSourceData tableSource = CadSubmissionReader.Read(ctx, selection.TableIds);
-            string tableModel = SubmissionRecordExtractor.ExtractTableCableModel(tableSource);
-            if (tableModel.Length > 0 && catalog.FindCable(tableModel) != null)
+            string tableFeature = SubmissionRecordExtractor.ExtractTableCableFeature(tableSource);
+            ListItem featureMatch = catalog.FindCableByFeature(tableFeature);
+            if (featureMatch != null)
             {
-                picked.Cable = tableModel;
+                // The table's project feature identifies the fixed catalog row; use its canonical alias
+                // for planning instead of trying to compare the rendered model text again.
+                picked.Cable = featureMatch.Alias;
                 ctx.Write("\n[U1U] 原始电缆型号“" + originalModel
-                    + "”无法匹配固定清单，已使用现有清单型号“" + tableModel + "”。");
+                    + "”无法匹配，已按现有清单项目特征使用固定清单型号“"
+                    + featureMatch.Alias + "”（编号 " + featureMatch.Code + "）。");
                 return;
             }
 
-            string tableValue = tableModel.Length > 0 ? tableModel : "未读取到";
+            string tableValue = tableFeature.Length > 0 ? tableFeature : "未读取到";
             throw new InvalidDataException("U1U 电缆型号无法匹配固定清单：原始型号“"
-                + originalModel + "”；现有清单型号“" + tableValue
+                + originalModel + "”；现有清单项目特征“" + tableValue
                 + "”也无法匹配。请先在图框清单中选择固定清单电缆型号。");
         }
 

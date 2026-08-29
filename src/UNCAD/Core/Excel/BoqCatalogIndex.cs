@@ -49,6 +49,27 @@ namespace UNCAD.Core.Excel
         public ListItem FindCable(string cableModel)
             => FindWithMigration(_cables, NormalizeCable(cableModel));
 
+        /// <summary>Matches a cable row by its complete project feature, not by its display model.</summary>
+        public ListItem FindCableByFeature(string projectFeature)
+        {
+            string key = NormalizeFeature(projectFeature);
+            if (key.Length == 0) return null;
+            List<ListItem> matches = _cableCandidates.Where(item =>
+                NormalizeFeature(item.Feature) == key).ToList();
+            if (matches.Count > 1)
+                throw new InvalidDataException("固定清单电缆项目特征重复，无法唯一匹配。");
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
+        /// <summary>Normalizes CAD/Excel line breaks and harmless unit/zero variants for feature comparison.</summary>
+        public static string NormalizeFeature(string value)
+        {
+            string text = (value ?? "").Replace(@"\P", "\n").Replace("²", "2");
+            text = text.Replace("o.6/", "0.6/").Replace("O.6/", "0.6/");
+            text = string.Join("", TextParser.SplitMTextLines(text).Select(TextParser.CleanMText));
+            return Whitespace.Replace(text, "").ToUpperInvariant();
+        }
+
         public ListItem FindBridge(string spec)
             => FindWithMigration(_bridges, NormalizeSpec(spec));
 

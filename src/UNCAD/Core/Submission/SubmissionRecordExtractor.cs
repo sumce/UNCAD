@@ -104,6 +104,17 @@ namespace UNCAD.Core.Submission
             return CableSuffix.Replace(cable.Trim(), "");
         }
 
+        /// <summary>Reads the full cable project feature from the existing BOQ table.</summary>
+        public static string ExtractTableCableFeature(SubmissionSourceData source)
+        {
+            foreach (List<string> row in (source?.TableRows ?? new List<List<string>>()).Where(IsCableRow))
+            {
+                string feature = NormalizeTableText(Cell(row, 2));
+                if (feature.Length > 0) return feature;
+            }
+            return "";
+        }
+
         /// <summary>Reads the currently drawn cable model from the existing BOQ table.</summary>
         public static string ExtractTableCableModel(SubmissionSourceData source)
         {
