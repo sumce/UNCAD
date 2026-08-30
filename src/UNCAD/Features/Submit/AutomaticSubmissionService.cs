@@ -65,6 +65,25 @@ namespace UNCAD.Features.Submit
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, string filePath,
             IEnumerable<ObjectId[]> sourceGroups)
+            => WriteCore(ctx, null, filePath, sourceGroups, null);
+
+        public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
+            string filePath, IEnumerable<ObjectId[]> sourceGroups)
+            => WriteCore(ctx, transaction, filePath, sourceGroups, null);
+
+        public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
+            string filePath, IEnumerable<ObjectId[]> sourceGroups, FileBatchRollback batch)
+            => WriteCore(ctx, transaction, filePath, sourceGroups, batch);
+
+        public static IReadOnlyList<string> TargetPaths(string outputRoot,
+            IEnumerable<string> machineIds)
+            => (machineIds ?? Enumerable.Empty<string>())
+                .Select(machineId => BoqWorkbookWriter.BuildTargetPath(outputRoot, machineId))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
+            Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
+            FileBatchRollback externalBatch)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (string.IsNullOrWhiteSpace(filePath))
@@ -76,8 +95,10 @@ namespace UNCAD.Features.Submit
             {
                 index++;
                 if (ids == null || ids.Length == 0) continue;
-                SubmissionRecord record = SubmissionRecordExtractor.Extract(
-                    CadSubmissionReader.Read(ctx, ids));
+                SubmissionSourceData source = transaction == null
+                    ? CadSubmissionReader.Read(ctx, ids)
+                    : CadSubmissionReader.Read(transaction, ids);
+                SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
                 if (string.IsNullOrWhiteSpace(record.MachineId)
                     || string.IsNullOrWhiteSpace(record.DeviceName))
                     throw new InvalidDataException("第 " + index
@@ -101,15 +122,39 @@ namespace UNCAD.Features.Submit
                 RecordCount = records.Count,
                 MaterialCount = records.Sum(record => record.Materials.Count)
             };
-            // 每个机台独立写入正式 BOQ 模板，多个图框的工程量按项目编码汇总。
-            foreach (IGrouping<string, SubmissionRecord> machineGroup in records
-                .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
+            Action writeRecords = () =>
             {
-                string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
-                bool existed = File.Exists(target);
-                BoqWorkbookWriter.Write(target, template, machineGroup);
-                result.AddedCount += machineGroup.Count();
-                if (existed) result.ReplacedCount++;
+                foreach (IGrouping<string, SubmissionRecord> machineGroup in records
+                    .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
+                {
+                    string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
+                    bool existed = File.Exists(target);
+                    BoqWorkbookWriter.Write(target, template, machineGroup);
+                    result.AddedCount += machineGroup.Count();
+                    if (existed) result.ReplacedCount++;
+                }
+            };
+            if (externalBatch != null)
+            {
+                writeRecords();
+            }
+            else
+            {
+                // Snapshot every destination before the first write. A later machine failure must
+                // restore earlier workbooks instead of leaving a partial batch.
+                using (var batch = new FileBatchRollback(outputPaths))
+                {
+                    try
+                    {
+                        writeRecords();
+                        batch.Complete();
+                    }
+                    catch
+                    {
+                        batch.Rollback();
+                        throw;
+                    }
+                }
             }
             return result;
         }
@@ -120,17 +165,25 @@ namespace UNCAD.Features.Submit
     {
         public static SubmissionSourceData Read(CadContext ctx, ObjectId[] ids)
         {
-            var source = new SubmissionSourceData();
             using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
-                {
-                    Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    // AutoCAD Table inherits BlockReference, so tables must be classified first.
-                    if (entity is Table table) ReadTable(table, source);
-                    else if (entity is BlockReference block) ReadBlock(transaction, block, source);
-                    else if (entity is DBText || entity is MText) source.TextEntityCount++;
-                }
+                SubmissionSourceData source = Read(transaction, ids);
+                transaction.Commit();
+                return source;
+            }
+        }
+
+        public static SubmissionSourceData Read(Transaction transaction, ObjectId[] ids)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            var source = new SubmissionSourceData();
+            foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
+            {
+                Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                // AutoCAD Table inherits BlockReference, so tables must be classified first.
+                if (entity is Table table) ReadTable(table, source);
+                else if (entity is BlockReference block) ReadBlock(transaction, block, source);
+                else if (entity is DBText || entity is MText) source.TextEntityCount++;
             }
             return source;
         }

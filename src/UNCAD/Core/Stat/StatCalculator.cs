@@ -33,6 +33,9 @@ namespace UNCAD.Core.Stat
         public double CableSum { get; set; }
         public List<BridgeStat> Bridges { get; } = new List<BridgeStat>();
         public List<ConduitStat> Conduits { get; } = new List<ConduitStat>();
+        public bool IncludeCable { get; internal set; } = true;
+        public bool IncludeBridge { get; internal set; } = true;
+        public bool IncludeConduit { get; internal set; } = true;
     }
 
     public sealed class StatCalculationOptions
@@ -57,7 +60,12 @@ namespace UNCAD.Core.Stat
         {
             options = options ?? new StatCalculationOptions();
             double mmPerGrid = options.MmPerGrid > 0 ? options.MmPerGrid : 250.0;
-            var result = new CableStatResult();
+            var result = new CableStatResult
+            {
+                IncludeCable = options.IncludeCable,
+                IncludeBridge = options.IncludeBridge,
+                IncludeConduit = options.IncludeConduit
+            };
             var bridgeMap = new Dictionary<string, BridgeStat>(StringComparer.Ordinal);
             var conduitMap = new Dictionary<string, ConduitStat>(StringComparer.Ordinal);
 
@@ -110,14 +118,16 @@ namespace UNCAD.Core.Stat
         /// <summary>由统计结果生成图纸 MTEXT 报表行。</summary>
         public static List<string> BuildReport(CableStatResult r)
         {
-            var outLines = new List<string>
+            if (r == null) return new List<string>();
+            var outLines = new List<string>();
+            if (r.IncludeCable)
             {
-                r.CableFormatted.Count > 0
+                outLines.Add(r.CableFormatted.Count > 0
                     ? "电缆长度: " + TextFormatter.Join(r.CableFormatted, "+") + "=" + TextFormatter.FormatNum(r.CableSum) + "M"
-                    : "电缆长度: 0M"
-            };
+                    : "电缆长度: 0M");
+            }
 
-            foreach (var b in r.Bridges)
+            if (r.IncludeBridge) foreach (var b in r.Bridges)
             {
                 var gridStrs = b.Grids.Select(TextFormatter.FormatNum).ToList();
                 outLines.Add(b.Spec + " " + TextFormatter.FormatNum(b.TotalGrids) + "格:("
@@ -125,7 +135,7 @@ namespace UNCAD.Core.Stat
                     + "=" + TextFormatter.FormatNum(b.TotalMm)
                     + "mm = " + TextFormatter.FormatNum(b.TotalM) + "M");
             }
-            foreach (var c in r.Conduits)
+            if (r.IncludeConduit) foreach (var c in r.Conduits)
             {
                 var lengths = c.LengthsMm.Select(v => TextFormatter.FormatNum(v / 1000.0)).ToList();
                 outLines.Add(c.Spec + ": " + TextFormatter.Join(lengths, "+")
@@ -136,5 +146,9 @@ namespace UNCAD.Core.Stat
 
         public static List<string> BuildReport(IEnumerable<string> lines, double mmPerGrid)
             => BuildReport(Calculate(lines, mmPerGrid));
+
+        public static List<string> BuildReport(IEnumerable<string> lines,
+            StatCalculationOptions options)
+            => BuildReport(Calculate(lines, options));
     }
 }

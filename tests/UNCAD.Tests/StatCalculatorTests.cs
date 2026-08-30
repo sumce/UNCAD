@@ -151,6 +151,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void BuildReport_DoesNotEmitDisabledCategory()
+        {
+            var report = StatCalculator.BuildReport(new[] { "桥架200*100 2格" },
+                new StatCalculationOptions
+                {
+                    MmPerGrid = 250.0,
+                    IncludeCable = false,
+                    IncludeBridge = true,
+                    IncludeConduit = false
+                });
+
+            Assert.DoesNotContain(report, line => line.StartsWith("电缆长度:"));
+            Assert.Single(report);
+            Assert.StartsWith("桥架200*100", report[0]);
+        }
+
+        [Fact]
         public void BuildReport_ContainsBridgeMath()
         {
             var lines = new List<string> { "桥架200*100 10格" };

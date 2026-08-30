@@ -27,12 +27,20 @@ namespace UNCAD.Core.Geometry
 
         public bool Contains(double x, double y)
         {
-            // Drawing coordinates are large in production files, so scale the tolerance with
-            // the frame while retaining a small absolute floor for boundary insertion points.
-            double tolerance = Math.Max(0.000001, Math.Max(Width, Height) * 0.000000001);
+            double tolerance = Tolerance();
             return x >= MinX - tolerance && x <= MaxX + tolerance
                 && y >= MinY - tolerance && y <= MaxY + tolerance;
         }
+
+        public bool Intersects(double minX, double minY, double maxX, double maxY)
+        {
+            double tolerance = Tolerance();
+            return maxX >= MinX - tolerance && minX <= MaxX + tolerance
+                && maxY >= MinY - tolerance && minY <= MaxY + tolerance;
+        }
+
+        private double Tolerance()
+            => Math.Max(0.000001, Math.Max(Width, Height) * 0.000000001);
 
         public static int CompareReadingOrder(FrameRectangle left, FrameRectangle right)
         {

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using UNCAD.Cad;
@@ -61,6 +63,7 @@ namespace UNCAD.Features.Fill
         public static string ReadRuanguanLengthMeters(CadContext ctx, ObjectId[] blockIds)
         {
             if (ctx == null || blockIds == null || blockIds.Length == 0) return "";
+            var values = new List<string>();
             using (var tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 foreach (ObjectId id in blockIds)
@@ -71,21 +74,25 @@ namespace UNCAD.Features.Fill
                     {
                         var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
                             as AttributeReference;
-                        string value = attribute?.TextString ?? "";
-                        string meters = ParseRuanguanMeters(value);
-                        if (meters.Length > 0) return meters;
+                        string meters = ParseRuanguanMeters(attribute?.TextString ?? "");
+                        if (meters.Length > 0) values.Add(meters);
                     }
                     if (!block.IsDynamicBlock) continue;
                     foreach (DynamicBlockReferenceProperty property
                         in block.DynamicBlockReferencePropertyCollection)
                     {
                         string meters = ParseRuanguanMeters(Convert.ToString(property.Value));
-                        if (meters.Length > 0) return meters;
+                        if (meters.Length > 0) values.Add(meters);
                     }
                 }
                 tr.Commit();
             }
-            return "";
+            if (values.Count == 0) return "";
+            string first = values[0];
+            if (values.Any(value => !string.Equals(value, first,
+                    StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("同一图框中存在多个不一致的 Ruanguan 软管长度。请只保留一个有效长度。");
+            return first;
         }
 
         private static string ParseRuanguanMeters(string value)
@@ -129,37 +136,31 @@ namespace UNCAD.Features.Fill
             var upstreamState = new List<ObjectId>();
             var upstreamAxis = new List<ObjectId>();
             var downstreamAxis = new List<ObjectId>();
-            try
+            using (var tr = ctx.Db.TransactionManager.StartTransaction())
             {
-                using (var tr = ctx.Db.TransactionManager.StartTransaction())
+                foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
                 {
-                    foreach (ObjectId id in ids)
+                    var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
+                    if (entity is Table) tables.Add(id);
+                    else if (entity is DBText || entity is MText) texts.Add(id);
+                    else if (entity is BlockReference block)
                     {
-                        var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
-                        if (entity is Table) tables.Add(id);
-                        else if (entity is DBText || entity is MText) texts.Add(id);
-                        else if (entity is BlockReference block)
-                        {
-                            if (IsFillTargetBlock(tr, block)) frames.Add(id);
-                            if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
-                                devices.Add(id);
-                            if (IsRuanguanBlock(tr, block))
-                                ruanguan.Add(id);
-                            if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
-                                upstreamInfo.Add(id);
-                            if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
-                                upstreamState.Add(id);
-                            if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
-                                upstreamAxis.Add(id);
-                            if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
-                                downstreamAxis.Add(id);
-                        }
+                        if (IsFillTargetBlock(tr, block)) frames.Add(id);
+                        if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
+                            devices.Add(id);
+                        if (IsRuanguanBlock(tr, block))
+                            ruanguan.Add(id);
+                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
+                            upstreamInfo.Add(id);
+                        if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
+                            upstreamState.Add(id);
+                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
+                            upstreamAxis.Add(id);
+                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
+                            downstreamAxis.Add(id);
                     }
                 }
-            }
-            catch (System.Exception ex)
-            {
-                Log.Warn("U1F selection split failed: " + ex.Message);
+                tr.Commit();
             }
 
             return new FillSelection
@@ -188,9 +189,9 @@ namespace UNCAD.Features.Fill
                 return definition != null && string.Equals(definition.Name, "Ruanguan",
                     StringComparison.OrdinalIgnoreCase);
             }
-            catch
+            catch (System.Exception ex)
             {
-                return false;
+                throw new InvalidOperationException("无法识别 Ruanguan 块。", ex);
             }
         }
 

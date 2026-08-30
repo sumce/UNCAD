@@ -264,8 +264,12 @@ namespace UNCAD.Features.Fill
             int filled;
             FillWriteResult frameResult, deviceResult, upstreamInfoResult;
             FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult;
+            AutomaticSubmissionWriteResult automaticExcel;
             // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
-            // 所有CAD修改共用一个事务，任一异常都会整体回滚。
+            // 文件快照覆盖到 CAD Commit，任一失败都不留下单边更新。
+            using (var outputBatch = new FileBatchRollback(
+                AutomaticSubmissionService.TargetPaths(automaticExcelPath,
+                    new[] { picked.MachineId })))
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
@@ -286,21 +290,11 @@ namespace UNCAD.Features.Fill
                 downstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                     selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
                     ConnectionBlockFiller.DownstreamAxis(picked), false);
+                // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
+                automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
+                    automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
                 transaction.Commit();
-            }
-
-            AutomaticSubmissionWriteResult automaticExcel;
-            try
-            {
-                automaticExcel = AutomaticSubmissionService.Write(ctx, automaticExcelPath,
-                    new[] { selection.SourceIds });
-            }
-            catch (System.Exception ex)
-            {
-                Log.Error((updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + " automatic BOQ output failed after CAD commit", ex);
-                throw new InvalidOperationException("CAD 已更新，但 BOQ 自动输出失败："
-                    + ex.Message + "；目标文件 " + automaticExcelPath, ex);
+                outputBatch.Complete();
             }
 
             SelectionService.ClearPickFirst(ctx);

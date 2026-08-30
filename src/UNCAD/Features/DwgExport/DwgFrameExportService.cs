@@ -56,18 +56,31 @@ namespace UNCAD.Features.DwgExport
                 throw new InvalidDataException("没有可导出的有效图框。");
 
             string outputRoot = ResolveOutputRoot();
-            var paths = new List<string>();
-            foreach (IGrouping<string, DwgExportFrame> machine in frames
-                .GroupBy(frame => frame.MachineId, StringComparer.OrdinalIgnoreCase))
+            var machineGroups = frames.GroupBy(frame => frame.MachineId,
+                StringComparer.OrdinalIgnoreCase).ToList();
+            var paths = machineGroups.Select(machine => Path.Combine(outputRoot, machine.Key,
+                machine.Key + ".dwg")).ToList();
+            // Export all selected machines as one batch. A later failure restores files written
+            // earlier in the same command.
+            using (var batch = new FileBatchRollback(paths))
             {
-                // Device names are labels, not unique keys. Two physical frames may intentionally
-                // share the same name, so every selected frame remains an independent export item.
-                string machineFolder = Path.Combine(outputRoot, machine.Key);
-                Directory.CreateDirectory(machineFolder);
-                string target = Path.Combine(machineFolder, machine.Key + ".dwg");
-                IReadOnlyList<DwgFramePlacement> layout = DwgExportLayout.Arrange(machine);
-                WriteMachine(ctx.Db, target, layout, machine.Key);
-                paths.Add(target);
+                try
+                {
+                    for (int exportIndex = 0; exportIndex < machineGroups.Count; exportIndex++)
+                    {
+                        IGrouping<string, DwgExportFrame> machine = machineGroups[exportIndex];
+                        string target = paths[exportIndex];
+                        Directory.CreateDirectory(Path.GetDirectoryName(target));
+                        IReadOnlyList<DwgFramePlacement> layout = DwgExportLayout.Arrange(machine);
+                        WriteMachine(ctx.Db, target, layout, machine.Key);
+                    }
+                    batch.Complete();
+                }
+                catch
+                {
+                    batch.Rollback();
+                    throw;
+                }
             }
             return new DwgExportResult
             {
@@ -327,12 +340,25 @@ namespace UNCAD.Features.DwgExport
             {
                 File.Replace(temporary, target, backup, true);
                 if (File.Exists(backup)) File.Delete(backup);
+                return;
+            }
+            catch (PlatformNotSupportedException) { }
+            catch (NotSupportedException) { }
+            catch (IOException) { }
+
+            bool movedOriginal = false;
+            try
+            {
+                File.Move(target, backup);
+                movedOriginal = true;
+                File.Move(temporary, target);
+                if (File.Exists(backup)) File.Delete(backup);
             }
             catch
             {
-                File.Copy(temporary, target, true);
-                File.Delete(temporary);
-                if (File.Exists(backup)) File.Delete(backup);
+                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
+                    File.Move(backup, target);
+                throw;
             }
         }
     }

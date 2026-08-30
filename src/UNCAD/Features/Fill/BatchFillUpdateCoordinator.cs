@@ -106,9 +106,13 @@ namespace UNCAD.Features.Fill
                     MessageBoxButtons.OKCancel, MessageBoxIcon.Information,
                     MessageBoxDefaultButton.Button1) != DialogResult.OK) return;
 
+            AutomaticSubmissionWriteResult automaticExcel;
             int tableRows = 0;
             int frameBlocks = 0;
             int attributeValues = 0;
+            using (var outputBatch = new FileBatchRollback(
+                AutomaticSubmissionService.TargetPaths(automaticExcelPath,
+                    plans.Select(plan => plan.Machine.MachineId))))
             try
             {
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
@@ -149,7 +153,13 @@ namespace UNCAD.Features.Fill
                         attributeValues += frame.Values + device.Values + upstreamInfo.Values
                             + upstreamState.Values + upstreamAxis.Values + downstreamAxis.Values;
                     }
+                    // Read the modified entities through the same transaction. If BOQ output
+                    // fails, disposing this transaction rolls back the whole CAD batch.
+                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
+                        automaticExcelPath, regions.Select(region => region.EntityIds.ToArray()),
+                        outputBatch);
                     transaction.Commit();
+                    outputBatch.Complete();
                 }
             }
             catch (System.Exception ex)
@@ -159,19 +169,6 @@ namespace UNCAD.Features.Fill
                 MessageBox.Show(Owner(), "批量写入失败，所有图框修改均已回滚。\r\n\r\n" + ex.Message,
                     "U1U", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
-            }
-
-            AutomaticSubmissionWriteResult automaticExcel;
-            try
-            {
-                automaticExcel = AutomaticSubmissionService.Write(ctx, automaticExcelPath,
-                    regions.Select(region => region.EntityIds.ToArray()));
-            }
-            catch (System.Exception ex)
-            {
-                Log.Error("U1U automatic BOQ output failed after CAD commit", ex);
-                throw new InvalidOperationException("CAD 已批量更新，但 BOQ 自动输出失败："
-                    + ex.Message + "；目标文件 " + automaticExcelPath, ex);
             }
 
             SelectionService.ClearPickFirst(ctx);

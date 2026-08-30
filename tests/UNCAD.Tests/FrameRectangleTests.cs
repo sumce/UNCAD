@@ -16,6 +16,15 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Intersects_IncludesEntityCrossingFrameBoundary()
+        {
+            var frame = new FrameRectangle("A", 0, 0, 10, 10);
+
+            Assert.True(frame.Intersects(9, 2, 12, 8));
+            Assert.False(frame.Intersects(11, 2, 12, 8));
+        }
+
+        [Fact]
         public void CompareReadingOrder_SortsTopToBottomThenLeftToRight()
         {
             var lower = new FrameRectangle("lower", 0, 0, 10, 10);

@@ -8,6 +8,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+if ($Configuration -ne "Release") { throw "release.ps1 只允许生成永久 Release 包；临时版请使用 release-temp.ps1。" }
 $bundle = Join-Path $root "bundle\UNCAD.bundle"
 
 if (-not $NoBuild) {

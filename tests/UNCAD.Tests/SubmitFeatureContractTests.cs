@@ -14,8 +14,6 @@ namespace UNCAD.Tests
             int table = source.IndexOf("if (entity is Table table)", StringComparison.Ordinal);
             int block = source.IndexOf("else if (entity is BlockReference block)",
                 StringComparison.Ordinal);
-
-            // Autodesk Table derives from BlockReference; order is a behavioral contract.
             Assert.True(table >= 0);
             Assert.True(block > table);
         }
@@ -40,10 +38,10 @@ namespace UNCAD.Tests
             Assert.Contains("record.Materials.Count", submit);
             Assert.DoesNotContain("FillWorkbookSnapshot", submit);
             Assert.DoesNotContain("StartTransaction", submit);
-            Assert.Contains("AutomaticSubmissionService.Write", fill);
-            Assert.Contains("AutomaticSubmissionService.Write", batch);
-            Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 BOQ", fill);
-            Assert.Contains("throw new InvalidOperationException(\"CAD 已批量更新，但 BOQ", batch);
+            Assert.Contains("Write(ctx, transaction", fill);
+            Assert.Contains("Write(ctx, transaction", batch);
+            Assert.DoesNotContain("after CAD commit", fill);
+            Assert.DoesNotContain("after CAD commit", batch);
             Assert.Contains("string outputRoot = Path.GetFullPath(filePath);", service);
             Assert.DoesNotContain("Path.GetDirectoryName(Path.GetFullPath(filePath))", service);
             Assert.DoesNotContain("批量图框包含重复的机台/设备", service);

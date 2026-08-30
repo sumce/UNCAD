@@ -76,10 +76,11 @@ namespace UNCAD.Cad
                 {
                     if (selectedFrames.Contains(id)) continue;
                     Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
+                    if (!TryBounds(entity, out double minX, out double minY,
+                        out double maxX, out double maxY, includeAllEntities)) continue;
 
                     List<FrameRegionGroup> owners = result.Groups.Where(group =>
-                        group.Boundary.Contains(anchor.X, anchor.Y)).ToList();
+                        group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
                     if (owners.Count == 1)
                     {
                         owners[0].EntityIds.Add(id);
@@ -219,35 +220,25 @@ namespace UNCAD.Cad
                 StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool TryAnchor(Entity entity, out Point3d anchor)
-            => TryAnchor(entity, out anchor, false);
-
-        private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)
+        private static bool TryBounds(Entity entity, out double minX, out double minY,
+            out double maxX, out double maxY, bool includeAllEntities)
         {
-            if (entity is BlockReference block)
-            {
-                anchor = block.Position;
-                return true;
-            }
-            if (!includeAllEntities && !(entity is Table) && !(entity is DBText) && !(entity is MText))
-            {
-                anchor = Point3d.Origin;
+            minX = minY = maxX = maxY = 0;
+            if (entity == null || (!includeAllEntities && !(entity is Table)
+                && !(entity is DBText) && !(entity is MText) && !(entity is BlockReference)))
                 return false;
-            }
-
             try
             {
                 Extents3d extents = entity.GeometricExtents;
-                anchor = new Point3d(
-                    (extents.MinPoint.X + extents.MaxPoint.X) / 2.0,
-                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2.0,
-                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2.0);
+                minX = extents.MinPoint.X;
+                minY = extents.MinPoint.Y;
+                maxX = extents.MaxPoint.X;
+                maxY = extents.MaxPoint.Y;
                 return true;
             }
             catch
             {
                 // An entity without valid extents cannot be assigned safely to a frame.
-                anchor = Point3d.Origin;
                 return false;
             }
         }

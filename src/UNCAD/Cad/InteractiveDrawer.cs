@@ -98,15 +98,17 @@ namespace UNCAD.Cad
                 {
                     foreach (var id in ids)
                     {
-                        var e = tx.GetObject(id, OpenMode.ForWrite) as Entity;
-                        e?.Erase();
+                        if (id.IsNull || !id.IsValid) continue;
+                        var e = tx.GetObject(id, OpenMode.ForWrite, true) as Entity;
+                        if (e != null && !e.IsErased) e.Erase();
                     }
                     tx.Commit();
                 }
             }
             catch (System.Exception ex)
             {
-                Log.Warn("清除失败: " + ex.Message);
+                Log.Error("清除失败，图纸可能保留了部分已绘制实体", ex);
+                throw new InvalidOperationException("取消操作时清理已绘制实体失败，请检查图纸。", ex);
             }
         }
 
@@ -122,9 +124,9 @@ namespace UNCAD.Cad
             }
             catch (System.Exception ex)
             {
-                // 实体可能已被删除/回滚，退回原点即可
-                Log.Warn("读取线段端点失败: " + ex.Message);
-                return Point3d.Origin;
+                // 实体可能已被删除/回滚；继续绘制会改变用户指定的连接点，必须停止。
+                Log.Error("读取线段端点失败", ex);
+                throw new InvalidOperationException("撤销后无法确定下一段起点，绘制已停止。", ex);
             }
         }
     }
