@@ -86,7 +86,9 @@ namespace UNCAD.UI
                     RibbonItemDefinition.Button("U1SET 设置", CommandIds.Settings,
                         "集中设置数据源、文字、绘图和输出参数"),
                     RibbonItemDefinition.Button("关于与授权", CommandIds.About,
-                        "查看版本、授权状态、使用条款和 UNSIAO.Ltd 信息"))
+                        "查看版本、授权状态、使用条款和 UNSIAO.Ltd 信息"),
+                    RibbonItemDefinition.Button("U1HELP 命令帮助", CommandIds.Help,
+                        "查看全部命令的使用方法、功能和注意事项"))
             };
 
         public static IEnumerable<RibbonItemDefinition> CommandItems =>

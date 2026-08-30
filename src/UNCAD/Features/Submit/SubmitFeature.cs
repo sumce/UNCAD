@@ -50,8 +50,7 @@ namespace UNCAD.Features.Submit
                 SubmissionRecord record;
                 try
                 {
-                    record = SubmissionRecordExtractor.Extract(CadSubmissionReader.Read(ctx,
-                        region.EntityIds.ToArray()));
+                    record = FrameIdentityReader.Read(ctx, region);
                 }
                 catch (System.Exception ex)
                 {

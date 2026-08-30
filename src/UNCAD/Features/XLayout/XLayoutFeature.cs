@@ -60,8 +60,7 @@ namespace UNCAD.Features.XLayout
                 SubmissionRecord record;
                 try
                 {
-                    record = SubmissionRecordExtractor.Extract(CadSubmissionReader.Read(ctx,
-                        group.EntityIds.ToArray()));
+                    record = FrameIdentityReader.Read(ctx, group);
                 }
                 catch (System.Exception ex)
                 {

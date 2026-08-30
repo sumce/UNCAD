@@ -43,8 +43,7 @@ namespace UNCAD.Features.DwgExport
             foreach (FrameRegionGroup group in groups ?? Enumerable.Empty<FrameRegionGroup>())
             {
                 index++;
-                SubmissionRecord record = SubmissionRecordExtractor.Extract(
-                    CadSubmissionReader.Read(ctx, group.EntityIds.ToArray()));
+                SubmissionRecord record = FrameIdentityReader.Read(ctx, group);
                 string machineId = (record.MachineId ?? "").Trim();
                 string deviceName = (record.DeviceName ?? "").Trim();
                 ValidatePathPart(machineId, "机台ID");

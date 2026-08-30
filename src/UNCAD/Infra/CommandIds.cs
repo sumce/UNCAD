@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.1.1.</summary>
+    /// <summary>Public AutoCAD command contract for v2.1.2.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -11,6 +11,7 @@ namespace UNCAD.Infra
         public const string Settings = "U1SET";
         public const string DwgExport = "U1DWG";
         public const string XLayout = "XLAYOUT";
+        public const string Help = "U1HELP";
         public const string About = "U1A";
         public const string Conduit = "U1C";
         public const string Tray100 = "U1Q1";
@@ -35,11 +36,12 @@ namespace UNCAD.Infra
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
+        public const string HelpFeatureCommands = Help;
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
             Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout
+            Conduit, About, Settings, DwgExport, XLayout, Help
         };
 
         public static IReadOnlyList<string> Legacy { get; } = new[]
@@ -51,7 +53,7 @@ namespace UNCAD.Infra
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
             Line, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout,
+            Conduit, About, Settings, DwgExport, XLayout, Help,
             LegacyLine, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics
         };

@@ -13,7 +13,7 @@ namespace UNCAD.Tests
                 "XLayout", "XLayoutFeature.cs"));
             Assert.Contains("CommandMethod(CommandIds.XLayout", source);
             Assert.Contains("CollectForLayout", source);
-            Assert.Contains("CadSubmissionReader.Read", source);
+            Assert.Contains("FrameIdentityReader.Read", source);
             Assert.Contains("XLayoutLayout.Arrange", source);
             Assert.Contains("transaction.Commit();", source);
             Assert.Contains("XLayoutSummaryForm", source);

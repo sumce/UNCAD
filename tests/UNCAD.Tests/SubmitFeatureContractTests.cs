@@ -33,7 +33,7 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("CommandMethod", service);
             Assert.Contains("CommandMethod(CommandIds.Submit", submit);
             Assert.Contains("FrameRegionCollector.Collect", submit);
-            Assert.Contains("CadSubmissionReader.Read", submit);
+            Assert.Contains("FrameIdentityReader.Read", submit);
             Assert.Contains("AutomaticSubmissionService.Write", submit);
             Assert.Contains("record.Materials.Count", submit);
             Assert.DoesNotContain("FillWorkbookSnapshot", submit);
