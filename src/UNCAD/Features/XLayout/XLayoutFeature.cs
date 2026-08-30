@@ -135,6 +135,9 @@ namespace UNCAD.Features.XLayout
                         labelAnchor, MachineLabelTextHeight, 0d,
                         AttachmentPoint.MiddleRight, textStyleId: textStyle);
                     ctx.AddToCurrentSpace(transaction, label);
+                    // AutoCAD applies DBText justification after database ownership is established;
+                    // refresh it here so short and long machine IDs share one right edge.
+                    label.AdjustAlignment(ctx.Db);
                 }
                 transaction.Commit();
             }

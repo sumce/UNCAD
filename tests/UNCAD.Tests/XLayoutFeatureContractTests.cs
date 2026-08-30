@@ -24,6 +24,7 @@ namespace UNCAD.Tests
             Assert.Contains("MachineLabelTextHeight = 25000d", source);
             Assert.Contains("AttachmentPoint.MiddleRight", source);
             Assert.Contains("EntityFactory.DBText", source);
+            Assert.Contains("label.AdjustAlignment(ctx.Db)", source);
         }
 
         [Fact]

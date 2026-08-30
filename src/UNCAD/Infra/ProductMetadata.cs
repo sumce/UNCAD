@@ -29,7 +29,7 @@ namespace UNCAD.Infra
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
         public const string ReleaseDateUtc = "2026-08-30";
-        public const string VersionLabel = "2.1.4";
+        public const string VersionLabel = "2.1.5";
 
         // Temporary builds use a separate configuration and package; Release remains perpetual.
 #if UNCAD_TEMPORARY_LICENSE
