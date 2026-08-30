@@ -87,7 +87,8 @@ namespace UNCAD.Core.Excel
 
         public static string NormalizeSpec(string value)
             => Whitespace.Replace(value ?? "", "")
-                .Replace("x", "*").Replace("X", "*").ToUpperInvariant();
+                .Replace("×", "*").Replace("x", "*").Replace("X", "*")
+                .ToUpperInvariant();
 
         public static string NormalizeCable(string cable)
         {

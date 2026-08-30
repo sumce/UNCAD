@@ -17,6 +17,7 @@ namespace UNCAD.Features.DwgExport
 
         protected override void Execute(CadContext ctx)
         {
+            ProductMetadata.EnsureCommandAllowed(CommandIds.DwgExport);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
                 "\n请框选或点选需要导出的 frame_20260812 图框: ",
                 new TypedValue(0, "INSERT"));

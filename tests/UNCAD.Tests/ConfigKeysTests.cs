@@ -8,17 +8,19 @@ namespace UNCAD.Tests
         [Fact]
         public void Nameplate_UsesApprovedBrandText()
         {
-            Assert.Equal("UNSIAO Work™ | 云邵出品", Branding.Nameplate);
+            Assert.Equal("UNCAD · AutoCAD Engineering Tools", Branding.Nameplate);
+            Assert.Equal("UNSIAO.Ltd", Branding.Developer);
         }
 
         [Fact]
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("1.9.7.9", info.Version);
+            Assert.Equal("1.9.7.16", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
-            Assert.Equal("2026-08-29", info.UpdatedOn);
-            Assert.Contains("正式版", info.Authorization);
+            Assert.Equal("2026-08-30", info.UpdatedOn);
+            Assert.Contains(ProductMetadata.BuildLicenseMode == LicenseMode.Perpetual
+                ? "正式版" : "试用版", info.Authorization);
             Assert.Equal("UNSIAO.Ltd", Branding.Developer);
         }
 

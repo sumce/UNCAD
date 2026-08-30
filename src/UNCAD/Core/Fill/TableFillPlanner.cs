@@ -53,6 +53,8 @@ namespace UNCAD.Core.Fill
             BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options)
         {
             machine = machine ?? new MachineRow();
+            // Keep every planner caller on the same cable-only hose diameter contract.
+            FlexibleConduitCableMap.ApplyTo(machine);
             catalog = catalog ?? new BoqCatalogIndex(null);
             stat = stat ?? new CableStatResult();
             options = options ?? FillPlanningOptions.Default;
@@ -61,7 +63,7 @@ namespace UNCAD.Core.Fill
             AddCable(rows, machine, catalog, stat);
             AddBridges(rows, catalog, stat);
             AddRigidConduits(rows, catalog, stat);
-            AddFlexibleConduit(rows, machine, catalog, stat, options);
+            AddFlexibleConduit(rows, machine, catalog, options);
             AddNextEquipment(rows, machine, catalog);
 
             return rows.OrderBy(r => r.SortOrder)
@@ -110,14 +112,12 @@ namespace UNCAD.Core.Fill
         }
 
         private static void AddFlexibleConduit(List<TableFillRow> rows, MachineRow machine,
-            BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options)
+            BoqCatalogIndex catalog, FillPlanningOptions options)
         {
-            string sourceDiameter = (machine.Dia ?? "").Trim();
-            string diameter = ConduitDiameter.NormalizeOrEmpty(sourceDiameter);
-            if (diameter.Length == 0)
-                diameter = sourceDiameter.Length == 0
-                    ? InferSingleConduitDiameter(stat)
-                    : sourceDiameter;
+            // Hose diameter is derived exclusively from the cable specification.
+            // Never reuse the workbook hose column or infer it from rigid-conduit statistics.
+            string diameter = ConduitDiameter.NormalizeOrEmpty(machine?.Dia);
+            if (diameter.Length == 0) return;
             rows.Add(BuildFlexibleConduitRow(diameter, catalog, options));
         }
 
@@ -162,12 +162,7 @@ namespace UNCAD.Core.Fill
 
             if (string.Equals(next, "插座盘", StringComparison.OrdinalIgnoreCase))
             {
-                ListItem item = catalog.Outlets.FirstOrDefault(i =>
-                    RangeContains(i.Spec, amps));
-                string description = "1.名称:插座"
-                    + (amps > 0 ? "\\P2.额定电流:" + amps + "A" : "");
-                rows.Add(FromItem(TableFillCategory.Outlet, 800, item,
-                    "插座", description, "个", "1"));
+                rows.Add(BuildOutletRow(machine.Detail, catalog));
                 return;
             }
 
@@ -179,6 +174,18 @@ namespace UNCAD.Core.Fill
                 rows.Add(FromItem(TableFillCategory.BusPlugBox, 500, item,
                     "母线插接箱", description, "个", "1"));
             }
+        }
+
+        public static TableFillRow BuildOutletRow(string detail, BoqCatalogIndex catalog)
+        {
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            TryExtractRating(detail, out _, out int amps);
+            ListItem item = catalog.Outlets.FirstOrDefault(candidate =>
+                RangeContains(candidate.Spec, amps));
+            string description = "1.名称:插座"
+                + (amps > 0 ? @"\P2.额定电流:" + amps + "A" : "");
+            return FromItem(TableFillCategory.Outlet, 800, item,
+                "插座", description, "个", "1");
         }
 
         private static TableFillRow FromItem(TableFillCategory category, int order,
@@ -196,15 +203,6 @@ namespace UNCAD.Core.Fill
                 Code = item?.Code ?? "",
                 CatalogMatched = item != null
             };
-        }
-
-        private static string InferSingleConduitDiameter(CableStatResult stat)
-        {
-            List<string> diameters = (stat?.Conduits ?? new List<ConduitStat>())
-                .Select(item => ExtractNumber(item.Spec))
-                .Where(value => value.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            return diameters.Count == 1 ? diameters[0] : "";
         }
 
         private static string NormalizeBridgeSpec(string value)

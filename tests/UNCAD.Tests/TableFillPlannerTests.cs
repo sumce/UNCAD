@@ -160,20 +160,16 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_AlwaysAddsEditableOnePointFiveMeterFlexibleConduit()
+        public void Build_DoesNotAddFlexibleConduitWithoutCableDerivedDiameter()
         {
-            var machine = new MachineRow { CircuitName = "普通设备" };
-            TableFillRow flexible = Assert.Single(TableFillPlanner.Build(
-                machine, Items(), new CableStatResult()));
+            var machine = new MachineRow { CircuitName = "普通设备", Dia = "" };
 
-            Assert.Equal(TableFillCategory.FlexibleConduit, flexible.Category);
-            Assert.Equal("包塑金属软管", flexible.Name);
-            Assert.Equal("1.5", flexible.Quantity);
-            Assert.Equal("", flexible.Code);
+            Assert.DoesNotContain(TableFillPlanner.Build(machine, Items(), new CableStatResult()),
+                row => row.Category == TableFillCategory.FlexibleConduit);
         }
 
         [Fact]
-        public void Build_BlankDiaInfers32ButDoesNotUse38FlexibleTemplate()
+        public void Build_DoesNotInferHoseDiameterFromRigidConduitStatistics()
         {
             var items = new List<ListItem>
             {
@@ -184,14 +180,8 @@ namespace UNCAD.Tests
                 new[] { "⌀32线管 3000mm" }, 250.0);
 
             List<TableFillRow> rows = TableFillPlanner.Build(new MachineRow(), items, stat);
-            TableFillRow flexible = rows.Single(row =>
-                row.Category == TableFillCategory.FlexibleConduit);
 
-            Assert.Equal("", flexible.Code);
-            Assert.Contains("32", flexible.Description);
-            Assert.DoesNotContain("软管38模板", flexible.Description);
-            Assert.Equal("1.5", flexible.Quantity);
-            Assert.False(flexible.CatalogMatched);
+            Assert.DoesNotContain(rows, row => row.Category == TableFillCategory.FlexibleConduit);
         }
 
         [Fact]
@@ -206,9 +196,8 @@ namespace UNCAD.Tests
                 Item("3.7", "包塑金属软管", "软管38mm模板", "m", "38mm")
             });
 
-            TableFillRow flexible = TableFillPlanner.Build(
-                new MachineRow { Dia = "32mm" }, catalog.Items, new CableStatResult())
-                .Single(row => row.Category == TableFillCategory.FlexibleConduit);
+            TableFillRow flexible = TableFillPlanner.BuildFlexibleConduitRow(
+                "32mm", catalog, FillPlanningOptions.Default);
 
             Assert.Equal("3.3", flexible.Code);
             Assert.Equal("镀锌穿线管", flexible.Name);
@@ -218,37 +207,31 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_ConfiguredFlexibleMetersFlowsToPlannedQuantity()
+        public void BuildFlexibleConduitRow_ConfiguredMetersFlowsToPlannedQuantity()
         {
             var catalog = new BoqCatalogIndex(new List<ListItem>
             {
                 Item("3.6", "包塑金属软管", "25mm模板", "m", "25mm")
             });
-            List<TableFillRow> rows = TableFillPlanner.Build(
-                new MachineRow { Dia = "DN25" }, catalog, new CableStatResult(),
-                FillPlanningOptions.Create(2.25, false));
+            TableFillRow flexible = TableFillPlanner.BuildFlexibleConduitRow(
+                "DN25", catalog, FillPlanningOptions.Create(2.25, false));
 
-            TableFillRow flexible = rows.Single(row =>
-                row.Category == TableFillCategory.FlexibleConduit);
             Assert.Equal("3.6", flexible.Code);
             Assert.Equal("2.25", flexible.Quantity);
         }
 
         [Fact]
-        public void Build_BlankDiaWithMultipleConduitsKeepsGenericEditableFlexibleRow()
+        public void Build_DoesNotUseMultipleRigidConduitDiametersForHose()
         {
             CableStatResult stat = StatCalculator.Calculate(new[]
             {
                 "⌀20线管 2000mm", "⌀25线管 3000mm"
             }, 250.0);
 
-            TableFillRow flexible = TableFillPlanner.Build(
-                new MachineRow(), Items(), stat).Single(row =>
-                    row.Category == TableFillCategory.FlexibleConduit);
+            List<TableFillRow> rows = TableFillPlanner.Build(
+                new MachineRow(), Items(), stat);
 
-            Assert.Equal("", flexible.Code);
-            Assert.Equal("1.名称:包塑金属软管", flexible.Description);
-            Assert.Equal("1.5", flexible.Quantity);
+            Assert.DoesNotContain(rows, row => row.Category == TableFillCategory.FlexibleConduit);
         }
 
         private static ListItem Item(string code, string name, string feature, string unit, string spec)

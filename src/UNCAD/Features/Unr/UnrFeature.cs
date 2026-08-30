@@ -49,7 +49,7 @@ namespace UNCAD.Features.Unr
             });
         }
 
-        // 规范命令：U1R / U1S
+        // 规范命令：U1R；统一设置使用 U1SET
         [CommandMethod(CommandIds.Arch)]
         public void UncadArch() => Run();
 

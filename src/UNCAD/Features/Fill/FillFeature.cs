@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -37,6 +38,7 @@ namespace UNCAD.Features.Fill
 
         private static void ExecuteCore(CadContext ctx, bool updateMode)
         {
+            ProductMetadata.EnsureCommandAllowed(updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
             // 阶段1：检测写入目标和统计文字。此阶段只读图纸，不产生任何修改。
             FillSelection selection = FillSelectionCollector.Collect(ctx);
             if (selection.IsEmpty)
@@ -151,7 +153,7 @@ namespace UNCAD.Features.Fill
             }
             else
             {
-                Func<MachineRow, string> preview = selected => BuildPreview(selected, catalog,
+                Func<MachineRow, string> preview = selected => BuildPreview(ctx, selected, catalog,
                     statistics, selection, options);
                 using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
                 {
@@ -165,18 +167,19 @@ namespace UNCAD.Features.Fill
             }
 
             // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
+            FlexibleConduitCableMap.ApplyTo(picked);
             TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
-            var preservedOutlets = new List<TableFillRow>();
-            if (updateMode)
-            {
-                // U1U treats the CAD table as authoritative for outlets. It preserves an existing
-                // outlet verbatim and never recreates one that the user removed from the drawing.
-                preservedOutlets = CadExistingOutletReader.Read(ctx, selection.TableIds,
-                    startRow, clearRowCount);
-                tablePlan = new TableGenerationOutput(UpdateOutletPolicy.PreserveExisting(
-                    tablePlan.CopyDefaultRows(), preservedOutlets), tablePlan.DefaultCableMeters);
-            }
+            bool deviceHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
+                selection.DeviceBlockIds, out string deviceState);
+            TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
+            tablePlan = new TableGenerationOutput(DeviceOutletPolicy.Apply(
+                tablePlan.CopyDefaultRows(), deviceHasOutlet, deviceOutlet),
+                tablePlan.DefaultCableMeters);
+            ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                + "] Device 状态: " + deviceState + "；插座清单: "
+                + (deviceHasOutlet ? "输出 " + (deviceOutlet.Code.Length > 0
+                    ? deviceOutlet.Code : "未匹配") : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
             ApplyRuanguanLength(ctx, selection, review);
@@ -193,11 +196,25 @@ namespace UNCAD.Features.Fill
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
-            if (updateMode)
+            // Device visibility is the final socket authority; DETAIL selects 8.2/8.3 when possible.
+            deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
+            if (deviceHasOutlet && !deviceOutlet.CatalogMatched)
             {
-                // Reapply after the dialog so U1U cannot alter outlet values through review edits.
-                tableRows = UpdateOutletPolicy.PreserveExisting(tableRows, preservedOutlets);
+                TableFillRow reviewedOutlet = tableRows.FirstOrDefault(row =>
+                    UpdateOutletPolicy.IsOutlet(row) && row.CatalogMatched);
+                if (reviewedOutlet == null)
+                {
+                    MessageBox.Show(new WindowWrapper(
+                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
+                        "Device 当前为插座状态，但 DETAIL 电流无法匹配插座 8.2/8.3。"
+                            + "请在清单确认中选择对应插座型号。",
+                        "U1F 插座型号未匹配", MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+                deviceOutlet = reviewedOutlet;
             }
+            tableRows = DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
             Log.Info("U1F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
@@ -216,7 +233,7 @@ namespace UNCAD.Features.Fill
                 MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "清单共 " + tableRows.Count + " 项，所选表格实际可写范围只有 "
-                        + tableCapacity + " 行。请删除部分清单项，或在U1S中调整起始行和清除行数。",
+                        + tableCapacity + " 行。请删除部分清单项，或在 U1SET 中调整起始行和清除行数。",
                     "U1F 表格容量不足", MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
@@ -246,7 +263,7 @@ namespace UNCAD.Features.Fill
 
             int filled;
             FillWriteResult frameResult, deviceResult, upstreamInfoResult;
-            FillWriteResult upstreamAxisResult, downstreamAxisResult;
+            FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult;
             // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
             // 所有CAD修改共用一个事务，任一异常都会整体回滚。
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
@@ -261,6 +278,8 @@ namespace UNCAD.Features.Fill
                 upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                     selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
                     ConnectionBlockFiller.UpstreamInfo(picked), true);
+                upstreamStateResult = CadDynamicBlockStateService.FillUpstreamState(ctx,
+                    transaction, selection.UpstreamStateBlockIds, picked.Next);
                 upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                     selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
                     ConnectionBlockFiller.UpstreamAxis(picked), false);
@@ -293,7 +312,8 @@ namespace UNCAD.Features.Fill
                 + " 项（SUM-STAT源 " + summation.SourceLineCount + " 行，命中 "
                 + summation.TotalMatchCount + " 行）；设备动态块更新 "
                 + deviceResult.Blocks + " 个；上游信息 "
-                + upstreamInfoResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
+                + upstreamInfoResult.Blocks + " 个，upstream 状态 "
+                + upstreamStateResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
@@ -334,11 +354,11 @@ namespace UNCAD.Features.Fill
             {
                 // Ruanguan is the only source of hose length; absent/invalid values mean no hose row.
                 review.RemoveItem(flexible);
-                ctx.Write("\n[U1U] 未找到 Ruanguan 有效软管长度，已不加入软管清单。");
+                ctx.Write("\n[U1F/U1U] 未找到 Ruanguan 有效软管长度，已不加入软管清单。");
                 return;
             }
             flexible.Quantity = meters;
-            ctx.Write("\n[U1U] Ruanguan 软管长度: " + meters + "M。");
+            ctx.Write("\n[U1F/U1U] Ruanguan 软管长度: " + meters + "M。");
         }
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
@@ -419,7 +439,7 @@ namespace UNCAD.Features.Fill
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
                 ctx.Write("\n[U1F] 使用上次 Excel: " + path
-                    + "（U1S → Excel 填充 可修改）");
+                    + "（U1SET → Excel 填充 可修改）");
                 return path;
             }
 
@@ -439,9 +459,11 @@ namespace UNCAD.Features.Fill
             return path;
         }
 
-        private static string BuildPreview(MachineRow row, BoqCatalogIndex catalog,
+        private static string BuildPreview(CadContext ctx, MachineRow row, BoqCatalogIndex catalog,
             CableStatResult statistics, FillSelection selection, FillRuntimeOptions options)
         {
+            // Keep the picker preview on the same cable-derived diameter path as final planning.
+            FlexibleConduitCableMap.ApplyTo(row);
             var preview = new StringBuilder();
             preview.AppendLine("▼ 回路详情");
             preview.AppendLine("  机台/设备：" + row.MachineId + " / " + row.CircuitName);
@@ -455,6 +477,21 @@ namespace UNCAD.Features.Fill
             List<TableFillRow> plannedRows = TableGenerationModule.Plan(
                 new TableGenerationRequest(row, catalog, statistics, options.Planning))
                 .CopyDefaultRows();
+            bool previewHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
+                selection?.DeviceBlockIds, out string previewDeviceState);
+            plannedRows = DeviceOutletPolicy.Apply(plannedRows, previewHasOutlet,
+                TableFillPlanner.BuildOutletRow(row.Detail, catalog));
+            TableFillRow previewHose = plannedRows.FirstOrDefault(item =>
+                item.Category == TableFillCategory.FlexibleConduit);
+            if (previewHose != null)
+            {
+                string hoseMeters = FillSelectionCollector.ReadRuanguanLengthMeters(
+                    ctx, selection?.RuanguanBlockIds);
+                if (hoseMeters.Length == 0)
+                    plannedRows.Remove(previewHose);
+                else
+                    previewHose.Quantity = hoseMeters;
+            }
             preview.AppendLine("▼ 表格写入（覆盖，从 No." + options.StartRow + " 行开始，共 "
                 + plannedRows.Count + " 项，文字高度 "
                 + TextFormatter.FormatNum(options.TextHeight) + "）");
@@ -475,7 +512,12 @@ namespace UNCAD.Features.Fill
             }
             if (selection.DeviceBlockIds.Length > 0)
                 preview.AppendLine("▼ 设备动态块（" + selection.DeviceBlockIds.Length
-                    + " 个）：DEVICENAME = " + DeviceBlockFiller.BuildValue(row));
+                    + " 个）：DEVICENAME = " + DeviceBlockFiller.BuildValue(row)
+                    + " ｜ 状态 " + previewDeviceState + " ｜ 插座 "
+                    + (previewHasOutlet ? "输出" : "不输出"));
+            if (selection.UpstreamStateBlockIds.Length > 0)
+                preview.AppendLine("▼ upstream 状态："
+                    + DynamicBlockStatePolicy.UpstreamVisibilityState(row.Next));
             if (selection.UpstreamInfoBlockIds.Length > 0)
                 preview.AppendLine("▼ 上游信息块：" + row.Fr + " / " + row.Detail);
             if (selection.UpstreamAxisBlockIds.Length > 0)

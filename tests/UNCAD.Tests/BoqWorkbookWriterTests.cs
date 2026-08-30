@@ -24,6 +24,41 @@ namespace UNCAD.Tests
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
+        [Theory]
+        [InlineData("BOQ_Template.xlsx")]
+        [InlineData("BOQ模板.xlsx")]
+        public void ResolveTemplatePath_UsesExplicitPluginDirectory(string fileName)
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_boq_template_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                string expected = Path.Combine(root, fileName);
+                File.WriteAllBytes(expected, new byte[] { 1 });
+
+                string actual = BoqWorkbookWriter.ResolveTemplatePath(root);
+
+                Assert.Equal(Path.GetFullPath(expected), actual);
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void ResolveTemplatePath_MissingTemplateReportsSearchedPluginDirectory()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_boq_missing_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                FileNotFoundException error = Assert.Throws<FileNotFoundException>(() =>
+                    BoqWorkbookWriter.ResolveTemplatePath(root));
+                Assert.Contains(Path.GetFullPath(root), error.Message);
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
         [Fact]
         public void Write_UpdatesOnlyMatchingTemplateQuantityRows()
         {
@@ -60,6 +95,7 @@ namespace UNCAD.Tests
                         }
                     }
                 });
+                Assert.False(File.Exists(target + ".boq.lock"));
 
                 using (var stream = new FileStream(target, FileMode.Open, FileAccess.Read))
                 {

@@ -69,8 +69,8 @@ namespace UNCAD.UI
             _planningOptions = planningOptions ?? FillPlanningOptions.Default;
             _defaults = Data.Snapshot();
 
-            DialogLayout.Apply(this, "U1F 填充确认 · " + Branding.Nameplate,
-                new Size(1040, 660), new Size(880, 560));
+            DialogLayout.Apply(this, ProductMetadata.ProductName + " · 清单确认",
+                new Size(1080, 700), new Size(900, 580));
 
             _cable.Name = "BoqCableModel";
             _cable.ReadOnly = true;
@@ -183,6 +183,14 @@ namespace UNCAD.UI
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var page = new TabPage("基础信息") { Padding = new Padding(4) };
             page.Controls.Add(layout);
+            page.Controls.Add(new Label
+            {
+                Text = "来源：电缆型号决定软管直径；Ruanguan 决定软管长度；Device_Build20260716 动态状态决定是否输出插座。",
+                Dock = DockStyle.Top,
+                Height = 30,
+                ForeColor = Color.FromArgb(0, 112, 173),
+                Padding = new Padding(14, 5, 14, 3)
+            });
             return page;
         }
 
@@ -200,9 +208,16 @@ namespace UNCAD.UI
                 MultiSelect = false,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackgroundColor = SystemColors.Window,
-                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
+                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
+                EnableHeadersVisualStyles = false,
+                GridColor = Color.FromArgb(220, 224, 228)
             };
             grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(214, 234, 248);
+            grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(35, 43, 52);
+            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
+            grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(235, 239, 243);
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(35, 43, 52);
             grid.RowTemplate.Height = 44;
             grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = 52 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = 80, ReadOnly = true });

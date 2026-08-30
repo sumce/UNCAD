@@ -1,5 +1,5 @@
 param(
-    [string]$Configuration = "Debug",
+    [string]$Configuration = "Release",
     [string]$AutoCADDir = "D:\Program Files\Autodesk\AutoCAD 2022",
     [switch]$SkipBundle,
     [switch]$NoRestore
@@ -8,8 +8,13 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+$buildTarget = if ($Configuration -eq "Temporary") {
+    "$root\tests\UNCAD.Tests\UNCAD.Tests.csproj"
+} else {
+    "$root\UNCAD.slnx"
+}
 $buildArgs = @(
-    "build", "$root\UNCAD.slnx", "-c", $Configuration,
+    "build", $buildTarget, "-c", $Configuration,
     "-p:AutoCADDir=$AutoCADDir"
 )
 if ($NoRestore) { $buildArgs += "--no-restore" }

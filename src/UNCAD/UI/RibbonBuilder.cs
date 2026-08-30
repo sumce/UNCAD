@@ -9,7 +9,7 @@ namespace UNCAD.UI
     public static class RibbonBuilder
     {
         public const string TabId = "UNCAD.Ribbon.Tab";
-        public const string TabTitle = "UNCAD · UNSIAO Work™";
+        public const string TabTitle = "UNCAD";
         private static readonly ICommand CommandHandler = new CadRibbonCommandHandler();
         private static bool _eventsAttached;
         private static bool _idleAttached;
@@ -88,11 +88,13 @@ namespace UNCAD.UI
         private static RibbonPanel BuildPanel(RibbonPanelDefinition definition)
         {
             var source = new RibbonPanelSource { Title = definition.Title };
+            RibbonItemSize size = definition.Title == "清单"
+                ? RibbonItemSize.Large : RibbonItemSize.Standard;
             foreach (RibbonItemDefinition item in definition.Items)
             {
                 source.Items.Add(item.IsMenu
-                    ? (RibbonItem)CreateMenuButton(item)
-                    : CreateButton(item, RibbonItemSize.Large));
+                    ? (RibbonItem)CreateMenuButton(item, size)
+                    : CreateButton(item, size));
             }
             return new RibbonPanel { Source = source };
         }
@@ -113,14 +115,15 @@ namespace UNCAD.UI
             };
         }
 
-        private static RibbonSplitButton CreateMenuButton(RibbonItemDefinition definition)
+        private static RibbonSplitButton CreateMenuButton(RibbonItemDefinition definition,
+            RibbonItemSize size)
         {
             var menu = new RibbonSplitButton
             {
                 Text = definition.Text,
                 ShowText = true,
                 ShowImage = true,
-                Size = RibbonItemSize.Large,
+                Size = size,
                 ToolTip = definition.ToolTip,
                 IsSplit = false,
                 IsSynchronizedWithCurrentItem = false,

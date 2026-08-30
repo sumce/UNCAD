@@ -9,7 +9,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Submit
 {
-    /// <summary>Result printed by U1F/U1U after their automatic Excel synchronization.</summary>
+    /// <summary>Result printed after U1F/U1U automatic sync or explicit U1S submission.</summary>
     internal sealed class AutomaticSubmissionWriteResult
     {
         public string FilePath { get; set; }
@@ -20,8 +20,8 @@ namespace UNCAD.Features.Submit
     }
 
     /// <summary>
-    /// Synchronizes the CAD state produced by U1F/U1U into one BOQ workbook per machine.
-    /// This is deliberately not an AutoCAD command: successful fill/update owns the Excel write.
+    /// Synchronizes current CAD frame state into one BOQ workbook per machine.
+    /// U1F/U1U call this after updates; U1S calls it directly without changing CAD.
     /// </summary>
     internal static class AutomaticSubmissionService
     {
@@ -32,17 +32,19 @@ namespace UNCAD.Features.Submit
             if (folder.Length == 0)
                 folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 BOQ 输出文件夹，请先在 U1S 中设置。");
+                throw new DirectoryNotFoundException("无法确定 BOQ 输出文件夹，请先在 U1SET 中设置。");
 
             Directory.CreateDirectory(folder);
             if (!Directory.Exists(folder))
                 throw new DirectoryNotFoundException("BOQ 输出文件夹不存在: " + folder);
             if (!string.Equals(configured, folder, StringComparison.OrdinalIgnoreCase))
                 Settings.Set(ConfigKeys.SubmitFolder, folder);
-            string template = BoqWorkbookWriter.ResolveTemplatePath();
+            string template = null;
             foreach (string machineId in machineIds ?? Enumerable.Empty<string>())
             {
                 string target = BoqWorkbookWriter.BuildTargetPath(folder, machineId);
+                if (!File.Exists(target) && template == null)
+                    template = BoqWorkbookWriter.ResolveTemplatePath();
                 BoqWorkbookWriter.ValidateTargetForUpdate(target, template);
             }
             return folder;
@@ -87,10 +89,12 @@ namespace UNCAD.Features.Submit
 
             // PrepareTargetPath returns the selected root directory, not a file path.
             string outputRoot = Path.GetFullPath(filePath);
-            string template = BoqWorkbookWriter.ResolveTemplatePath();
+            string template = null;
             var outputPaths = records.Select(record =>
                 BoqWorkbookWriter.BuildTargetPath(outputRoot, record.MachineId))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (outputPaths.Any(path => !File.Exists(path)))
+                template = BoqWorkbookWriter.ResolveTemplatePath();
             var result = new AutomaticSubmissionWriteResult
             {
                 FilePath = string.Join("; ", outputPaths),
@@ -111,7 +115,7 @@ namespace UNCAD.Features.Submit
         }
     }
 
-    /// <summary>Reads blocks and BOQ tables from one frame selection after its CAD transaction commits.</summary>
+    /// <summary>Reads blocks and BOQ tables through a read-only CAD transaction.</summary>
     internal static class CadSubmissionReader
     {
         public static SubmissionSourceData Read(CadContext ctx, ObjectId[] ids)

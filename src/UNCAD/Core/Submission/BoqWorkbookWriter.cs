@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -23,20 +24,26 @@ namespace UNCAD.Core.Submission
 
         public static string ResolveTemplatePath()
         {
+            string assemblyPath = typeof(BoqWorkbookWriter).Assembly.Location;
+            return ResolveTemplatePath(Path.GetDirectoryName(assemblyPath));
+        }
+
+        public static string ResolveTemplatePath(string pluginDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(pluginDirectory))
+                throw new DirectoryNotFoundException("无法确定 UNCAD 插件目录，不能定位 BOQ 模板。");
+            string directory = Path.GetFullPath(pluginDirectory);
             string[] candidates =
             {
-                // 兼容用户提供的无分隔符路径，以及工作区内的实际文件路径。
-                @"D:\Workspace\UNCADBOQ模板.xlsx",
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BOQ_Template.xlsx"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TemplateFileName),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", TemplateFileName),
-                @"D:\Workspace\UNCAD\BOQ模板.xlsx"
+                Path.Combine(directory, "BOQ_Template.xlsx"),
+                Path.Combine(directory, TemplateFileName)
             };
             string path = candidates.FirstOrDefault(File.Exists);
             if (string.IsNullOrWhiteSpace(path))
                 throw new FileNotFoundException(
-                    @"找不到固定 BOQ 模板，请确认 D:\Workspace\UNCADBOQ模板.xlsx 或插件目录内存在 BOQ模板.xlsx。",
-                    TemplateFileName);
+                    "找不到固定 BOQ 模板。已搜索插件目录：" + directory
+                    + "。请确认其中存在 BOQ_Template.xlsx 或 BOQ模板.xlsx。",
+                    candidates[0]);
             return Path.GetFullPath(path);
         }
 
@@ -98,8 +105,10 @@ namespace UNCAD.Core.Submission
             Directory.CreateDirectory(folder);
             string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             IWorkbook workbook = null;
+            FileStream updateLock = null;
             try
             {
+                updateLock = AcquireUpdateLock(fullPath);
                 workbook = Load(fullPath, templatePath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
                 Dictionary<string, int> rows = FindItemRows(sheet);
@@ -140,8 +149,12 @@ namespace UNCAD.Core.Submission
             finally
             {
                 workbook?.Close();
-                try { if (!string.IsNullOrWhiteSpace(temporary) && File.Exists(temporary)) File.Delete(temporary); }
-                catch { }
+                if (updateLock != null)
+                {
+                    updateLock.Dispose();
+                    TryDelete(fullPath + ".boq.lock");
+                }
+                TryDelete(temporary);
             }
         }
 
@@ -284,22 +297,61 @@ namespace UNCAD.Core.Submission
 
         private static void Replace(string target, string temporary)
         {
-            if (File.Exists(target))
+            if (!File.Exists(target))
             {
-                string backup = target + ".bak";
+                File.Move(temporary, target);
+                return;
+            }
+
+            string backup = target + ".bak";
+            try
+            {
+                File.Replace(temporary, target, backup, true);
+                TryDelete(backup);
+                return;
+            }
+            catch (PlatformNotSupportedException) { }
+            catch (NotSupportedException) { }
+            catch (IOException) { }
+
+            bool movedOriginal = false;
+            try
+            {
+                File.Move(target, backup);
+                movedOriginal = true;
+                File.Move(temporary, target);
+                TryDelete(backup);
+            }
+            catch
+            {
+                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
+                    File.Move(backup, target);
+                throw;
+            }
+        }
+
+        private static FileStream AcquireUpdateLock(string workbookPath)
+        {
+            string lockPath = workbookPath + ".boq.lock";
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
                 try
                 {
-                    File.Replace(temporary, target, backup, true);
-                    if (File.Exists(backup)) File.Delete(backup);
+                    return new FileStream(lockPath, FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite, FileShare.None);
                 }
-                catch
+                catch (IOException)
                 {
-                    File.Copy(temporary, target, true);
-                    File.Delete(temporary);
-                    if (File.Exists(backup)) File.Delete(backup);
+                    if (attempt < 19) Thread.Sleep(150);
                 }
             }
-            else File.Move(temporary, target);
+            throw new IOException("BOQ 正在被另一个 UNCAD 用户更新，请稍后重试。");
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); }
+            catch { }
         }
     }
 }

@@ -202,7 +202,11 @@ namespace UNCAD.Cad
                     || string.Equals(attribute.Tag, ConnectionBlockFiller.TagDownstreamAxis,
                         StringComparison.OrdinalIgnoreCase)) return true;
             }
-            return false;
+            ObjectId recordId = block.IsDynamicBlock
+                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
+            BlockTableRecord record = transaction.GetObject(recordId, OpenMode.ForRead, true)
+                as BlockTableRecord;
+            return record != null && DynamicBlockStatePolicy.IsUpstreamBlock(record.Name);
         }
 
         private static bool IsSupportedFrame(Transaction transaction, BlockReference block)

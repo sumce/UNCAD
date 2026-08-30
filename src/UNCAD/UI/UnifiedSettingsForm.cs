@@ -9,13 +9,20 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// 统一配置中心对话框（U1S）。
+    /// 统一配置中心对话框（U1SET）。
     /// 页签：线段绘制 / 桥架标注 / 线管标注 / 拱桥开洞 / 统计汇总。
     /// 确定时一次性写回全部配置键（Features 只读，这里统一写）。
     /// </summary>
     public sealed class UnifiedSettingsForm : Form
     {
-        private readonly TabControl _tabs = new TabControl { Dock = DockStyle.Fill };
+        private readonly TabControl _tabs = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Appearance = TabAppearance.Buttons,
+            ItemSize = new System.Drawing.Size(112, 30),
+            SizeMode = TabSizeMode.Fixed,
+            Padding = new System.Drawing.Point(14, 6)
+        };
 
         // 线段绘制
         private readonly TextBox _unlText = new TextBox { Width = 200 };
@@ -70,8 +77,8 @@ namespace UNCAD.UI
 
         public UnifiedSettingsForm(int tabIndex)
         {
-            DialogLayout.Apply(this, "UNCAD 配置中心 · " + Branding.Nameplate,
-                new System.Drawing.Size(900, 600), new System.Drawing.Size(760, 520));
+            DialogLayout.Apply(this, ProductMetadata.ProductName + " · 配置中心",
+                new System.Drawing.Size(960, 650), new System.Drawing.Size(800, 540));
 
             _conduitDia.Items.AddRange(new object[]
                 { "20", "25", "32", "38", "51", "75", "100" });
@@ -96,8 +103,39 @@ namespace UNCAD.UI
 
             Controls.Add(_tabs);
             Controls.Add(btnRow);
+            Controls.Add(BuildHeader());
             AcceptButton = ok;
             CancelButton = cancel;
+        }
+
+        private Control BuildHeader()
+        {
+            var header = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 48,
+                BackColor = System.Drawing.Color.White,
+                Padding = new Padding(14, 7, 14, 6)
+            };
+            header.Controls.Add(new Label
+            {
+                Text = ProductMetadata.ProductName + "  /  " + ProductMetadata.ProductSubtitle,
+                Dock = DockStyle.Left,
+                Width = 360,
+                Font = new System.Drawing.Font("微软雅黑", 11f, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.FromArgb(35, 43, 52),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft
+            });
+            header.Controls.Add(new Label
+            {
+                Text = ProductMetadata.CompanyName + "  ·  " + ProductMetadata.Website,
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                ForeColor = System.Drawing.Color.FromArgb(102, 112, 122),
+                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
+                Padding = new Padding(0, 5, 0, 0)
+            });
+            return header;
         }
 
         private void Confirm(object sender, EventArgs e)
@@ -108,7 +146,7 @@ namespace UNCAD.UI
                 _conduitDia.Focus();
                 _conduitDia.SelectAll();
                 MessageBox.Show(this, "默认管径无效，请输入1到1000毫米之间的数值。",
-                    "U1S", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "U1SET", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             _conduitDia.Text = diameter;
@@ -128,7 +166,7 @@ namespace UNCAD.UI
             _tabs.SelectedIndex = 6;
             field.Focus();
             field.SelectAll();
-            MessageBox.Show(this, message, "U1S",
+            MessageBox.Show(this, message, "U1SET",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
@@ -245,7 +283,7 @@ namespace UNCAD.UI
             _toolTips.SetToolTip(_statBridge, "严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。");
             _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
-            _toolTips.SetToolTip(_fillFlexibleMeters, "软管清单行的默认数量，单位为米。");
+            _toolTips.SetToolTip(_fillFlexibleMeters, "仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。");
         }
 
         private static NumericUpDown IntegerBox(decimal value, decimal minimum, decimal maximum)
@@ -398,10 +436,19 @@ namespace UNCAD.UI
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 1); g.Controls.Add(_fillTblRow, 1, 1);
             g.Controls.Add(Lbl("每次清空数据行数:"), 0, 2); g.Controls.Add(_fillClearRows, 1, 2);
             g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
-            g.Controls.Add(Lbl("软管默认长度 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
+            g.Controls.Add(Lbl("软管手动数量 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
             g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
             g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
-            return Page("Excel 数据", g);
+            var page = Page("Excel 数据", g);
+            page.Controls.Add(new Label
+            {
+                Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",
+                Dock = DockStyle.Bottom,
+                Height = 30,
+                ForeColor = System.Drawing.Color.FromArgb(0, 112, 173),
+                Padding = new Padding(14, 4, 14, 4)
+            });
+            return page;
         }
 
         private Control FolderPicker(TextBox target)

@@ -21,7 +21,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void FillCommandsOwnAutomaticExcelAndNoSubmitCommandExists()
+        public void U1S_SubmitsCurrentFramesWithoutMachineWorkbookOrCadWrites()
         {
             string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Submit", "AutomaticSubmissionService.cs"));
@@ -29,8 +29,17 @@ namespace UNCAD.Tests
                 "Fill", "FillFeature.cs"));
             string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Fill", "BatchFillUpdateCoordinator.cs"));
+            string submit = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Submit", "SubmitFeature.cs"));
 
             Assert.DoesNotContain("CommandMethod", service);
+            Assert.Contains("CommandMethod(CommandIds.Submit", submit);
+            Assert.Contains("FrameRegionCollector.Collect", submit);
+            Assert.Contains("CadSubmissionReader.Read", submit);
+            Assert.Contains("AutomaticSubmissionService.Write", submit);
+            Assert.Contains("record.Materials.Count", submit);
+            Assert.DoesNotContain("FillWorkbookSnapshot", submit);
+            Assert.DoesNotContain("StartTransaction", submit);
             Assert.Contains("AutomaticSubmissionService.Write", fill);
             Assert.Contains("AutomaticSubmissionService.Write", batch);
             Assert.Contains("throw new InvalidOperationException(\"CAD 已更新，但 BOQ", fill);

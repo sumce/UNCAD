@@ -62,13 +62,15 @@ namespace UNCAD.Features.Fill
                 try
                 {
                     for (int clearRow = row; clearRow < row + rowsToClear; clearRow++)
-                        for (int column = 1; column <= 5; column++)
+                        for (int column = 0; column <= 5; column++)
                             SetCellTextPreservingFormat(table, clearRow, column, "");
 
                     for (int i = 0; i < plannedRows.Count; i++)
                     {
                         TableFillRow planned = plannedRows[i];
                         int targetRow = row + i;
+                        SetCellTextPreservingFormat(table, targetRow, 0, (i + 1).ToString(),
+                            textHeight, true);
                         SetCellTextPreservingFormat(table, targetRow, 1, planned.Name,
                             textHeight, true);
                         SetCellTextPreservingFormat(table, targetRow, 2, planned.Description,
@@ -80,8 +82,6 @@ namespace UNCAD.Features.Fill
                         SetCellTextPreservingFormat(table, targetRow, 5, planned.Code,
                             textHeight, true);
                     }
-                    RestoreTableDimensions(table, rowHeights, columnWidths);
-                    LockGeneratedRowHeights(table, row, plannedRows.Count);
                 }
                 finally
                 {

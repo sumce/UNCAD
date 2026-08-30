@@ -12,7 +12,7 @@ namespace UNCAD.Features.Unl
 {
     /// <summary>
     /// U1L：连续绘制线段（交互同 AutoCAD L 命令），每段中心靠边立即生成占位文字（默认 "2000mm"）。
-    /// U1S：打开统一配置中心（线段页签）。
+    /// U1SET：打开统一配置中心（线段页签）。
     /// </summary>
     [Feature("unl", "带标注线段",
         Commands = CommandIds.LineFeatureCommands,
@@ -46,7 +46,7 @@ namespace UNCAD.Features.Unl
             // 防御性钳制：偏移不应超过 2 倍字高
             if (offset > hgt * 2)
             {
-                ctx.Write("\n[U1L] 警告：偏移设置异常（>2 倍字高），已按贴线处理。请用 U1S 重新设置。");
+                ctx.Write("\n[U1L] 警告：偏移设置异常（>2 倍字高），已按贴线处理。请用 U1SET 重新设置。");
                 offset = 0.0;
             }
 

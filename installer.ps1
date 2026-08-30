@@ -74,7 +74,7 @@ function Get-PackageInfo {
     # The manifest is an explicit public API: only the current U1 family and six retained
     # traditional keyboard commands may trigger package loading.
     $expectedCommands = @(
-        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1C", "U1A", "U1S", "U1DWG",
+        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG",
         "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
@@ -90,12 +90,24 @@ function Get-PackageInfo {
     if (-not (Test-Path $modulePath -PathType Leaf)) { throw "Plugin module is missing: $moduleRelative" }
     $requiredFiles = @(
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
-        "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll"
+        "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+        "BOQ_Template.xlsx"
     )
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }
     }
     $version = [string]$package.AppVersion
+    $licenseMode = [string]$package.LicenseMode
+    $licenseExpiresUtc = [string]$package.LicenseExpiresUtc
+    if ([string]::IsNullOrWhiteSpace($licenseMode)) {
+        throw "Package license metadata is missing: LicenseMode"
+    }
+    if ($licenseMode -ne "Perpetual" -and [string]::IsNullOrWhiteSpace($licenseExpiresUtc)) {
+        throw "Expiring package must declare LicenseExpiresUtc"
+    }
+    if ($licenseMode -eq "Perpetual" -and -not [string]::IsNullOrWhiteSpace($licenseExpiresUtc)) {
+        throw "Perpetual package must not declare LicenseExpiresUtc"
+    }
     $fileVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($modulePath).FileVersion
     # Accept exact four-part patch versions such as 1.9.7.1; retain compatibility with three-part packages.
     if ($fileVersion -ne $version -and $fileVersion -ne ($version + ".0")) {
@@ -105,6 +117,8 @@ function Get-PackageInfo {
         Name = [string]$package.Name
         Version = $version
         FileVersion = $fileVersion
+        LicenseMode = $licenseMode
+        LicenseExpiresUtc = $licenseExpiresUtc
         ModulePath = $modulePath
         BundlePath = $BundlePath
     }
@@ -353,7 +367,7 @@ function Show-Menu {
         $packageLabel = try { $p = Get-PackageInfo $SourceBundle; "$($p.Name) $($p.Version)" } catch { "INVALID PACKAGE" }
         $cad = Get-AutoCAD2022Path
         Write-Host "============================================================" -ForegroundColor DarkCyan
-        Write-Host " UNCAD Setup - UNSIAO Work" -ForegroundColor Cyan
+        Write-Host " UNCAD Setup - UNSIAO.Ltd" -ForegroundColor Cyan
         Write-Host "============================================================" -ForegroundColor DarkCyan
         Write-Host "Package      : $packageLabel"
         Write-Host "AutoCAD 2022 : $(if ($cad) { $cad } else { 'Not detected' })"

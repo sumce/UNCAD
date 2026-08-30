@@ -7,21 +7,36 @@ namespace UNCAD.Infra
 {
     public sealed class AboutInfo
     {
+        public string ProductName { get; set; }
+        public string Subtitle { get; set; }
+        public string CompanyName { get; set; }
+        public string Website { get; set; }
+        public string WebsiteUrl { get; set; }
+        public string Copyright { get; set; }
         public string Version { get; set; }
         public string BuildTime { get; set; }
         public string UpdatedOn { get; set; }
         public string Authorization { get; set; }
+        public LicenseSnapshot License { get; set; }
 
         public static AboutInfo Current()
         {
             Assembly assembly = Assembly.GetExecutingAssembly();
             FileVersionInfo file = FileVersionInfo.GetVersionInfo(assembly.Location);
+            LicenseSnapshot license = ProductMetadata.CurrentLicense();
             return new AboutInfo
             {
-                Version = file.FileVersion ?? assembly.GetName().Version?.ToString() ?? "未知",
+                ProductName = ProductMetadata.ProductName,
+                Subtitle = ProductMetadata.ProductSubtitle,
+                CompanyName = ProductMetadata.CompanyName,
+                Website = ProductMetadata.Website,
+                WebsiteUrl = ProductMetadata.WebsiteUrl,
+                Copyright = ProductMetadata.Copyright,
+                Version = ProductMetadata.VersionLabel,
                 BuildTime = ParseBuildTime(file.ProductVersion),
-                UpdatedOn = Branding.ReleaseUpdatedOn,
-                Authorization = Branding.Edition
+                UpdatedOn = ProductMetadata.ReleaseDateUtc,
+                Authorization = license.StatusText,
+                License = license
             };
         }
 

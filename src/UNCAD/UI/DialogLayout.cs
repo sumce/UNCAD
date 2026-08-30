@@ -12,6 +12,7 @@ namespace UNCAD.UI
             form.StartPosition = FormStartPosition.CenterParent;
             form.AutoScaleMode = AutoScaleMode.Dpi;
             form.Font = new Font("微软雅黑", 9f);
+            form.BackColor = Color.FromArgb(246, 247, 249);
             form.ClientSize = clientSize;
             form.MinimumSize = minimumSize;
             form.Padding = new Padding(8);
@@ -30,7 +31,8 @@ namespace UNCAD.UI
                 AutoSize = true,
                 FlowDirection = FlowDirection.RightToLeft,
                 WrapContents = false,
-                Padding = new Padding(0, 7, 4, 2)
+                Padding = new Padding(0, 8, 8, 4),
+                BackColor = Color.FromArgb(246, 247, 249)
             };
         }
 
@@ -42,7 +44,9 @@ namespace UNCAD.UI
                 Width = 92,
                 Height = 30,
                 DialogResult = result,
-                AutoSize = false
+                AutoSize = false,
+                UseVisualStyleBackColor = true,
+                Margin = new Padding(4, 0, 0, 0)
             };
         }
     }

@@ -84,7 +84,7 @@ namespace UNCAD.Features.DwgExport
                 ? configured
                 : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 DWG 输出文件夹，请先在 U1S 中设置。");
+                throw new DirectoryNotFoundException("无法确定 DWG 输出文件夹，请先在 U1SET 中设置。");
             Directory.CreateDirectory(folder);
             if (!Directory.Exists(folder))
                 throw new DirectoryNotFoundException("DWG 输出文件夹不存在：" + folder);
@@ -192,7 +192,7 @@ namespace UNCAD.Features.DwgExport
                 const double metadataGap = 9000d;
                 AddMetadataText(space, transaction, machineId,
                     new Point3d(titleX, titleY, 0d), 25000d, textStyle);
-                AddMetadataText(space, transaction, "UNSIAO Work™",
+                AddMetadataText(space, transaction, ProductMetadata.CompanyName + "  " + ProductMetadata.Website,
                     new Point3d(titleX, titleY - 35000d, 0d), metadataHeight, textStyle);
                 AddMetadataText(space, transaction,
                     "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),

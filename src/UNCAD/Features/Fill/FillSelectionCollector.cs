@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using UNCAD.Cad;
@@ -13,9 +11,6 @@ namespace UNCAD.Features.Fill
 {
     internal static class FillSelectionCollector
     {
-        private static readonly Regex MillimeterLength = new Regex(
-            @"(?<![0-9.])([0-9]+(?:[.,][0-9]+)?)\s*mm\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
         public static FillSelection Collect(CadContext ctx)
         {
             var selection = new FillSelection();
@@ -94,14 +89,7 @@ namespace UNCAD.Features.Fill
         }
 
         private static string ParseRuanguanMeters(string value)
-        {
-            Match match = MillimeterLength.Match(value ?? "");
-            if (!match.Success) return "";
-            string numeric = match.Groups[1].Value.Replace(',', '.');
-            if (!double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture,
-                out double millimeters) || millimeters <= 0) return "";
-            return TextFormatter.FormatNum(millimeters / 1000d);
-        }
+            => RuanguanLengthParser.ParseMeters(value);
 
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,
             out ExistingFillIdentity identity, out string error)
@@ -138,6 +126,7 @@ namespace UNCAD.Features.Fill
             var devices = new List<ObjectId>();
             var ruanguan = new List<ObjectId>();
             var upstreamInfo = new List<ObjectId>();
+            var upstreamState = new List<ObjectId>();
             var upstreamAxis = new List<ObjectId>();
             var downstreamAxis = new List<ObjectId>();
             try
@@ -158,6 +147,8 @@ namespace UNCAD.Features.Fill
                                 ruanguan.Add(id);
                             if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
                                 upstreamInfo.Add(id);
+                            if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
+                                upstreamState.Add(id);
                             if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
                                 upstreamAxis.Add(id);
                             if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
@@ -180,6 +171,7 @@ namespace UNCAD.Features.Fill
                 DeviceBlockIds = devices.ToArray(),
                 RuanguanBlockIds = ruanguan.ToArray(),
                 UpstreamInfoBlockIds = upstreamInfo.ToArray(),
+                UpstreamStateBlockIds = upstreamState.ToArray(),
                 UpstreamAxisBlockIds = upstreamAxis.ToArray(),
                 DownstreamAxisBlockIds = downstreamAxis.ToArray()
             };

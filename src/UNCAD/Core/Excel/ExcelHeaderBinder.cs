@@ -5,7 +5,8 @@ using NPOI.SS.UserModel;
 
 namespace UNCAD.Core.Excel
 {
-    internal static class ExcelHeaderBinder
+    /// <summary>Resolves required and optional worksheet headers with alias priority.</summary>
+    public static class ExcelHeaderBinder
     {
         public static bool Equals(ICell cell, string expected)
         {
@@ -27,16 +28,23 @@ namespace UNCAD.Core.Excel
 
         private static int Find(IRow header, string sheetName, string[] aliases)
         {
-            int found = -1;
-            for (int c = 0; c < header.LastCellNum; c++)
+            if (header == null) return -1;
+            // Aliases are alternatives, not duplicate columns. Prefer the first alias
+            // in the contract and reject only repeated instances of that same alias.
+            foreach (string alias in aliases ?? new string[0])
             {
-                if (!aliases.Any(alias => Equals(header.GetCell(c), alias))) continue;
-                if (found >= 0)
-                    throw new InvalidDataException("工作表“" + sheetName + "”存在重复字段“"
-                        + aliases[0] + "”（第 " + (found + 1) + "、" + (c + 1) + " 列）。");
-                found = c;
+                int found = -1;
+                for (int c = 0; c < header.LastCellNum; c++)
+                {
+                    if (!Equals(header.GetCell(c), alias)) continue;
+                    if (found >= 0)
+                        throw new InvalidDataException("工作表“" + sheetName + "”存在重复字段“"
+                            + alias + "”（第 " + (found + 1) + "、" + (c + 1) + " 列）。");
+                    found = c;
+                }
+                if (found >= 0) return found;
             }
-            return found;
+            return -1;
         }
 
         private static string Normalize(string value)

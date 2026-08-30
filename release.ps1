@@ -17,14 +17,17 @@ if (-not $NoBuild) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-# 即使显式跳过构建，也禁止把旧输出或与 bundle 不一致的 DLL 打进正式产物。
+# 即使显式跳过构建，也禁止针对旧输出运行测试或打包。
 $buildOutput = Join-Path $root ("src\UNCAD\bin\" + $Configuration + "\net48\UNCAD.dll")
 $bundleModule = Join-Path $bundle "UNCAD.dll"
 if (-not (Test-Path $buildOutput -PathType Leaf)) { throw "Build output is missing: $buildOutput" }
 if ($NoBuild) {
-    $newerInput = Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
-        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg") -and
-            $_.LastWriteTimeUtc -gt (Get-Item $buildOutput).LastWriteTimeUtc } |
+    $sourceInputs = @(Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
+        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx") })
+    $sourceInputs += @(Get-ChildItem $root -File |
+        Where-Object { $_.Extension -in @(".xlsx") })
+    $newerInput = $sourceInputs |
+        Where-Object { $_.LastWriteTimeUtc -gt (Get-Item $buildOutput).LastWriteTimeUtc } |
         Select-Object -First 1
     if ($newerInput) { throw "-NoBuild rejected: source is newer than UNCAD.dll ($($newerInput.FullName))." }
 }
@@ -34,14 +37,22 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
     throw "Bundle UNCAD.dll does not match the verified build output. Run release.ps1 without -NoBuild."
 }
 
+$testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
+# build.ps1 already built the solution; avoid a second timestamped DLL build.
+$testArgs += "--no-build"
+if ($NoRestore) { $testArgs += "--no-restore" }
+& dotnet $testArgs
+if ($LASTEXITCODE -ne 0) { throw "Release tests failed." }
+
 & (Join-Path $root "installer.ps1") -Mode VerifyPackage
 if ($LASTEXITCODE -ne 0) { throw "Release package validation failed." }
 
 [xml]$manifest = Get-Content (Join-Path $bundle "PackageContents.xml") -Raw -Encoding UTF8
-$version = [string]$manifest.ApplicationPackage.AppVersion
-$temporaryPolicy = Join-Path $root "src\UNCAD\Core\Licensing\TemporaryLicensePolicy.cs"
-if ([string]::IsNullOrWhiteSpace($Suffix) -and (Test-Path $temporaryPolicy)) {
-    $Suffix = "temp-20260927"
+$package = $manifest.ApplicationPackage
+$version = [string]$package.AppVersion
+if ([string]$package.LicenseMode -ne "Perpetual" -or
+    -not [string]::IsNullOrWhiteSpace([string]$package.LicenseExpiresUtc)) {
+    throw "Permanent package must use LicenseMode=Perpetual with an empty LicenseExpiresUtc."
 }
 $baseName = "UNCAD-v" + $version
 if (-not [string]::IsNullOrWhiteSpace($Suffix)) { $baseName += "-" + $Suffix.Trim("-") }

@@ -20,6 +20,12 @@ namespace UNCAD.Tests
             Version version = typeof(CommandIds).Assembly.GetName().Version;
             string expected = version.ToString();
             Assert.Equal(expected, (string)package.Attribute("AppVersion"));
+            Assert.Equal("UNCAD", (string)package.Attribute("Name"));
+            Assert.Equal("Perpetual", (string)package.Attribute("LicenseMode"));
+            Assert.Equal("", (string)package.Attribute("LicenseExpiresUtc"));
+            Assert.Equal("https://www.unsiao.com", (string)package.Attribute("Website"));
+            Assert.Equal("UNSIAO.Ltd", (string)package.Element("CompanyDetails")?.Attribute("Name"));
+            Assert.Equal("https://www.unsiao.com", (string)package.Element("CompanyDetails")?.Attribute("Website"));
             string productCode = (string)package.Attribute("ProductCode");
             string upgradeCode = (string)package.Attribute("UpgradeCode");
             Assert.True(Guid.TryParse(productCode, out _));
@@ -77,6 +83,20 @@ namespace UNCAD.Tests
             Assert.Contains("-NoBuild rejected: source is newer than UNCAD.dll", script);
             Assert.Contains("Bundle UNCAD.dll does not match the verified build output", script);
             Assert.Contains("Get-FileHash $buildOutput -Algorithm SHA256", script);
+        }
+
+        [Fact]
+        public void TemporaryRelease_UsesUtcPlus8ExpiryAndIsolatedBundle()
+        {
+            string script = File.ReadAllText(RepoFile("release-temp.ps1"));
+
+            Assert.Contains("$configuration = \"Temporary\"", script);
+            Assert.Contains("$licenseMode = \"Trial\"", script);
+            Assert.Contains("2026-09-08T23:59:59+08:00", script);
+            Assert.Contains("temp-20260908", script);
+            Assert.Contains("SkipBundle = $true", script);
+            Assert.Contains("$stageBundle", script);
+            Assert.Contains("-Mode VerifyPackage", script);
         }
 
         private static XElement LoadManifest()

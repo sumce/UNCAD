@@ -82,7 +82,7 @@ namespace UNCAD.Tests
                         Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                             label => label.Text == "每次清空数据行数:");
                         Assert.Contains(FindAll<Label>(tabs.SelectedTab),
-                            label => label.Text == "软管默认长度 (m):");
+                            label => label.Text == "软管手动数量 (m):");
                         Assert.DoesNotContain(FindAll<CheckBox>(tabs.SelectedTab),
                             check => check.Text.Contains("未匹配"));
                     }

@@ -30,6 +30,7 @@ namespace UNCAD.Features.Fill
             public SummationOutput Summation { get; set; }
             public CableStatResult Statistics { get; set; }
             public List<TableFillRow> Rows { get; set; }
+            public string DeviceState { get; set; }
         }
 
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
@@ -95,6 +96,7 @@ namespace UNCAD.Features.Fill
             {
                 summary.AppendLine("图框 " + plan.Region.Handle + "  |  "
                     + plan.Machine.MachineId + " / " + plan.Machine.CircuitName
+                    + "  |  Device " + plan.DeviceState
                     + "  |  清单 " + plan.Rows.Count + " 项");
             }
             if (plans.Count > 15) summary.AppendLine("其余 " + (plans.Count - 15) + " 个图框...");
@@ -131,6 +133,9 @@ namespace UNCAD.Features.Fill
                             transaction, plan.Selection.UpstreamInfoBlockIds,
                             ConnectionBlockFiller.TagUpstreamInfo,
                             ConnectionBlockFiller.UpstreamInfo(plan.Machine), true);
+                        FillWriteResult upstreamState = CadDynamicBlockStateService.FillUpstreamState(
+                            ctx, transaction, plan.Selection.UpstreamStateBlockIds,
+                            plan.Machine.Next);
                         FillWriteResult upstreamAxis = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamAxisBlockIds,
                             ConnectionBlockFiller.TagUpstreamAxis,
@@ -140,9 +145,9 @@ namespace UNCAD.Features.Fill
                             ConnectionBlockFiller.TagDownstreamAxis,
                             ConnectionBlockFiller.DownstreamAxis(plan.Machine), false);
                         frameBlocks += frame.Blocks + device.Blocks + upstreamInfo.Blocks
-                            + upstreamAxis.Blocks + downstreamAxis.Blocks;
+                            + upstreamState.Blocks + upstreamAxis.Blocks + downstreamAxis.Blocks;
                         attributeValues += frame.Values + device.Values + upstreamInfo.Values
-                            + upstreamAxis.Values + downstreamAxis.Values;
+                            + upstreamState.Values + upstreamAxis.Values + downstreamAxis.Values;
                     }
                     transaction.Commit();
                 }
@@ -232,14 +237,26 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
+            FlexibleConduitCableMap.ApplyTo(machine);
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);
-            // Batch U1U follows the same outlet rule as single-frame U1U: CAD decides whether
-            // an outlet exists, and its current values are carried forward without regeneration.
-            List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(
-                ctx, selection.TableIds, options.StartRow, options.ClearRows);
-            tablePlan = new TableGenerationOutput(UpdateOutletPolicy.PreserveExisting(
-                tablePlan.CopyDefaultRows(), existingOutlets), tablePlan.DefaultCableMeters);
+            bool deviceHasOutlet;
+            string deviceState;
+            try
+            {
+                deviceHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
+                    selection.DeviceBlockIds, out deviceState);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(prefix + ex.Message);
+                return;
+            }
+            TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(machine.Detail,
+                workbook.Catalog);
+            tablePlan = new TableGenerationOutput(DeviceOutletPolicy.Apply(
+                tablePlan.CopyDefaultRows(), deviceHasOutlet, deviceOutlet),
+                tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
             FillFeature.ApplyRuanguanLength(ctx, selection, review);
             List<FillReviewItem> unresolved = review.Items.Where(item =>
@@ -267,7 +284,8 @@ namespace UNCAD.Features.Fill
                 Machine = machine,
                 Summation = summation,
                 Statistics = statistics,
-                Rows = rows
+                Rows = rows,
+                DeviceState = deviceState
             });
         }
 

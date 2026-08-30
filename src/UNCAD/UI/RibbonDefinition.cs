@@ -53,17 +53,15 @@ namespace UNCAD.UI
         public static IReadOnlyList<RibbonPanelDefinition> Panels { get; } =
             new RibbonPanelDefinition[]
             {
-                new RibbonPanelDefinition("UNSIAO Work™",
-                    RibbonItemDefinition.Button("清单生成", CommandIds.Fill,
-                        "根据机台和回路数据生成清单，并自动记录 Excel"),
-                    RibbonItemDefinition.Button("批量更新", CommandIds.FillUpdate,
-                        "按图框批量更新已填清单，并自动记录 Excel"),
-                    RibbonItemDefinition.Button("DWG导出", CommandIds.DwgExport,
-                        "按机台ID导出图框内容并横向排列"),
-                    RibbonItemDefinition.Button("设置", CommandIds.Settings,
-                        "集中设置数据源、文字和绘图参数"),
-                    RibbonItemDefinition.Button("关于", CommandIds.About,
-                        "查看版本、授权状态和联系方式")),
+                new RibbonPanelDefinition("清单",
+                    RibbonItemDefinition.Button("U1F 生成", CommandIds.Fill,
+                        "新建清单：选择机台和回路，填充 CAD 表并自动输出 BOQ"),
+                    RibbonItemDefinition.Button("U1U 更新", CommandIds.FillUpdate,
+                        "更新一个或多个已填图框；多个图框会先统一预检再一次性写入"),
+                    RibbonItemDefinition.Button("U1S 提交", CommandIds.Submit,
+                        "只读取一个或多个当前图框清单，提交项目、数量和米数到 BOQ Excel"),
+                    RibbonItemDefinition.Button("U1DWG 导出", CommandIds.DwgExport,
+                        "按机台 ID 导出图框内容，并将同机台图框横向排列")),
                 new RibbonPanelDefinition("标注",
                     RibbonItemDefinition.Button("绘制软管", CommandIds.Conduit,
                         "按统一设置中的软管参数绘制和标注"),
@@ -74,15 +72,19 @@ namespace UNCAD.UI
                         RibbonItemDefinition.Button("桥架 200", CommandIds.Tray200,
                             "使用 200 mm 桥架规格"),
                         RibbonItemDefinition.Button("桥架 400", CommandIds.Tray400,
-                            "使用 400 mm 桥架规格"))),
-                new RibbonPanelDefinition("绘制",
+                            "使用 400 mm 桥架规格")),
                     RibbonItemDefinition.Button("绘制线条", CommandIds.Line,
                         "连续绘制线段并自动生成长度文字"),
                     RibbonItemDefinition.Button("开拱桥", CommandIds.Arch,
                         "在线段交叉位置生成拱桥开洞")),
                 new RibbonPanelDefinition("统计",
                     RibbonItemDefinition.Button("图纸统计", CommandIds.LegacyStatistics,
-                        "使用传统 UNADD 统计所选对象并生成汇总文字"))
+                        "统计所选对象并生成汇总文字")),
+                new RibbonPanelDefinition("系统",
+                    RibbonItemDefinition.Button("U1SET 设置", CommandIds.Settings,
+                        "集中设置数据源、文字、绘图和输出参数"),
+                    RibbonItemDefinition.Button("关于与授权", CommandIds.About,
+                        "查看版本、授权状态、使用条款和 UNSIAO.Ltd 信息"))
             };
 
         public static IEnumerable<RibbonItemDefinition> CommandItems =>
