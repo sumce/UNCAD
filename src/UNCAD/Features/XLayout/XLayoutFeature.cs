@@ -24,6 +24,9 @@ namespace UNCAD.Features.XLayout
         [CommandMethod(CommandIds.XLayout, CommandFlags.UsePickSet)]
         public void ArrangeFrames() => Run();
 
+        private const double MachineLabelTextHeight = 25000d;
+        private const double MachineLabelGap = 10000d;
+
         protected override void Execute(CadContext ctx)
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.XLayout);
@@ -87,6 +90,13 @@ namespace UNCAD.Features.XLayout
             }
 
             IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(items);
+            if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
+            {
+                SelectionService.ClearPickFirst(ctx);
+                ctx.Write("\n[XLAYOUT] 已取消位置选择，未执行排版。");
+                return;
+            }
+
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var moved = new HashSet<ObjectId>();
@@ -94,7 +104,9 @@ namespace UNCAD.Features.XLayout
                 {
                     FrameRegionGroup group = groupsByItem[placement.Item];
                     Vector3d displacement = new Vector3d(
-                        placement.TranslationX, placement.TranslationY, 0d);
+                        placement.TranslationX + layoutOrigin.X,
+                        placement.TranslationY + layoutOrigin.Y,
+                        layoutOrigin.Z);
                     foreach (ObjectId id in group.EntityIds)
                     {
                         if (!moved.Add(id)) continue;
@@ -102,6 +114,27 @@ namespace UNCAD.Features.XLayout
                         if (entity == null || entity.IsErased) continue;
                         entity.TransformBy(Matrix3d.Displacement(displacement));
                     }
+                }
+
+                ObjectId textStyle = StyleManager.GetDrawingStandardStyle(ctx, transaction);
+                foreach (IGrouping<int, XLayoutPlacement> row in placements.GroupBy(
+                    placement => placement.RowIndex))
+                {
+                    XLayoutPlacement first = row.OrderBy(placement => placement.TranslationX)
+                        .ThenBy(placement => placement.Item.Handle,
+                            StringComparer.OrdinalIgnoreCase).First();
+                    Point3d firstFrameMin = new Point3d(
+                        first.Item.Boundary.MinX + first.TranslationX + layoutOrigin.X,
+                        first.Item.Boundary.MinY + first.TranslationY + layoutOrigin.Y,
+                        layoutOrigin.Z);
+                    Point3d labelAnchor = new Point3d(
+                        firstFrameMin.X - MachineLabelGap,
+                        firstFrameMin.Y + first.Item.Boundary.Height / 2d,
+                        firstFrameMin.Z);
+                    DBText label = EntityFactory.DBText(ctx, first.Item.MachineId,
+                        labelAnchor, MachineLabelTextHeight, 0d,
+                        AttachmentPoint.MiddleRight, textStyleId: textStyle);
+                    ctx.AddToCurrentSpace(transaction, label);
                 }
                 transaction.Commit();
             }
@@ -112,6 +145,27 @@ namespace UNCAD.Features.XLayout
             using (var form = new XLayoutSummaryForm(summaries.Values.ToList(), regions.Groups.Count))
                 form.ShowDialog(new WindowWrapper(
                     Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle));
+        }
+
+        private static bool TryGetLayoutOrigin(CadContext ctx, out Point3d origin)
+        {
+            var options = new PromptPointOptions("\n请点击指定排版左上角位置 <原点>: ")
+            {
+                AllowNone = true
+            };
+            PromptPointResult result = ctx.Ed.GetPoint(options);
+            if (result.Status == PromptStatus.OK)
+            {
+                origin = result.Value;
+                return true;
+            }
+            if (result.Status == PromptStatus.None)
+            {
+                origin = Point3d.Origin;
+                return true;
+            }
+            origin = Point3d.Origin;
+            return false;
         }
     }
 }

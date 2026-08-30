@@ -47,7 +47,7 @@ namespace UNCAD.Infra
                 E(CommandIds.About, "关于与授权", "U1A", "查看版本、授权、开发者和使用条款", "只读操作。"),
                 E(CommandIds.Settings, "配置中心", "U1SET", "集中设置绘图、统计、清单和输出参数", "保存前验证路径和数值范围。"),
                 E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812 图框", "同机台图框在独立 DWG 中横向排列。"),
-                E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "按机台 ID 将图框分行排版并统计回路", "同机台同一行；横向和上下间距均为 10000。"),
+                E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "直接回车使用原点；每行首框左侧生成高度 25000 的机台 ID 文字。"),
                 E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "统计分类可在 U1SET 独立开关。"),
                 E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。")
             };

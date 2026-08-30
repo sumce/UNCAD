@@ -17,6 +17,13 @@ namespace UNCAD.Tests
             Assert.Contains("XLayoutLayout.Arrange", source);
             Assert.Contains("transaction.Commit();", source);
             Assert.Contains("XLayoutSummaryForm", source);
+            Assert.Contains("PromptPointOptions", source);
+            Assert.Contains("AllowNone = true", source);
+            Assert.Contains("layoutOrigin.X", source);
+            Assert.Contains("layoutOrigin.Y", source);
+            Assert.Contains("MachineLabelTextHeight = 25000d", source);
+            Assert.Contains("AttachmentPoint.MiddleRight", source);
+            Assert.Contains("EntityFactory.DBText", source);
         }
 
         [Fact]
