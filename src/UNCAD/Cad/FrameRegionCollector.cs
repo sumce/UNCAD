@@ -41,6 +41,10 @@ namespace UNCAD.Cad
         public static FrameRegionCollection CollectForExport(CadContext ctx, ObjectId[] selectedIds)
             => CollectCore(ctx, selectedIds, true);
 
+        /// <summary>Collects all entities needed to move selected frames in XLAYOUT.</summary>
+        public static FrameRegionCollection CollectForLayout(CadContext ctx, ObjectId[] selectedIds)
+            => CollectCore(ctx, selectedIds, true);
+
         private static FrameRegionCollection CollectCore(CadContext ctx, ObjectId[] selectedIds,
             bool includeAllEntities)
         {

@@ -74,7 +74,7 @@ function Get-PackageInfo {
     # The manifest is an explicit public API: only the current U1 family and six retained
     # traditional keyboard commands may trigger package loading.
     $expectedCommands = @(
-        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG",
+        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT",
         "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
