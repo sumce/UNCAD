@@ -16,7 +16,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.1.5", info.Version);
+            Assert.Equal("2.1.6", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal("2026-08-30", info.UpdatedOn);
             Assert.Contains(ProductMetadata.BuildLicenseMode == LicenseMode.Perpetual

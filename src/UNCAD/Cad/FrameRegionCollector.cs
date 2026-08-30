@@ -35,7 +35,7 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
 
         public static FrameRegionCollection Collect(CadContext ctx, ObjectId[] selectedIds)
-            => CollectCore(ctx, selectedIds, false, false);
+            => CollectCore(ctx, selectedIds, false, true);
 
         /// <summary>Collects every model-space entity for style-preserving DWG export.</summary>
         public static FrameRegionCollection CollectForExport(CadContext ctx, ObjectId[] selectedIds)

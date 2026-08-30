@@ -22,9 +22,10 @@ namespace UNCAD.Tests
             Assert.Contains("layoutOrigin.X", source);
             Assert.Contains("layoutOrigin.Y", source);
             Assert.Contains("MachineLabelTextHeight = 25000d", source);
-            Assert.Contains("AttachmentPoint.MiddleRight", source);
+            Assert.Contains("MachineLabelLeftDistance = 300000d", source);
+            Assert.Contains("AttachmentPoint.BaseLeft", source);
             Assert.Contains("EntityFactory.DBText", source);
-            Assert.Contains("label.AdjustAlignment(ctx.Db)", source);
+            Assert.DoesNotContain("label.AdjustAlignment(ctx.Db)", source);
         }
 
         [Fact]
@@ -32,6 +33,7 @@ namespace UNCAD.Tests
         {
             string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
                 "FrameRegionCollector.cs"));
+            Assert.Contains("CollectCore(ctx, selectedIds, false, true)", collector);
             Assert.Contains("CollectCore(ctx, selectedIds, true, true)", collector);
             Assert.Contains("if (useAnchorOwnership)", collector);
             Assert.Contains("TryAnchor(entity, out Point3d anchor, includeAllEntities)", collector);

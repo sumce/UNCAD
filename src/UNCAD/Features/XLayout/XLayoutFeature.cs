@@ -25,7 +25,8 @@ namespace UNCAD.Features.XLayout
         public void ArrangeFrames() => Run();
 
         private const double MachineLabelTextHeight = 25000d;
-        private const double MachineLabelGap = 10000d;
+        // Keep one fixed left column for every row; text grows right without alignment recalculation.
+        private const double MachineLabelLeftDistance = 300000d;
 
         protected override void Execute(CadContext ctx)
         {
@@ -128,16 +129,13 @@ namespace UNCAD.Features.XLayout
                         first.Item.Boundary.MinY + first.TranslationY + layoutOrigin.Y,
                         layoutOrigin.Z);
                     Point3d labelAnchor = new Point3d(
-                        firstFrameMin.X - MachineLabelGap,
+                        firstFrameMin.X - MachineLabelLeftDistance,
                         firstFrameMin.Y + first.Item.Boundary.Height / 2d,
                         firstFrameMin.Z);
                     DBText label = EntityFactory.DBText(ctx, first.Item.MachineId,
                         labelAnchor, MachineLabelTextHeight, 0d,
-                        AttachmentPoint.MiddleRight, textStyleId: textStyle);
+                        AttachmentPoint.BaseLeft, textStyleId: textStyle);
                     ctx.AddToCurrentSpace(transaction, label);
-                    // AutoCAD applies DBText justification after database ownership is established;
-                    // refresh it here so short and long machine IDs share one right edge.
-                    label.AdjustAlignment(ctx.Db);
                 }
                 transaction.Commit();
             }
