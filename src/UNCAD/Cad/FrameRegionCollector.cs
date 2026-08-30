@@ -35,18 +35,18 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
 
         public static FrameRegionCollection Collect(CadContext ctx, ObjectId[] selectedIds)
-            => CollectCore(ctx, selectedIds, false);
+            => CollectCore(ctx, selectedIds, false, false);
 
         /// <summary>Collects every model-space entity for style-preserving DWG export.</summary>
         public static FrameRegionCollection CollectForExport(CadContext ctx, ObjectId[] selectedIds)
-            => CollectCore(ctx, selectedIds, true);
+            => CollectCore(ctx, selectedIds, true, true);
 
         /// <summary>Collects all entities needed to move selected frames in XLAYOUT.</summary>
         public static FrameRegionCollection CollectForLayout(CadContext ctx, ObjectId[] selectedIds)
-            => CollectCore(ctx, selectedIds, true);
+            => CollectCore(ctx, selectedIds, true, true);
 
         private static FrameRegionCollection CollectCore(CadContext ctx, ObjectId[] selectedIds,
-            bool includeAllEntities)
+            bool includeAllEntities, bool useAnchorOwnership)
         {
             var result = new FrameRegionCollection();
             if (ctx == null || selectedIds == null || selectedIds.Length == 0) return result;
@@ -80,16 +80,32 @@ namespace UNCAD.Cad
                 {
                     if (selectedFrames.Contains(id)) continue;
                     Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                    if (useAnchorOwnership)
+                    {
+                        if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
+                        List<FrameRegionGroup> owners = result.Groups.Where(group =>
+                            group.Boundary.Contains(anchor.X, anchor.Y)).ToList();
+                        if (owners.Count == 1)
+                        {
+                            owners[0].EntityIds.Add(id);
+                        }
+                        else if (owners.Count > 1)
+                        {
+                            SelectAnchorOwner(owners, anchor).EntityIds.Add(id);
+                        }
+                        continue;
+                    }
+
                     if (!TryBounds(entity, out double minX, out double minY,
                         out double maxX, out double maxY, includeAllEntities)) continue;
 
-                    List<FrameRegionGroup> owners = result.Groups.Where(group =>
+                    List<FrameRegionGroup> strictOwners = result.Groups.Where(group =>
                         group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
-                    if (owners.Count == 1)
+                    if (strictOwners.Count == 1)
                     {
-                        owners[0].EntityIds.Add(id);
+                        strictOwners[0].EntityIds.Add(id);
                     }
-                    else if (owners.Count > 1)
+                    else if (strictOwners.Count > 1)
                     {
                         // Unrelated inserts do not affect fill or submission and must not make
                         // otherwise valid adjacent frames fail. Tables, text and tagged blocks
@@ -97,7 +113,7 @@ namespace UNCAD.Cad
                         if (entity is BlockReference candidate
                             && !HasKnownFillTag(transaction, candidate)) continue;
                         result.Errors.Add("对象 " + entity.Handle + " 同时位于图框 "
-                            + string.Join("、", owners.Select(owner => owner.Handle)) + " 内。");
+                            + string.Join("、", strictOwners.Select(owner => owner.Handle)) + " 内。");
                     }
                 }
             }
@@ -222,6 +238,44 @@ namespace UNCAD.Cad
                 as BlockTableRecord;
             return record != null && string.Equals(record.Name, SupportedFrameName,
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static FrameRegionGroup SelectAnchorOwner(
+            IReadOnlyList<FrameRegionGroup> owners, Point3d anchor)
+        {
+            // Adjacent frame borders share coordinates. For export/layout, the anchor is the
+            // ownership contract; nearest frame center makes a border tie deterministic.
+            return owners.OrderBy(owner => Math.Abs((owner.Boundary.MinX
+                    + owner.Boundary.MaxX) / 2d - anchor.X)
+                + Math.Abs((owner.Boundary.MinY + owner.Boundary.MaxY) / 2d - anchor.Y))
+                .ThenBy(owner => owner.Handle, StringComparer.OrdinalIgnoreCase)
+                .First();
+        }
+
+        private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)
+        {
+            anchor = Point3d.Origin;
+            if (entity is BlockReference block)
+            {
+                anchor = block.Position;
+                return true;
+            }
+            if (!includeAllEntities && !(entity is Table) && !(entity is DBText)
+                && !(entity is MText)) return false;
+            try
+            {
+                Extents3d extents = entity.GeometricExtents;
+                anchor = new Point3d(
+                    (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
+                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
+                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
+                return true;
+            }
+            catch
+            {
+                // An entity without valid extents cannot be assigned safely to a frame.
+                return false;
+            }
         }
 
         private static bool TryBounds(Entity entity, out double minX, out double minY,

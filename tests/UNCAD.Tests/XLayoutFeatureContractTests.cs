@@ -19,6 +19,18 @@ namespace UNCAD.Tests
             Assert.Contains("XLayoutSummaryForm", source);
         }
 
+        [Fact]
+        public void ExportAndLayoutUseAnchorOwnershipForAllEntities()
+        {
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "FrameRegionCollector.cs"));
+            Assert.Contains("CollectCore(ctx, selectedIds, true, true)", collector);
+            Assert.Contains("if (useAnchorOwnership)", collector);
+            Assert.Contains("TryAnchor(entity, out Point3d anchor, includeAllEntities)", collector);
+            Assert.Contains("SelectAnchorOwner(owners, anchor)", collector);
+            Assert.Contains("group.Boundary.Intersects(minX, minY, maxX, maxY)", collector);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
