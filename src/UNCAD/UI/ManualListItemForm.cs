@@ -147,14 +147,14 @@ namespace UNCAD.UI
             quantityBar.Controls.Add(_resultCount, 3, 0);
             quantityBar.Visible = !replacement;
 
-            _confirm = DialogLayout.CommandButton(replacement
-                ? "使用所选清单" : "添加所选清单", DialogResult.None);
-            _continueAdd = DialogLayout.CommandButton("添加并继续", DialogResult.None);
+            _confirm = UiTheme.PrimaryButton(replacement
+                ? "使用所选清单" : "添加所选清单");
+            _continueAdd = UiTheme.Button("添加并继续");
             _continueAdd.Visible = !replacement;
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             _confirm.Click += (sender, args) => PickCurrent(keepOpen: false);
             _continueAdd.Click += (sender, args) => PickCurrent(keepOpen: true);
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(cancel);
             commands.Controls.Add(_continueAdd);
             commands.Controls.Add(_confirm);

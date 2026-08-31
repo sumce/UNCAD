@@ -134,10 +134,10 @@ namespace UNCAD.UI
             lowerTabs.TabPages.Add(previewTab);
 
             // 按钮
-            _ok = DialogLayout.CommandButton("确定");
+            _ok = UiTheme.PrimaryButton("确定");
             _ok.Enabled = false;
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
-            FlowLayoutPanel btnRow = DialogLayout.CommandBar();
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
+            FlowLayoutPanel btnRow = UiTheme.CommandBar();
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(_ok);
 

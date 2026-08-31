@@ -13,7 +13,7 @@ namespace UNCAD.UI
             Width = 126;
             Height = 42;
             // WinForms does not support transparent backgrounds on every AutoCAD host control.
-            BackColor = Color.White;
+            BackColor = UiTheme.Surface;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -21,10 +21,10 @@ namespace UNCAD.UI
             base.OnPaint(e);
             Graphics g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var blue = new SolidBrush(Color.FromArgb(0, 112, 173)))
-            using (var orange = new SolidBrush(Color.FromArgb(236, 126, 34)))
-            using (var white = new SolidBrush(Color.White))
-            using (var ink = new SolidBrush(Color.FromArgb(35, 43, 52)))
+            using (var blue = new SolidBrush(UiTheme.BrandBlue))
+            using (var orange = new SolidBrush(UiTheme.BrandOrange))
+            using (var white = new SolidBrush(UiTheme.Surface))
+            using (var ink = new SolidBrush(UiTheme.TextPrimary))
             using (var font = new Font("Segoe UI", 10f, FontStyle.Bold))
             using (var markFont = new Font("Segoe UI", 16f, FontStyle.Bold))
             {

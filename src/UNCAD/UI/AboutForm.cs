@@ -8,16 +8,16 @@ namespace UNCAD.UI
 {
     internal sealed class AboutForm : Form
     {
-        private static readonly Color Ink = Color.FromArgb(35, 43, 52);
-        private static readonly Color Muted = Color.FromArgb(102, 112, 122);
-        private static readonly Color Accent = Color.FromArgb(0, 112, 173);
+        private static readonly Color Ink = UiTheme.TextPrimary;
+        private static readonly Color Muted = UiTheme.TextSecondary;
+        private static readonly Color Accent = UiTheme.BrandBlue;
 
         public AboutForm()
         {
             AboutInfo info = AboutInfo.Current();
             DialogLayout.Apply(this, ProductMetadata.ProductName + " · 关于与授权",
                 new Size(650, 520), new Size(580, 460));
-            BackColor = Color.FromArgb(246, 247, 249);
+            BackColor = UiTheme.WindowBg;
 
             Panel header = BuildHeader(info);
             TabControl tabs = new TabControl
@@ -32,8 +32,8 @@ namespace UNCAD.UI
             tabs.TabPages.Add(BuildTermsTab());
             tabs.TabPages.Add(BuildCompanyTab(info));
 
-            Button close = DialogLayout.CommandButton("关闭", DialogResult.Cancel);
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            Button close = UiTheme.Button("关闭", DialogResult.Cancel);
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Padding = new Padding(0, 7, 12, 2);
             commands.Controls.Add(close);
 
@@ -131,7 +131,7 @@ namespace UNCAD.UI
                 Multiline = true,
                 ReadOnly = true,
                 BorderStyle = BorderStyle.FixedSingle,
-                BackColor = SystemColors.Window,
+                BackColor = UiTheme.Surface,
                 ForeColor = Ink,
                 ScrollBars = ScrollBars.Vertical,
                 Text = LegalTerms.FullText,
@@ -197,8 +197,8 @@ namespace UNCAD.UI
             {
                 Text = value ?? "",
                 AutoSize = true,
-                ForeColor = warning ? Color.FromArgb(180, 70, 20) : Ink,
-                Font = new Font("微软雅黑", 9f, warning ? FontStyle.Bold : FontStyle.Regular),
+                ForeColor = warning ? UiTheme.WarningFg : Ink,
+                Font = warning ? UiTheme.FontBodyBold : UiTheme.FontBody,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0, 4, 0, 4)

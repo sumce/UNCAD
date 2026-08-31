@@ -129,10 +129,10 @@ namespace UNCAD.UI
             _tabs.TabPages.Add(basicTab);
             _tabs.TabPages.Add(listTab);
 
-            Button ok = DialogLayout.CommandButton("确认填充");
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
+            Button ok = UiTheme.PrimaryButton("确认填充");
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             ok.Click += Confirm;
-            FlowLayoutPanel buttons = DialogLayout.CommandBar();
+            FlowLayoutPanel buttons = UiTheme.CommandBar();
             buttons.Controls.Add(cancel);
             buttons.Controls.Add(ok);
 

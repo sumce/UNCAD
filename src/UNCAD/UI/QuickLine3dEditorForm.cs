@@ -71,7 +71,7 @@ namespace UNCAD.UI
             Name = nameof(QuickLine3dEditorForm);
             ShowInTaskbar = false;
 
-            var close = DialogLayout.CommandButton("关闭", DialogResult.Cancel);
+            var close = UiTheme.Button("关闭", DialogResult.Cancel);
             close.Anchor = AnchorStyles.None;
             close.Click += (sender, args) => Close();
             var errorLayout = new TableLayoutPanel

@@ -94,10 +94,10 @@ namespace UNCAD.UI
             _tabs.TabPages.Add(BuildFillTab());
             _tabs.SelectedIndex = Math.Min(Math.Max(tabIndex, 0), _tabs.TabPages.Count - 1);
 
-            Button ok = DialogLayout.CommandButton("保存");
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
+            Button ok = UiTheme.PrimaryButton("保存");
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             ok.Click += Confirm;
-            FlowLayoutPanel btnRow = DialogLayout.CommandBar();
+            FlowLayoutPanel btnRow = UiTheme.CommandBar();
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(ok);
 

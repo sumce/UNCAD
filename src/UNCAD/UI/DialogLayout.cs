@@ -22,32 +22,5 @@ namespace UNCAD.UI
             form.MaximizeBox = resizable;
             form.MinimizeBox = false;
         }
-
-        public static FlowLayoutPanel CommandBar()
-        {
-            return new FlowLayoutPanel
-            {
-                Dock = DockStyle.Bottom,
-                AutoSize = true,
-                FlowDirection = FlowDirection.RightToLeft,
-                WrapContents = false,
-                Padding = new Padding(0, UiTheme.SpaceS, UiTheme.SpaceS, UiTheme.SpaceXS),
-                BackColor = UiTheme.WindowBg
-            };
-        }
-
-        public static Button CommandButton(string text, DialogResult result = DialogResult.None)
-        {
-            return new Button
-            {
-                Text = text,
-                Width = 92,
-                Height = 30,
-                DialogResult = result,
-                AutoSize = false,
-                UseVisualStyleBackColor = true,
-                Margin = new Padding(4, 0, 0, 0)
-            };
-        }
     }
 }
