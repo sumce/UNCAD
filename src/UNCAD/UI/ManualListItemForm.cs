@@ -59,7 +59,7 @@ namespace UNCAD.UI
         {
             Text = "",
             TextAlign = ContentAlignment.MiddleLeft,
-            ForeColor = Color.DimGray
+            ForeColor = UiTheme.TextSecondary
         };
         private readonly Button _confirm;
         private readonly Button _continueAdd;
@@ -110,6 +110,9 @@ namespace UNCAD.UI
             _list.Columns.Add("单位", 60);
             _list.Columns.Add("项目特征", 300);
             _list.ColumnClick += OnColumnClick;
+            _list.BorderStyle = BorderStyle.None;
+            _list.BackColor = UiTheme.Surface;
+            _list.ForeColor = UiTheme.TextPrimary;
 
             // 类别直接做成顶部标签；标签值只来自“类”列，不根据名称或编码推断。
             AddCategoryTab("全部");
@@ -142,7 +145,7 @@ namespace UNCAD.UI
                 Text = "双击项目 = 添加并继续；回车 = 添加后关闭",
                 TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
-                ForeColor = Color.DimGray
+                ForeColor = UiTheme.TextSecondary
             }, 2, 0);
             quantityBar.Controls.Add(_resultCount, 3, 0);
             quantityBar.Visible = !replacement;
@@ -180,6 +183,7 @@ namespace UNCAD.UI
             AcceptButton = _confirm;
             CancelButton = cancel;
 
+            UiTheme.StyleInput(_search);
             _search.TextChanged += (sender, args) => Populate();
             _categoryTabs.SelectedIndexChanged += (sender, args) => Populate();
             _list.SelectedIndexChanged += (sender, args) => UpdateConfirmState();
@@ -334,7 +338,43 @@ namespace UNCAD.UI
                 var b = (ListViewItem)y;
                 string xs = a.SubItems.Count > _column ? a.SubItems[_column].Text ?? "" : "";
                 string ys = b.SubItems.Count > _column ? b.SubItems[_column].Text ?? "" : "";
-                return string.Compare(xs, ys, StringComparison.OrdinalIgnoreCase) * _sign;
+                // 自然排序:数字段按数值比较,避免 "10" 排在 "2" 前面。
+                return NaturalCompare(xs, ys) * _sign;
+            }
+
+            private static int NaturalCompare(string x, string y)
+            {
+                int ix = 0, iy = 0;
+                while (ix < x.Length && iy < y.Length)
+                {
+                    char cx = x[ix], cy = y[iy];
+                    if (char.IsDigit(cx) && char.IsDigit(cy))
+                    {
+                        long nx = ReadNumber(x, ref ix);
+                        long ny = ReadNumber(y, ref iy);
+                        if (nx != ny) return nx < ny ? -1 : 1;
+                    }
+                    else
+                    {
+                        int compared = char.ToUpperInvariant(cx)
+                            .CompareTo(char.ToUpperInvariant(cy));
+                        if (compared != 0) return compared;
+                        ix++;
+                        iy++;
+                    }
+                }
+                return (x.Length - ix).CompareTo(y.Length - iy);
+            }
+
+            private static long ReadNumber(string text, ref int index)
+            {
+                long value = 0;
+                while (index < text.Length && char.IsDigit(text[index]))
+                {
+                    value = value * 10 + (text[index] - '0');
+                    index++;
+                }
+                return value;
             }
         }
 
