@@ -227,6 +227,26 @@ namespace UNCAD.UI
 
         // ---- 命令栏 ----
 
+        /// <summary>统一 DataGridView 外观:白底、软网格线、AccentSoft 选中、斑马行。</summary>
+        public static void StyleGrid(DataGridView grid)
+        {
+            grid.BackgroundColor = Surface;
+            grid.BorderStyle = BorderStyle.None;
+            grid.GridColor = Border;
+            grid.EnableHeadersVisualStyles = false;
+            grid.ColumnHeadersDefaultCellStyle.BackColor = SurfaceAlt;
+            grid.ColumnHeadersDefaultCellStyle.ForeColor = TextSecondary;
+            grid.ColumnHeadersDefaultCellStyle.SelectionBackColor = SurfaceAlt;
+            grid.ColumnHeadersDefaultCellStyle.SelectionForeColor = TextSecondary;
+            grid.ColumnHeadersDefaultCellStyle.Font = FontBodyBold;
+            grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(SpaceS, SpaceXS, SpaceS, SpaceXS);
+            grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            grid.DefaultCellStyle.BackColor = Surface;
+            grid.DefaultCellStyle.ForeColor = TextPrimary;
+            grid.DefaultCellStyle.SelectionBackColor = AccentSoft;
+            grid.DefaultCellStyle.SelectionForeColor = TextPrimary;
+        }
+
         /// <summary>底部右对齐命令栏。</summary>
         public static FlowLayoutPanel CommandBar()
         {

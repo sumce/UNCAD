@@ -36,30 +36,9 @@ namespace UNCAD.UI
             DialogLayout.Apply(this, "U1U 批量确认", new Size(980, 640),
                 new Size(820, 500));
 
-            var header = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 68,
-                BackColor = Color.White,
-                Padding = new Padding(16, 9, 16, 8)
-            };
-            var title = new Label
-            {
-                Dock = DockStyle.Top,
-                Height = 26,
-                Text = "将按图框边界批量更新 " + rows.Count + " 个已填图框",
-                Font = new Font("微软雅黑", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(35, 43, 52)
-            };
-            var note = new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = "所有图框将在一个事务中写入，任一失败则整批回滚。",
-                ForeColor = Color.FromArgb(90, 98, 108),
-                AutoEllipsis = true
-            };
-            header.Controls.Add(note);
-            header.Controls.Add(title);
+            var header = UiTheme.Header(
+                "将按图框边界批量更新 " + rows.Count + " 个已填图框",
+                "所有图框将在一个事务中写入，任一失败则整批回滚。");
 
             var grid = new DataGridView
             {
@@ -71,7 +50,7 @@ namespace UNCAD.UI
                 AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White,
+                BackgroundColor = UiTheme.Surface,
                 BorderStyle = BorderStyle.FixedSingle,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
@@ -113,10 +92,11 @@ namespace UNCAD.UI
                 }
             });
             grid.DataSource = rows.ToList();
+            UiTheme.StyleGrid(grid);
 
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
-            Button confirm = DialogLayout.CommandButton("确认更新", DialogResult.OK);
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
+            Button confirm = UiTheme.PrimaryButton("确认更新", DialogResult.OK);
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(cancel);
             commands.Controls.Add(confirm);
 

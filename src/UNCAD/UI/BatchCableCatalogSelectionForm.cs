@@ -64,8 +64,8 @@ namespace UNCAD.UI
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
                 EditMode = DataGridViewEditMode.EditOnEnter,
                 AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
-                BackgroundColor = SystemColors.Window,
-                GridColor = Color.FromArgb(220, 224, 228)
+                BackgroundColor = UiTheme.Surface,
+                GridColor = UiTheme.Border
             };
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -83,16 +83,17 @@ namespace UNCAD.UI
                 DisplayMember = nameof(ListItem.Alias)
             });
 
-            _confirm = DialogLayout.CommandButton("确认全部选择", DialogResult.None);
-            Button cancel = DialogLayout.CommandButton("取消", DialogResult.Cancel);
+            _confirm = UiTheme.PrimaryButton("确认全部选择");
+            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             _confirm.Click += Confirm;
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(cancel);
             commands.Controls.Add(_confirm);
 
             Controls.Add(_grid);
             Controls.Add(notice);
             Controls.Add(commands);
+            UiTheme.StyleGrid(_grid);
             AcceptButton = _confirm;
             CancelButton = cancel;
 

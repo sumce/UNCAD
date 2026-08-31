@@ -25,22 +25,9 @@ namespace UNCAD.UI
             DialogLayout.Apply(this, "XLAYOUT · 排版统计", new Size(560, 420),
                 new Size(460, 320), false);
 
-            var header = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 62,
-                BackColor = Color.White,
-                Padding = new Padding(16, 10, 16, 8)
-            };
-            header.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = "排版完成  ·  " + frameCount + " 个图框  /  "
-                    + (summaries?.Count ?? 0) + " 个机台",
-                Font = new Font("微软雅黑", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(35, 43, 52),
-                TextAlign = ContentAlignment.MiddleLeft
-            });
+            var header = UiTheme.Header(
+                "排版完成  ·  " + frameCount + " 个图框  /  "
+                + (summaries?.Count ?? 0) + " 个机台");
 
             var grid = new DataGridView
             {
@@ -51,7 +38,7 @@ namespace UNCAD.UI
                 AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White,
+                BackgroundColor = UiTheme.Surface,
                 BorderStyle = BorderStyle.FixedSingle,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
@@ -74,9 +61,10 @@ namespace UNCAD.UI
                 }
             });
             grid.DataSource = (summaries ?? Array.Empty<XLayoutMachineSummary>()).ToList();
+            UiTheme.StyleGrid(grid);
 
-            Button close = DialogLayout.CommandButton("关闭", DialogResult.Cancel);
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            Button close = UiTheme.Button("关闭", DialogResult.Cancel);
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(close);
             Controls.Add(grid);
             Controls.Add(commands);

@@ -15,21 +15,7 @@ namespace UNCAD.UI
             DialogLayout.Apply(this, "U1HELP · 命令帮助", new Size(1120, 650),
                 new Size(760, 460));
 
-            var header = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 58,
-                BackColor = Color.White,
-                Padding = new Padding(16, 9, 16, 7)
-            };
-            header.Controls.Add(new Label
-            {
-                Dock = DockStyle.Fill,
-                Text = "UNCAD 命令帮助  ·  使用方法、功能和注意事项",
-                Font = new Font("微软雅黑", 11f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(35, 43, 52),
-                TextAlign = ContentAlignment.MiddleLeft
-            });
+            var header = UiTheme.Header("UNCAD 命令帮助", "使用方法、功能和注意事项");
 
             var grid = new DataGridView
             {
@@ -40,7 +26,7 @@ namespace UNCAD.UI
                 AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = Color.White,
+                BackgroundColor = UiTheme.Surface,
                 BorderStyle = BorderStyle.FixedSingle,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
@@ -58,9 +44,10 @@ namespace UNCAD.UI
                 if (args.RowIndex >= 0) args.CellStyle.WrapMode = DataGridViewTriState.True;
             };
             grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
+            UiTheme.StyleGrid(grid);
 
-            Button close = DialogLayout.CommandButton("关闭", DialogResult.Cancel);
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            Button close = UiTheme.Button("关闭", DialogResult.Cancel);
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(close);
             Controls.Add(grid);
             Controls.Add(commands);

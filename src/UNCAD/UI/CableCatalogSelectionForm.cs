@@ -54,15 +54,16 @@ namespace UNCAD.UI
                 Padding = new Padding(8, 7, 8, 7)
             };
             searchPanel.Controls.Add(_search);
+            UiTheme.StyleInput(_search);
             _list.Columns.Add("项目编码", 90);
             _list.Columns.Add("规格", 180);
             _list.Columns.Add("名称", 180);
             _list.Columns.Add("特征", 320);
 
-            _confirm = DialogLayout.CommandButton("使用所选型号", DialogResult.None);
-            Button cancel = DialogLayout.CommandButton("保持原型号", DialogResult.Cancel);
+            _confirm = UiTheme.PrimaryButton("使用所选型号");
+            Button cancel = UiTheme.Button("保持原型号", DialogResult.Cancel);
             _confirm.Click += Confirm;
-            FlowLayoutPanel commands = DialogLayout.CommandBar();
+            FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(cancel);
             commands.Controls.Add(_confirm);
 
