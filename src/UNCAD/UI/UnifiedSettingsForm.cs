@@ -18,10 +18,8 @@ namespace UNCAD.UI
         private readonly TabControl _tabs = new TabControl
         {
             Dock = DockStyle.Fill,
-            Appearance = TabAppearance.Buttons,
-            ItemSize = new System.Drawing.Size(112, 30),
-            SizeMode = TabSizeMode.Fixed,
-            Padding = new System.Drawing.Point(14, 6)
+            Appearance = TabAppearance.Normal,
+            Padding = new System.Drawing.Point(18, 8)
         };
 
         // 线段绘制
@@ -110,32 +108,9 @@ namespace UNCAD.UI
 
         private Control BuildHeader()
         {
-            var header = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 48,
-                BackColor = System.Drawing.Color.White,
-                Padding = new Padding(14, 7, 14, 6)
-            };
-            header.Controls.Add(new Label
-            {
-                Text = ProductMetadata.ProductName + "  /  " + ProductMetadata.ProductSubtitle,
-                Dock = DockStyle.Left,
-                Width = 360,
-                Font = new System.Drawing.Font("微软雅黑", 11f, System.Drawing.FontStyle.Bold),
-                ForeColor = System.Drawing.Color.FromArgb(35, 43, 52),
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft
-            });
-            header.Controls.Add(new Label
-            {
-                Text = ProductMetadata.CompanyName + "  ·  " + ProductMetadata.Website,
-                Dock = DockStyle.Right,
-                AutoSize = true,
-                ForeColor = System.Drawing.Color.FromArgb(102, 112, 122),
-                TextAlign = System.Drawing.ContentAlignment.MiddleRight,
-                Padding = new Padding(0, 5, 0, 0)
-            });
-            return header;
+            return UiTheme.Header(
+                ProductMetadata.ProductName + "  /  " + ProductMetadata.ProductSubtitle,
+                ProductMetadata.CompanyName + "  ·  " + ProductMetadata.Website);
         }
 
         private void Confirm(object sender, EventArgs e)
@@ -445,7 +420,7 @@ namespace UNCAD.UI
                 Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",
                 Dock = DockStyle.Bottom,
                 Height = 30,
-                ForeColor = System.Drawing.Color.FromArgb(0, 112, 173),
+                ForeColor = UiTheme.Accent,
                 Padding = new Padding(14, 4, 14, 4)
             });
             return page;
@@ -453,7 +428,7 @@ namespace UNCAD.UI
 
         private Control FolderPicker(TextBox target)
         {
-            var button = new Button { Text = "浏览...", Width = 66, Height = 26 };
+            var button = UiTheme.Button("浏览...");
             button.Click += (sender, args) =>
             {
                 using (var dialog = new FolderBrowserDialog
@@ -471,7 +446,7 @@ namespace UNCAD.UI
 
         private Control PathPicker(TextBox target)
         {
-            var button = new Button { Text = "浏览...", Width = 66, Height = 26 };
+            var button = UiTheme.Button("浏览...");
             button.Click += (sender, args) =>
             {
                 using (var dialog = new OpenFileDialog
@@ -519,8 +494,9 @@ namespace UNCAD.UI
             {
                 Text = title,
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 0, 0, 8),
-                Padding = new Padding(8)
+                ForeColor = UiTheme.TextSecondary,
+                Margin = new Padding(0, 0, 0, UiTheme.SpaceS),
+                Padding = new Padding(UiTheme.SpaceS)
             };
             content.Dock = DockStyle.Fill;
             group.Controls.Add(content);
@@ -530,6 +506,7 @@ namespace UNCAD.UI
         private static Label Lbl(string text) => new Label
         {
             Text = text,
+            ForeColor = UiTheme.TextSecondary,
             TextAlign = System.Drawing.ContentAlignment.MiddleRight,
             Dock = DockStyle.Fill,
             AutoSize = false,
