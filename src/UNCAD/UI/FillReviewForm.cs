@@ -29,8 +29,8 @@ namespace UNCAD.UI
             AutoEllipsis = true,
             UseMnemonic = false,
             Padding = new Padding(8, 7, 8, 5),
-            ForeColor = Color.FromArgb(150, 70, 0),
-            BackColor = Color.FromArgb(255, 247, 220),
+            ForeColor = UiTheme.WarningFg,
+            BackColor = UiTheme.WarningBg,
             Visible = false
         };
         private readonly BoqCatalogIndex _catalog;
@@ -47,7 +47,7 @@ namespace UNCAD.UI
             Name = "OriginalCableModel",
             Dock = DockStyle.Fill,
             ReadOnly = true,
-            BackColor = SystemColors.Control
+            BackColor = UiTheme.SurfaceAlt
         };
         private readonly TextBox _cable = Field();
         private readonly TextBox _cableMeters = Field();
@@ -83,7 +83,7 @@ namespace UNCAD.UI
 
             _cable.Name = "BoqCableModel";
             _cable.ReadOnly = true;
-            _cable.BackColor = SystemColors.Control;
+            _cable.BackColor = UiTheme.SurfaceAlt;
             _panel.Items.AddRange(new object[] { "", "I-Line盘", "母线插接口", "插座盘" });
             TabPage basicTab = BuildBasicTab();
 
@@ -96,13 +96,13 @@ namespace UNCAD.UI
                 WrapContents = false,
                 Padding = new Padding(4, 4, 4, 2)
             };
-            Button addManual = CommandButton("从固定清单添加");
-            _replaceItem = CommandButton("替换为固定清单");
-            _resolveMissing = CommandButton("选择未匹配项");
-            _removeItem = CommandButton("删除选中项");
-            Button selectAll = CommandButton("全部勾选");
-            Button clearAll = CommandButton("全部取消");
-            Button restore = CommandButton("恢复默认");
+            Button addManual = UiTheme.Button("从固定清单添加");
+            _replaceItem = UiTheme.Button("替换为固定清单");
+            _resolveMissing = UiTheme.Button("选择未匹配项");
+            _removeItem = UiTheme.DangerButton("删除选中项");
+            Button selectAll = UiTheme.Button("全部勾选");
+            Button clearAll = UiTheme.Button("全部取消");
+            Button restore = UiTheme.Button("恢复默认");
             _count = new Label { AutoSize = true, Padding = new Padding(12, 7, 0, 0) };
             addManual.Click += AddCatalogItem;
             _replaceItem.Click += ReplaceSelectedItem;
@@ -145,9 +145,9 @@ namespace UNCAD.UI
             if (_lockIdentity)
             {
                 _machine.ReadOnly = true;
-                _machine.BackColor = SystemColors.Control;
+                _machine.BackColor = UiTheme.SurfaceAlt;
                 _circuit.ReadOnly = true;
-                _circuit.BackColor = SystemColors.Control;
+                _circuit.BackColor = UiTheme.SurfaceAlt;
             }
             PopulateRows(Data.Items);
             _cable.TextChanged += CableModelChanged;
@@ -204,7 +204,7 @@ namespace UNCAD.UI
                 Text = "来源：电缆型号决定软管直径；Ruanguan 决定软管长度；Device_Build20260716 动态状态决定是否输出插座。",
                 Dock = DockStyle.Top,
                 Height = 30,
-                ForeColor = Color.FromArgb(0, 112, 173),
+                ForeColor = UiTheme.Accent,
                 Padding = new Padding(14, 5, 14, 3)
             });
             return page;
@@ -222,18 +222,12 @@ namespace UNCAD.UI
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
                 MultiSelect = false,
-                BorderStyle = BorderStyle.FixedSingle,
-                BackgroundColor = SystemColors.Window,
-                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
-                EnableHeadersVisualStyles = false,
-                GridColor = Color.FromArgb(220, 224, 228)
+                BorderStyle = BorderStyle.None,
+                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
             };
+            UiTheme.StyleGrid(grid);
             grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
-            grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(214, 234, 248);
-            grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(35, 43, 52);
-            grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
-            grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(235, 239, 243);
-            grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(35, 43, 52);
+            grid.AlternatingRowsDefaultCellStyle.BackColor = UiTheme.WindowBg;
             grid.RowTemplate.Height = 44;
             grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = 52 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = 80, ReadOnly = true });
@@ -566,8 +560,8 @@ namespace UNCAD.UI
         {
             bool unmatched = item.RequiresCatalogConfirmation;
             row.DefaultCellStyle.BackColor = unmatched
-                ? Color.FromArgb(255, 247, 220)
-                : Color.White;
+                ? UiTheme.WarningBg
+                : UiTheme.Surface;
             row.Cells["Included"].ReadOnly = unmatched;
             if (unmatched)
             {
@@ -632,10 +626,10 @@ namespace UNCAD.UI
             => Convert.ToString(row.Cells[name].Value)?.Trim() ?? "";
 
         private static TextBox Field() => new TextBox { Dock = DockStyle.Fill };
-        private static Button CommandButton(string text) => new Button { Text = text, AutoSize = true, Height = 27 };
         private static Label LabelFor(string text) => new Label
         {
             Text = text,
+            ForeColor = UiTheme.TextSecondary,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleRight
         };
