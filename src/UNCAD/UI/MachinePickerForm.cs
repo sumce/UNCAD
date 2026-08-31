@@ -49,6 +49,7 @@ namespace UNCAD.UI
                 Padding = new Padding(8, 21, 8, 6)
             };
             _machineInput = new TextBox { Dock = DockStyle.Fill, Font = new Font("微软雅黑", 10.5f) };
+            UiTheme.StyleInput(_machineInput);
             mBox.Controls.Add(_machineInput);
 
             // 相似机台建议
@@ -57,7 +58,9 @@ namespace UNCAD.UI
                 Dock = DockStyle.Top,
                 Height = 72,
                 Visible = false,
-                Font = new Font("微软雅黑", 9f),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = UiTheme.Surface,
+                ForeColor = UiTheme.TextPrimary,
                 IntegralHeight = false
             };
 
@@ -66,8 +69,8 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Top,
                 Height = 24,
-                ForeColor = Color.FromArgb(38, 91, 140),
-                Font = new Font("微软雅黑", 9f, FontStyle.Bold),
+                ForeColor = UiTheme.Accent,
+                Font = UiTheme.FontBodyBold,
                 Padding = new Padding(6, 4, 4, 0),
                 Text = "请输入机台 ID"
             };
@@ -89,7 +92,8 @@ namespace UNCAD.UI
                 HeaderStyle = ColumnHeaderStyle.Nonclickable,
                 BorderStyle = BorderStyle.FixedSingle,
                 MultiSelect = false,
-                Font = new Font("微软雅黑", 9f)
+                BackColor = UiTheme.Surface,
+                ForeColor = UiTheme.TextPrimary
             };
             _circuit.Columns.Add("设备 / 回路", 215);
             _circuit.Columns.Add("盘柜类型", 110);
@@ -101,8 +105,7 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                BackColor = Color.White,
-                Font = new Font("微软雅黑", 9f),
+                BackColor = UiTheme.Surface,
                 ScrollBars = ScrollBars.Vertical,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -113,9 +116,9 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                BackColor = Color.FromArgb(244, 248, 253),
-                ForeColor = Color.FromArgb(30, 60, 100),
-                Font = new Font("微软雅黑", 8.5f),
+                BackColor = UiTheme.AccentSoft,
+                ForeColor = UiTheme.TextPrimary,
+                Font = UiTheme.FontCaption,
                 ScrollBars = ScrollBars.Vertical,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -241,7 +244,7 @@ namespace UNCAD.UI
             if (mid.Length == 0)
             {
                 _machineSummary.Text = "请输入机台 ID";
-                _machineSummary.ForeColor = Color.SteelBlue;
+                _machineSummary.ForeColor = UiTheme.Accent;
                 return;
             }
 
@@ -251,14 +254,14 @@ namespace UNCAD.UI
             if (!exact)
             {
                 _machineSummary.Text = "未找到机台 " + mid + "，请选择上方相似机台";
-                _machineSummary.ForeColor = Color.Crimson;
+                _machineSummary.ForeColor = UiTheme.DangerFg;
                 return;
             }
 
             _current.AddRange(rows);
             _machineSummary.Text = rows[0].Region + " ｜ 机台 " + rows[0].MachineId
                 + " ｜ 共 " + rows.Count + " 个回路";
-            _machineSummary.ForeColor = Color.SteelBlue;
+            _machineSummary.ForeColor = UiTheme.Accent;
 
             foreach (var r in _current)
             {
@@ -296,10 +299,10 @@ namespace UNCAD.UI
         private static Color PanelTypeColor(string value)
         {
             string type = DisplayPanelType(value);
-            if (type == "I-Line盘") return Color.FromArgb(32, 104, 164);
-            if (type == "母线插接口") return Color.FromArgb(132, 82, 25);
-            if (type == "插座盘") return Color.FromArgb(34, 122, 74);
-            return Color.DimGray;
+            if (type == "I-Line盘") return UiTheme.Accent;
+            if (type == "母线插接口") return UiTheme.WarningFg;
+            if (type == "插座盘") return UiTheme.SuccessFg;
+            return UiTheme.TextSecondary;
         }
 
         private void ResizeCircuitColumns()
