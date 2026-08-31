@@ -80,19 +80,22 @@ namespace UNCAD.UI
             return "tool";
         }
 
+        // 图标色与 UiTheme 色板对齐(此处为 WPF Color,与 WinForms Color 不通用):
+        // Accent #0E6FD1 / Success #1E7A45 / Warning #8A5300 / Danger #B4302B /
+        // TextSecondary #5F6B76,派生色保持同饱和度。
         private static Color IconColor(string icon)
         {
-            if (icon == "fill") return Color.FromRgb(47, 128, 183);
-            if (icon == "submit") return Color.FromRgb(37, 139, 98);
-            if (icon == "settings") return Color.FromRgb(210, 139, 39);
-            if (icon == "about") return Color.FromRgb(78, 114, 165);
-            if (icon == "conduit") return Color.FromRgb(34, 148, 172);
-            if (icon == "tray") return Color.FromRgb(192, 85, 70);
-            if (icon == "line") return Color.FromRgb(197, 150, 45);
-            if (icon == "arch") return Color.FromRgb(68, 139, 104);
-            if (icon == "stat") return Color.FromRgb(92, 120, 176);
-            if (icon == "excel") return Color.FromRgb(44, 128, 87);
-            return Color.FromRgb(100, 112, 125);
+            if (icon == "fill") return Color.FromRgb(0x0E, 0x6F, 0xD1);
+            if (icon == "submit") return Color.FromRgb(0x1E, 0x7A, 0x45);
+            if (icon == "settings") return Color.FromRgb(0x8A, 0x53, 0x00);
+            if (icon == "about") return Color.FromRgb(0x5F, 0x6B, 0x76);
+            if (icon == "conduit") return Color.FromRgb(0x0B, 0x5A, 0xAB);
+            if (icon == "tray") return Color.FromRgb(0xB4, 0x30, 0x2B);
+            if (icon == "line") return Color.FromRgb(0x0E, 0x6F, 0xD1);
+            if (icon == "arch") return Color.FromRgb(0x1E, 0x7A, 0x45);
+            if (icon == "stat") return Color.FromRgb(0x5F, 0x6B, 0x76);
+            if (icon == "excel") return Color.FromRgb(0x1E, 0x7A, 0x45);
+            return Color.FromRgb(0x9A, 0xA3, 0xAC);
         }
     }
 }

@@ -27,7 +27,7 @@ namespace UNCAD.UI
         private readonly WebView2 _webView = new WebView2
         {
             Dock = DockStyle.Fill,
-            DefaultBackgroundColor = Color.FromArgb(237, 241, 244)
+            DefaultBackgroundColor = UiTheme.SurfaceAlt
         };
         private readonly Label _status = new Label
         {
@@ -35,14 +35,14 @@ namespace UNCAD.UI
             Height = 24,
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(6, 0, 0, 0),
-            ForeColor = Color.FromArgb(70, 79, 87),
-            BackColor = Color.FromArgb(237, 241, 244),
+            ForeColor = UiTheme.TextSecondary,
+            BackColor = UiTheme.SurfaceAlt,
             Text = "正在启动 3D 编辑器..."
         };
         private readonly Panel _errorPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = Color.FromArgb(246, 247, 249),
+            BackColor = UiTheme.WindowBg,
             Visible = false
         };
         private readonly Label _errorMessage = new Label
@@ -50,7 +50,7 @@ namespace UNCAD.UI
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter,
             Padding = new Padding(32),
-            ForeColor = Color.FromArgb(145, 48, 45)
+            ForeColor = UiTheme.DangerFg
         };
         private bool _initializationStarted;
         private bool _fatal;
