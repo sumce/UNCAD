@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m 'chore: checkpoint pending feature work before UI refactor *)"
+      "Bash(git commit -m 'chore: checkpoint pending feature work before UI refactor *)",
+      "Bash(powershell -File build.ps1 -SkipBundle)",
+      "Bash(dotnet test *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): add UiTheme token system and control factories *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): migrate small dialogs to UiTheme palette *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): retheme UnifiedSettingsForm with UiTheme *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): retheme FillReviewForm with UiTheme *)",
+      "Bash(git commit -q -m 'fix\\(ui\\): natural ordering in ManualListItemForm column sort *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): retheme MachinePickerForm with UiTheme *)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): retheme QuickLine editor chrome and ribbon icon colors *)",
+      "Bash(powershell -File build.ps1)",
+      "Bash(git commit -q -m 'refactor\\(ui\\): unify modal dialog API and purge raw color/font literals *)"
     ]
   }
 }

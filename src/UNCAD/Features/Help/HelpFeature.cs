@@ -17,8 +17,7 @@ namespace UNCAD.Features.Help
         protected override void Execute(CadContext ctx)
         {
             using (var form = new CommandHelpForm(CommandHelpCatalog.All))
-                form.ShowDialog(new WindowWrapper(
-                    Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle));
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
         }
     }
 }

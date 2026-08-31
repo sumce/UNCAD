@@ -148,8 +148,7 @@ namespace UNCAD.Features.XLayout
             ctx.Write("\n[XLAYOUT] 排版完成：" + regions.Groups.Count
                 + " 个图框，" + summaries.Count + " 个机台；图框间距 10000。");
             using (var form = new XLayoutSummaryForm(summaries.Values.ToList(), regions.Groups.Count))
-                form.ShowDialog(new WindowWrapper(
-                    Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle));
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
         }
 
         private static bool TryGetLayoutOrigin(CadContext ctx, out Point3d origin)

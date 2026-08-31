@@ -48,7 +48,7 @@ namespace UNCAD.UI
                 Height = 54,
                 Padding = new Padding(8, 21, 8, 6)
             };
-            _machineInput = new TextBox { Dock = DockStyle.Fill, Font = new Font("微软雅黑", 10.5f) };
+            _machineInput = new TextBox { Dock = DockStyle.Fill, Font = UiTheme.FontInput };
             UiTheme.StyleInput(_machineInput);
             mBox.Controls.Add(_machineInput);
 
@@ -131,7 +131,7 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Bottom,
                 Height = 126,
-                Font = new Font("微软雅黑", 9f)
+                Font = UiTheme.FontBody
             };
             lowerTabs.TabPages.Add(detailTab);
             lowerTabs.TabPages.Add(previewTab);

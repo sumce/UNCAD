@@ -154,8 +154,7 @@ namespace UNCAD.Features.Fill
                     statistics, selection, options);
                 using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
                 {
-                    if (form.ShowDialog(new WindowWrapper(
-                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
+                    if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)
                         != DialogResult.OK) return;
                     picked = form.Selected;
                 }
@@ -203,8 +202,7 @@ namespace UNCAD.Features.Fill
             using (var form = new FillReviewForm(review, catalog, options.Planning,
                 updateMode))
             {
-                if (form.ShowDialog(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
+                if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)
                     != DialogResult.OK) return;
                 review = form.Data;
             }
@@ -650,7 +648,8 @@ namespace UNCAD.Features.Fill
             using (var picker = new CableCatalogSelectionForm(
                 catalog.Cables, review.BoqCableModel))
             {
-                if (picker.ShowDialog(owner) != DialogResult.OK
+                if (Autodesk.AutoCAD.ApplicationServices.Application
+                    .ShowModalDialog(picker) != DialogResult.OK
                     || picker.SelectedItem == null) return;
                 review.SetCableModel(picker.SelectedItem.Alias ?? picker.SelectedItem.Spec,
                     catalog);

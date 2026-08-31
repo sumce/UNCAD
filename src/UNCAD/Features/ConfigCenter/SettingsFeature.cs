@@ -28,7 +28,7 @@ namespace UNCAD.Features.ConfigCenter
             {
                 using (var dlg = new UnifiedSettingsForm(tabIndex))
                 {
-                    if (dlg.ShowDialog(new WindowWrapper(Application.MainWindow.Handle)) !=
+                    if (Application.ShowModalDialog(dlg) !=
                         System.Windows.Forms.DialogResult.OK)
                         return false;
                     dlg.Save();

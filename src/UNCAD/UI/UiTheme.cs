@@ -45,6 +45,8 @@ namespace UNCAD.UI
         public static Font FontBodyBold => new Font(FontFamily, 9f, FontStyle.Bold);
         public static Font FontHeader => new Font(FontFamily, 11.5f, FontStyle.Bold);
         public static Font FontCaption => new Font(FontFamily, 8.25f);
+        public static Font FontInput => new Font(FontFamily, 10.5f);
+        public static Font FontTitle => new Font(FontFamily, 13f, FontStyle.Bold);
 
         // ---- 间距(4pt 基线)----
         public const int SpaceXS = 4;

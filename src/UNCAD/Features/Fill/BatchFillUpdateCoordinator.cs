@@ -81,7 +81,7 @@ namespace UNCAD.Features.Fill
             {
                 using (var picker = new BatchCableCatalogSelectionForm(cableRequests))
                 {
-                    if (picker.ShowDialog(Owner()) != DialogResult.OK) return;
+                    if (AcApplication.ShowModalDialog(picker) != DialogResult.OK) return;
                     foreach (Plan plan in plans)
                     {
                         if (string.IsNullOrWhiteSpace(plan.CableRequestKey)
@@ -181,7 +181,7 @@ namespace UNCAD.Features.Fill
                 plan.DeviceState, plan.Rows.Count)).ToList();
             using (var confirmation = new BatchFillConfirmationForm(confirmationRows))
             {
-                if (confirmation.ShowDialog(Owner()) != DialogResult.OK) return;
+                if (AcApplication.ShowModalDialog(confirmation) != DialogResult.OK) return;
             }
 
             AutomaticSubmissionWriteResult automaticExcel;

@@ -29,8 +29,7 @@ namespace UNCAD.Features.About
         protected override void Execute(CadContext ctx)
         {
             using (var form = new AboutForm())
-                form.ShowDialog(new WindowWrapper(
-                    Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle));
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
         }
     }
 }

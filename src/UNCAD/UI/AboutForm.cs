@@ -72,7 +72,7 @@ namespace UNCAD.UI
             {
                 Text = info.ProductName + "  /  " + info.Subtitle,
                 Dock = DockStyle.Fill,
-                Font = new Font("微软雅黑", 13f, FontStyle.Bold),
+                Font = UiTheme.FontTitle,
                 ForeColor = Ink,
                 TextAlign = ContentAlignment.BottomLeft
             }, 0, 0);
@@ -80,7 +80,7 @@ namespace UNCAD.UI
             {
                 Text = info.CompanyName + "  ·  " + info.Website,
                 Dock = DockStyle.Fill,
-                Font = new Font("微软雅黑", 9f),
+                Font = UiTheme.FontBody,
                 ForeColor = Muted,
                 TextAlign = ContentAlignment.TopLeft
             }, 0, 1);
