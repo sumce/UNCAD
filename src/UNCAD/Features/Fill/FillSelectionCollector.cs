@@ -20,7 +20,7 @@ namespace UNCAD.Features.Fill
             if (implied.Status == PromptStatus.OK && implied.Value != null
                 && implied.Value.Count > 0)
             {
-                selection = Split(ctx, implied.Value.GetObjectIds());
+                selection = ExpandSingleFrame(ctx, Split(ctx, implied.Value.GetObjectIds()));
                 if (!selection.IsEmpty)
                 {
                     ctx.Write("\n[U1F] 已使用预选：表格 " + selection.TableIds.Length
@@ -37,7 +37,26 @@ namespace UNCAD.Features.Fill
             ObjectId[] picked = SelectionService.Pick(ctx,
                 "请框选或点选清单表/图框块/设备块/统计文字: ",
                 new TypedValue(0, "TEXT,MTEXT,ACAD_TABLE,INSERT"));
-            return picked == null ? selection : Split(ctx, picked);
+            return picked == null ? selection : ExpandSingleFrame(ctx, Split(ctx, picked));
+        }
+
+        /// <summary>
+        /// A frame is the natural U1F/U1U selection target. Selecting only that block must
+        /// still include the table, statistics, Device and Ruanguan objects in the same
+        /// frame; otherwise U1U sees zero measurements and cannot read identity.
+        /// </summary>
+        private static FillSelection ExpandSingleFrame(CadContext ctx, FillSelection selection)
+        {
+            if (ctx == null || selection == null || selection.FrameBlockIds.Length != 1)
+                return selection;
+            FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                selection.FrameBlockIds);
+            if (regions.Errors.Count > 0 || regions.Groups.Count != 1)
+                return selection;
+            FrameRegionGroup group = regions.Groups[0];
+            return group.EntityIds.Count == 0
+                ? selection
+                : Split(ctx, group.EntityIds.ToArray());
         }
 
         public static List<string> ReadStatisticsLines(CadContext ctx, ObjectId[] textIds,
@@ -74,14 +93,19 @@ namespace UNCAD.Features.Fill
                     {
                         var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
                             as AttributeReference;
-                        string meters = ParseRuanguanMeters(attribute?.TextString ?? "");
+                        string meters = ParseRuanguanMeters(attribute?.TextString ?? "",
+                            attribute?.Tag);
                         if (meters.Length > 0) values.Add(meters);
                     }
                     if (!block.IsDynamicBlock) continue;
                     foreach (DynamicBlockReferenceProperty property
                         in block.DynamicBlockReferencePropertyCollection)
                     {
-                        string meters = ParseRuanguanMeters(Convert.ToString(property.Value));
+                        // Dynamic blocks expose many numeric coordinates. Only a
+                        // property explicitly named as a hose length may use a bare
+                        // number; all other values require an mm/m unit or prefix.
+                        string meters = ParseRuanguanMeters(Convert.ToString(property.Value),
+                            property.PropertyName);
                         if (meters.Length > 0) values.Add(meters);
                     }
                 }
@@ -95,12 +119,32 @@ namespace UNCAD.Features.Fill
             return first;
         }
 
-        private static string ParseRuanguanMeters(string value)
-            => RuanguanLengthParser.ParseMeters(value);
+        private static string ParseRuanguanMeters(string value, string tag)
+        {
+            if (!RuanguanBlockWriter.TryReadLength(value, tag,
+                out double millimetres)) return "";
+            return TextFormatter.FormatNum(millimetres / 1000d);
+        }
 
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,
             out ExistingFillIdentity identity, out string error)
         {
+            // frameinfo_json is the durable identity source written by U1F/U1U. Prefer it
+            // over editable legacy attributes so a stale or partially migrated block cannot
+            // redirect an update to another BOQ column.
+            FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(ctx,
+                selection?.FrameInfoJsonBlockIds);
+            if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
+                && !string.IsNullOrWhiteSpace(json.DeviceName))
+            {
+                identity = new ExistingFillIdentity
+                {
+                    MachineId = json.MachineId.Trim(),
+                    DeviceName = json.DeviceName.Trim()
+                };
+                error = "";
+                return true;
+            }
             var powers = new List<string>();
             var composites = new List<string>();
             var devices = new List<string>();
@@ -132,6 +176,7 @@ namespace UNCAD.Features.Fill
             var frames = new List<ObjectId>();
             var devices = new List<ObjectId>();
             var ruanguan = new List<ObjectId>();
+            var frameInfoJson = new List<ObjectId>();
             var upstreamInfo = new List<ObjectId>();
             var upstreamState = new List<ObjectId>();
             var upstreamAxis = new List<ObjectId>();
@@ -150,6 +195,8 @@ namespace UNCAD.Features.Fill
                             devices.Add(id);
                         if (IsRuanguanBlock(tr, block))
                             ruanguan.Add(id);
+                        if (FrameInfoJsonBlockWriter.IsJsonHostBlock(tr, block))
+                            frameInfoJson.Add(id);
                         if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
                             upstreamInfo.Add(id);
                         if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
@@ -171,6 +218,7 @@ namespace UNCAD.Features.Fill
                 FrameBlockIds = frames.ToArray(),
                 DeviceBlockIds = devices.ToArray(),
                 RuanguanBlockIds = ruanguan.ToArray(),
+                FrameInfoJsonBlockIds = frameInfoJson.ToArray(),
                 UpstreamInfoBlockIds = upstreamInfo.ToArray(),
                 UpstreamStateBlockIds = upstreamState.ToArray(),
                 UpstreamAxisBlockIds = upstreamAxis.ToArray(),
@@ -197,6 +245,16 @@ namespace UNCAD.Features.Fill
 
         private static bool IsFillTargetBlock(Transaction tr, BlockReference block)
         {
+            if (block == null) return false;
+            ObjectId recordId = block.IsDynamicBlock
+                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
+            BlockTableRecord record = tr.GetObject(recordId, OpenMode.ForRead, true)
+                as BlockTableRecord;
+            // Legacy frame inserts may have no recognizable attributes yet. The stable
+            // definition name is the migration anchor for adding frameinfo_json.
+            if (record != null && string.Equals(record.Name,
+                FrameRegionCollector.SupportedFrameName, StringComparison.OrdinalIgnoreCase))
+                return true;
             foreach (ObjectId attributeId in block.AttributeCollection)
             {
                 var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)

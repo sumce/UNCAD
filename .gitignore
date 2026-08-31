@@ -20,6 +20,8 @@ _ReSharper*/
 
 # Generated bundle binaries (keep PackageContents.xml)
 bundle/UNCAD.bundle/*.dll
+bundle/UNCAD.bundle/**/*.dll
+bundle/UNCAD.bundle/Web/
 
 # Local diagnostics and sensitive input data
 tmp/

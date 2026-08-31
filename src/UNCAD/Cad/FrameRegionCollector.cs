@@ -34,6 +34,14 @@ namespace UNCAD.Cad
     {
         public const string SupportedFrameName = "frame_20260812";
 
+        private sealed class FrameBorderBounds
+        {
+            public double MinX;
+            public double MinY;
+            public double MaxX;
+            public double MaxY;
+        }
+
         public static FrameRegionCollection Collect(CadContext ctx, ObjectId[] selectedIds)
             => CollectCore(ctx, selectedIds, false, true);
 
@@ -54,6 +62,7 @@ namespace UNCAD.Cad
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var selectedFrames = new HashSet<ObjectId>();
+                var boundaryCache = new Dictionary<ObjectId, FrameBorderBounds>();
                 foreach (ObjectId id in selectedIds.Distinct())
                 {
                     BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
@@ -62,7 +71,7 @@ namespace UNCAD.Cad
                         || !IsSupportedFrame(transaction, block)) continue;
                     selectedFrames.Add(id);
                     result.SelectedFrameCount++;
-                    AddFrame(result, transaction, block);
+                    AddFrame(result, transaction, block, boundaryCache);
                 }
 
                 if (result.Groups.Count == 0) return result;
@@ -76,6 +85,7 @@ namespace UNCAD.Cad
                     return result;
                 }
 
+                FrameRegionGroup[] groups = result.Groups.ToArray();
                 foreach (ObjectId id in space)
                 {
                     if (selectedFrames.Contains(id)) continue;
@@ -83,30 +93,43 @@ namespace UNCAD.Cad
                     if (useAnchorOwnership)
                     {
                         if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
-                        List<FrameRegionGroup> owners = result.Groups.Where(group =>
-                            group.Boundary.Contains(anchor.X, anchor.Y)).ToList();
-                        if (owners.Count == 1)
+                        FrameRegionGroup owner = null;
+                        List<FrameRegionGroup> owners = null;
+                        foreach (FrameRegionGroup group in groups)
                         {
-                            owners[0].EntityIds.Add(id);
+                            if (!group.Boundary.Contains(anchor.X, anchor.Y)) continue;
+                            if (owner == null) owner = group;
+                            else
+                            {
+                                if (owners == null)
+                                    owners = new List<FrameRegionGroup> { owner };
+                                owners.Add(group);
+                            }
                         }
-                        else if (owners.Count > 1)
-                        {
-                            SelectAnchorOwner(owners, anchor).EntityIds.Add(id);
-                        }
+                        if (owners == null) owner?.EntityIds.Add(id);
+                        else SelectAnchorOwner(owners, anchor).EntityIds.Add(id);
                         continue;
                     }
 
                     if (!TryBounds(entity, out double minX, out double minY,
                         out double maxX, out double maxY, includeAllEntities)) continue;
 
-                    List<FrameRegionGroup> strictOwners = result.Groups.Where(group =>
-                        group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
-                    if (strictOwners.Count == 1)
+                    FrameRegionGroup strictOwner = null;
+                    int strictOwnerCount = 0;
+                    foreach (FrameRegionGroup group in groups)
                     {
-                        strictOwners[0].EntityIds.Add(id);
+                        if (!group.Boundary.Intersects(minX, minY, maxX, maxY)) continue;
+                        strictOwner = group;
+                        strictOwnerCount++;
                     }
-                    else if (strictOwners.Count > 1)
+                    if (strictOwnerCount == 1)
                     {
+                        strictOwner.EntityIds.Add(id);
+                    }
+                    else if (strictOwnerCount > 1)
+                    {
+                        List<FrameRegionGroup> strictOwners = groups.Where(group =>
+                            group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
                         // Unrelated inserts do not affect fill or submission and must not make
                         // otherwise valid adjacent frames fail. Tables, text and tagged blocks
                         // remain hard conflicts because assigning them by guess would corrupt data.
@@ -124,7 +147,7 @@ namespace UNCAD.Cad
         }
 
         private static void AddFrame(FrameRegionCollection result, Transaction transaction,
-            BlockReference block)
+            BlockReference block, Dictionary<ObjectId, FrameBorderBounds> boundaryCache)
         {
             if (Math.Abs(block.Rotation) > 0.0000001)
             {
@@ -134,7 +157,7 @@ namespace UNCAD.Cad
 
             try
             {
-                FrameRectangle boundary = ReadBorderBoundary(transaction, block);
+                FrameRectangle boundary = ReadBorderBoundary(transaction, block, boundaryCache);
                 var group = new FrameRegionGroup
                 {
                     FrameId = block.ObjectId,
@@ -152,12 +175,18 @@ namespace UNCAD.Cad
         }
 
         private static FrameRectangle ReadBorderBoundary(Transaction transaction,
-            BlockReference block)
+            BlockReference block, Dictionary<ObjectId, FrameBorderBounds> boundaryCache)
         {
             // frame_20260812 owns an explicit four-line outer rectangle. Reading the line border
             // avoids attributes or annotation geometry expanding BlockReference.GeometricExtents.
             var lines = new List<Line>();
-            BlockTableRecord definition = transaction.GetObject(block.BlockTableRecord,
+            ObjectId definitionId = block.BlockTableRecord;
+            if (boundaryCache != null && boundaryCache.TryGetValue(definitionId,
+                out FrameBorderBounds cached))
+            {
+                return TransformBorder(block, cached);
+            }
+            BlockTableRecord definition = transaction.GetObject(definitionId,
                 OpenMode.ForRead, true) as BlockTableRecord;
             if (definition == null) throw new InvalidOperationException("找不到图框块定义。");
             foreach (ObjectId id in definition)
@@ -180,12 +209,23 @@ namespace UNCAD.Cad
             if (!top || !bottom || !left || !right)
                 throw new InvalidOperationException("图框定义未找到闭合的最外矩形边线。");
 
+            var bounds = new FrameBorderBounds
+            {
+                MinX = minX, MinY = minY, MaxX = maxX, MaxY = maxY
+            };
+            if (boundaryCache != null) boundaryCache[definitionId] = bounds;
+            return TransformBorder(block, bounds);
+        }
+
+        private static FrameRectangle TransformBorder(BlockReference block,
+            FrameBorderBounds bounds)
+        {
             Point3d[] corners =
             {
-                new Point3d(minX, minY, 0).TransformBy(block.BlockTransform),
-                new Point3d(minX, maxY, 0).TransformBy(block.BlockTransform),
-                new Point3d(maxX, minY, 0).TransformBy(block.BlockTransform),
-                new Point3d(maxX, maxY, 0).TransformBy(block.BlockTransform)
+                new Point3d(bounds.MinX, bounds.MinY, 0).TransformBy(block.BlockTransform),
+                new Point3d(bounds.MinX, bounds.MaxY, 0).TransformBy(block.BlockTransform),
+                new Point3d(bounds.MaxX, bounds.MinY, 0).TransformBy(block.BlockTransform),
+                new Point3d(bounds.MaxX, bounds.MaxY, 0).TransformBy(block.BlockTransform)
             };
             return new FrameRectangle(block.Handle.ToString(),
                 corners.Min(point => point.X), corners.Min(point => point.Y),
@@ -227,6 +267,8 @@ namespace UNCAD.Cad
                 ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             BlockTableRecord record = transaction.GetObject(recordId, OpenMode.ForRead, true)
                 as BlockTableRecord;
+            if (record != null && string.Equals(record.Name, "frameinfo_json",
+                StringComparison.OrdinalIgnoreCase)) return true;
             return record != null && DynamicBlockStatePolicy.IsUpstreamBlock(record.Name);
         }
 
@@ -245,11 +287,24 @@ namespace UNCAD.Cad
         {
             // Adjacent frame borders share coordinates. For export/layout, the anchor is the
             // ownership contract; nearest frame center makes a border tie deterministic.
-            return owners.OrderBy(owner => Math.Abs((owner.Boundary.MinX
-                    + owner.Boundary.MaxX) / 2d - anchor.X)
-                + Math.Abs((owner.Boundary.MinY + owner.Boundary.MaxY) / 2d - anchor.Y))
-                .ThenBy(owner => owner.Handle, StringComparer.OrdinalIgnoreCase)
-                .First();
+            FrameRegionGroup selected = null;
+            double bestDistance = double.MaxValue;
+            foreach (FrameRegionGroup owner in owners ?? Array.Empty<FrameRegionGroup>())
+            {
+                double distance = Math.Abs((owner.Boundary.MinX + owner.Boundary.MaxX)
+                        / 2d - anchor.X)
+                    + Math.Abs((owner.Boundary.MinY + owner.Boundary.MaxY)
+                        / 2d - anchor.Y);
+                if (selected == null || distance < bestDistance
+                    || (Math.Abs(distance - bestDistance) < 1e-9
+                        && string.Compare(owner.Handle, selected.Handle,
+                            StringComparison.OrdinalIgnoreCase) < 0))
+                {
+                    selected = owner;
+                    bestDistance = distance;
+                }
+            }
+            return selected;
         }
 
         private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)

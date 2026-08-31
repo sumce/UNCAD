@@ -9,6 +9,26 @@ namespace UNCAD.Tests
     public class XLayoutLayoutTests
     {
         [Fact]
+        public void Arrange_IdentifiesFirstPlacedFrameByFinalLeftEdge()
+        {
+            // The second source frame starts much farther right. Its translation is therefore
+            // numerically smaller, even though its final placed column is the second one.
+            var firstSource = new XLayoutFrameItem("M1", "A",
+                new FrameRectangle("first", 100000, 0, 101000, 500), "first");
+            var secondSource = new XLayoutFrameItem("M1", "B",
+                new FrameRectangle("second", 500000, 0, 501000, 500), "second");
+
+            IReadOnlyList<XLayoutPlacement> result = XLayoutLayout.Arrange(
+                new[] { firstSource, secondSource });
+            XLayoutPlacement firstPlaced = result.OrderBy(placement =>
+                placement.TranslationX + placement.Item.Boundary.MinX).First();
+
+            Assert.Same(firstSource, firstPlaced.Item);
+            Assert.NotSame(firstPlaced.Item, result.OrderBy(
+                placement => placement.TranslationX).First().Item);
+        }
+
+        [Fact]
         public void Arrange_GroupsSameMachineIntoOneRow()
         {
             var items = new[]

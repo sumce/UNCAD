@@ -61,6 +61,7 @@ namespace UNCAD.Features.Unr
 
         protected override void Execute(CadContext ctx)
         {
+            ProductMetadata.EnsureCommandAllowed(CommandIds.Arch);
             var ed = ctx.Ed;
 
             double diameter0 = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);

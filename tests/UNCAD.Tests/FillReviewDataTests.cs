@@ -31,6 +31,27 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void BatchDefaults_CanExplicitlyIncludeUnmatchedRows()
+        {
+            FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.BusPlugBox,
+                    Name = "母线插接箱",
+                    Quantity = "1",
+                    CatalogMatched = false
+                }
+            });
+
+            Assert.Empty(data.SelectedRows());
+            Assert.Equal(1, data.AcceptUnmatchedDefaults());
+            TableFillRow row = Assert.Single(data.SelectedRows(true));
+            Assert.Equal("母线插接箱", row.Name);
+            Assert.False(row.CatalogMatched);
+        }
+
+        [Fact]
         public void ManualItem_CanBeAddedSelectedAndRemovedWithoutDeletingPlannedRows()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow(), Rows());
@@ -105,6 +126,75 @@ namespace UNCAD.Tests
             Assert.Equal("ZB-YJVR-5*6", data.BoqCableModel);
             Assert.Contains("ZB-YJVR-5*6", data.CableItem().Description);
             Assert.Equal("18.5", data.CableItem().Quantity);
+        }
+
+        [Fact]
+        public void CableReplacement_RecomputesMappedHoseAndCreatesMissingHoseRow()
+        {
+            var cable = new TableFillRow
+            {
+                Category = TableFillCategory.Cable,
+                Name = "未知电缆",
+                Description = "未知电缆",
+                Quantity = "12",
+                CatalogMatched = false
+            };
+            FillReviewData data = FillReviewData.Create(
+                new MachineRow { Cable = "UNKNOWN" }, new[] { cable });
+            var catalog = new BoqCatalogIndex(new[]
+            {
+                new ListItem
+                {
+                    Category = "电缆", Code = "1.1", Name = "多芯电缆",
+                    Feature = "1.名称:0.6/1kV-YJVR-2.5mm2*3C", Unit = "m",
+                    Alias = "3*2.5"
+                },
+                new ListItem
+                {
+                    Category = "软管", Code = "3.8", Name = "包塑金属软管",
+                    Feature = "1.名称:包塑金属软管\\P2.规格:20mm", Unit = "m",
+                    Alias = "20mm"
+                }
+            });
+
+            data.ReplaceWithCatalogItem(data.CableItem(), catalog.Cables[0], catalog);
+
+            Assert.Equal("3*2.5", data.BoqCableModel);
+            Assert.Equal("20", data.Machine.Dia);
+            FillReviewItem hose = Assert.Single(data.Items,
+                item => item.Category == TableFillCategory.FlexibleConduit);
+            Assert.Equal("3.8", hose.Code);
+            Assert.True(hose.Included);
+        }
+
+        [Fact]
+        public void LegacyCableReplacement_WithoutCatalogDoesNotCreateUnmatchedHose()
+        {
+            FillReviewData data = FillReviewData.Create(
+                new MachineRow { Cable = "UNKNOWN" }, new[]
+                {
+                    new TableFillRow
+                    {
+                        Category = TableFillCategory.Cable,
+                        Name = "未知电缆",
+                        Quantity = "12",
+                        CatalogMatched = false
+                    }
+                });
+            var replacement = new ListItem
+            {
+                Code = "1.1",
+                Name = "多芯电缆",
+                Alias = "3*2.5",
+                Feature = "电缆特征",
+                Unit = "m"
+            };
+
+            data.ReplaceWithCatalogItem(data.CableItem(), replacement);
+
+            Assert.Equal("3*2.5", data.BoqCableModel);
+            Assert.Null(data.FlexibleConduitItem());
+            Assert.Single(data.SelectedRows());
         }
 
         [Fact]

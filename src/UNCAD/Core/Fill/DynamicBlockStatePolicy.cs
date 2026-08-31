@@ -59,5 +59,16 @@ namespace UNCAD.Core.Fill
             for (int index = 0; index < result.Count; index++) result[index].SortOrder = index + 1;
             return result;
         }
+
+        /// <summary>
+        /// U1U variant that uses the current CAD table as the outlet quantity authority.
+        /// An existing outlet row is retained verbatim; a new row is created with quantity
+        /// one only when the device state says an outlet exists and no row is present.
+        /// </summary>
+        public static List<TableFillRow> ApplyForUpdate(
+            IEnumerable<TableFillRow> rows, bool hasOutlet, TableFillRow generatedOutlet,
+            IEnumerable<TableFillRow> existingOutlets)
+            => UpdateOutletPolicy.PreserveExistingOrAdd(
+                rows, hasOutlet, generatedOutlet, existingOutlets);
     }
 }

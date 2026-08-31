@@ -65,15 +65,19 @@ namespace UNCAD.Features.Submit
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, string filePath,
             IEnumerable<ObjectId[]> sourceGroups)
-            => WriteCore(ctx, null, filePath, sourceGroups, null);
+            // U1S is the explicit migration path for drawings whose table predates
+            // socket-panel rows, so it may infer the missing 4.x panel material.
+            => WriteCore(ctx, null, filePath, sourceGroups, null, true);
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
             string filePath, IEnumerable<ObjectId[]> sourceGroups)
-            => WriteCore(ctx, transaction, filePath, sourceGroups, null);
+            // U1F/U1U have just applied the user's editable table; preserve deletions.
+            => WriteCore(ctx, transaction, filePath, sourceGroups, null, false);
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
             string filePath, IEnumerable<ObjectId[]> sourceGroups, FileBatchRollback batch)
-            => WriteCore(ctx, transaction, filePath, sourceGroups, batch);
+            // Batch U1U follows the same post-edit contract as single-frame U1U.
+            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false);
 
         public static IReadOnlyList<string> TargetPaths(string outputRoot,
             IEnumerable<string> machineIds)
@@ -83,7 +87,7 @@ namespace UNCAD.Features.Submit
 
         private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
             Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
-            FileBatchRollback externalBatch)
+            FileBatchRollback externalBatch, bool inferLegacySocketPanels)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (string.IsNullOrWhiteSpace(filePath))
@@ -98,7 +102,8 @@ namespace UNCAD.Features.Submit
                 SubmissionSourceData source = transaction == null
                     ? CadSubmissionReader.Read(ctx, ids)
                     : CadSubmissionReader.Read(transaction, ids);
-                SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+                SubmissionRecord record = SubmissionRecordExtractor.Extract(source,
+                    inferLegacySocketPanels);
                 if (string.IsNullOrWhiteSpace(record.MachineId)
                     || string.IsNullOrWhiteSpace(record.DeviceName))
                     throw new InvalidDataException("第 " + index
@@ -122,9 +127,21 @@ namespace UNCAD.Features.Submit
                 RecordCount = records.Count,
                 MaterialCount = records.Sum(record => record.Materials.Count)
             };
+            // A batch may contain only fallback CAD rows with no fixed-catalog code. Those
+            // rows are valid for the drawing table after explicit confirmation, but there is
+            // no safe material key to submit to the BOQ workbook. Report success and leave
+            // the existing workbook untouched in that case.
+            List<SubmissionRecord> recordsWithMaterials = records
+                .Where(record => record.Materials != null && record.Materials.Count > 0)
+                .ToList();
+            if (recordsWithMaterials.Count == 0)
+            {
+                result.FilePath = "";
+                return result;
+            }
             Action writeRecords = () =>
             {
-                foreach (IGrouping<string, SubmissionRecord> machineGroup in records
+                foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsWithMaterials
                     .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
                 {
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);

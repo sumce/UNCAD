@@ -77,6 +77,8 @@ namespace UNCAD.UI
                             "使用 400 mm 桥架规格")),
                     RibbonItemDefinition.Button("绘制线条", CommandIds.Line,
                         "连续绘制线段并自动生成长度文字"),
+                    RibbonItemDefinition.Button("3D 快速绘图", CommandIds.LineQuick,
+                        "在 3D 正交视图中选择相连线段并批量配置距离（兼容命令 UNLX）"),
                     RibbonItemDefinition.Button("开拱桥", CommandIds.Arch,
                         "在线段交叉位置生成拱桥开洞")),
                 new RibbonPanelDefinition("统计",

@@ -121,10 +121,25 @@ namespace UNCAD.Features.Fill
         internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
             ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
             CableStatResult statistics)
+            => FillFrame(ctx, transaction, blockIds, selected, bridgeInfo,
+                statistics, false);
+
+        internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
+            CableStatResult statistics, bool preserveMissingStatistics)
+            => FillFrame(ctx, transaction, blockIds, selected, bridgeInfo, statistics,
+                preserveMissingStatistics, preserveMissingStatistics,
+                preserveMissingStatistics);
+
+        internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
+            CableStatResult statistics, bool preserveCable, bool preserveBridge,
+            bool preserveConduit)
         {
             if (blockIds == null || blockIds.Length == 0) return FillWriteResult.Empty;
             Dictionary<string, string> values = FrameBlockFiller.BuildValues(
-                selected, bridgeInfo, statistics);
+                selected, bridgeInfo, statistics, preserveCable, preserveBridge,
+                preserveConduit);
             if (values.Count == 0) return FillWriteResult.Empty;
 
             int blocks = 0, attributes = 0;

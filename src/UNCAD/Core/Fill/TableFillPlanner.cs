@@ -17,7 +17,9 @@ namespace UNCAD.Core.Fill
         BusPlugBox,
         Breaker,
         Outlet,
-        Manual
+        Manual,
+        // Appended to preserve the numeric values of the existing public categories.
+        OutletPanel
     }
 
     public sealed class TableFillRow
@@ -36,7 +38,7 @@ namespace UNCAD.Core.Fill
     public static class TableFillPlanner
     {
         private static readonly Regex DetailRatingRegex = new Regex(
-            @"(\d+)P(\d+)A", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"(\d+)\s*P\s*(\d+)\s*A", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BreakerSpecRegex = new Regex(
             @"^(\d+)P(\d+)\s*[~～-]\s*(\d+)A$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -162,6 +164,11 @@ namespace UNCAD.Core.Fill
 
             if (string.Equals(next, "插座盘", StringComparison.OrdinalIgnoreCase))
             {
+                // NEXT identifies the upstream physical panel as well as the
+                // downstream outlet state.  Keep the two material rows separate:
+                // 4.11/4.12 is the panel, while 8.2/8.3 is the outlet itself.
+                TableFillRow panel = BuildOutletPanelRow(machine.Detail, catalog);
+                if (panel != null) rows.Add(panel);
                 rows.Add(BuildOutletRow(machine.Detail, catalog));
                 return;
             }
@@ -186,6 +193,27 @@ namespace UNCAD.Core.Fill
                 + (amps > 0 ? @"\P2.额定电流:" + amps + "A" : "");
             return FromItem(TableFillCategory.Outlet, 800, item,
                 "插座", description, "个", "1");
+        }
+
+        /// <summary>
+        /// Builds the upstream socket-panel row for NEXT=插座盘.  A panel row is
+        /// emitted only when the catalog has panel entries; with a partial/legacy
+        /// test catalog there is no safe material identity to write.  When panel
+        /// entries exist but the rating is unsupported, an unmatched row is kept
+        /// for explicit review rather than guessing 4.11 or 4.12.
+        /// </summary>
+        public static TableFillRow BuildOutletPanelRow(string detail,
+            BoqCatalogIndex catalog)
+        {
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            if (catalog.OutletPanels.Count == 0) return null;
+
+            TryExtractRating(detail, out _, out int amps);
+            ListItem item = catalog.FindOutletPanel(amps);
+            string description = "1.名称:插座盘"
+                + (amps > 0 ? @"\P2.额定电流:" + amps + "A" : "");
+            return FromItem(TableFillCategory.OutletPanel, 450, item,
+                "插座盘", description, "个", "1");
         }
 
         private static TableFillRow FromItem(TableFillCategory category, int order,

@@ -51,6 +51,20 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Calculate_ReadsCurrentMillimetreBridgeLabels()
+        {
+            var result = StatCalculator.Calculate(new[]
+            {
+                "桥架200*100 2500mm", "桥架200×100 1250mm"
+            }, 250.0);
+
+            var bridge = Assert.Single(result.Bridges);
+            Assert.Equal(15.0, bridge.TotalGrids, 4);
+            Assert.Equal(3750.0, bridge.TotalMm, 4);
+            Assert.Equal(3.75, bridge.TotalM, 4);
+        }
+
+        [Fact]
         public void Calculate_IgnoresLinesWithOnlyGridWord()
         {
             var r = StatCalculator.Calculate(new[] { "10格" }, 250.0);
@@ -173,7 +187,7 @@ namespace UNCAD.Tests
             var lines = new List<string> { "桥架200*100 10格" };
             var report = StatCalculator.BuildReport(lines, 250.0);
             string line = report.Single(s => s.StartsWith("桥架200*100"));
-            Assert.Contains("10格", line);
+            Assert.Contains("2500mm", line);
             Assert.Contains("2500mm", line); // 10 * 250
             Assert.Contains("2.5M", line);    // 2500 / 1000
         }

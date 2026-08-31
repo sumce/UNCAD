@@ -44,6 +44,9 @@ namespace UNCAD.Cad
             }
             finally
             {
+                // AutoCAD keeps implied selection after ESC or an exception. Clear it for
+                // every command so the next UsePickSet command cannot silently reuse stale IDs.
+                try { SelectionService.ClearPickFirst(ctx); } catch { }
                 stopwatch.Stop();
                 Log.Info(command + " finished in " + stopwatch.ElapsedMilliseconds + "ms");
             }

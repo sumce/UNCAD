@@ -85,7 +85,8 @@ namespace UNCAD.Core.Stat
 
                 // 条件 B：桥架标注必须整行命中，不允许“共用”等前后缀或中间备注。
                 if (options.IncludeBridge
-                    && TextParser.TryExtractBridgeLabel(s, out string spec, out double grids))
+                    && TextParser.TryExtractBridgeLabel(s, mmPerGrid,
+                        out string spec, out double grids))
                 {
                     if (!bridgeMap.TryGetValue(spec, out var entry))
                     {
@@ -129,10 +130,11 @@ namespace UNCAD.Core.Stat
 
             if (r.IncludeBridge) foreach (var b in r.Bridges)
             {
-                var gridStrs = b.Grids.Select(TextFormatter.FormatNum).ToList();
-                outLines.Add(b.Spec + " " + TextFormatter.FormatNum(b.TotalGrids) + "格:("
-                    + TextFormatter.Join(gridStrs, "+") + ")*" + TextFormatter.FormatNum(b.MmPerGrid)
-                    + "=" + TextFormatter.FormatNum(b.TotalMm)
+                var millimetreParts = b.Grids.Select(grid =>
+                    TextFormatter.FormatNum(grid * b.MmPerGrid)).ToList();
+                outLines.Add(b.Spec + " " + TextFormatter.FormatNum(b.TotalMm) + "mm:("
+                    + TextFormatter.Join(millimetreParts, "+") + ")="
+                    + TextFormatter.FormatNum(b.TotalMm)
                     + "mm = " + TextFormatter.FormatNum(b.TotalM) + "M");
             }
             if (r.IncludeConduit) foreach (var c in r.Conduits)

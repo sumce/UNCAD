@@ -27,9 +27,13 @@ namespace UNCAD.Cad
             return Pick(ctx, prompt, filter);
         }
 
-        /// <summary>优先使用预选，否则选择直线/二维多段线；支持 D 修改平行线偏移。</summary>
+        /// <summary>
+        /// 优先使用预选，否则选择直线/二维多段线；支持 D 修改平行线偏移。
+        /// U1C 可额外允许 INSERT，以便同一次选择直接更新 Ruanguan 块。
+        /// </summary>
         public static ObjectId[] PickCurvesWithOffset(CadContext ctx, string prompt,
-            string distancePrompt, ref double offset, Action<double> persistOffset)
+            string distancePrompt, ref double offset, Action<double> persistOffset,
+            bool includeInserts = false)
         {
             var implied = ctx.Ed.SelectImplied();
             if (implied.Status == PromptStatus.OK && implied.Value != null && implied.Value.Count > 0)
@@ -40,7 +44,10 @@ namespace UNCAD.Cad
             while (true)
             {
                 var result = ctx.Ed.GetSelection(options,
-                    new SelectionFilter(new[] { new TypedValue(0, "LINE,LWPOLYLINE,POLYLINE") }));
+                    new SelectionFilter(new[] { new TypedValue(0,
+                        includeInserts
+                            ? "LINE,LWPOLYLINE,POLYLINE,INSERT"
+                            : "LINE,LWPOLYLINE,POLYLINE") }));
                 if (result.Status == PromptStatus.Keyword)
                 {
                     var distance = ctx.Ed.GetDistance(distancePrompt + " <" + offset.ToString("0.##") + ">: ");

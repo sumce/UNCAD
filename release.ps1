@@ -11,6 +11,31 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ($Configuration -ne "Release") { throw "release.ps1 只允许生成永久 Release 包；临时版请使用 release-temp.ps1。" }
 $bundle = Join-Path $root "bundle\UNCAD.bundle"
 
+function Assert-FileMatches {
+    param([string]$Expected, [string]$Actual, [string]$Label)
+    if (-not (Test-Path $Expected -PathType Leaf)) { throw "Build output is missing: $Label" }
+    if (-not (Test-Path $Actual -PathType Leaf)) { throw "Bundle file is missing: $Label" }
+    if ((Get-FileHash -LiteralPath $Expected -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $Actual -Algorithm SHA256).Hash) {
+        throw "Bundle file does not match the verified build output: $Label"
+    }
+}
+
+function Assert-TreeMatches {
+    param([string]$ExpectedRoot, [string]$ActualRoot, [string]$Label)
+    if (-not (Test-Path $ExpectedRoot -PathType Container)) { throw "Build output folder is missing: $Label" }
+    if (-not (Test-Path $ActualRoot -PathType Container)) { throw "Bundle folder is missing: $Label" }
+    $expectedFiles = @(Get-ChildItem -LiteralPath $ExpectedRoot -File -Recurse)
+    $actualFiles = @(Get-ChildItem -LiteralPath $ActualRoot -File -Recurse)
+    if ($expectedFiles.Count -ne $actualFiles.Count) {
+        throw "Bundle folder file count mismatch: $Label"
+    }
+    foreach ($sourceFile in $expectedFiles) {
+        $relative = $sourceFile.FullName.Substring($ExpectedRoot.Length).TrimStart([IO.Path]::DirectorySeparatorChar)
+        Assert-FileMatches $sourceFile.FullName (Join-Path $ActualRoot $relative) (Join-Path $Label $relative)
+    }
+}
+
 if (-not $NoBuild) {
     $buildArgs = @{ Configuration = $Configuration }
     if ($NoRestore) { $buildArgs.NoRestore = $true }
@@ -24,7 +49,7 @@ $bundleModule = Join-Path $bundle "UNCAD.dll"
 if (-not (Test-Path $buildOutput -PathType Leaf)) { throw "Build output is missing: $buildOutput" }
 if ($NoBuild) {
     $sourceInputs = @(Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
-        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx") })
+        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".html", ".css", ".js", ".txt") })
     $sourceInputs += @(Get-ChildItem $root -File |
         Where-Object { $_.Extension -in @(".xlsx") })
     $newerInput = $sourceInputs |
@@ -37,6 +62,18 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
     (Get-FileHash $bundleModule -Algorithm SHA256).Hash) {
     throw "Bundle UNCAD.dll does not match the verified build output. Run release.ps1 without -NoBuild."
 }
+$publishFiles = @(
+    "Microsoft.Web.WebView2.Core.dll",
+    "Microsoft.Web.WebView2.WinForms.dll",
+    "Microsoft.Web.WebView2.Wpf.dll",
+    "runtimes\win-x64\native\WebView2Loader.dll"
+)
+$buildRoot = Split-Path $buildOutput -Parent
+foreach ($relative in $publishFiles) {
+    Assert-FileMatches (Join-Path $buildRoot $relative) (Join-Path $bundle $relative) $relative
+}
+Assert-TreeMatches (Join-Path $root "src\UNCAD\Web\QuickLine3D") `
+    (Join-Path $bundle "Web\QuickLine3D") "Web\QuickLine3D"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.

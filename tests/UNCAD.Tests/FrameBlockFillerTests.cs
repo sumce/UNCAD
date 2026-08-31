@@ -125,5 +125,19 @@ namespace UNCAD.Tests
             Assert.Equal("桥架200*100 3M; 桥架400*100 1M",
                 v[FrameBlockFiller.TagBridge]);
         }
+
+        [Fact]
+        public void BuildValues_UpdateModeOmitsStatisticsTagsWithoutFreshMeasurements()
+        {
+            var empty = new CableStatResult();
+
+            Dictionary<string, string> values = FrameBlockFiller.BuildValues(
+                Row(), "", empty, true);
+
+            Assert.False(values.ContainsKey(FrameBlockFiller.TagCable));
+            Assert.False(values.ContainsKey(FrameBlockFiller.TagBridge));
+            Assert.False(values.ContainsKey(FrameBlockFiller.TagConduit));
+            Assert.Equal("MDAPT01-泵1", values[FrameBlockFiller.TagDevice]);
+        }
     }
 }

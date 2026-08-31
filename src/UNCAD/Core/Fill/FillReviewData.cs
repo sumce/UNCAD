@@ -64,8 +64,8 @@ namespace UNCAD.Core.Fill
             {
                 data.Items.Add(new FillReviewItem
                 {
-                    // Unmatched rows cannot be generated. The user must replace them with
-                    // a database item before the inclusion checkbox becomes available.
+                    // Unmatched rows stay excluded until a catalog replacement is selected,
+                    // or a batch U1U caller explicitly accepts fallback defaults.
                     Included = row.CatalogMatched,
                     Category = row.Category,
                     Name = row.Name ?? "",
@@ -115,18 +115,37 @@ namespace UNCAD.Core.Fill
         /// unchecked rows leave no gaps; manual rows remain where the user added them.
         /// </summary>
         public List<TableFillRow> SelectedRows()
+            => SelectedRows(false);
+
+        /// <summary>
+        /// Returns rows selected for writing. Batch U1U may explicitly accept fallback
+        /// rows whose catalog code is unavailable; single-frame U1F keeps the strict
+        /// catalog-only default.
+        /// </summary>
+        public List<TableFillRow> SelectedRows(bool allowUnmatchedDefaults)
         {
             var selected = new List<TableFillRow>();
-            // This core boundary is the final guard even if a caller bypasses the UI and
-            // toggles Included directly on an unmatched row.
             foreach (FillReviewItem item in Items.Where(item =>
-                item.Included && item.CatalogMatched))
+                item.Included && (item.CatalogMatched || allowUnmatchedDefaults)))
             {
                 TableFillRow row = item.ToTableRow();
                 row.SortOrder = selected.Count + 1;
                 selected.Add(row);
             }
             return selected;
+        }
+
+        /// <summary>Marks unresolved generated rows as accepted fallback data for batch U1U.</summary>
+        public int AcceptUnmatchedDefaults()
+        {
+            int count = 0;
+            foreach (FillReviewItem item in Items)
+            {
+                if (item.CatalogMatched) continue;
+                item.Included = true;
+                count++;
+            }
+            return count;
         }
 
         public FillReviewItem CableItem()
@@ -161,6 +180,10 @@ namespace UNCAD.Core.Fill
         }
 
         public void ReplaceWithCatalogItem(FillReviewItem item, ListItem catalogItem)
+            => ReplaceWithCatalogItem(item, catalogItem, null);
+
+        public void ReplaceWithCatalogItem(FillReviewItem item, ListItem catalogItem,
+            BoqCatalogIndex catalog)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (catalogItem == null) throw new ArgumentNullException(nameof(catalogItem));
@@ -175,7 +198,18 @@ namespace UNCAD.Core.Fill
             item.CatalogMatched = true;
             item.Included = true;
             if (item.Category == TableFillCategory.Cable)
-                BoqCableModel = (catalogItem.Alias ?? "").Trim();
+            {
+                string model = (catalogItem.Alias ?? catalogItem.Spec ?? "").Trim();
+                BoqCableModel = model;
+                // The legacy overload has no catalog index, so it can confirm the
+                // cable row but cannot safely create a catalog-backed hose row.  The
+                // indexed overload used by U1F/U1U performs the derived hose update.
+                if (catalog == null) return;
+                // A cable replacement changes the derived hose diameter as well.  Keep
+                // the editable BOQ identity and the device identity separate, but make
+                // the hose row follow the newly confirmed catalog cable immediately.
+                SetCableModel(model, catalog, catalogItem);
+            }
         }
 
         public bool RemoveItem(FillReviewItem item)
@@ -196,6 +230,18 @@ namespace UNCAD.Core.Fill
             if (cable == null) return;
 
             ListItem matched = catalog?.FindCable(value);
+            SetCableModel(value, catalog, matched);
+        }
+
+        private void SetCableModel(string model, BoqCatalogIndex catalog,
+            ListItem explicitMatch)
+        {
+            string value = (model ?? "").Trim();
+            BoqCableModel = value;
+            FillReviewItem cable = CableItem();
+            if (cable == null) return;
+
+            ListItem matched = explicitMatch ?? catalog?.FindCable(value);
             cable.Name = string.IsNullOrWhiteSpace(matched?.Name)
                 ? "电缆" : matched.Name;
             cable.Description = string.IsNullOrWhiteSpace(matched?.Feature)
@@ -207,6 +253,16 @@ namespace UNCAD.Core.Fill
             cable.Code = matched?.Code ?? "";
             cable.CatalogMatched = matched != null;
             cable.Included = matched != null;
+
+            // The fixed hose map is keyed by the confirmed cable alias/core model.  When
+            // the cable was unknown, the initial plan has no hose row; after a user picks
+            // a known cable we create/rematch it so a valid Ruanguan length is not lost.
+            if (matched != null && FlexibleConduitCableMap.TryGetDiameter(
+                    matched.Alias ?? value, out string diameter))
+            {
+                SetFlexibleConduitDiameter(diameter, catalog,
+                    FillPlanningOptions.Default);
+            }
         }
 
         public void SetCableMeters(string meters)
@@ -231,7 +287,25 @@ namespace UNCAD.Core.Fill
             string value = normalized.Length > 0 ? normalized : sourceValue;
             Machine.Dia = value;
             FillReviewItem flexible = FlexibleConduitItem();
-            if (flexible == null) return null;
+            if (flexible == null)
+            {
+                if (value.Length == 0) return null;
+                TableFillRow generated = TableFillPlanner.BuildFlexibleConduitRow(
+                    value, catalog, options);
+                flexible = new FillReviewItem
+                {
+                    Included = generated.CatalogMatched,
+                    Category = TableFillCategory.FlexibleConduit,
+                    Name = generated.Name,
+                    Description = generated.Description,
+                    Unit = generated.Unit,
+                    Quantity = generated.Quantity,
+                    Code = generated.Code,
+                    CatalogMatched = generated.CatalogMatched
+                };
+                Items.Add(flexible);
+                return flexible;
+            }
 
             string quantity = flexible.Quantity;
             TableFillRow planned = TableFillPlanner.BuildFlexibleConduitRow(
@@ -256,6 +330,7 @@ namespace UNCAD.Core.Fill
                 case TableFillCategory.FlexibleConduit: return "软管";
                 case TableFillCategory.BusPlugBox: return "母线插接箱";
                 case TableFillCategory.Breaker: return "断路器";
+                case TableFillCategory.OutletPanel: return "插座盘";
                 case TableFillCategory.Outlet: return "插座";
                 case TableFillCategory.Manual: return "手动添加";
                 default: return category.ToString();

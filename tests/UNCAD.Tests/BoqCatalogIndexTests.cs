@@ -88,6 +88,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void OutletPanelMatching_UsesApprovedCodeMappingOnly()
+        {
+            var index = new BoqCatalogIndex(new[]
+            {
+                Item("4.11", "插座盘", "100A+20A*40", "插座盘"),
+                Item("4.12", "插座盘", "80A+16A*30", "插座盘"),
+                Item("4.14", "插座盘", "50A+16A*10", "插座盘")
+            });
+
+            Assert.Equal("4.11", index.FindOutletPanel(20)?.Code);
+            Assert.Equal("4.12", index.FindOutletPanel(16)?.Code);
+            Assert.Null(index.FindOutletPanel(10));
+            Assert.Equal("4.11", BoqCatalogIndex.OutletPanelCode(20));
+            Assert.Equal("", BoqCatalogIndex.OutletPanelCode(10));
+        }
+
+        [Fact]
         public void CableFeatureMatching_UsesProjectFeatureAndReturnsCanonicalAlias()
         {
             ListItem item = new ListItem

@@ -123,6 +123,59 @@ namespace UNCAD.Tests
             if (outlet != null) Assert.Equal("1", outlet.Quantity);
         }
 
+        [Theory]
+        [InlineData("U220 1P3W 1P20A", "4.11")]
+        [InlineData("N220 1P3W 1P16A", "4.12")]
+        [InlineData("N220 1P3W 1P 16 A", "4.12")]
+        public void Build_AddsExactSocketPanelForSupportedRating(string detail,
+            string expectedCode)
+        {
+            var machine = new MachineRow { Next = "插座盘", Detail = detail };
+            var catalog = new BoqCatalogIndex(new[]
+            {
+                Panel("4.11", "100A+20A*40"),
+                Panel("4.12", "80A+16A*30"),
+                // 4.14 also mentions 16A and must never win by a broad range match.
+                Panel("4.14", "50A+16A*10"),
+                Item("8.2", "插座", "10~16A插座描述", "个", "10~16A"),
+                Item("8.3", "插座", "20~30A插座描述", "个", "20~30A")
+            });
+
+            List<TableFillRow> rows = TableFillPlanner.Build(
+                machine, catalog, new CableStatResult(), FillPlanningOptions.Default);
+            TableFillRow panel = Assert.Single(rows,
+                row => row.Category == TableFillCategory.OutletPanel);
+
+            Assert.Equal(expectedCode, panel.Code);
+            Assert.Equal("1", panel.Quantity);
+            Assert.True(panel.CatalogMatched);
+            Assert.Equal(expectedCode == "4.12" ? "8.2" : "8.3",
+                Assert.Single(rows, row => row.Category == TableFillCategory.Outlet).Code);
+        }
+
+        [Fact]
+        public void Build_LeavesUnsupportedSocketPanelUnmatchedInsteadOfGuessing()
+        {
+            var machine = new MachineRow { Next = "插座盘", Detail = "N220 1P3W 1P10A" };
+            var catalog = new BoqCatalogIndex(new[]
+            {
+                Panel("4.11", "100A+20A*40"),
+                Panel("4.12", "80A+16A*30"),
+                Panel("4.13", "50A+10A*10"),
+                Panel("4.14", "50A+16A*10"),
+                Item("8.2", "插座", "10~16A插座描述", "个", "10~16A")
+            });
+
+            TableFillRow panel = Assert.Single(TableFillPlanner.Build(
+                machine, catalog, new CableStatResult(), FillPlanningOptions.Default),
+                row => row.Category == TableFillCategory.OutletPanel);
+
+            Assert.Equal("", panel.Code);
+            Assert.False(panel.CatalogMatched);
+            Assert.DoesNotContain("4.11", panel.Code);
+            Assert.DoesNotContain("4.12", panel.Code);
+        }
+
         [Fact]
         public void Build_AddsMatchingBreakerForNextILinePanel()
         {
@@ -248,6 +301,19 @@ namespace UNCAD.Tests
             };
         }
 
+        private static ListItem Panel(string code, string spec)
+        {
+            return new ListItem
+            {
+                Category = "插座盘",
+                Code = code,
+                Name = "插座盘",
+                Feature = "1.名称:插座盘\\P2.规格:" + spec,
+                Unit = "个",
+                Spec = spec
+            };
+        }
+
         private static string TestCategory(string code, string name)
         {
             if (code.StartsWith("1.")) return "电缆";
@@ -256,6 +322,9 @@ namespace UNCAD.Tests
             if (code.StartsWith("5.")) return "母线插接箱";
             if (code.StartsWith("6.")) return "断路器";
             if (code.StartsWith("8.")) return "插座";
+            if (code.StartsWith("4.9") || code.StartsWith("4.10")
+                || code.StartsWith("4.11") || code.StartsWith("4.12")
+                || code.StartsWith("4.13") || code.StartsWith("4.14")) return "插座盘";
             return "";
         }
     }

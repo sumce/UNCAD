@@ -81,10 +81,7 @@ namespace UNCAD.Features.Fill
             CableStatResult statistics = summation.Statistics;
             if (updateMode && statistics.CableSum <= 0 && statistics.Bridges.Count == 0
                 && statistics.Conduits.Count == 0)
-            {
-                ctx.Write("\n[SUM-STAT/求和统计] 未框选到符合规则的电缆、桥架或线管长度文字，现有数据未修改。");
-                return;
-            }
+                ctx.Write("\n[SUM-STAT/求和统计] 本次未读取到新的电缆、桥架或线管长度，U1U 将保留清单中的现有数量并继续同步块状态。");
 
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
@@ -170,11 +167,24 @@ namespace UNCAD.Features.Fill
             FlexibleConduitCableMap.ApplyTo(picked);
             TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
+            List<TableFillRow> plannedRows = tablePlan.CopyDefaultRows();
+            if (updateMode)
+                plannedRows = MergeExistingRowsForUpdate(ctx, selection, plannedRows, statistics);
+            // U1U treats existing CAD outlet rows as authoritative for quantity and
+            // material.  U1F starts from a clean generated list instead.
+            List<TableFillRow> existingOutlets = updateMode
+                ? CadExistingOutletReader.Read(ctx, selection.TableIds,
+                    startRow, clearRowCount)
+                : new List<TableFillRow>();
             bool deviceHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
                 selection.DeviceBlockIds, out string deviceState);
             TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
-            tablePlan = new TableGenerationOutput(DeviceOutletPolicy.Apply(
-                tablePlan.CopyDefaultRows(), deviceHasOutlet, deviceOutlet),
+            List<TableFillRow> socketAdjustedRows = updateMode
+                ? DeviceOutletPolicy.ApplyForUpdate(plannedRows,
+                    deviceHasOutlet, deviceOutlet, existingOutlets)
+                : DeviceOutletPolicy.Apply(plannedRows,
+                    deviceHasOutlet, deviceOutlet);
+            tablePlan = new TableGenerationOutput(socketAdjustedRows,
                 tablePlan.DefaultCableMeters);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] Device 状态: " + deviceState + "；插座清单: "
@@ -182,16 +192,53 @@ namespace UNCAD.Features.Fill
                     ? deviceOutlet.Code : "未匹配") : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
-            ApplyRuanguanLength(ctx, selection, review);
             ResolveMissingCableCatalog(review, catalog);
+            // Resolve a replacement before reading Ruanguan so an initially unknown
+            // cable can still create the correctly mapped hose row.
+            ApplyRuanguanLength(ctx, selection, review, catalog, options.Planning);
+            bool hoseWasMissingBeforeReview = review.FlexibleConduitItem() == null;
             // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
-            using (var form = new FillReviewForm(review, catalog, options.Planning))
+            string updateMachineId = picked.MachineId;
+            string updateDeviceName = picked.CircuitName;
+            using (var form = new FillReviewForm(review, catalog, options.Planning,
+                updateMode))
             {
                 if (form.ShowDialog(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
                     != DialogResult.OK) return;
                 review = form.Data;
             }
+            if (updateMode && (!string.Equals(updateMachineId,
+                    review.Machine?.MachineId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(updateDeviceName, review.Machine?.CircuitName,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show(new WindowWrapper(
+                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
+                    "U1U 不允许在更新清单时修改机台 ID 或设备名称。请使用 U1F 为新身份建立清单。",
+                    "U1U 身份锁定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (updateMode)
+            {
+                MachineRow validated = ExistingFillIdentityResolver.MatchMachine(
+                    new ExistingFillIdentity
+                    {
+                        MachineId = review.Machine?.MachineId,
+                        DeviceName = review.Machine?.CircuitName
+                    }, workbook.FindRows(review.Machine?.MachineId), out string identityError);
+                if (validated == null)
+                {
+                    ctx.Write("\n[U1U] " + identityError);
+                    return;
+                }
+            }
+            // If the user resolved an unknown cable inside the review dialog, the hose row
+            // did not exist when the first Ruanguan read ran. Apply the block length once
+            // after that replacement, while still honoring an explicit user deletion made
+            // in the review itself.
+            if (hoseWasMissingBeforeReview && review.FlexibleConduitItem() != null)
+                ApplyRuanguanLength(ctx, selection, review, catalog, options.Planning);
             // Machine.Cable remains the source-device value. A BOQ replacement updates only
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
@@ -214,7 +261,10 @@ namespace UNCAD.Features.Fill
                 }
                 deviceOutlet = reviewedOutlet;
             }
-            tableRows = DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
+            tableRows = updateMode
+                ? DeviceOutletPolicy.ApplyForUpdate(tableRows, deviceHasOutlet,
+                    deviceOutlet, existingOutlets)
+                : DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
             Log.Info("U1F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
@@ -262,7 +312,8 @@ namespace UNCAD.Features.Fill
             }
 
             int filled;
-            FillWriteResult frameResult, deviceResult, upstreamInfoResult;
+            FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
+                upstreamInfoResult;
             FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult;
             AutomaticSubmissionWriteResult automaticExcel;
             // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
@@ -276,9 +327,17 @@ namespace UNCAD.Features.Fill
                     startRow, clearRowCount, tableRows, textHeight);
                 if (filled < 0) return;
                 frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
-                    selection.FrameBlockIds, picked, bridgeInfo, statistics);
+                    selection.FrameBlockIds, picked, bridgeInfo, statistics,
+                    updateMode && statistics.CableSum <= 0,
+                    updateMode && statistics.Bridges.Count == 0,
+                    updateMode && statistics.Conduits.Count == 0);
                 deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
                     selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
+                ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
+                    selection.RuanguanBlockIds, picked.Dia);
+                frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
+                    selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
+                    updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
                 upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                     selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
                     ConnectionBlockFiller.UpstreamInfo(picked), true);
@@ -305,7 +364,10 @@ namespace UNCAD.Features.Fill
                 + statistics.Bridges.Count + " 项，线管规格 " + statistics.Conduits.Count
                 + " 项（SUM-STAT源 " + summation.SourceLineCount + " 行，命中 "
                 + summation.TotalMatchCount + " 行）；设备动态块更新 "
-                + deviceResult.Blocks + " 个；上游信息 "
+                + deviceResult.Blocks + " 个；Ruanguan 更新 "
+                + ruanguanResult.Blocks + " 个块共 " + ruanguanResult.Values + " 项；"
+                + "frameinfo_json " + frameInfoResult.Blocks + " 个块共 "
+                + frameInfoResult.Values + " 项；上游信息 "
                 + upstreamInfoResult.Blocks + " 个，upstream 状态 "
                 + upstreamStateResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
@@ -337,18 +399,149 @@ namespace UNCAD.Features.Fill
             return capacity == int.MaxValue ? 0 : capacity;
         }
 
+        /// <summary>
+        /// U1U may be run after a user selects only the frame or after the measurement text
+        /// was removed. In that case a zero statistic means "no new measurement", not
+        /// "erase every existing quantity". Reuse existing cable/bridge/rigid-conduit
+        /// rows only for categories that had no fresh statistic; Ruanguan is handled
+        /// separately because deleting its block is an explicit delete operation.
+        /// </summary>
+        internal static List<TableFillRow> MergeExistingRowsForUpdate(CadContext ctx,
+            FillSelection selection, List<TableFillRow> planned, CableStatResult statistics)
+        {
+            planned = planned ?? new List<TableFillRow>();
+            statistics = statistics ?? new CableStatResult();
+            if (selection?.TableIds == null || selection.TableIds.Length == 0) return planned;
+            if (statistics.CableSum > 0 && statistics.Bridges.Count > 0
+                && statistics.Conduits.Count > 0) return planned;
+
+            SubmissionSourceData source = CadSubmissionReader.Read(ctx, selection.TableIds);
+            var existing = new List<TableFillRow>();
+            foreach (List<string> cells in source.TableRows ?? new List<List<string>>())
+            {
+                if (cells == null || cells.Count < 5) continue;
+                string number = Cell(cells, 0);
+                string name = Cell(cells, 1);
+                string description = Cell(cells, 2);
+                string unit = Cell(cells, 3);
+                string quantity = Cell(cells, 4);
+                string code = Cell(cells, 5);
+                if (TableLayoutClassifier.IsHeaderLike(number, name, code)) continue;
+                TableFillCategory? category = ExistingCategory(number, name, code);
+                if (!category.HasValue || category.Value == TableFillCategory.FlexibleConduit
+                    || category.Value == TableFillCategory.Outlet
+                    || category.Value == TableFillCategory.OutletPanel
+                    || category.Value == TableFillCategory.Breaker
+                    || category.Value == TableFillCategory.BusPlugBox)
+                    continue;
+                existing.Add(new TableFillRow
+                {
+                    Category = category.Value,
+                    SortOrder = existing.Count + 1,
+                    Name = name,
+                    Description = description,
+                    Unit = unit,
+                    Quantity = quantity,
+                    Code = code.Length > 0 ? code : number,
+                    CatalogMatched = code.Length > 0 || number.Length > 0
+                });
+            }
+
+            foreach (TableFillRow old in existing)
+            {
+                bool categoryMissing = old.Category == TableFillCategory.Cable
+                    ? statistics.CableSum <= 0
+                    : old.Category == TableFillCategory.Bridge
+                        ? statistics.Bridges.Count == 0
+                        : old.Category == TableFillCategory.RigidConduit
+                            && statistics.Conduits.Count == 0;
+                if (!categoryMissing) continue;
+
+                TableFillRow current = planned.FirstOrDefault(row =>
+                    row.Category == old.Category && SameMaterial(row, old));
+                if (current != null)
+                {
+                    if (string.IsNullOrWhiteSpace(current.Quantity))
+                        current.Quantity = old.Quantity;
+                    if (string.IsNullOrWhiteSpace(current.Code)) current.Code = old.Code;
+                    if (!current.CatalogMatched && old.CatalogMatched)
+                        current.CatalogMatched = true;
+                    continue;
+                }
+                planned.Add(old);
+            }
+            return planned.OrderBy(row => row.SortOrder)
+                .ThenBy(row => row.Code ?? "", StringComparer.Ordinal).ToList();
+        }
+
+        internal static List<TableFillRow> MergeExistingRowsForBatchUpdate(CadContext ctx,
+            FillSelection selection, List<TableFillRow> planned, CableStatResult statistics)
+            => MergeExistingRowsForUpdate(ctx, selection, planned, statistics);
+
+        private static TableFillCategory? ExistingCategory(string number, string name,
+            string code)
+        {
+            string key = code.Length > 0 ? code : number;
+            if (key.StartsWith("1.", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf("电缆", StringComparison.OrdinalIgnoreCase) >= 0)
+                return TableFillCategory.Cable;
+            if (key.StartsWith("2.", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf("桥架", StringComparison.OrdinalIgnoreCase) >= 0)
+                return TableFillCategory.Bridge;
+            if (key.StartsWith("3.8", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf("软管", StringComparison.OrdinalIgnoreCase) >= 0)
+                return TableFillCategory.FlexibleConduit;
+            if (key.StartsWith("3.", StringComparison.OrdinalIgnoreCase)
+                || name.IndexOf("线管", StringComparison.OrdinalIgnoreCase) >= 0)
+                return TableFillCategory.RigidConduit;
+            return null;
+        }
+
+        private static bool SameMaterial(TableFillRow left, TableFillRow right)
+        {
+            if (!string.IsNullOrWhiteSpace(left.Code) && !string.IsNullOrWhiteSpace(right.Code))
+                return string.Equals(left.Code.Trim(), right.Code.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+            return string.Equals((left.Name ?? "").Trim(), (right.Name ?? "").Trim(),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string Cell(List<string> row, int index)
+            => index >= 0 && index < row.Count ? (row[index] ?? "").Trim() : "";
+
         internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
             FillReviewData review)
+            => ApplyRuanguanLength(ctx, selection, review, null,
+                FillPlanningOptions.Default);
+
+        internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+            FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options)
         {
-            FillReviewItem flexible = review?.FlexibleConduitItem();
-            if (flexible == null) return;
+            if (review == null) return;
+            options = options ?? FillPlanningOptions.Default;
             string meters = FillSelectionCollector.ReadRuanguanLengthMeters(ctx,
                 selection?.RuanguanBlockIds);
             if (meters.Length == 0)
             {
                 // Ruanguan is the only source of hose length; absent/invalid values mean no hose row.
-                review.RemoveItem(flexible);
+                FillReviewItem existing = review.FlexibleConduitItem();
+                if (existing != null) review.RemoveItem(existing);
                 ctx.Write("\n[U1F/U1U] 未找到 Ruanguan 有效软管长度，已不加入软管清单。");
+                return;
+            }
+            FillReviewItem flexible = review.FlexibleConduitItem();
+            if (flexible == null && !string.IsNullOrWhiteSpace(review.Machine.Dia))
+                flexible = review.SetFlexibleConduitDiameter(review.Machine.Dia,
+                    catalog, options);
+            if (flexible == null)
+            {
+                ctx.Write("\n[U1F/U1U] 已读取 Ruanguan 长度，但电缆没有可映射的软管直径，未加入软管清单。");
+                return;
+            }
+            if (!flexible.CatalogMatched)
+            {
+                ctx.Write("\n[U1F/U1U] 软管直径未匹配固定清单，未加入软管清单。");
+                review.RemoveItem(flexible);
                 return;
             }
             flexible.Quantity = meters;
@@ -358,10 +551,51 @@ namespace UNCAD.Features.Fill
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
             FillSelection selection, MachineRow picked, BoqCatalogIndex catalog)
         {
+            if (picked == null) return;
+            catalog = catalog ?? new BoqCatalogIndex(null);
             string originalModel = (picked.Cable ?? "").Trim();
-            if (catalog.FindCable(originalModel) != null) return;
+            FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(ctx,
+                selection?.FrameInfoJsonBlockIds);
+            var sourceIds = new List<ObjectId>();
+            sourceIds.AddRange(selection?.FrameBlockIds ?? Array.Empty<ObjectId>());
+            sourceIds.AddRange(selection?.TableIds ?? Array.Empty<ObjectId>());
+            SubmissionSourceData tableSource = CadSubmissionReader.Read(ctx,
+                sourceIds.Distinct().ToArray());
 
-            SubmissionSourceData tableSource = CadSubmissionReader.Read(ctx, selection.TableIds);
+            // The current table is authoritative for procurement. If the row was merged or
+            // deleted, frameinfo_json preserves the user's previously confirmed substitute.
+            string tableModel = SubmissionRecordExtractor.ExtractTableCableModel(tableSource);
+            ListItem tableModelMatch = catalog.FindCable(tableModel);
+            if (tableModelMatch != null)
+            {
+                picked.Cable = tableModelMatch.Alias;
+                ctx.Write("\n[U1U] 已按现有清单电缆型号匹配固定清单型号“"
+                    + tableModelMatch.Alias + "”（编号 " + tableModelMatch.Code + "）。");
+                return;
+            }
+            ListItem frameInfoMatch = catalog.FindCable(frameInfo?.BoqCableModel);
+            if (frameInfoMatch != null)
+            {
+                picked.Cable = frameInfoMatch.Alias;
+                ctx.Write("\n[U1U] 已按 frameinfo_json 保留的 BOQ 电缆替代型号匹配固定清单型号“"
+                    + frameInfoMatch.Alias + "”（编号 " + frameInfoMatch.Code + "）。");
+                return;
+            }
+
+            // The current frame attribute is the next source. It reflects a cable changed
+            // in CAD after the workbook was created, while the workbook row can be stale.
+            string frameModel = "";
+            if (tableSource.Attributes.TryGetValue(FrameBlockFiller.TagCable,
+                    out List<string> frameValues))
+                frameModel = frameValues.Select(SubmissionRecordExtractor.ExtractCableModel)
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "";
+            ListItem frameMatch = catalog.FindCable(frameModel);
+            if (frameMatch != null)
+            {
+                picked.Cable = frameMatch.Alias;
+                return;
+            }
+
             string tableFeature = SubmissionRecordExtractor.ExtractTableCableFeature(tableSource);
             ListItem featureMatch = catalog.FindCableByFeature(tableFeature);
             if (featureMatch != null)
@@ -375,10 +609,20 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            string tableValue = tableFeature.Length > 0 ? tableFeature : "未读取到";
-            throw new InvalidDataException("U1U 电缆型号无法匹配固定清单：原始型号“"
-                + originalModel + "”；现有清单项目特征“" + tableValue
-                + "”也无法匹配。请先在图框清单中选择固定清单电缆型号。");
+            // The workbook value is still useful when the drawing carries no cable
+            // attribute at all. Leave an unmatched review row for the single-frame picker
+            // or the batch picker instead of aborting before the user can choose.
+            ListItem workbookMatch = catalog.FindCable(originalModel);
+            if (workbookMatch != null)
+            {
+                picked.Cable = workbookMatch.Alias;
+                return;
+            }
+
+            string tableValue = tableModel.Length > 0 ? tableModel
+                : tableFeature.Length > 0 ? tableFeature : "未读取到";
+            ctx.Write("\n[U1U] 电缆型号暂未匹配固定清单：原始型号“" + originalModel
+                + "”；现有清单“" + tableValue + "”。将在确认窗口中选择固定清单型号。");
         }
 
         private static void ResolveMissingCableCatalog(FillReviewData review,
@@ -408,7 +652,8 @@ namespace UNCAD.Features.Fill
             {
                 if (picker.ShowDialog(owner) != DialogResult.OK
                     || picker.SelectedItem == null) return;
-                review.SetCableModel(picker.SelectedItem.Spec, catalog);
+                review.SetCableModel(picker.SelectedItem.Alias ?? picker.SelectedItem.Spec,
+                    catalog);
             }
         }
 

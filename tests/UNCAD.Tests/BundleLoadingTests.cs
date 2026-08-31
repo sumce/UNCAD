@@ -83,6 +83,35 @@ namespace UNCAD.Tests
             Assert.Contains("-NoBuild rejected: source is newer than UNCAD.dll", script);
             Assert.Contains("Bundle UNCAD.dll does not match the verified build output", script);
             Assert.Contains("Get-FileHash $buildOutput -Algorithm SHA256", script);
+            Assert.Contains(".html", script);
+            Assert.Contains(".css", script);
+            Assert.Contains(".js", script);
+            Assert.Contains(".txt", script);
+            Assert.Contains("Assert-TreeMatches", script);
+            Assert.Contains("Web\\QuickLine3D", script);
+        }
+
+        [Fact]
+        public void PackagePipeline_PreservesAndValidatesOfflineThreeAndWebView2Payload()
+        {
+            string build = File.ReadAllText(RepoFile("build.ps1"));
+            string temporary = File.ReadAllText(RepoFile("release-temp.ps1"));
+            string installer = File.ReadAllText(RepoFile("installer.ps1"));
+
+            Assert.Contains("Microsoft.Web.WebView2.Core.dll", build);
+            Assert.Contains("Microsoft.Web.WebView2.WinForms.dll", build);
+            Assert.Contains("Microsoft.Web.WebView2.Wpf.dll", build);
+            Assert.Contains("runtimes\\win-x64\\native\\WebView2Loader.dll", build);
+            Assert.Contains("Web\\QuickLine3D", build);
+            Assert.Contains("Copy-Item -LiteralPath $webSource", build);
+
+            Assert.Contains("runtimes\\win-x64\\native\\WebView2Loader.dll", temporary);
+            Assert.Contains("Web\\QuickLine3D", temporary);
+            Assert.Contains("Microsoft.Web.WebView2.Core.dll", installer);
+            Assert.Contains("runtimes\\win-x64\\native\\WebView2Loader.dll", installer);
+            Assert.Contains("Web\\QuickLine3D\\vendor\\three\\three.core.min.js", installer);
+            Assert.Contains("Web\\QuickLine3D\\vendor\\three\\three.module.min.js", installer);
+            Assert.Contains("Web\\QuickLine3D\\vendor\\three\\LICENSE.txt", installer);
         }
 
         [Fact]

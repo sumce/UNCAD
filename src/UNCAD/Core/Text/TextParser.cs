@@ -19,6 +19,9 @@ namespace UNCAD.Core.Text
         private static readonly Regex BridgeLabelRegex = new Regex(
             @"^桥架\s*([0-9]+)\s*[\*xX]\s*([0-9]+)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BridgeMillimetreLabelRegex = new Regex(
+            @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*mm$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static string CleanMText(string s)
         {
@@ -58,7 +61,7 @@ namespace UNCAD.Core.Text
         }
 
         /// <summary>
-        /// 桥架标注必须整行符合“桥架宽*高 格数格”；不允许前缀、后缀或中间备注。
+        /// 兼容旧桥架标注“桥架宽*高 格数格”；不允许前缀、后缀或中间备注。
         /// </summary>
         public static bool TryExtractBridgeLabel(string s, out string spec, out double grids)
         {
@@ -74,9 +77,34 @@ namespace UNCAD.Core.Text
             return grids > 0;
         }
 
+        /// <summary>
+        /// Reads both the legacy grid label and the current millimetre label. The returned
+        /// grid count is an internal compatibility value so existing statistics can keep
+        /// aggregating by the configured millimetres-per-grid scale.
+        /// </summary>
+        public static bool TryExtractBridgeLabel(string s, double mmPerGrid,
+            out string spec, out double grids)
+        {
+            if (TryExtractBridgeLabel(s, out spec, out grids)) return true;
+            Match match = BridgeMillimetreLabelRegex.Match((s ?? "").Trim());
+            if (!match.Success || double.IsNaN(mmPerGrid) || double.IsInfinity(mmPerGrid)
+                || mmPerGrid <= 0
+                || !double.TryParse(match.Groups[3].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double millimetres)
+                || millimetres <= 0)
+            {
+                spec = null;
+                grids = 0;
+                return false;
+            }
+            spec = "桥架" + match.Groups[1].Value + "*" + match.Groups[2].Value;
+            grids = millimetres / mmPerGrid;
+            return grids > 0 && !double.IsNaN(grids) && !double.IsInfinity(grids);
+        }
+
         public static string ExtractBridgeSpec(string s)
         {
-            return TryExtractBridgeLabel(s, out string spec, out _) ? spec : null;
+            return TryExtractBridgeLabel(s, 250.0, out string spec, out _) ? spec : null;
         }
 
         /// <summary>

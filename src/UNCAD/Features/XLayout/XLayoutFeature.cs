@@ -121,7 +121,11 @@ namespace UNCAD.Features.XLayout
                 foreach (IGrouping<int, XLayoutPlacement> row in placements.GroupBy(
                     placement => placement.RowIndex))
                 {
-                    XLayoutPlacement first = row.OrderBy(placement => placement.TranslationX)
+                    // TranslationX is relative to each source frame's original MinX. It is
+                    // not a comparable world coordinate when source frames start at different
+                    // X positions; compare the final placed left edge instead.
+                    XLayoutPlacement first = row.OrderBy(placement =>
+                            placement.TranslationX + placement.Item.Boundary.MinX)
                         .ThenBy(placement => placement.Item.Handle,
                             StringComparer.OrdinalIgnoreCase).First();
                     Point3d firstFrameMin = new Point3d(

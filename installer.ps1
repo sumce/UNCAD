@@ -71,11 +71,11 @@ function Get-PackageInfo {
         throw "Package must support both startup and command-triggered loading."
     }
     $declaredCommands = @($entry.Commands.Command | ForEach-Object { [string]$_.Global })
-    # The manifest is an explicit public API: only the current U1 family and six retained
-    # traditional keyboard commands may trigger package loading.
+    # The manifest is an explicit public API: only the current U1 family and seven retained
+    # keyboard compatibility commands may trigger package loading.
     $expectedCommands = @(
-        "U1L", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "U1HELP",
-        "UNL", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
+        "U1L", "U1LX", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "U1HELP",
+        "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
             throw "Package command-triggered loading is missing: $requiredCommand"
@@ -92,7 +92,13 @@ function Get-PackageInfo {
     $requiredFiles = @(
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
-        "BOQ_Template.xlsx"
+        "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
+        "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
+        "Web\QuickLine3D\index.html", "Web\QuickLine3D\styles.css",
+        "Web\QuickLine3D\app.js", "Web\QuickLine3D\vendor\three\three.core.min.js",
+        "Web\QuickLine3D\vendor\three\three.module.min.js",
+        "Web\QuickLine3D\vendor\three\OrbitControls.js",
+        "Web\QuickLine3D\vendor\three\LICENSE.txt", "BOQ_Template.xlsx"
     )
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }

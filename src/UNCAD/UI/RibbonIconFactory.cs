@@ -72,7 +72,9 @@ namespace UNCAD.UI
             if (string.Equals(command, CommandIds.Tray100, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Tray200, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Tray400, StringComparison.OrdinalIgnoreCase)) return "tray";
-            if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)) return "line";
+            if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.LineQuick, StringComparison.OrdinalIgnoreCase))
+                return "line";
             if (string.Equals(command, CommandIds.Arch, StringComparison.OrdinalIgnoreCase)) return "arch";
             if (string.Equals(command, CommandIds.LegacyStatistics, StringComparison.OrdinalIgnoreCase)) return "stat";
             return "tool";

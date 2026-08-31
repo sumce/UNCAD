@@ -18,13 +18,13 @@ namespace UNCAD.Features.Unq
         public void UncadTraySet() => SettingsFeature.Show(1);
 
         [CommandMethod(CommandIds.Tray100, CommandFlags.UsePickSet)]
-        public void UncadTray100() => Run("桥架100*100 10格");
+        public void UncadTray100() => Run("桥架100*100 2500mm");
 
         [CommandMethod(CommandIds.Tray200, CommandFlags.UsePickSet)]
-        public void UncadTray200() => Run("桥架200*100 10格");
+        public void UncadTray200() => Run("桥架200*100 2500mm");
 
         [CommandMethod(CommandIds.Tray400, CommandFlags.UsePickSet)]
-        public void UncadTray400() => Run("桥架400*100 10格");
+        public void UncadTray400() => Run("桥架400*100 2500mm");
 
         [CommandMethod(CommandIds.LegacyTray100, CommandFlags.UsePickSet)] public void Unq1() => UncadTray100();
         [CommandMethod(CommandIds.LegacyTray200, CommandFlags.UsePickSet)] public void Unq2() => UncadTray200();
@@ -35,8 +35,22 @@ namespace UNCAD.Features.Unq
 
         protected override void Execute(CadContext ctx, object state)
         {
-            string content = state as string
-                ?? Settings.Get(ConfigKeys.UnqText, "桥架200*100 10格");
+            string requestedContent = state as string
+                ?? Settings.Get(ConfigKeys.UnqText, "桥架200*100 2500mm");
+            double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
+            if (double.IsNaN(mmPerGrid) || double.IsInfinity(mmPerGrid) || mmPerGrid <= 0)
+                mmPerGrid = 250.0;
+            string content = BridgeLabelFormatter.NormalizeOrDefault(requestedContent,
+                mmPerGrid, "桥架200*100 2500mm");
+            if (!string.Equals((requestedContent ?? "").Trim(), content,
+                System.StringComparison.Ordinal))
+            {
+                ctx.Write("\n[U1Q] 已将桥架标识规范为“" + content
+                    + "”（长度统一使用毫米；旧格数按 " + TextFormatter.FormatNum(mmPerGrid)
+                    + " mm/格换算）。");
+                if (state == null)
+                    Settings.Set(ConfigKeys.UnqText, content);
+            }
             // Legacy UNQ commands route through the same implementation, so diagnostics use
             // the corresponding current U1Q name determined from the selected specification.
             string commandName = content.IndexOf("100*", System.StringComparison.Ordinal) >= 0
@@ -47,6 +61,7 @@ namespace UNCAD.Features.Unq
             double lineOff = Settings.GetDouble(ConfigKeys.UnqLineOff, 15.0);
             double textOff = Settings.GetDouble(ConfigKeys.UnqTextOff, 0.0);
             string side = Settings.Get(ConfigKeys.UnqSide, "1");
+            ProductMetadata.EnsureCommandAllowed(commandName);
 
             var ids = SelectionService.PickCurvesWithOffset(ctx,
                 "请选择基准线段或 [设置红线距离(D)]: ",
@@ -73,6 +88,7 @@ namespace UNCAD.Features.Unq
                 TextHeight = hgt,
                 Above = side != "0",
                 ColorIndex = 1,
+                AnnotationKind = "U1Q",
                 LabelFactory = _ => content
             });
 

@@ -1,8 +1,11 @@
+using System.Linq;
 using Autodesk.AutoCAD.Runtime;
+using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Text;
 using UNCAD.Features.ConfigCenter;
+using UNCAD.Features.Fill;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.Conduit
@@ -28,6 +31,7 @@ namespace UNCAD.Features.Conduit
 
         protected override void Execute(CadContext ctx, object state)
         {
+            ProductMetadata.EnsureCommandAllowed(CommandIds.Conduit);
             string diameter = NormalizeDiameter(state as string
                 ?? Settings.Get(ConfigKeys.ConduitDiameter, "20"));
             double hgt = Settings.GetDouble(ConfigKeys.ConduitHeight, 180.0);
@@ -39,12 +43,29 @@ namespace UNCAD.Features.Conduit
                 "请选择线管基准线或 [设置紫线距离(D)]: ",
                 "\n请输入紫线距基线距离", ref lineOff, value =>
                     Settings.Set(ConfigKeys.ConduitLineOff, value.ToString("0.##",
-                        System.Globalization.CultureInfo.InvariantCulture)));
+                        System.Globalization.CultureInfo.InvariantCulture)),
+                includeInserts: true);
             if (ids == null || ids.Length == 0)
             {
                 ctx.Write("\n[U1C] 未选择线段，已取消。");
                 return;
             }
+
+            // U1C also accepts a preselected frame/Ruanguan block. Keep the
+            // existing curve annotation path, and update hose labels separately
+            // so INSERT entities never reach the curve offsetter.
+            FillSelection ruanguanSelection = FillSelectionCollector.Split(ctx, ids);
+            if (ruanguanSelection.RuanguanBlockIds.Length == 0)
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, ids);
+                if (regions.Groups.Count == 1)
+                    ruanguanSelection = FillSelectionCollector.Split(ctx,
+                        regions.Groups[0].EntityIds.ToArray());
+            }
+            FillWriteResult ruanguanResult = FillWriteResult.Empty;
+            if (ruanguanResult.Blocks > 0)
+                ctx.Write("\n[U1C] Ruanguan 更新 " + ruanguanResult.Blocks
+                    + " 个块共 " + ruanguanResult.Values + " 项。");
 
             ConfigPrinter.Print(ctx, "U1C",
                 ("管径", "⌀" + diameter),
@@ -53,15 +74,27 @@ namespace UNCAD.Features.Conduit
                 ("文字偏移", TextFormatter.FormatNum(textOff)),
                 ("侧", side == "0" ? "下方" : "上方"));
 
-            int count = ParallelCurveAnnotator.Add(ctx, ids, new ParallelAnnotationOptions
+            int count;
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                CurveOffset = lineOff,
-                TextOffset = textOff,
-                TextHeight = hgt,
-                Above = side != "0",
-                ColorIndex = 6,
-                LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
-            });
+                ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
+                    ruanguanSelection.RuanguanBlockIds, diameter);
+                count = ParallelCurveAnnotator.Add(ctx, transaction, ids,
+                    new ParallelAnnotationOptions
+                    {
+                        CurveOffset = lineOff,
+                        TextOffset = textOff,
+                        TextHeight = hgt,
+                        Above = side != "0",
+                        ColorIndex = 6,
+                        AnnotationKind = "U1C",
+                        LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
+                    });
+                transaction.Commit();
+            }
+            if (ruanguanResult.Blocks > 0)
+                ctx.Write("\n[U1C] Ruanguan 已更新 " + ruanguanResult.Blocks
+                    + " 个块，共 " + ruanguanResult.Values + " 项。");
 
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[U1C] 已生成 " + count + " 条 ⌀" + diameter + " 线管标注。");

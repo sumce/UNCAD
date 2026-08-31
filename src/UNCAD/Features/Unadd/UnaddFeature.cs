@@ -13,7 +13,7 @@ using UNCAD.Infra;
 namespace UNCAD.Features.Unadd
 {
     /// <summary>
-    /// UNADD：框选文字，统计电缆长度、桥架格数与线管长度，并生成汇总文字。
+    /// UNADD：框选文字，统计电缆长度、桥架毫米长度与线管长度，并生成汇总文字。
     /// </summary>
     [Feature("unadd", "文字统计汇总",
         Commands = CommandIds.StatisticsFeatureCommands,
@@ -28,6 +28,12 @@ namespace UNCAD.Features.Unadd
         {
             CableStatResult stat = CollectAndCalculate(ctx);
             if (stat == null) return;
+            if (stat.CableSum <= 0 && stat.Bridges.Count == 0
+                && stat.Conduits.Count == 0)
+            {
+                ctx.Write("\n[UNADD] 未找到可统计的电缆、桥架或线管标注，未生成 0M 汇总文字。");
+                return;
+            }
 
             IReadOnlyList<string> report = StatCalculator.BuildReport(stat);
             var pointOptions = new PromptPointOptions("\n请点击指定统计结果放置位置: ");

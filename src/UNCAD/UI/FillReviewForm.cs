@@ -35,6 +35,7 @@ namespace UNCAD.UI
         };
         private readonly BoqCatalogIndex _catalog;
         private readonly FillPlanningOptions _planningOptions;
+        private readonly bool _lockIdentity;
         private readonly TextBox _machine = Field();
         private readonly TextBox _region = Field();
         private readonly TextBox _circuit = Field();
@@ -63,10 +64,18 @@ namespace UNCAD.UI
 
         public FillReviewForm(FillReviewData data, BoqCatalogIndex catalog,
             FillPlanningOptions planningOptions)
+            : this(data, catalog, planningOptions, false)
+        {
+        }
+
+        /// <summary>U1U keeps the persisted machine/device identity fixed while editing quantities.</summary>
+        public FillReviewForm(FillReviewData data, BoqCatalogIndex catalog,
+            FillPlanningOptions planningOptions, bool lockIdentity)
         {
             Data = data ?? throw new ArgumentNullException(nameof(data));
             _catalog = catalog ?? new BoqCatalogIndex(null);
             _planningOptions = planningOptions ?? FillPlanningOptions.Default;
+            _lockIdentity = lockIdentity;
             _defaults = Data.Snapshot();
 
             DialogLayout.Apply(this, ProductMetadata.ProductName + " · 清单确认",
@@ -133,6 +142,13 @@ namespace UNCAD.UI
             CancelButton = cancel;
 
             LoadFromData(Data);
+            if (_lockIdentity)
+            {
+                _machine.ReadOnly = true;
+                _machine.BackColor = SystemColors.Control;
+                _circuit.ReadOnly = true;
+                _circuit.BackColor = SystemColors.Control;
+            }
             PopulateRows(Data.Items);
             _cable.TextChanged += CableModelChanged;
             _cableMeters.TextChanged += CableMetersChanged;
@@ -362,7 +378,7 @@ namespace UNCAD.UI
                         "固定清单类别不一致", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                Data.ReplaceWithCatalogItem(item, form.SelectedItem);
+                Data.ReplaceWithCatalogItem(item, form.SelectedItem, _catalog);
                 if (item.Category == TableFillCategory.Cable)
                 {
                     _synchronizing = true;
@@ -499,9 +515,9 @@ namespace UNCAD.UI
                 return;
             }
             Data.SetCableMeters(_cableMeters.Text);
-            Data.Machine.MachineId = _machine.Text.Trim();
+            if (!_lockIdentity) Data.Machine.MachineId = _machine.Text.Trim();
             Data.Machine.Region = _region.Text.Trim();
-            Data.Machine.CircuitName = _circuit.Text.Trim();
+            if (!_lockIdentity) Data.Machine.CircuitName = _circuit.Text.Trim();
             Data.Machine.Next = _panel.Text.Trim();
             Data.Machine.Fr = _fr.Text.Trim();
             Data.Machine.Seq = _seq.Text.Trim();

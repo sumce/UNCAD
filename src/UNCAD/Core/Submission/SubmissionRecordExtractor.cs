@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 
@@ -23,8 +24,21 @@ namespace UNCAD.Core.Submission
             @"=\s*([0-9]+(?:\.[0-9]+)?)\s*[mM](?:\b|$)", RegexOptions.Compiled);
         private static readonly Regex MeterValue = new Regex(
             @"([0-9]+(?:\.[0-9]+)?)\s*[mM](?:\b|$)", RegexOptions.Compiled);
+        private static readonly Regex DetailRating = new Regex(
+            @"(\d+)\s*P\s*(\d+)\s*A", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex CatalogCode = new Regex(
+            @"^\d+(?:\.\d+)+$", RegexOptions.Compiled);
 
         public static SubmissionRecord Extract(SubmissionSourceData source)
+            => Extract(source, true);
+
+        /// <summary>
+        /// Extracts one submission record. Legacy socket-panel inference is enabled for
+        /// explicit U1S migration, but callers that have just applied the editable U1F/U1U
+        /// table must disable it so a deliberate panel-row deletion remains durable.
+        /// </summary>
+        public static SubmissionRecord Extract(SubmissionSourceData source,
+            bool inferLegacySocketPanels)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             string power = Unique(source, FrameBlockFiller.TagPower);
@@ -45,6 +59,7 @@ namespace UNCAD.Core.Submission
             string upstreamInfo = Unique(source, ConnectionBlockFiller.TagUpstreamInfo);
             List<string> infoLines = TextParser.SplitMTextLines(upstreamInfo)
                 .Select(TextParser.CleanMText).Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+            string detail = infoLines.Count > 1 ? string.Join("\n", infoLines.Skip(1)) : "";
             string cableInfo = Unique(source, FrameBlockFiller.TagCable);
             string bridgeInfo = Unique(source, FrameBlockFiller.TagBridge);
             string conduitInfo = Unique(source, FrameBlockFiller.TagConduit);
@@ -80,7 +95,7 @@ namespace UNCAD.Core.Submission
                 Cable = cable,
                 CableMeters = cableMeters,
                 Fr = infoLines.Count > 0 ? infoLines[0] : "",
-                Detail = infoLines.Count > 1 ? string.Join("\n", infoLines.Skip(1)) : "",
+                Detail = detail,
                 Diameter = flexibleDiameter.Length > 0
                     ? flexibleDiameter : ExtractDiameter(conduitInfo),
                 FlexibleConduitMeters = flexibleMeters,
@@ -90,13 +105,19 @@ namespace UNCAD.Core.Submission
                 ConduitMeters = conduitMeters,
                 DownstreamAxis = Unique(source, ConnectionBlockFiller.TagDownstreamAxis),
                 UpstreamAxis = Unique(source, ConnectionBlockFiller.TagUpstreamAxis),
-                Materials = ExtractMaterials(source),
+                Materials = ExtractMaterials(source, detail, inferLegacySocketPanels),
                 TableRowsRead = source.TableRows.Count,
                 TextEntityCount = source.TextEntityCount
             };
         }
 
-        private static string ExtractCableModel(string cableInfo)
+        /// <summary>
+        /// Extracts the model portion from the frame CABLE_INFO attribute.  U1U uses this
+        /// before falling back to the currently rendered BOQ row, so a changed frame value
+        /// can be matched against the embedded cable catalog without trusting a stale
+        /// workbook row.
+        /// </summary>
+        public static string ExtractCableModel(string cableInfo)
         {
             string cable = cableInfo ?? "";
             int separator = cable.IndexOfAny(new[] { ':', '：' });
@@ -220,7 +241,8 @@ namespace UNCAD.Core.Submission
         private static string FormatMeters(double value)
             => value > 0 ? TextFormatter.FormatNum(value) : "";
 
-        private static List<SubmissionMaterial> ExtractMaterials(SubmissionSourceData source)
+        private static List<SubmissionMaterial> ExtractMaterials(SubmissionSourceData source,
+            string detail, bool inferLegacySocketPanels)
         {
             var materials = new List<SubmissionMaterial>();
             foreach (List<string> row in source.TableRows)
@@ -237,6 +259,10 @@ namespace UNCAD.Core.Submission
                     && quantity.Length == 0) continue;
                 if (name.Length == 0 && description.Length == 0
                     && unit.Length == 0 && quantity.Length == 0 && code.Length == 0) continue;
+                // Batch U1U can explicitly keep an unmatched fallback row in the CAD table.
+                // Its generated ordinal (1, 2, ...) is not a BOQ item code; omit that row
+                // from automatic material submission instead of guessing a catalog item.
+                if (code.Length == 0 && !CatalogCode.IsMatch(number)) continue;
                 materials.Add(new SubmissionMaterial
                 {
                     Number = number,
@@ -247,7 +273,80 @@ namespace UNCAD.Core.Submission
                     Code = code
                 });
             }
+            if (inferLegacySocketPanels)
+                AddInferredSocketPanel(source, detail, materials);
             return materials;
+        }
+
+        /// <summary>
+        /// Older CAD tables were generated before socket-panel rows (4.11/4.12) were
+        /// emitted, so a submit of those drawings would otherwise report zero panels.
+        /// The upstream dynamic state is the only authoritative signal for this migration;
+        /// a downstream Device socket state alone must not create a panel.  Existing panel
+        /// rows are left untouched and unsupported ratings are deliberately not guessed.
+        /// </summary>
+        private static void AddInferredSocketPanel(SubmissionSourceData source, string detail,
+            List<SubmissionMaterial> materials)
+        {
+            if (!HasSocketPanelState(source) || HasSocketPanelMaterial(materials)) return;
+
+            MatchCollection matches = DetailRating.Matches(detail ?? "");
+            if (matches.Count == 0) return;
+            Match match = matches[matches.Count - 1];
+            if (!int.TryParse(match.Groups[2].Value, out int amps)) return;
+            string code = BoqCatalogIndex.OutletPanelCode(amps);
+            if (code.Length == 0) return;
+
+            var inferred = new SubmissionMaterial
+            {
+                Number = code,
+                Name = "插座盘",
+                Description = SocketPanelDescription(code, amps),
+                Unit = "个",
+                Quantity = "1",
+                Code = code
+            };
+            // Keep the material order consistent with newly generated tables: panel (4.x)
+            // precedes the downstream outlet (8.x), while preserving all user table rows.
+            int outletIndex = materials.FindIndex(item => IsOutletCode(MaterialCode(item)));
+            if (outletIndex < 0) materials.Add(inferred);
+            else materials.Insert(outletIndex, inferred);
+        }
+
+        private static bool HasSocketPanelState(SubmissionSourceData source)
+        {
+            return (source?.DynamicValues ?? new List<string>()).Any(value =>
+                string.Equals((value ?? "").Trim(), "socket box",
+                    StringComparison.OrdinalIgnoreCase)
+                || string.Equals((value ?? "").Trim(), "插座盘",
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool HasSocketPanelMaterial(IEnumerable<SubmissionMaterial> materials)
+        {
+            return (materials ?? Enumerable.Empty<SubmissionMaterial>()).Any(item =>
+                IsSocketPanelCode(MaterialCode(item)) ||
+                (item?.Name ?? "").IndexOf("插座盘",
+                    StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
+        private static string MaterialCode(SubmissionMaterial item)
+        {
+            string code = (item?.Code ?? "").Trim();
+            return code.Length > 0 ? code : (item?.Number ?? "").Trim();
+        }
+
+        private static bool IsOutletCode(string value)
+            => (value ?? "").Trim().StartsWith("8.", StringComparison.OrdinalIgnoreCase);
+
+        private static string SocketPanelDescription(string code, int amps)
+        {
+            string specification = code.Equals("4.11", StringComparison.OrdinalIgnoreCase)
+                ? "MG breaker,100A+20A*40pcs"
+                : code.Equals("4.12", StringComparison.OrdinalIgnoreCase)
+                    ? "MG breaker,80A+16A*30pcs"
+                    : amps + "A";
+            return "1.名称:插座盘\\P2.规格:" + specification;
         }
 
         private static string Cell(List<string> row, int index)
@@ -326,8 +425,19 @@ namespace UNCAD.Core.Submission
             if (source.Any(v => Contains(v, "母线插接") || Contains(v, "PLUG-IN")
                 || IsCode(v, "5."))) return "母线插接口";
             if (source.Any(v => Contains(v, "插座") || Contains(v, "socket")
-                || IsCode(v, "8."))) return "插座盘";
+                || IsCode(v, "8.") || IsSocketPanelCode(v))) return "插座盘";
             return null;
+        }
+
+        private static bool IsSocketPanelCode(string value)
+        {
+            string code = (value ?? "").Trim();
+            return code.Equals("4.9", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("4.10", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("4.11", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("4.12", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("4.13", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("4.14", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool Contains(string value, string fragment)

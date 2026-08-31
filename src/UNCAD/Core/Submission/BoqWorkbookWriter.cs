@@ -98,6 +98,15 @@ namespace UNCAD.Core.Submission
                 throw new ArgumentException("BOQ 输出文件路径为空。", nameof(targetPath));
             List<SubmissionRecord> sourceRecords = (records ?? Enumerable.Empty<SubmissionRecord>())
                 .Where(record => record != null).ToList();
+            string[] machineIds = sourceRecords.Select(record => (record.MachineId ?? "").Trim())
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (machineIds.Length > 1)
+                throw new InvalidDataException("One BOQ workbook cannot mix multiple machine IDs.");
+            if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.MachineId)))
+                throw new InvalidDataException("BOQ machine ID is required for quantity attribution.");
+            if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.DeviceName)))
+                throw new InvalidDataException("BOQ device name is required for quantity attribution.");
             if (!sourceRecords.Any(record => record.Materials != null && record.Materials.Count > 0))
                 throw new InvalidDataException("没有可写入 BOQ 的清单材料。");
             string fullPath = Path.GetFullPath(targetPath);
@@ -133,9 +142,17 @@ namespace UNCAD.Core.Submission
                 string firstColumn = ColumnName(FirstDeviceColumn);
                 string lastColumn = ColumnName(lastDeviceColumn);
                 foreach (KeyValuePair<string, int> item in rows)
-                    sheet.GetRow(item.Value).GetCell(4).SetCellFormula(
+                {
+                    IRow row = GetOrCreateRow(sheet, item.Value);
+                    ICell totalCell = GetOrCreateCell(row, 4);
+                    totalCell.SetCellFormula(
                         "SUM(" + firstColumn + (item.Value + 1) + ":" + lastColumn
                         + (item.Value + 1) + ")");
+                    // NPOI only writes the formula text.  SetCellValue on a formula cell
+                    // stores its pre-calculated result, so viewers that do not recalculate
+                    // (including WPS preview/data_only readers) still see the real total.
+                    totalCell.SetCellValue((double)ReadDeviceTotal(row, deviceColumns.Values));
+                }
                 ((XSSFWorkbook)workbook).SetForceFormulaRecalculation(true);
 
                 using (var stream = new FileStream(temporary, FileMode.CreateNew,
@@ -226,7 +243,11 @@ namespace UNCAD.Core.Submission
                 foreach (SubmissionMaterial material in record.Materials
                     ?? new List<SubmissionMaterial>())
                 {
-                    string code = (material.Code ?? material.Number ?? "").Trim();
+                    // Legacy CAD tables sometimes store the fixed code in NO. and leave
+                    // 项次编码 empty. Prefer the explicit code, but fall back on a
+                    // non-empty number rather than rejecting an otherwise valid row.
+                    string code = (material.Code ?? "").Trim();
+                    if (code.Length == 0) code = (material.Number ?? "").Trim();
                     if (code.Length == 0)
                         throw new InvalidDataException("BOQ 材料缺少项目编码，不能猜测固定清单项目。");
                     if (!rows.ContainsKey(code))
@@ -234,6 +255,9 @@ namespace UNCAD.Core.Submission
                     if (!TryParseQuantity(material.Quantity, out decimal quantity))
                         throw new InvalidDataException("BOQ 项目 " + code + " 的工程量不是有效数字："
                             + (material.Quantity ?? ""));
+                    if (quantity < 0m)
+                        throw new InvalidDataException("BOQ material quantity cannot be negative: "
+                            + code + " = " + material.Quantity);
                     quantities[code] = quantities.TryGetValue(code, out decimal old)
                         ? old + quantity : quantity;
                 }
@@ -248,6 +272,27 @@ namespace UNCAD.Core.Submission
 
         private static ICell GetOrCreateCell(IRow row, int column)
             => row.GetCell(column) ?? row.CreateCell(column);
+
+        private static decimal ReadDeviceTotal(IRow row, IEnumerable<int> columns)
+        {
+            decimal total = 0m;
+            foreach (int column in columns ?? Enumerable.Empty<int>())
+            {
+                ICell cell = row?.GetCell(column);
+                if (cell == null) continue;
+                if (cell.CellType == CellType.Numeric)
+                {
+                    total += (decimal)cell.NumericCellValue;
+                    continue;
+                }
+                // Device columns are normally numeric, but retain cached numeric values if
+                // a workbook was edited by another spreadsheet application.
+                if (cell.CellType == CellType.Formula
+                    && cell.CachedFormulaResultType == CellType.Numeric)
+                    total += (decimal)cell.NumericCellValue;
+            }
+            return total;
+        }
 
         private static string ColumnName(int column)
         {

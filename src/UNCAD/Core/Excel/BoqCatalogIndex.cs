@@ -19,6 +19,17 @@ namespace UNCAD.Core.Excel
         private readonly Dictionary<string, ListItem> _busPlugBoxes;
         private readonly List<ListItem> _breakers;
         private readonly List<ListItem> _outlets;
+        private readonly List<ListItem> _outletPanels;
+
+        // Socket-panel rows are deliberately mapped by the approved BOQ code.  The
+        // catalog contains two other panel shapes that mention 16A/30A, so a broad
+        // range/substring match would silently select the wrong physical panel.
+        private static readonly IReadOnlyDictionary<int, string> OutletPanelCodes =
+            new Dictionary<int, string>
+            {
+                { 20, "4.11" },
+                { 16, "4.12" }
+            };
 
         public BoqCatalogIndex(IEnumerable<ListItem> items)
         {
@@ -35,6 +46,7 @@ namespace UNCAD.Core.Excel
             _busPlugBoxes = AliasIndex(CategoryItems("母线插接箱"), "母线插接箱");
             _breakers = CategoryItems("断路器").ToList();
             _outlets = CategoryItems("插座").ToList();
+            _outletPanels = CategoryItems("插座盘").ToList();
         }
 
         public List<ListItem> Items { get; }
@@ -45,6 +57,7 @@ namespace UNCAD.Core.Excel
         public IReadOnlyList<ListItem> Cables => _cableCandidates;
         public IReadOnlyList<ListItem> Breakers => _breakers;
         public IReadOnlyList<ListItem> Outlets => _outlets;
+        public IReadOnlyList<ListItem> OutletPanels => _outletPanels;
 
         public ListItem FindCable(string cableModel)
             => FindWithMigration(_cables, NormalizeCable(cableModel));
@@ -81,6 +94,26 @@ namespace UNCAD.Core.Excel
 
         public ListItem FindBusPlugBox(string rating)
             => FindWithMigration(_busPlugBoxes, NormalizeSpec(rating));
+
+        /// <summary>
+        /// Finds the fixed socket-panel row for a feeder rating.  Only the two
+        /// approved mappings are supported; an unknown rating intentionally returns
+        /// null instead of selecting a merely similar panel specification.
+        /// </summary>
+        public ListItem FindOutletPanel(int amps)
+        {
+            if (!OutletPanelCodes.TryGetValue(amps, out string code)) return null;
+            List<ListItem> matches = _outletPanels.Where(item =>
+                string.Equals((item.Code ?? "").Trim(), code,
+                    StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count > 1)
+                throw new InvalidDataException("固定清单插座盘项目编码重复：" + code);
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
+        /// <summary>Returns the approved BOQ code for a supported socket-panel rating.</summary>
+        public static string OutletPanelCode(int amps)
+            => OutletPanelCodes.TryGetValue(amps, out string code) ? code : "";
 
         public ListItem FindMigrationAlias(string value)
             => Find(_migrationAliases, NormalizeAlias(value));

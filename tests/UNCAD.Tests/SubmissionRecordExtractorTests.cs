@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
 using Xunit;
@@ -60,6 +61,112 @@ namespace UNCAD.Tests
             source.AddAttribute(DeviceBlockFiller.TagDeviceName, "插座1");
             source.TableValues.Add("母线插接箱");
             Assert.Equal("母线插接口", SubmissionRecordExtractor.Extract(source).PanelType);
+        }
+
+        [Fact]
+        public void Extract_PreservesSocketPanelMaterialsAndInfersSocketPanelType()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddTableRow("1", "插座盘",
+                "1.名称:插座盘\\P2.规格:MG breaker,100A+20A*40pcs",
+                "个", "1", "4.11");
+            source.AddTableRow("2", "插座", "1.名称:插座\\P2.额定电流:20A",
+                "个", "1", "8.3");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("插座盘", record.PanelType);
+            Assert.Equal(2, record.Materials.Count);
+            Assert.Equal("4.11", record.Materials[0].Code);
+            Assert.Equal("1", record.Materials[0].Quantity);
+            Assert.Equal("8.3", record.Materials[1].Code);
+        }
+
+        [Fact]
+        public void Extract_MigratesLegacySocketTableByInferringTwentyAmpPanel()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddAttribute(ConnectionBlockFiller.TagUpstreamInfo,
+                "3N-41D2A-PP-01\\PN220 1P3W 1P20A");
+            source.DynamicValues.Add("socket box");
+            // This is the shape written by the pre-fix version: it has the outlet,
+            // but no 4.x upstream panel row.
+            source.AddTableRow("1", "插座", "1.名称:插座20A~30A", "个", "1", "8.3");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("插座盘", record.PanelType);
+            Assert.Equal(new[] { "4.11", "8.3" },
+                record.Materials.Select(material => material.Code));
+            Assert.Equal("1", record.Materials[0].Quantity);
+        }
+
+        [Fact]
+        public void Extract_MigratesLegacySocketTableToSixteenAmpPanel()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M02-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备2");
+            source.AddAttribute(ConnectionBlockFiller.TagUpstreamInfo,
+                "3N-11B2A-PP-04\\PN220 1P3W 1P16A");
+            source.DynamicValues.Add("socket box");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Single(record.Materials);
+            Assert.Equal("4.12", record.Materials[0].Code);
+            Assert.Equal("1", record.Materials[0].Quantity);
+        }
+
+        [Fact]
+        public void Extract_DoesNotInferPanelFromDeviceSocketStateAlone()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M03-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备3");
+            source.AddAttribute(ConnectionBlockFiller.TagUpstreamInfo,
+                "3N-11B2A-PP-04\\PN220 1P3W 1P20A");
+            source.DynamicValues.Add("插座5孔");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Empty(record.Materials);
+        }
+
+        [Fact]
+        public void Extract_DoesNotGuessAnUnapprovedSocketPanelRating()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M05-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备5");
+            source.AddAttribute(ConnectionBlockFiller.TagUpstreamInfo,
+                "3N-11B2A-PP-04\\PN220 1P3W 1P10A");
+            source.DynamicValues.Add("socket box");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Empty(record.Materials);
+        }
+
+        [Fact]
+        public void Extract_DoesNotDuplicateExistingSocketPanelDuringMigration()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M04-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备4");
+            source.AddAttribute(ConnectionBlockFiller.TagUpstreamInfo,
+                "3N-41D2A-PP-01\\PN220 1P3W 1P20A");
+            source.DynamicValues.Add("socket box");
+            source.AddTableRow("1", "插座盘", "1.名称:插座盘", "个", "1", "4.11");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Single(record.Materials);
+            Assert.Equal("4.11", record.Materials[0].Code);
         }
 
         [Fact]

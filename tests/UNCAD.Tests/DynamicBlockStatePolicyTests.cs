@@ -71,6 +71,25 @@ namespace UNCAD.Tests
                 UpdateOutletPolicy.IsOutlet).Code);
         }
 
+        [Fact]
+        public void DeviceOutletPolicy_PreservesSocketPanelWhenDeviceOutletIsDisabled()
+        {
+            var panel = new TableFillRow
+            {
+                Category = TableFillCategory.OutletPanel,
+                Code = "4.11",
+                Name = "插座盘",
+                CatalogMatched = true
+            };
+
+            List<TableFillRow> result = DeviceOutletPolicy.Apply(
+                new[] { panel }, false, null);
+
+            Assert.Same(panel, Assert.Single(result));
+            Assert.False(UpdateOutletPolicy.IsOutlet(panel));
+            Assert.True(UpdateOutletPolicy.IsOutletPanel(panel));
+        }
+
         private static List<TableFillRow> Rows() => new List<TableFillRow>
         {
             new TableFillRow { Category = TableFillCategory.Cable, SortOrder = 100, Code = "1.1" },

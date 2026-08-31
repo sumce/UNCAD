@@ -60,6 +60,21 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
             MachineRow row, string bridgeInfo, CableStatResult stat)
+            => BuildValues(row, bridgeInfo, stat, false);
+
+        /// <summary>
+        /// Builds frame values while optionally leaving statistics-backed attributes
+        /// untouched when an update did not receive a fresh measurement text.
+        /// </summary>
+        public static System.Collections.Generic.Dictionary<string, string> BuildValues(
+            MachineRow row, string bridgeInfo, CableStatResult stat,
+            bool preserveMissingStatistics)
+            => BuildValues(row, bridgeInfo, stat, preserveMissingStatistics,
+                preserveMissingStatistics, preserveMissingStatistics);
+
+        public static System.Collections.Generic.Dictionary<string, string> BuildValues(
+            MachineRow row, string bridgeInfo, CableStatResult stat,
+            bool preserveCable, bool preserveBridge, bool preserveConduit)
         {
             var d = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
 
@@ -82,7 +97,7 @@ namespace UNCAD.Core.Fill
             }
             else
             {
-                d[TagCable] = cable;
+                if (!preserveCable) d[TagCable] = cable;
             }
 
             if (stat != null && stat.Bridges.Count > 0)
@@ -92,13 +107,14 @@ namespace UNCAD.Core.Fill
             }
             else
             {
-                d[TagBridge] = (bridgeInfo ?? "").Trim();
+                if (!preserveBridge) d[TagBridge] = (bridgeInfo ?? "").Trim();
             }
 
-            d[TagConduit] = stat != null && stat.Conduits.Count > 0
-                ? string.Join("，", stat.Conduits.Select(c =>
-                    c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"))
-                : "";
+            if (stat != null && stat.Conduits.Count > 0)
+                d[TagConduit] = string.Join("，", stat.Conduits.Select(c =>
+                    c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"));
+            else if (!preserveConduit)
+                d[TagConduit] = "";
 
             return d;
         }

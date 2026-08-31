@@ -49,6 +49,27 @@ if (Test-Path $archive) { Remove-Item $archive -Force }
 New-Item (Join-Path $stage "bundle") -ItemType Directory -Force | Out-Null
 Copy-Item (Join-Path $root "bundle\UNCAD.bundle") $stageBundle -Recurse -Force
 Get-ChildItem (Join-Path $buildOutput "*.dll") | Copy-Item -Destination $stageBundle -Force
+
+$loaderRelative = "runtimes\win-x64\native\WebView2Loader.dll"
+$loaderSource = Join-Path $buildOutput $loaderRelative
+$loaderDestination = Join-Path $stageBundle $loaderRelative
+if (-not (Test-Path $loaderSource -PathType Leaf)) {
+    throw "Temporary WebView2 native loader is missing: $loaderSource"
+}
+New-Item -ItemType Directory -Path (Split-Path $loaderDestination -Parent) -Force | Out-Null
+Copy-Item -LiteralPath $loaderSource -Destination $loaderDestination -Force
+
+$webSource = Join-Path $root "src\UNCAD\Web\QuickLine3D"
+$webDestination = Join-Path $stageBundle "Web\QuickLine3D"
+if (-not (Test-Path $webSource -PathType Container)) {
+    throw "QuickLine3D web source is missing: $webSource"
+}
+if (Test-Path $webDestination) {
+    Remove-Item -LiteralPath $webDestination -Recurse -Force
+}
+New-Item -ItemType Directory -Path (Split-Path $webDestination -Parent) -Force | Out-Null
+Copy-Item -LiteralPath $webSource -Destination $webDestination -Recurse -Force
+
 Copy-Item (Join-Path $root "BOQ_Template.xlsx") (Join-Path $stageBundle "BOQ_Template.xlsx") -Force
 Copy-Item ($distributionFiles | ForEach-Object { Join-Path $root $_ }) $stage -Force
 

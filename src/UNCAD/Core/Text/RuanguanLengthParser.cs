@@ -8,24 +8,35 @@ namespace UNCAD.Core.Text
     public static class RuanguanLengthParser
     {
         private static readonly Regex ExplicitLength = new Regex(
-            @"软管(?:长度)?\s*[:：=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*mm\b",
+            @"软管(?:长度)?\s*[:：=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*(mm|m)\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex BareLength = new Regex(
-            @"^\s*([0-9]+(?:[.,][0-9]+)?)\s*mm\s*$",
+            @"^\s*([0-9]+(?:[.,][0-9]+)?)\s*(mm|m)\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static string ParseMeters(string value)
         {
+            return TryParseMillimetres(value, out double millimetres)
+                ? TextFormatter.FormatNum(millimetres / 1000d) : "";
+        }
+
+        public static bool TryParseMillimetres(string value, out double millimetres)
+        {
+            millimetres = 0;
             string text = (value ?? "").Trim();
             Match match = ExplicitLength.Match(text);
             if (!match.Success) match = BareLength.Match(text);
-            if (!match.Success) return "";
+            if (!match.Success) return false;
 
             string numeric = NormalizeNumeric(match.Groups[1].Value);
-            if (!double.TryParse(numeric, NumberStyles.Float, CultureInfo.InvariantCulture,
-                out double millimeters) || double.IsNaN(millimeters)
-                || double.IsInfinity(millimeters) || millimeters <= 0) return "";
-            return TextFormatter.FormatNum(millimeters / 1000d);
+            if (!double.TryParse(numeric, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double parsed)
+                || double.IsNaN(parsed) || double.IsInfinity(parsed) || parsed <= 0)
+                return false;
+            millimetres = string.Equals(match.Groups[2].Value, "m",
+                StringComparison.OrdinalIgnoreCase) ? parsed * 1000d : parsed;
+            return !double.IsNaN(millimetres) && !double.IsInfinity(millimetres)
+                && millimetres > 0;
         }
 
         private static string NormalizeNumeric(string value)

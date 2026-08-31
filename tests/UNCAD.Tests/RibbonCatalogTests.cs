@@ -10,14 +10,14 @@ namespace UNCAD.Tests
     public class RibbonCatalogTests
     {
         [Fact]
-        public void PrimaryLayout_HasFourPanelsAndThirteenTaskOrientedControls()
+        public void PrimaryLayout_HasFourPanelsAndFourteenTaskOrientedControls()
         {
             Assert.Equal(new[] { "清单", "标注", "统计", "系统" },
                 RibbonCatalog.Panels.Select(panel => panel.Title));
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(13, primary.Length);
+            Assert.Equal(14, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));
@@ -26,6 +26,12 @@ namespace UNCAD.Tests
             });
             Assert.Equal(primary.Length, primary.Select(item => item.Text)
                 .Distinct(StringComparer.Ordinal).Count());
+
+            RibbonItemDefinition quickLine = Assert.Single(primary,
+                item => string.Equals(item.Command, CommandIds.LineQuick,
+                    StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("3D 快速绘图", quickLine.Text);
+            Assert.Contains("UNLX", quickLine.ToolTip);
         }
 
         [Fact]

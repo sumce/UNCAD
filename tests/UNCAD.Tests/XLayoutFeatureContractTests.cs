@@ -23,6 +23,7 @@ namespace UNCAD.Tests
             Assert.Contains("layoutOrigin.Y", source);
             Assert.Contains("MachineLabelTextHeight = 25000d", source);
             Assert.Contains("MachineLabelLeftDistance = 300000d", source);
+            Assert.Contains("placement.TranslationX + placement.Item.Boundary.MinX", source);
             Assert.Contains("AttachmentPoint.BaseLeft", source);
             Assert.Contains("EntityFactory.DBText", source);
             Assert.DoesNotContain("label.AdjustAlignment(ctx.Db)", source);

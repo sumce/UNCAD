@@ -155,7 +155,10 @@ namespace UNCAD.Tests
                     Assert.Equal("设备B", result.GetRow(4).GetCell(12).StringCellValue);
                     Assert.Equal(12d, result.GetRow(0).GetCell(11).NumericCellValue);
                     Assert.Equal(3d, result.GetRow(0).GetCell(12).NumericCellValue);
-                    Assert.Equal("SUM(L1:M1)", result.GetRow(0).GetCell(4).CellFormula);
+                    ICell total = result.GetRow(0).GetCell(4);
+                    Assert.Equal("SUM(L1:M1)", total.CellFormula);
+                    Assert.Equal(CellType.Formula, total.CellType);
+                    Assert.Equal(15d, total.NumericCellValue);
                     resultWorkbook.Close();
                 }
             }
@@ -244,6 +247,46 @@ namespace UNCAD.Tests
                             { new SubmissionMaterial { Quantity = "1" } }
                         }
                     }));
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void Write_FallsBackToMaterialNumberWhenCodeColumnIsBlank()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_boq_number_fallback_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string template = Path.Combine(root, "template.xlsx");
+            string target = Path.Combine(root, "machine", "[BOQ]MACHINE01.xlsx");
+            try
+            {
+                var workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                sheet.CreateRow(0).CreateCell(0).SetCellValue("4.11");
+                using (var stream = new FileStream(template, FileMode.CreateNew))
+                    workbook.Write(stream);
+                workbook.Close();
+
+                BoqWorkbookWriter.Write(target, template, new[]
+                {
+                    new SubmissionRecord
+                    {
+                        MachineId = "MACHINE01", DeviceName = "设备",
+                        Materials = new List<SubmissionMaterial>
+                        {
+                            new SubmissionMaterial { Number = "4.11", Code = "", Quantity = "1" }
+                        }
+                    }
+                });
+
+                using (var stream = new FileStream(target, FileMode.Open, FileAccess.Read))
+                {
+                    var result = new XSSFWorkbook(stream);
+                    Assert.Equal(1d, result.GetSheet("Sheet1").GetRow(0)
+                        .GetCell(11).NumericCellValue);
+                    result.Close();
+                }
             }
             finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }

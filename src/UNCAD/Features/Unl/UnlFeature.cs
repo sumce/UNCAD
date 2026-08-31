@@ -3,7 +3,9 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.QuickLine;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 using UNCAD.Features.ConfigCenter;
@@ -37,7 +39,19 @@ namespace UNCAD.Features.Unl
 
         protected override void Execute(CadContext ctx)
         {
-            string txt = Settings.Get(ConfigKeys.UnlText, "2000mm");
+            ProductMetadata.EnsureCommandAllowed(CommandIds.Line);
+            string configuredText = Settings.Get(ConfigKeys.UnlText, "2000mm");
+            string txt;
+            if (!QuickLineMillimeterText.TryParseCad(configuredText,
+                out double configuredMillimetres) || configuredMillimetres <= 0)
+            {
+                txt = QuickLineMillimeterText.Format(2000.0);
+                ctx.Write("\n[U1L] 线段长度设置无效，已回退为 2000mm。请在 U1SET 中输入正数毫米值。");
+            }
+            else
+            {
+                txt = QuickLineMillimeterText.Format(configuredMillimetres);
+            }
             double hgt = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
             string pos = Settings.Get(ConfigKeys.UnlPos, "1"); // 0=居中 1=靠边下 2=靠边上
             double offset = Settings.GetDouble(ConfigKeys.UnlOffset, 0.0);
@@ -94,6 +108,9 @@ namespace UNCAD.Features.Unl
                     var t = EntityFactory.DBText(ctx, txt, txtpt, hgt, ang, align,
                         textStyleId: styleId);
                     ctx.AddToCurrentSpace(tx, t);
+                    // Persist the line/label relationship so U1LX does not
+                    // have to guess when labels overlap or have been moved.
+                    QuickLineCadService.TryLinkLineAndLabel(ctx, tx, line.Id, t.Id);
                     segIds.Add(t.Id);
                 });
         }

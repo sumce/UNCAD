@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Infra;
@@ -14,109 +15,251 @@ namespace UNCAD.Cad
         public bool Above { get; set; }
         public short ColorIndex { get; set; }
         public Func<double, string> LabelFactory { get; set; }
+        /// <summary>U1Q or U1C; repeated runs replace prior output for each source.</summary>
+        public string AnnotationKind { get; set; }
     }
 
-    /// <summary>用 AutoCAD 原生偏移曲线生成桥架/线管平行标注。</summary>
+    /// <summary>Creates an offset curve and its label in one CAD transaction.</summary>
     public static class ParallelCurveAnnotator
     {
-        public static int Add(CadContext ctx, ObjectId[] ids, ParallelAnnotationOptions options)
+        public static int Add(CadContext ctx, ObjectId[] ids,
+            ParallelAnnotationOptions options)
         {
-            if (ids == null || options == null || options.LabelFactory == null) return 0;
+            if (ctx == null || ids == null || options == null
+                || options.LabelFactory == null) return 0;
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                int count = Add(ctx, transaction, ids, options);
+                transaction.Commit();
+                return count;
+            }
+        }
+
+        /// <summary>Uses a caller-owned transaction so U1C can update all outputs atomically.</summary>
+        public static int Add(CadContext ctx, Transaction transaction, ObjectId[] ids,
+            ParallelAnnotationOptions options)
+        {
+            if (ctx == null || transaction == null || ids == null || options == null
+                || options.LabelFactory == null) return 0;
+
             int count = 0;
             int skipped = 0;
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            ObjectId[] sourceIds = ids.Distinct().ToArray();
+            HashSet<string> sourceHandles = new HashSet<string>(
+                sourceIds.Select(id => id.Handle.ToString()),
+                StringComparer.OrdinalIgnoreCase);
+            bool metadataReady = !string.IsNullOrWhiteSpace(options.AnnotationKind)
+                && ParallelAnnotationMetadata.EnsureApplication(ctx.Db, transaction);
+            Dictionary<string, List<ObjectId>> previous = metadataReady
+                ? CollectPrevious(ctx, transaction, options.AnnotationKind, sourceHandles)
+                : new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
+
+            ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
+            foreach (ObjectId id in sourceIds)
             {
-                ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
-                foreach (ObjectId id in ids)
+                var source = transaction.GetObject(id, OpenMode.ForRead, true) as Curve;
+                if (!IsSupported(source)) continue;
+                // A previous generated offset can be selected by a window. Never use it as
+                // a new source, otherwise each run walks one level farther from the design line.
+                if (metadataReady && ParallelAnnotationMetadata.TryRead(source,
+                    out _, out _)) continue;
+
+                double length;
+                Point3d sourceMid;
+                double sourceAngle;
+                Vector3d desired;
+                try
                 {
-                    var source = tr.GetObject(id, OpenMode.ForRead, true) as Curve;
-                    if (!IsSupported(source)) continue;
-
-                    double length;
-                    Point3d sourceMid;
-                    double sourceAngle;
-                    Vector3d desired;
-                    try
-                    {
-                        // 某些损坏或退化曲线能被选中，但在取中点/切线时会由 AutoCAD 抛错。
-                        // 在创建任何数据库实体前完成预检，单条坏曲线不会中断其他线管生成。
-                        length = GetLength(source);
-                        if (length <= 0) { skipped++; continue; }
-                        sourceMid = source.GetPointAtDist(length / 2.0);
-                        Vector3d tangent = source.GetFirstDerivative(sourceMid);
-                        if (tangent.Length < 1e-9) { skipped++; continue; }
-                        sourceAngle = GeoMath.ReadableAngle(sourceMid, sourceMid + tangent);
-                        double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
-                        desired = new Vector3d(Math.Cos(sideAngle), Math.Sin(sideAngle), 0);
-                    }
-                    catch (Exception ex)
-                    {
-                        skipped++;
-                        Log.Warn("平行曲线预检失败，已跳过对象 " + id + ": " + ex.Message);
-                        continue;
-                    }
-
-                    OffsetCandidate positive = CreateCandidate(source, options.CurveOffset, sourceMid, desired);
-                    OffsetCandidate negative = CreateCandidate(source, -options.CurveOffset, sourceMid, desired);
-                    OffsetCandidate selected = SelectCandidate(positive, negative);
-                    OffsetCandidate rejected = ReferenceEquals(selected, positive) ? negative : positive;
-                    rejected?.Dispose();
-                    if (selected == null) { skipped++; continue; }
-
-                    DBText text;
-                    try
-                    {
-                        // 文本位置也先计算完毕，防止偏移曲线已入库后才因切线异常失败。
-                        Curve labelCurve = selected.LabelCurve;
-                        Point3d curvePoint = labelCurve.GetClosestPointTo(sourceMid, false);
-                        Vector3d labelTangent = labelCurve.GetFirstDerivative(curvePoint);
-                        double textAngle = labelTangent.Length < 1e-9
-                            ? sourceAngle
-                            : GeoMath.ReadableAngle(curvePoint, curvePoint + labelTangent);
-                        Point3d textPoint = GeoMath.Polar(curvePoint,
-                            GeoMath.SideDirection(textAngle, options.Above), options.TextOffset);
-                        text = EntityFactory.DBText(ctx, options.LabelFactory(length), textPoint,
-                            options.TextHeight, textAngle,
-                            options.Above ? AttachmentPoint.BottomCenter : AttachmentPoint.TopCenter,
-                            options.ColorIndex, styleId);
-                    }
-                    catch (Exception ex)
-                    {
-                        selected.Dispose();
-                        skipped++;
-                        Log.Warn("平行曲线标注预检失败，已跳过对象 " + id + ": " + ex.Message);
-                        continue;
-                    }
-
-                    try
-                    {
-                        // 一旦开始入库就不再吞异常：数据库失败必须让整个命令事务回滚，禁止留下半批标注。
-                        foreach (Entity entity in selected.Entities)
-                        {
-                            entity.LayerId = ctx.CurrentLayerId;
-                            if (options.ColorIndex != 0) entity.ColorIndex = options.ColorIndex;
-                            ctx.AddToCurrentSpace(tr, entity);
-                        }
-                        ctx.AddToCurrentSpace(tr, text);
-                        selected.Detach();
-                        count++;
-                    }
-                    finally
-                    {
-                        selected.Dispose();
-                    }
+                    length = GetLength(source);
+                    if (length <= 0) { skipped++; continue; }
+                    sourceMid = source.GetPointAtDist(length / 2.0);
+                    Vector3d tangent = source.GetFirstDerivative(sourceMid);
+                    if (tangent.Length < 1e-9) { skipped++; continue; }
+                    sourceAngle = GeoMath.ReadableAngle(sourceMid,
+                        sourceMid + tangent);
+                    double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
+                    desired = new Vector3d(Math.Cos(sideAngle), Math.Sin(sideAngle), 0);
                 }
-                tr.Commit();
+                catch (Exception ex)
+                {
+                    skipped++;
+                    Log.Warn("Parallel curve preflight failed for " + id + ": "
+                        + ex.Message);
+                    continue;
+                }
+
+                OffsetCandidate positive = CreateCandidate(source, options.CurveOffset,
+                    sourceMid, desired);
+                OffsetCandidate negative = CreateCandidate(source, -options.CurveOffset,
+                    sourceMid, desired);
+                OffsetCandidate selected = SelectCandidate(positive, negative);
+                OffsetCandidate rejected = ReferenceEquals(selected, positive)
+                    ? negative : positive;
+                rejected?.Dispose();
+                if (selected == null) { skipped++; continue; }
+
+                DBText text;
+                try
+                {
+                    Curve labelCurve = selected.LabelCurve;
+                    Point3d curvePoint = labelCurve.GetClosestPointTo(sourceMid, false);
+                    Vector3d labelTangent = labelCurve.GetFirstDerivative(curvePoint);
+                    double textAngle = labelTangent.Length < 1e-9
+                        ? sourceAngle
+                        : GeoMath.ReadableAngle(curvePoint,
+                            curvePoint + labelTangent);
+                    Point3d textPoint = GeoMath.Polar(curvePoint,
+                        GeoMath.SideDirection(textAngle, options.Above),
+                        options.TextOffset);
+                    text = EntityFactory.DBText(ctx, options.LabelFactory(length), textPoint,
+                        options.TextHeight, textAngle,
+                        options.Above ? AttachmentPoint.BottomCenter
+                            : AttachmentPoint.TopCenter,
+                        options.ColorIndex, styleId);
+                }
+                catch (Exception ex)
+                {
+                    selected.Dispose();
+                    skipped++;
+                    Log.Warn("Parallel curve label preflight failed for " + id + ": "
+                        + ex.Message);
+                    continue;
+                }
+
+                try
+                {
+                    foreach (Entity entity in selected.Entities)
+                    {
+                        entity.LayerId = ctx.CurrentLayerId;
+                        if (options.ColorIndex != 0) entity.ColorIndex = options.ColorIndex;
+                        ctx.AddToCurrentSpace(transaction, entity);
+                        if (metadataReady)
+                            ParallelAnnotationMetadata.Set(entity, options.AnnotationKind,
+                                id.Handle.ToString());
+                    }
+                    ctx.AddToCurrentSpace(transaction, text);
+                    if (metadataReady)
+                        ParallelAnnotationMetadata.Set(text, options.AnnotationKind,
+                            id.Handle.ToString());
+                    if (metadataReady)
+                        RemoveLegacyDuplicates(ctx, transaction, text, selected.Entities,
+                            options.ColorIndex);
+                    ErasePrevious(transaction, previous, id.Handle.ToString());
+                    selected.Detach();
+                    count++;
+                }
+                finally
+                {
+                    selected.Dispose();
+                }
             }
             if (skipped > 0)
-                ctx.Write("\n[UNCAD] 已跳过 " + skipped + " 条无法偏移或无法标注的曲线。");
+                ctx.Write("\n[UNCAD] 已跳过 " + skipped
+                    + " 条无法偏移或无法标注的曲线。");
             return count;
         }
 
-        private static bool IsSupported(Curve curve)
+        private static Dictionary<string, List<ObjectId>> CollectPrevious(CadContext ctx,
+            Transaction transaction,
+            string kind, HashSet<string> sourceHandles)
         {
-            return curve is Line || curve is Polyline || curve is Polyline2d;
+            var result = new Dictionary<string, List<ObjectId>>(
+                StringComparer.OrdinalIgnoreCase);
+            BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                OpenMode.ForRead, false) as BlockTableRecord;
+            if (space == null) return result;
+            foreach (ObjectId id in space)
+            {
+                Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (entity == null || !ParallelAnnotationMetadata.TryRead(entity,
+                    out string existingKind, out string sourceHandle)
+                    || !string.Equals(existingKind, kind,
+                        StringComparison.OrdinalIgnoreCase)
+                    || !sourceHandles.Contains(sourceHandle)) continue;
+                if (!result.TryGetValue(sourceHandle, out List<ObjectId> ids))
+                {
+                    ids = new List<ObjectId>();
+                    result[sourceHandle] = ids;
+                }
+                ids.Add(id);
+            }
+            return result;
         }
+
+        private static void ErasePrevious(Transaction transaction,
+            Dictionary<string, List<ObjectId>> previous, string sourceHandle)
+        {
+            if (previous == null || !previous.TryGetValue(sourceHandle,
+                out List<ObjectId> ids)) return;
+            foreach (ObjectId id in ids)
+            {
+                Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
+                if (entity != null && !entity.IsErased) entity.Erase();
+            }
+            previous.Remove(sourceHandle);
+        }
+
+        /// <summary>
+        /// Older versions did not write metadata, so their exact-overlap output cannot be
+        /// associated by source handle. Remove only untagged, same-colour entities whose
+        /// geometry/text is identical to the newly generated result.
+        /// </summary>
+        private static void RemoveLegacyDuplicates(CadContext ctx, Transaction transaction,
+            DBText currentText, IEnumerable<Entity> currentCurves, short colorIndex)
+        {
+            BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                OpenMode.ForRead, false) as BlockTableRecord;
+            if (space == null) return;
+            Entity[] generated = (currentCurves ?? Enumerable.Empty<Entity>()).ToArray();
+            foreach (ObjectId id in space)
+            {
+                Entity candidate = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (candidate == null || candidate.ObjectId == currentText.ObjectId
+                    || (ParallelAnnotationMetadata.TryRead(candidate,
+                        out _, out _))) continue;
+                if (candidate is DBText oldText && oldText.ColorIndex == colorIndex
+                    && string.Equals(oldText.TextString, currentText.TextString,
+                        StringComparison.Ordinal)
+                    && SamePoint(oldText.Position, currentText.Position))
+                {
+                    candidate.UpgradeOpen();
+                    candidate.Erase();
+                    continue;
+                }
+                if (!(candidate is Curve oldCurve) || oldCurve.ColorIndex != colorIndex)
+                    continue;
+                foreach (Entity created in generated)
+                {
+                    if (created is Curve newCurve && SameCurve(oldCurve, newCurve))
+                    {
+                        candidate.UpgradeOpen();
+                        candidate.Erase();
+                        break;
+                    }
+                }
+            }
+        }
+
+        private static bool SamePoint(Point3d first, Point3d second)
+            => first.DistanceTo(second) <= 1e-6;
+
+        private static bool SameCurve(Curve first, Curve second)
+        {
+            if (first == null || second == null
+                || first.GetType() != second.GetType()) return false;
+            try
+            {
+                Extents3d a = first.GeometricExtents;
+                Extents3d b = second.GeometricExtents;
+                return SamePoint(a.MinPoint, b.MinPoint)
+                    && SamePoint(a.MaxPoint, b.MaxPoint)
+                    && Math.Abs(GetLength(first) - GetLength(second)) <= 1e-6;
+            }
+            catch { return false; }
+        }
+
+        private static bool IsSupported(Curve curve)
+            => curve is Line || curve is Polyline || curve is Polyline2d;
 
         private static double GetLength(Curve curve)
         {
@@ -125,14 +268,11 @@ namespace UNCAD.Cad
                 return Math.Abs(curve.GetDistanceAtParameter(curve.EndParam)
                     - curve.GetDistanceAtParameter(curve.StartParam));
             }
-            catch
-            {
-                return 0;
-            }
+            catch { return 0; }
         }
 
-        private static OffsetCandidate CreateCandidate(
-            Curve source, double distance, Point3d sourceMid, Vector3d desired)
+        private static OffsetCandidate CreateCandidate(Curve source, double distance,
+            Point3d sourceMid, Vector3d desired)
         {
             DBObjectCollection objects = null;
             try
@@ -150,7 +290,8 @@ namespace UNCAD.Cad
                     }
                     entities.Add(entity);
                     Point3d nearest = curve.GetClosestPointTo(sourceMid, false);
-                    double candidateScore = sourceMid.GetVectorTo(nearest).DotProduct(desired);
+                    double candidateScore = sourceMid.GetVectorTo(nearest)
+                        .DotProduct(desired);
                     if (candidateScore > score)
                     {
                         score = candidateScore;
@@ -159,7 +300,6 @@ namespace UNCAD.Cad
                 }
                 if (entities.Count == 0 || labelCurve == null)
                 {
-                    // GetOffsetCurves 返回的对象尚未入库，失败出口必须由当前方法释放所有权。
                     foreach (Entity entity in entities) entity.Dispose();
                     return null;
                 }
@@ -173,7 +313,8 @@ namespace UNCAD.Cad
             }
         }
 
-        private static OffsetCandidate SelectCandidate(OffsetCandidate first, OffsetCandidate second)
+        private static OffsetCandidate SelectCandidate(OffsetCandidate first,
+            OffsetCandidate second)
         {
             if (first == null) return second;
             if (second == null) return first;
