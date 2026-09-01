@@ -10,6 +10,7 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.QuickLine;
 using UNCAD.Infra;
 using UNCAD.UI;
+using NativeEditor = UNCAD.UI.QuickLine3d.QuickLine3dEditorForm;
 using AcApplication = Autodesk.AutoCAD.ApplicationServices.Application;
 using CadQuickLineSegment = UNCAD.Cad.QuickLine.QuickLineSegment;
 
@@ -49,7 +50,7 @@ namespace UNCAD.Features.Unl
             ProductMetadata.EnsureCommandAllowed(CommandIds.Line3d);
             QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder
                 .CreateDrawingScene();
-            using (var form = new QuickLine3dEditorForm(scene))
+            using (var form = new NativeEditor(scene))
             {
                 DialogResult result = AcApplication.ShowModalDialog(form);
                 if (result != DialogResult.OK)
@@ -148,7 +149,7 @@ namespace UNCAD.Features.Unl
                 var scene = QuickLineIsometricSceneBuilder.Build(graph,
                     selectedCad.LineId.Handle.ToString(), distances,
                     displayDistances, completed);
-                using (var form = new QuickLine3dEditorForm(scene))
+                using (var form = new NativeEditor(scene))
                 {
                     if (AcApplication.ShowModalDialog(form) != DialogResult.OK)
                         return;
