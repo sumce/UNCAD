@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using UNCAD.Infra;
 using Xunit;
@@ -62,6 +63,23 @@ namespace UNCAD.Tests
             Assert.Contains("use AutoCAD RIBBON if hidden", script);
             Assert.Contains("$unexpectedCommands", script);
             Assert.Contains("\"U1DWG\"", script);
+        }
+
+        [Fact]
+        public void Installer_PublicCommandAllowListMatchesRegisteredCommands()
+        {
+            string script = File.ReadAllText(RepoFile("installer.ps1"));
+            Match block = Regex.Match(script,
+                @"\$expectedCommands\s*=\s*@\((?<body>[\s\S]*?)\)\s*foreach\s*\(\$requiredCommand",
+                RegexOptions.CultureInvariant);
+            Assert.True(block.Success, "installer.ps1 expected-command block was not found.");
+            string[] commands = Regex.Matches(block.Groups["body"].Value,
+                    "\"(?<command>[^\"]+)\"", RegexOptions.CultureInvariant)
+                .Cast<Match>().Select(item => item.Groups["command"].Value)
+                .ToArray();
+
+            Assert.Equal(CommandIds.Registered.OrderBy(item => item),
+                commands.OrderBy(item => item), StringComparer.OrdinalIgnoreCase);
         }
 
         [Fact]

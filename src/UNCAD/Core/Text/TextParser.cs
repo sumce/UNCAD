@@ -17,8 +17,8 @@ namespace UNCAD.Core.Text
             @"\\f[^;]+;|\\A[0-2];|\\[a-zA-HJ-Z0-9]+|[{}]",
             RegexOptions.Compiled);
         private static readonly Regex BridgeLabelRegex = new Regex(
-            @"^桥架\s*([0-9]+)\s*[\*xX]\s*([0-9]+)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
         private static readonly Regex BridgeMillimetreLabelRegex = new Regex(
             @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*mm$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -72,9 +72,21 @@ namespace UNCAD.Core.Text
                 grids = 0;
                 return false;
             }
-            spec = "桥架" + match.Groups[1].Value + "*" + match.Groups[2].Value;
-            grids = double.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
-            return grids > 0;
+            if (!double.TryParse(match.Groups[1].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double width)
+                || !double.TryParse(match.Groups[2].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double height)
+                || !double.TryParse(match.Groups[3].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out grids)
+                || width <= 0 || height <= 0 || grids <= 0)
+            {
+                spec = null;
+                grids = 0;
+                return false;
+            }
+            spec = "桥架" + width.ToString("0.##", CultureInfo.InvariantCulture)
+                + "*" + height.ToString("0.##", CultureInfo.InvariantCulture);
+            return true;
         }
 
         /// <summary>

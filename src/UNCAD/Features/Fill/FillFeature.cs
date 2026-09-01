@@ -310,6 +310,7 @@ namespace UNCAD.Features.Fill
             }
 
             int filled;
+            int migratedBridgeLabels;
             FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
                 upstreamInfoResult;
             FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult;
@@ -321,6 +322,8 @@ namespace UNCAD.Features.Fill
                     new[] { picked.MachineId })))
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
+                    selection.TextIds, options.MmPerGrid);
                 filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
                     startRow, clearRowCount, tableRows, textHeight);
                 if (filled < 0) return;
@@ -369,6 +372,11 @@ namespace UNCAD.Features.Fill
                 + upstreamInfoResult.Blocks + " 个，upstream 状态 "
                 + upstreamStateResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
+            if (migratedBridgeLabels > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 已将 " + migratedBridgeLabels
+                    + " 个旧桥架格数标注转换为毫米标注（"
+                    + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格）。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
                 + " 条，覆盖文件 " + automaticExcel.ReplacedCount

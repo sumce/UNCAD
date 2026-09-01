@@ -26,26 +26,36 @@ namespace UNCAD.Core.Text
             out string normalized)
         {
             normalized = "";
-            string text = (value ?? "").Trim();
-            Match grid = GridLabel.Match(text);
-            if (grid.Success && TryNumber(grid, 1, out double width)
-                && TryNumber(grid, 2, out double height)
-                && TryNumber(grid, 3, out double grids)
-                && width > 0 && height > 0 && grids > 0)
-            {
-                if (!IsValidScale(mmPerGrid)) return false;
-                normalized = "桥架" + Format(width) + "*" + Format(height)
-                    + " " + Format(grids * mmPerGrid) + "mm";
-                return true;
-            }
+            if (TryMigrateLegacyGrid(value, mmPerGrid, out normalized)) return true;
 
+            string text = (value ?? "").Trim();
             Match millimetre = MillimetreLabel.Match(text);
-            if (!millimetre.Success || !TryNumber(millimetre, 1, out width)
-                || !TryNumber(millimetre, 2, out height)
+            if (!millimetre.Success || !TryNumber(millimetre, 1, out double width)
+                || !TryNumber(millimetre, 2, out double height)
                 || !TryNumber(millimetre, 3, out double totalMillimetres)
                 || width <= 0 || height <= 0 || totalMillimetres <= 0) return false;
             normalized = "桥架" + Format(width) + "*" + Format(height)
                 + " " + Format(totalMillimetres) + "mm";
+            return true;
+        }
+
+        /// <summary>
+        /// Converts only the legacy grid-count form. Current millimetre labels
+        /// deliberately return false so U1F/U1U can migrate old CAD text without
+        /// rewriting already-current annotations.
+        /// </summary>
+        public static bool TryMigrateLegacyGrid(string value, double mmPerGrid,
+            out string normalized)
+        {
+            normalized = "";
+            Match grid = GridLabel.Match((value ?? "").Trim());
+            if (!grid.Success || !TryNumber(grid, 1, out double width)
+                || !TryNumber(grid, 2, out double height)
+                || !TryNumber(grid, 3, out double grids)
+                || width <= 0 || height <= 0 || grids <= 0
+                || !IsValidScale(mmPerGrid)) return false;
+            normalized = "桥架" + Format(width) + "*" + Format(height)
+                + " " + Format(grids * mmPerGrid) + "mm";
             return true;
         }
 

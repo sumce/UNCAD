@@ -42,12 +42,13 @@ namespace UNCAD.Tests
         {
             var r = StatCalculator.Calculate(new[]
             {
-                "桥架200*100 2格", "桥架200x100 3格", "桥架200X100 4格"
+                "桥架200*100 2格", "桥架200x100 3格", "桥架200X100 4格",
+                "桥架200×100 5格"
             }, 250.0);
 
             var bridge = Assert.Single(r.Bridges);
             Assert.Equal("桥架200*100", bridge.Spec);
-            Assert.Equal(9.0, bridge.TotalGrids);
+            Assert.Equal(14.0, bridge.TotalGrids);
         }
 
         [Fact]

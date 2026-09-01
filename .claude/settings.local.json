@@ -13,7 +13,11 @@
       "Bash(git commit -q -m 'refactor\\(ui\\): retheme MachinePickerForm with UiTheme *)",
       "Bash(git commit -q -m 'refactor\\(ui\\): retheme QuickLine editor chrome and ribbon icon colors *)",
       "Bash(powershell -File build.ps1)",
-      "Bash(git commit -q -m 'refactor\\(ui\\): unify modal dialog API and purge raw color/font literals *)"
+      "Bash(git commit -q -m 'refactor\\(ui\\): unify modal dialog API and purge raw color/font literals *)",
+      "Bash(git commit -q -m 'feat\\(u1x\\): unfold drawn circuit to plan view at user-picked insertion point *)",
+      "Bash(git reset *)",
+      "Bash(git commit -q -m 'feat\\(u1x\\): 3D isometric circuit drawing with plan-view unfold *)",
+      "Bash(git commit -q -m 'chore: checkpoint parallel work \\(bridge label migration, text parser, misc\\) *)"
     ]
   }
 }

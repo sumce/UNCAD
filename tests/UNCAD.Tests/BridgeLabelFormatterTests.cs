@@ -32,5 +32,25 @@ namespace UNCAD.Tests
                 0.0, out string actual));
             Assert.Equal("桥架200*100 2500mm", actual);
         }
+
+        [Fact]
+        public void TryMigrateLegacyGrid_ConvertsOnlyGridLabels()
+        {
+            Assert.True(BridgeLabelFormatter.TryMigrateLegacyGrid(
+                "桥架200*100 10格", 250.0, out string migrated));
+            Assert.Equal("桥架200*100 2500mm", migrated);
+
+            Assert.False(BridgeLabelFormatter.TryMigrateLegacyGrid(
+                "桥架200*100 2500mm", 250.0, out string current));
+            Assert.Equal("", current);
+        }
+
+        [Fact]
+        public void TryMigrateLegacyGrid_RejectsInvalidScaleWithoutRewriting()
+        {
+            Assert.False(BridgeLabelFormatter.TryMigrateLegacyGrid(
+                "桥架200*100 10格", 0.0, out string actual));
+            Assert.Equal("", actual);
+        }
     }
 }

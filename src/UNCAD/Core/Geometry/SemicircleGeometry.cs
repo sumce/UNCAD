@@ -41,5 +41,18 @@ namespace UNCAD.Core.Geometry
             while (startAngle >= Math.PI * 2.0) startAngle -= Math.PI * 2.0;
             endAngle = startAngle + Math.PI;
         }
+
+        /// <summary>
+        /// Returns the bulge for a polyline segment travelling from the first
+        /// breakpoint to the second while preserving the same upward-facing
+        /// semicircle selected by <see cref="Angles"/>.
+        /// </summary>
+        public static double Bulge(double centerX, double centerY,
+            double firstX, double firstY, double secondX, double secondY,
+            double radius)
+        {
+            return NeedReverse(centerX, centerY,
+                firstX, firstY, secondX, secondY, radius) ? -1.0 : 1.0;
+        }
     }
 }

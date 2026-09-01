@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         [InlineData("(共用)桥架200*100 12格", null)]
         [InlineData("桥架200*100 共用 12格", null)]
         [InlineData("桥架200*100 12格 备注", null)]
-            [InlineData("桥架200×100 12格", null)]
+            [InlineData("桥架200×100 12格", "桥架200*100")]
             [InlineData("桥架200×100 3000mm", "桥架200*100")]
         [InlineData("桥架200*10012格", null)]
         [InlineData("只有桥架两字", null)]         // 无规格尺寸不算

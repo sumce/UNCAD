@@ -40,6 +40,16 @@ namespace UNCAD.Tests
             AssertBulgesUp(5, -5);
         }
 
+        [Theory]
+        [InlineData(-5, 5, -1)]
+        [InlineData(5, -5, 1)]
+        public void Bulge_PreservesUpwardArcInPolylineTravelDirection(
+            double firstX, double secondX, double expected)
+        {
+            Assert.Equal(expected, SemicircleGeometry.Bulge(
+                0, 0, firstX, 0, secondX, 0, 5));
+        }
+
         private static void AssertBulgesUp(double firstX, double secondX)
         {
             SemicircleGeometry.Angles(0, 0, firstX, 0, secondX, 0, 5,

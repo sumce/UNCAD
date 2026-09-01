@@ -188,6 +188,7 @@ namespace UNCAD.Features.Fill
             int tableRows = 0;
             int frameBlocks = 0;
             int attributeValues = 0;
+            int migratedBridgeLabels = 0;
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     plans.Select(plan => plan.Machine.MachineId))))
@@ -197,6 +198,8 @@ namespace UNCAD.Features.Fill
                 {
                     foreach (Plan plan in plans)
                     {
+                        migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
+                            transaction, plan.Selection.TextIds, options.MmPerGrid);
                         int filled = FillTableModule.Write(ctx, transaction,
                             plan.Selection.TableIds, options.StartRow, options.ClearRows,
                             plan.Rows, options.TextHeight);
@@ -268,6 +271,10 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性。"
+                + (migratedBridgeLabels > 0 ? " 旧桥架标注转换 "
+                    + migratedBridgeLabels + " 个（"
+                    + UNCAD.Core.Text.TextFormatter.FormatNum(options.MmPerGrid)
+                    + " mm/格）。" : "")
                 + " BOQ 文件处理 " + automaticExcel.AddedCount + " 条，覆盖 "
                 + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath);
 
