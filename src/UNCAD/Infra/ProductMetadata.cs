@@ -35,7 +35,7 @@ namespace UNCAD.Infra
 #if UNCAD_TEMPORARY_LICENSE
         public static readonly string BuildConfiguration = "Temporary";
         public static readonly LicenseMode BuildLicenseMode = LicenseMode.Trial;
-        public const string BuildLicenseExpiresUtc = "2026-09-08T23:59:59+08:00";
+        public const string BuildLicenseExpiresUtc = "2026-09-02T23:59:59+08:00";
 #else
         public static readonly string BuildConfiguration = "Release";
         public static readonly LicenseMode BuildLicenseMode = LicenseMode.Perpetual;
@@ -48,7 +48,18 @@ namespace UNCAD.Infra
         }
 
         public static LicenseSnapshot CurrentLicense()
-            => EvaluateLicense(BuildLicenseMode, BuildLicenseExpiresUtc, DateTime.UtcNow);
+        {
+            // 防回拨时钟:有效时间取水位线最大值,检测到回拨立即视为过期。
+            DateTime now = TrustedClock.NowUtc(out bool clockTampered);
+            LicenseSnapshot license = EvaluateLicense(
+                BuildLicenseMode, BuildLicenseExpiresUtc, now);
+            if (clockTampered && !license.IsExpired)
+            {
+                license.IsExpired = true;
+                license.StatusText = "已过期 · 检测到系统时间被回拨";
+            }
+            return license;
+        }
 
         public static LicenseSnapshot EvaluateLicense(
             LicenseMode mode, string expiresAt, DateTime utcNow)

@@ -56,6 +56,8 @@ namespace UNCAD.Infra
 
         // BOQ 与 DWG 自动输出目录；沿用旧键名以迁移已有用户设置。
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹
+        // 试用授权防回拨:系统时间水位线(max-seen UTC,yyyyMMddHHmmss)。
+        public const string ClockWatermarkUtc = "UNC_CLOCK_WATERMARK";
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";

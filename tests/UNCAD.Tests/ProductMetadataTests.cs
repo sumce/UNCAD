@@ -32,7 +32,7 @@ namespace UNCAD.Tests
             else
             {
                 Assert.NotNull(license.ExpiresUtc);
-                Assert.Equal("2026-09-08 23:59:59 UTC+8", license.ExpiryText);
+                Assert.Equal("2026-09-02 23:59:59 UTC+8", license.ExpiryText);
             }
         }
 
@@ -42,7 +42,7 @@ namespace UNCAD.Tests
             if (ProductMetadata.BuildConfiguration == "Temporary")
             {
                 Assert.Equal(LicenseMode.Trial, ProductMetadata.BuildLicenseMode);
-                Assert.Equal("2026-09-08T23:59:59+08:00",
+                Assert.Equal("2026-09-02T23:59:59+08:00",
                     ProductMetadata.BuildLicenseExpiresUtc);
             }
             else
@@ -55,16 +55,16 @@ namespace UNCAD.Tests
         [Fact]
         public void TemporaryLicense_ExpiresAtConfiguredUtcPlus8Deadline()
         {
-            const string expiry = "2026-09-08T23:59:59+08:00";
+            const string expiry = "2026-09-02T23:59:59+08:00";
             LicenseSnapshot active = ProductMetadata.EvaluateLicense(LicenseMode.Trial,
-                expiry, new DateTime(2026, 9, 8, 15, 59, 58, DateTimeKind.Utc));
+                expiry, new DateTime(2026, 9, 2, 15, 59, 58, DateTimeKind.Utc));
             LicenseSnapshot expired = ProductMetadata.EvaluateLicense(LicenseMode.Trial,
-                expiry, new DateTime(2026, 9, 8, 15, 59, 59, DateTimeKind.Utc));
+                expiry, new DateTime(2026, 9, 2, 15, 59, 59, DateTimeKind.Utc));
 
             Assert.False(active.IsExpired);
             Assert.Equal(0, active.DaysRemaining);
             Assert.True(expired.IsExpired);
-            Assert.Equal("2026-09-08 23:59:59 UTC+8", expired.ExpiryText);
+            Assert.Equal("2026-09-02 23:59:59 UTC+8", expired.ExpiryText);
         }
 
         [Fact]

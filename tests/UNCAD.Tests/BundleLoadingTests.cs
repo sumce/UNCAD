@@ -130,8 +130,8 @@ namespace UNCAD.Tests
 
             Assert.Contains("$configuration = \"Temporary\"", script);
             Assert.Contains("$licenseMode = \"Trial\"", script);
-            Assert.Contains("2026-09-08T23:59:59+08:00", script);
-            Assert.Contains("temp-20260908", script);
+            Assert.Contains("2026-09-02T23:59:59+08:00", script);
+            Assert.Contains("temp-20260902", script);
             Assert.Contains("SkipBundle = $true", script);
             Assert.Contains("$stageBundle", script);
             Assert.Contains("-Mode VerifyPackage", script);

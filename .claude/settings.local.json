@@ -36,7 +36,8 @@
       "Bash(git commit -q -m 'feat\\(u1lx\\): command-line fast millimetre annotation along connected route *)",
       "Bash(git commit -q -m 'chore: remove 3D circuit editor entirely \\(U1X, OpenTK, scene/layout stack\\) *)",
       "Bash(git commit -q -m 'fix\\(frame\\): anchor block ownership at geometric extents center *)",
-      "Bash(git commit -q -m 'feat\\(submit\\): hard-fail BOQ export on catalog mismatch with post-write verification *)"
+      "Bash(git commit -q -m 'feat\\(submit\\): hard-fail BOQ export on catalog mismatch with post-write verification *)",
+      "Bash(git commit -q -m 'feat\\(license\\): anti-rollback clock watermark; temp expiry moved to 2026-09-02 *)"
     ]
   }
 }

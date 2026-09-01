@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $configuration = "Temporary"
 $licenseMode = "Trial"
-$licenseExpires = "2026-09-08T23:59:59+08:00"
+$licenseExpires = "2026-09-02T23:59:59+08:00"
 
 $buildArgs = @{
     Configuration = $configuration
@@ -29,7 +29,7 @@ if (-not (Test-Path $module -PathType Leaf)) { throw "Temporary build output is 
 
 [xml]$sourceManifest = Get-Content (Join-Path $root "bundle\UNCAD.bundle\PackageContents.xml") -Raw -Encoding UTF8
 $version = [string]$sourceManifest.ApplicationPackage.AppVersion
-$baseName = "UNCAD-v$version-temp-20260908"
+$baseName = "UNCAD-v$version-temp-20260902"
 $artifacts = Join-Path $root "artifacts"
 $stage = Join-Path $artifacts $baseName
 $archive = Join-Path $artifacts ($baseName + ".zip")
@@ -71,5 +71,5 @@ if ($LASTEXITCODE -ne 0) { throw "Temporary package validation failed." }
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
 $hash = (Get-FileHash $archive -Algorithm SHA256).Hash
 Write-Host "Temporary release archive: $archive" -ForegroundColor Green
-Write-Host "License expires: 2026-09-08 23:59:59 UTC+8" -ForegroundColor Cyan
+Write-Host "License expires: 2026-09-02 23:59:59 UTC+8" -ForegroundColor Cyan
 Write-Host "SHA-256: $hash" -ForegroundColor Green
