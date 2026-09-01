@@ -28,7 +28,8 @@
       "Bash(rm -rf bundle/UNCAD.bundle/Web bundle/UNCAD.bundle/runtimes bundle/UNCAD.bundle/Microsoft.Web.WebView2.*.dll)",
       "Bash(git commit -q -m 'chore: drop stale WebView2/web files from bundle output *)",
       "Bash(unzip -l artifacts/UNCAD-v2.2.0.0-temp-20260908.zip)",
-      "Bash(git commit -q -m 'feat\\(u1x\\): pure mouse drawing with locked-axis handles, no input box *)"
+      "Bash(git commit -q -m 'feat\\(u1x\\): pure mouse drawing with locked-axis handles, no input box *)",
+      "Bash(git commit -q -m 'feat\\(u1x\\): CAD polar-tracking guide line with sticky axis, click-to-place *)"
     ]
   }
 }

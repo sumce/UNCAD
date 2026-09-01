@@ -187,7 +187,7 @@ namespace UNCAD.UI.QuickLine3d
                     : 2000.0;
                 _state.ArmPreview(axis, sign, lastLength);
                 _state.CommitArmedPreview();
-                _canvas.FitRoute();
+                _canvas.EnsureRouteVisible();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
@@ -291,11 +291,11 @@ namespace UNCAD.UI.QuickLine3d
             finally { _list.EndUpdate(); }
             int done = _state.Segments.Count(item => item.Completed);
             _summary.Text = Drawing
-                ? $"共 {_state.Segments.Count} 段(全部完成)。拖拽或点选方向手柄画段;Backspace 撤销。"
+                ? $"共 {_state.Segments.Count} 段(全部完成)。移动鼠标选向,单击落点;Backspace 撤销。"
                 : $"共 {_state.Segments.Count} 段,已完成 {done} 段;本次已修改 {_state.ModifiedSegmentIds.Count} 段。";
             _commandLine.Visible = !Drawing;
             _hint.Text = Drawing
-                ? "在手柄上按下并拖拽松手,或点一下手柄再点一下确认;按住 Shift 微调,默认 100mm 吸附"
+                ? "移动鼠标 = 极轴预览;单击 = 落点;默认 100mm 吸附,Shift = 自由长度"
                 : "点击线段后输入新距离,回车确认";
             _undo.Visible = Drawing;
             _commit.Enabled = Drawing || _state.ModifiedSegmentIds.Count > 0;

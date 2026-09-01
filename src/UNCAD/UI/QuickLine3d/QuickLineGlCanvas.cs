@@ -24,21 +24,17 @@ namespace UNCAD.UI.QuickLine3d
         private readonly Font _labelFont;
         private readonly Font _hintFont;
 
-        // 鼠标绘制状态:方向手柄 + 拖拽/点动两种画法。
+        // 鼠标绘制:CAD 极轴追踪 — 移动即预览,单击落点。
         private static readonly (QuickLineSpatialAxis axis, int sign)[] Handles =
         {
             (QuickLineSpatialAxis.X, 1), (QuickLineSpatialAxis.X, -1),
             (QuickLineSpatialAxis.Y, 1), (QuickLineSpatialAxis.Y, -1),
             (QuickLineSpatialAxis.Z, 1), (QuickLineSpatialAxis.Z, -1)
         };
-        private const float HandleRadiusPx = 9f;
-        private const float HandleReachPx = 26f;
         private const double SnapMillimetres = 100.0;
-        private int _hoverHandle = -1;
-        private int _activeHandle = -1;   // 拖拽或点动锁定的手柄
-        private bool _dragging;
-        private bool _dragMoved;
-        private Point _dragStart;
+        /// <summary>方向粘滞余量:新轴点积领先当前轴这么多才切换,防止辅助线乱跳。</summary>
+        private const float StickyMargin = 0.12f;
+        private int _stickyAxis = -1;
         private PointF _cursorClient;
 
         public QuickLineGlCanvas(QuickLineSceneState state)
@@ -83,21 +79,10 @@ namespace UNCAD.UI.QuickLine3d
 
             if (_state.Drawing)
             {
-                // 已锁定方向(点动模式)时,再次单击 = 按当前预览长度提交。
-                if (_activeHandle >= 0 && !_dragging)
+                // 极轴追踪:移动即预览,单击直接落点。
+                if (_state.PreviewLength > 0.0)
                 {
                     CommitArmed();
-                    return;
-                }
-                int handle = HitHandle(e.Location);
-                if (handle >= 0)
-                {
-                    // 按下手柄:进入拖拽;若松开时几乎没动则切换为点动模式。
-                    _dragging = true;
-                    _dragMoved = false;
-                    _dragStart = e.Location;
-                    _activeHandle = handle;
-                    ArmFromPointer(e.Location, e);
                     return;
                 }
             }
@@ -125,100 +110,85 @@ namespace UNCAD.UI.QuickLine3d
                     + up * delta.Height * worldPerPixel);
                 Invalidate();
             }
-            else if (_state.Drawing && _dragging && _activeHandle >= 0)
-            {
-                // 拖拽:方向已锁定,预览只沿该轴伸缩,不会乱跳。
-                if (Math.Abs(e.X - _dragStart.X) + Math.Abs(e.Y - _dragStart.Y) > 6)
-                    _dragMoved = true;
-                ArmFromPointer(e.Location, e);
-            }
             else if (_state.Drawing)
             {
-                _cursorClient = e.Location;
-                int hover = HitHandle(e.Location);
-                if (hover != _hoverHandle)
-                {
-                    _hoverHandle = hover;
-                    Invalidate();
-                }
-                else if (_activeHandle >= 0)
-                {
-                    ArmFromPointer(e.Location, e); // 点动模式:移动更新长度
-                }
+                TrackPolarAxis(e.Location, e);
             }
             _lastMouse = e.Location;
+        }
+
+        /// <summary>
+        /// CAD 极轴追踪:光标世界坐标相对活动节点的矢量,与 6 个单位轴取点积,
+        /// 最大者为吸附方向;长度 = 该方向的投影长度(连续)。带方向粘滞,
+        /// 越过 45° 边界一定余量才切换,辅助线不乱跳。
+        /// </summary>
+        private void TrackPolarAxis(Point location, MouseEventArgs e)
+        {
+            _cursorClient = location;
+            Vector3 node = ToVector(_state.NodePosition(_state.ActiveNodeId));
+            Vector3 cursor = _camera.ClientToWorldOnTargetPlane(location,
+                View, Projection, Width, Height);
+            Vector3 delta = cursor - node;
+            if (delta.LengthSquared < 1e-6f) return;
+
+            int best = 0;
+            float bestDot = float.NegativeInfinity;
+            for (int i = 0; i < Handles.Length; i++)
+            {
+                float d = Vector3.Dot(delta, AxisWorldVector(Handles[i].axis,
+                    Handles[i].sign));
+                if (d > bestDot) { bestDot = d; best = i; }
+            }
+            if (_stickyAxis >= 0 && best != _stickyAxis)
+            {
+                float stickyDot = Vector3.Dot(delta, AxisWorldVector(
+                    Handles[_stickyAxis].axis, Handles[_stickyAxis].sign));
+                // 粘滞:新方向必须明显更优才切换;否则维持原方向。
+                if (bestDot > stickyDot * (1f + StickyMargin))
+                    _stickyAxis = best;
+                best = _stickyAxis;
+            }
+            else
+            {
+                _stickyAxis = best;
+            }
+
+            double rawLength = Math.Max(0f, bestDot);
+            double length = (Control.ModifierKeys & Keys.Shift) != 0 ? rawLength
+                : Math.Round(rawLength / SnapMillimetres) * SnapMillimetres;
+            _state.ArmPreview(Handles[best].axis, Handles[best].sign, length);
         }
 
         private void OnCanvasMouseUp(object sender, MouseEventArgs e)
         {
             _orbiting = false;
             _panning = false;
-            if (_dragging && _activeHandle >= 0)
-            {
-                _dragging = false;
-                if (_dragMoved)
-                {
-                    CommitArmed(); // 拖拽松手 = 画下这一段
-                }
-                // 没怎么动 → 保持锁定,进入"点一下手柄、移动、再点一下"的点动画法。
-            }
         }
 
         private void CommitArmed()
         {
             _state.CommitArmedPreview();
-            _activeHandle = -1;
-            _hoverHandle = -1;
+            _stickyAxis = -1; // 新一段重新开始方向追踪
             _cursorClient = PointF.Empty;
+            EnsureRouteVisible();
         }
 
-        private void ArmFromPointer(Point location, MouseEventArgs e)
+        /// <summary>路线超出当前视野时才重新取景,避免每次落点重置缩放。</summary>
+        public void EnsureRouteVisible()
         {
-            (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) =
-                HandleGeometry(_activeHandle);
-            float t = Vector3.Dot(new Vector3(location.X, location.Y, 0) - nodeClient,
-                axisDir);
-            double rawLength = Math.Max(0f, t) * worldPerPixel;
-            double length = (Control.ModifierKeys & Keys.Shift) != 0 ? rawLength
-                : Math.Round(rawLength / SnapMillimetres) * SnapMillimetres;
-            var (axis, sign) = Handles[_activeHandle];
-            _state.ArmPreview(axis, sign, length);
-        }
-
-        /// <summary>活动节点在屏幕上的位置与指定手柄的屏幕方向、每像素世界长度。</summary>
-        private (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) HandleGeometry(
-            int index)
-        {
-            Matrix4 view = View;
-            Matrix4 projection = Projection;
-            Vector3 node = ToVector(_state.NodePosition(_state.ActiveNodeId));
-            PointF nodeClient = _camera.WorldToClient(node, view, projection, Width, Height);
-            float worldStep = Math.Max(100f, _camera.ViewHalfWidth * 0.25f);
-            var (axis, sign) = Handles[index];
-            Vector3 tip = node + AxisWorldVector(axis, sign) * worldStep;
-            PointF tipClient = _camera.WorldToClient(tip, view, projection, Width, Height);
-            Vector3 direction = Vector3.Normalize(new Vector3(
-                tipClient.X - nodeClient.X, tipClient.Y - nodeClient.Y, 0));
-            float worldPerPixel = Vector3.Distance(node, tip)
-                / Math.Max(1f, Vector3.Distance(new Vector3(nodeClient.X, nodeClient.Y, 0),
-                    new Vector3(tipClient.X, tipClient.Y, 0)));
-            return (new Vector3(nodeClient.X, nodeClient.Y, 0), direction, worldPerPixel);
-        }
-
-        /// <summary>命中测试:光标是否落在某个方向手柄上。</summary>
-        private int HitHandle(Point location)
-        {
-            for (int i = 0; i < Handles.Length; i++)
+            if (_state.Segments.Count == 0) return;
+            var min = new Vector3(float.MaxValue);
+            var max = new Vector3(float.MinValue);
+            foreach (QuickLineMutableSegment segment in _state.Segments)
             {
-                (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) =
-                    HandleGeometry(i);
-                Vector3 offset = new Vector3(location.X, location.Y, 0) - nodeClient;
-                float along = Vector3.Dot(offset, axisDir);
-                float reach = Vector3.Distance(offset, axisDir * along);
-                if (along > 0 && along < HandleReachPx * 2.4f && reach <= HandleReachPx)
-                    return i;
+                Expand(ref min, ref max, ToVector(
+                    _state.NodePosition(segment.StartNodeId)));
+                Expand(ref min, ref max, ToVector(
+                    _state.NodePosition(segment.EndNodeId)));
             }
-            return -1;
+            Vector3 size = max - min;
+            float extent = Math.Max(size.X, Math.Max(size.Y, size.Z));
+            if (extent * 0.75f > _camera.ViewHalfWidth * 1.15f) FitRoute();
         }
 
         private static Vector3 AxisWorldVector(QuickLineSpatialAxis axis, int sign)
@@ -426,35 +396,11 @@ namespace UNCAD.UI.QuickLine3d
                     : TextFormatter.FormatNum(segment.DisplayDistanceMillimetres) + "mm(未确认)";
                 DrawShadowText(g, text, point, _labelFont, UiTheme.TextSecondary);
             }
-            if (_state.Drawing) DrawDirectionHandles(g, view, projection);
-        }
-
-        /// <summary>绘制模式:活动节点周围的 6 个方向手柄与拖拽长度提示。</summary>
-        private void DrawDirectionHandles(Graphics g, Matrix4 view, Matrix4 projection)
-        {
-            for (int i = 0; i < Handles.Length; i++)
+            if (_state.Drawing && _state.PreviewLength > 0.0)
             {
-                (Vector3 nodeClient, Vector3 axisDir, _) = HandleGeometry(i);
-                var center = new PointF(nodeClient.X + axisDir.X * HandleReachPx * 2.4f,
-                    nodeClient.Y + axisDir.Y * HandleReachPx * 2.4f);
-                bool highlighted = i == _hoverHandle || i == _activeHandle;
-                using var fill = new SolidBrush(highlighted
-                    ? UiTheme.Accent : Color.FromArgb(150, UiTheme.AccentSoft));
-                using var stroke = new Pen(highlighted ? UiTheme.AccentHover : UiTheme.Accent,
-                    highlighted ? 2f : 1.2f);
-                g.FillEllipse(fill, center.X - HandleRadiusPx,
-                    center.Y - HandleRadiusPx, HandleRadiusPx * 2, HandleRadiusPx * 2);
-                g.DrawEllipse(stroke, center.X - HandleRadiusPx,
-                    center.Y - HandleRadiusPx, HandleRadiusPx * 2, HandleRadiusPx * 2);
-            }
-            if (_state.PreviewLength > 0.0)
-            {
-                Vector3 active = ToVector(_state.NodePosition(_state.ActiveNodeId));
-                PointF anchor = _camera.WorldToClient(active, view, projection,
-                    Width, Height);
+                // 长度提示跟随光标。
                 DrawShadowText(g, TextFormatter.FormatNum(_state.PreviewLength) + "mm",
-                    new PointF(anchor.X, anchor.Y - HandleReachPx * 3.2f),
-                    _labelFont, UiTheme.Accent);
+                    _cursorClient, _labelFont, UiTheme.Accent);
             }
         }
 
