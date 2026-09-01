@@ -93,13 +93,7 @@ function Get-PackageInfo {
     $requiredFiles = @(
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
-        "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
-        "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
-        "Web\QuickLine3D\index.html", "Web\QuickLine3D\styles.css",
-        "Web\QuickLine3D\app.js", "Web\QuickLine3D\vendor\three\three.core.min.js",
-        "Web\QuickLine3D\vendor\three\three.module.min.js",
-        "Web\QuickLine3D\vendor\three\OrbitControls.js",
-        "Web\QuickLine3D\vendor\three\LICENSE.txt", "BOQ_Template.xlsx"
+        "OpenTK.dll", "OpenTK.GLControl.dll", "BOQ_Template.xlsx"
     )
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }

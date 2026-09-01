@@ -17,7 +17,14 @@
       "Bash(git commit -q -m 'feat\\(u1x\\): unfold drawn circuit to plan view at user-picked insertion point *)",
       "Bash(git reset *)",
       "Bash(git commit -q -m 'feat\\(u1x\\): 3D isometric circuit drawing with plan-view unfold *)",
-      "Bash(git commit -q -m 'chore: checkpoint parallel work \\(bridge label migration, text parser, misc\\) *)"
+      "Bash(git commit -q -m 'chore: checkpoint parallel work \\(bridge label migration, text parser, misc\\) *)",
+      "Bash(git commit -q -m 'feat\\(u1x\\): real-scale drawing view with free zoom/pan and auto-fit *)",
+      "Bash(git commit -q -m 'test\\(u1x\\): cover plan unfold rules \\(axes, signs, vertical skip, loops\\) *)",
+      "Bash(powershell -File release-temp.ps1)",
+      "Bash(git commit -q -m 'feat\\(u1x\\): native OpenTK 3D editor \\(side-by-side with web editor\\) *)",
+      "Bash(git commit -q -m 'refactor\\(u1x\\): switch QuickLineFeature to native OpenTK editor *)",
+      "Bash(git rm *)",
+      "Bash(git commit -q -m 'chore: remove WebView2 editor and web assets in favor of native OpenTK editor *)"
     ]
   }
 }

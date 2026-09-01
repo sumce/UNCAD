@@ -62,18 +62,6 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
     (Get-FileHash $bundleModule -Algorithm SHA256).Hash) {
     throw "Bundle UNCAD.dll does not match the verified build output. Run release.ps1 without -NoBuild."
 }
-$publishFiles = @(
-    "Microsoft.Web.WebView2.Core.dll",
-    "Microsoft.Web.WebView2.WinForms.dll",
-    "Microsoft.Web.WebView2.Wpf.dll",
-    "runtimes\win-x64\native\WebView2Loader.dll"
-)
-$buildRoot = Split-Path $buildOutput -Parent
-foreach ($relative in $publishFiles) {
-    Assert-FileMatches (Join-Path $buildRoot $relative) (Join-Path $bundle $relative) $relative
-}
-Assert-TreeMatches (Join-Path $root "src\UNCAD\Web\QuickLine3D") `
-    (Join-Path $bundle "Web\QuickLine3D") "Web\QuickLine3D"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.

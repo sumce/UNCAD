@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace UNCAD.Tests
@@ -49,50 +50,29 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void WebEditorSeparatesActualRenderAndSquareFitLengths()
+        public void NativeEditor_KeepsActualDistanceSeparateFromDisplayLength()
         {
-            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Web",
-                "QuickLine3D", "app.js"));
-
-            Assert.Contains("renderDistanceMm: displayDistanceMm", source);
-            Assert.Contains("segment.renderDistanceMm = value", source);
-            Assert.Contains("segment.completed = true", source);
-            Assert.Contains("const distance = squareDisplayDistance(segment)", source);
-            Assert.Contains("state.squareReferenceMm * 0.35", source);
-            Assert.Contains("state.squareReferenceMm * 2.75", source);
-            Assert.Contains("distanceMm: segment.distanceMm", source);
-            Assert.Contains("state.squareFit = !state.drawing && allSegmentsCompleted()", source);
-            Assert.Contains("message.segments = state.segments.map", source);
-            Assert.DoesNotContain("exportSquareImage", source);
-            Assert.DoesNotContain("exportButton", source);
+            // 未确认段以原线长显示(display),真实毫米值(distance)必须保留到写回。
+            var state = UI.QuickLine3d.QuickLineSceneState.CreateDrawing();
+            state.SetPreview(Core.QuickLine.QuickLineSpatialAxis.X, 1);
+            state.CommitPreview(2000);
+            var segment = state.Segments.Single();
+            Assert.Equal(2000, segment.DistanceMillimetres);
+            Assert.Equal(2000, segment.DisplayDistanceMillimetres);
+            Assert.True(segment.Completed);
         }
 
         [Fact]
-        public void WebEditorDrawing_AllowsDragContinuationWithoutStealingLineEditClicks()
+        public void NativeEditor_FormReadsSceneStateWithoutWebDependencies()
         {
-            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Web",
-                "QuickLine3D", "app.js"));
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Unl", "QuickLineFeature.cs"));
+            Assert.Contains("UNCAD.UI.QuickLine3d.QuickLine3dEditorForm", source);
+            Assert.DoesNotContain("Microsoft.Web.WebView2", source);
+            Assert.DoesNotContain("QuickLine3dEditorProtocol", source);
 
-            int finish = source.IndexOf("function finishSelection(",
-                StringComparison.Ordinal);
-            int drawing = source.IndexOf("function finishDrawingPointer(",
-                StringComparison.Ordinal);
-            int drag = source.IndexOf("if (distance >= 8)", drawing,
-                StringComparison.Ordinal);
-            int hitEdit = source.IndexOf("startQuickEdit(hit.index, end)", drawing,
-                StringComparison.Ordinal);
-            int capture = source.IndexOf(
-                "state.mode === 'select' || state.mode === 'draw'",
-                StringComparison.Ordinal);
-
-            Assert.True(finish >= 0 && drawing > finish,
-                "Drawing pointer handling must be explicit and reachable.");
-            Assert.True(drag > drawing,
-                "A drag must create the next orthogonal segment.");
-            Assert.True(hitEdit > drag,
-                "A short click on an existing line must still enter distance editing.");
-            Assert.True(capture >= 0,
-                "Drawing must capture the pointer so the release event is not lost.");
+            string project = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
+            Assert.DoesNotContain("Microsoft.Web.WebView2", project);
         }
 
         [Fact]
