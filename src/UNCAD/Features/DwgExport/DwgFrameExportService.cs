@@ -200,24 +200,8 @@ namespace UNCAD.Features.DwgExport
                 // keeps AutoCAD from reinterpreting the text anchor inside the frame.
                 double titleX = left - Math.Max(250000d, firstPlacement.Item.Boundary.Width * 0.5d);
                 double titleY = bottom + Math.Max(firstPlacement.Item.Boundary.Height * 0.65d, 90000d);
-                const double metadataHeight = 6000d;
-                const double metadataGap = 9000d;
                 AddMetadataText(space, transaction, machineId,
                     new Point3d(titleX, titleY, 0d), 25000d, textStyle);
-                AddMetadataText(space, transaction, ProductMetadata.CompanyName + "  " + ProductMetadata.Website,
-                    new Point3d(titleX, titleY - 35000d, 0d), metadataHeight, textStyle);
-                AddMetadataText(space, transaction,
-                    "Generated: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-                    new Point3d(titleX, titleY - 35000d - metadataGap, 0d),
-                    metadataHeight, textStyle);
-                AddMetadataText(space, transaction,
-                    "Software Version: " + AboutInfo.Current().Version,
-                    new Point3d(titleX, titleY - 35000d - metadataGap * 2d, 0d),
-                    metadataHeight, textStyle);
-                AddMetadataText(space, transaction,
-                    "Windows User: " + Environment.UserName,
-                    new Point3d(titleX, titleY - 35000d - metadataGap * 3d, 0d),
-                    metadataHeight, textStyle);
                 transaction.Commit();
             }
             try
@@ -308,8 +292,22 @@ namespace UNCAD.Features.DwgExport
         {
             if (entity is BlockReference block)
             {
-                anchor = block.Position;
-                return true;
+                // 与 FrameRegionCollector 一致:块按外包框中心归属,
+                // 基点偏离可见几何时不漏检;取不到外包框时回退插入点。
+                try
+                {
+                    Extents3d extents = block.GeometricExtents;
+                    anchor = new Point3d(
+                        (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
+                        (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
+                        (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
+                    return true;
+                }
+                catch
+                {
+                    anchor = block.Position;
+                    return true;
+                }
             }
             try
             {

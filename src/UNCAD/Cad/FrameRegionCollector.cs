@@ -310,17 +310,26 @@ namespace UNCAD.Cad
         private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)
         {
             anchor = Point3d.Origin;
-            if (entity is BlockReference block)
+            if (entity is BlockReference)
             {
-                anchor = block.Position;
+                // 块的基点可能远离可见几何(动态块/异形基点),用外包框中心
+                // 归属才不会漏检或错归;取不到外包框时回退插入点。
+                if (TryExtentsCenter(entity, out anchor)) return true;
+                anchor = ((BlockReference)entity).Position;
                 return true;
             }
             if (!includeAllEntities && !(entity is Table) && !(entity is DBText)
                 && !(entity is MText)) return false;
+            return TryExtentsCenter(entity, out anchor);
+        }
+
+        private static bool TryExtentsCenter(Entity entity, out Point3d center)
+        {
+            center = Point3d.Origin;
             try
             {
                 Extents3d extents = entity.GeometricExtents;
-                anchor = new Point3d(
+                center = new Point3d(
                     (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
                     (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
                     (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
