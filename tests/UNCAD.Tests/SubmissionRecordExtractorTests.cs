@@ -9,6 +9,29 @@ namespace UNCAD.Tests
     public class SubmissionRecordExtractorTests
     {
         [Fact]
+        public void Extract_RecordsDroppedFallbackRowsForHardReconciliation()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "MQBAN01-POWER");
+            source.AddAttribute(FrameBlockFiller.TagDevice, "MQBAN01-中央实验台1-1");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "中央实验台1-1");
+            // 固定清单行:序号 1.1 + 编码 3.1,正常入库。
+            source.AddTableRow("1.1", "包塑金属软管", "1.名称:25mm软管", "M", "2", "3.1");
+            // 手动 fallback 行:序号非 x.y 且无编码,不入库但必须记录。
+            source.AddTableRow("2", "手工加的电缆", "", "M", "10", "");
+
+            var record = SubmissionRecordExtractor.Extract(source);
+
+            var single = System.Linq.Enumerable.Single(
+                System.Linq.Enumerable.Where(record.Materials,
+                    material => material.Code.Length > 0));
+            Assert.Equal("3.1", single.Code);
+            Assert.Single(record.DroppedRows);
+            Assert.Contains("手工加的电缆", record.DroppedRows[0]);
+            Assert.Contains("10", record.DroppedRows[0]);
+        }
+
+        [Fact]
         public void Extract_ReadsFilledBlocksAndPanelType()
         {
             var source = new SubmissionSourceData();

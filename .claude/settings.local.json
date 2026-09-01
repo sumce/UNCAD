@@ -34,7 +34,9 @@
       "Bash(python *)",
       "Bash(tasklist //FI \"IMAGENAME eq dotnet.exe\")",
       "Bash(git commit -q -m 'feat\\(u1lx\\): command-line fast millimetre annotation along connected route *)",
-      "Bash(git commit -q -m 'chore: remove 3D circuit editor entirely \\(U1X, OpenTK, scene/layout stack\\) *)"
+      "Bash(git commit -q -m 'chore: remove 3D circuit editor entirely \\(U1X, OpenTK, scene/layout stack\\) *)",
+      "Bash(git commit -q -m 'fix\\(frame\\): anchor block ownership at geometric extents center *)",
+      "Bash(git commit -q -m 'feat\\(submit\\): hard-fail BOQ export on catalog mismatch with post-write verification *)"
     ]
   }
 }

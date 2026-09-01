@@ -113,6 +113,22 @@ namespace UNCAD.Features.Submit
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
 
+            // 硬对账:图框内存在无法匹配固定清单的材料行时,生成的 xlsx 必然
+            // 与图框实际内容不一致。报错中止,列出每一行,让用户先在 CAD 表中解决。
+            var dropped = records.Where(record =>
+                record.DroppedRows != null && record.DroppedRows.Count > 0).ToList();
+            if (dropped.Count > 0)
+            {
+                string detail = string.Join("\n", dropped.Select(record =>
+                    "  机台 " + record.MachineId.Trim() + " / " + record.DeviceName.Trim()
+                    + ":\n" + string.Join("\n", record.DroppedRows
+                        .Select(row => "    · " + row))));
+                throw new InvalidDataException(
+                    "图框内存在无法匹配固定清单的手动材料行,BOQ 导出已中止"
+                    + "（xlsx 将与图框内容不一致）:\n" + detail
+                    + "\n请删除这些行或在 U1F/U1U 中替换为固定清单项目后重试。");
+            }
+
             // PrepareTargetPath returns the selected root directory, not a file path.
             string outputRoot = Path.GetFullPath(filePath);
             string template = null;

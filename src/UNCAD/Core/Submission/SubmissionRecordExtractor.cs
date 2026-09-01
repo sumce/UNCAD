@@ -84,9 +84,11 @@ namespace UNCAD.Core.Submission
                 ? BuildTableInfo(source, IsBridgeRow) : bridgeInfo;
             string currentConduitInfo = hasConduitRows
                 ? BuildTableInfo(source, IsRigidConduitRow) : conduitInfo;
+            var droppedRows = new List<string>();
 
             return new SubmissionRecord
             {
+                DroppedRows = droppedRows,
                 MachineId = machineId,
                 DeviceName = deviceName,
                 PanelType = InferPanelType(source.DynamicValues)
@@ -105,7 +107,8 @@ namespace UNCAD.Core.Submission
                 ConduitMeters = conduitMeters,
                 DownstreamAxis = Unique(source, ConnectionBlockFiller.TagDownstreamAxis),
                 UpstreamAxis = Unique(source, ConnectionBlockFiller.TagUpstreamAxis),
-                Materials = ExtractMaterials(source, detail, inferLegacySocketPanels),
+                Materials = ExtractMaterials(source, detail, inferLegacySocketPanels,
+                    droppedRows),
                 TableRowsRead = source.TableRows.Count,
                 TextEntityCount = source.TextEntityCount
             };
@@ -242,7 +245,7 @@ namespace UNCAD.Core.Submission
             => value > 0 ? TextFormatter.FormatNum(value) : "";
 
         private static List<SubmissionMaterial> ExtractMaterials(SubmissionSourceData source,
-            string detail, bool inferLegacySocketPanels)
+            string detail, bool inferLegacySocketPanels, List<string> droppedRows)
         {
             var materials = new List<SubmissionMaterial>();
             foreach (List<string> row in source.TableRows)
@@ -262,7 +265,16 @@ namespace UNCAD.Core.Submission
                 // Batch U1U can explicitly keep an unmatched fallback row in the CAD table.
                 // Its generated ordinal (1, 2, ...) is not a BOQ item code; omit that row
                 // from automatic material submission instead of guessing a catalog item.
-                if (code.Length == 0 && !CatalogCode.IsMatch(number)) continue;
+                // The omission is recorded so the submission layer can hard-fail instead
+                // of silently writing an xlsx that disagrees with the frame contents.
+                if (code.Length == 0 && !CatalogCode.IsMatch(number))
+                {
+                    droppedRows.Add(string.Join(" | ", new[]
+                        { number, name, description, unit, quantity }
+                        .Select(value => (value ?? "").Trim())
+                        .Where(value => value.Length > 0)));
+                    continue;
+                }
                 materials.Add(new SubmissionMaterial
                 {
                     Number = number,

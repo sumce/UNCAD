@@ -122,6 +122,8 @@ namespace UNCAD.Core.Submission
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
                 Dictionary<string, int> rows = FindItemRows(sheet);
                 Dictionary<string, int> deviceColumns = FindDeviceColumns(sheet);
+                var expected = new Dictionary<string, Dictionary<string, decimal>>(
+                    StringComparer.OrdinalIgnoreCase);
                 foreach (IGrouping<string, SubmissionRecord> deviceGroup in sourceRecords
                     .Where(record => record != null)
                     .GroupBy(record => (record.DeviceName ?? "").Trim(),
@@ -132,6 +134,7 @@ namespace UNCAD.Core.Submission
                     int deviceColumn = GetOrCreateDeviceColumn(sheet, deviceColumns, deviceGroup.Key);
                     Dictionary<string, decimal> deviceQuantities = ReadQuantities(
                         deviceGroup, rows);
+                    expected[deviceGroup.Key] = deviceQuantities;
                     // 只清空当前设备列；同一机台其他设备列必须完整保留。
                     foreach (KeyValuePair<string, int> item in rows)
                         SetNumber(GetOrCreateCell(sheet.GetRow(item.Value), deviceColumn), 0m);
@@ -162,6 +165,9 @@ namespace UNCAD.Core.Submission
                 workbook = null;
                 Replace(fullPath, temporary);
                 temporary = null;
+                // 写后回读硬对账:逐设备列核对非零工程量与内存聚合一致,
+                // 不一致(写入失败/外部改动)立即报错并回滚整个批次。
+                VerifyWrittenWorkbook(fullPath, templatePath, expected);
             }
             finally
             {
@@ -173,6 +179,51 @@ namespace UNCAD.Core.Submission
                 }
                 TryDelete(temporary);
             }
+        }
+
+        /// <summary>写后回读:重新打开目标文件,逐设备列核对每个项目编码的工程量。</summary>
+        private static void VerifyWrittenWorkbook(string fullPath, string templatePath,
+            Dictionary<string, Dictionary<string, decimal>> expected)
+        {
+            IWorkbook workbook = Load(fullPath, templatePath);
+            try
+            {
+                ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
+                Dictionary<string, int> rows = FindItemRows(sheet);
+                Dictionary<string, int> deviceColumns = FindDeviceColumns(sheet);
+                foreach (KeyValuePair<string, Dictionary<string, decimal>> device in expected)
+                {
+                    if (!deviceColumns.TryGetValue(device.Key, out int column))
+                        throw new InvalidDataException(
+                            "BOQ 写后校验失败：设备列不存在 " + device.Key);
+                    foreach (KeyValuePair<string, int> item in rows)
+                    {
+                        decimal expectedValue = device.Value.TryGetValue(item.Key,
+                            out decimal quantity) ? quantity : 0m;
+                        decimal actualValue = ReadNumeric(sheet.GetRow(item.Value)
+                            ?.GetCell(column));
+                        if (Math.Abs(actualValue - expectedValue) > 0.000001m)
+                            throw new InvalidDataException(
+                                "BOQ 写后校验失败：文件与图框内容不一致。设备 "
+                                + device.Key + "，项目编码 " + item.Key
+                                + "，期望 " + expectedValue + "，实际 " + actualValue
+                                + "。导出已回滚。");
+                    }
+                }
+            }
+            finally
+            {
+                workbook.Close();
+            }
+        }
+
+        private static decimal ReadNumeric(ICell cell)
+        {
+            if (cell == null) return 0m;
+            if (cell.CellType == CellType.Numeric) return (decimal)cell.NumericCellValue;
+            if (cell.CellType == CellType.String
+                && TryParseQuantity(cell.StringCellValue, out decimal parsed)) return parsed;
+            return 0m;
         }
 
         private static IWorkbook Load(string targetPath, string templatePath)
