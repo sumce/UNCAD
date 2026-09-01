@@ -8,71 +8,54 @@ namespace UNCAD.Tests
     public class QuickLineFeatureContractTests
     {
         [Fact]
-        public void ThreeDimensionalEditor_CommitsOnlyAfterModalAcceptance()
-        {
-            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Unl", "QuickLineFeature.cs"));
-            int scene = source.IndexOf("CreateDrawingScene()",
-                StringComparison.Ordinal);
-            int modal = source.IndexOf("AcApplication.ShowModalDialog(form)",
-                StringComparison.Ordinal);
-            int accepted = source.IndexOf("result != DialogResult.OK",
-                StringComparison.Ordinal);
-            int insertion = source.IndexOf(
-                "PromptPointOptions(\"\\n请点击平面图插入点: \")",
-                StringComparison.Ordinal);
-            int batch = source.IndexOf(
-                "QuickLineCadService.TryCreatePlanRoute(ctx,",
-                StringComparison.Ordinal);
-
-            Assert.True(scene >= 0, "The 3D scene builder was not found.");
-            Assert.True(modal > scene, "The scene must be built before opening the editor.");
-            Assert.True(accepted > modal,
-                "The modal result must be checked before any CAD write.");
-            Assert.True(insertion > accepted,
-                "The insertion point must be picked after editor acceptance.");
-            Assert.True(batch > insertion,
-                "The batch write must occur only after the insertion point is picked.");
-            Assert.DoesNotContain("QuickLineDistanceForm", source);
-            Assert.DoesNotContain("TryUpdateMillimetreLabel(ctx, current", source);
-        }
-
-        [Fact]
-        public void QuickLineStartsBlankWithoutScanningOrSelectingCadEntities()
+        public void FastAnnotate_IsCommandLineOnlyAndTraversalDriven()
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Unl", "QuickLineFeature.cs"));
 
-            Assert.Contains("CreateDrawingScene()", source);
-            Assert.Contains("form.CreatedSegments", source);
-            Assert.Contains("ExecuteSelected", source);
+            // 无 GUI:不允许任何窗体/Web 依赖;逐段填写走遍历计划。
+            Assert.DoesNotContain("ShowDialog", source);
+            Assert.DoesNotContain("QuickLine3dEditorForm", source);
+            Assert.DoesNotContain("WebView2", source);
+            Assert.DoesNotContain("OpenTK", source);
+            Assert.Contains("QuickLineTraversal.CreatePlan", source);
+            Assert.Contains("QuickLineCadService.TryWriteSegmentMillimetre", source);
+            Assert.Contains("QuickLineCadService.TryCenterView", source);
             Assert.Contains("GetEntity(", source);
+            Assert.Contains("GetDouble(", source);
+
+            // 顺序契约:先选实体,再写标注(计划经 BuildPlan 构建)。
+            int pick = source.IndexOf("ctx.Ed.GetEntity(", StringComparison.Ordinal);
+            int plan = source.IndexOf("BuildPlan(graph, startId", StringComparison.Ordinal);
+            int create = source.IndexOf("QuickLineTraversal.CreatePlan", StringComparison.Ordinal);
+            int write = source.IndexOf("TryWriteSegmentMillimetre", StringComparison.Ordinal);
+            Assert.True(pick >= 0 && plan > pick);
+            Assert.True(create >= 0 && write > 0);
         }
 
         [Fact]
-        public void NativeEditor_KeepsActualDistanceSeparateFromDisplayLength()
-        {
-            // 未确认段以原线长显示(display),真实毫米值(distance)必须保留到写回。
-            var state = UI.QuickLine3d.QuickLineSceneState.CreateDrawing();
-            state.SetPreview(Core.QuickLine.QuickLineSpatialAxis.X, 1);
-            state.CommitPreview(2000);
-            var segment = state.Segments.Single();
-            Assert.Equal(2000, segment.DistanceMillimetres);
-            Assert.Equal(2000, segment.DisplayDistanceMillimetres);
-            Assert.True(segment.Completed);
-        }
-
-        [Fact]
-        public void NativeEditor_FormReadsSceneStateWithoutWebDependencies()
+        public void InteriorClick_AsksUserWhichDirectionBeforeTraversal()
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Unl", "QuickLineFeature.cs"));
-            Assert.Contains("UNCAD.UI.QuickLine3d.QuickLine3dEditorForm", source);
-            Assert.DoesNotContain("Microsoft.Web.WebView2", source);
-            Assert.DoesNotContain("QuickLine3dEditorProtocol", source);
+            int interior = source.IndexOf("ClickRegion != QuickLineClickRegion.Interior",
+                StringComparison.Ordinal);
+            int keywords = source.IndexOf("GetKeywords(", StringComparison.Ordinal);
+            Assert.True(interior >= 0 && keywords > interior,
+                "An interior click must prompt for the direction before building the plan.");
+        }
 
+        [Fact]
+        public void NoThreeDimensionalRemnantsInProject()
+        {
             string project = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
-            Assert.DoesNotContain("Microsoft.Web.WebView2", project);
+            Assert.DoesNotContain("OpenTK", project);
+            Assert.DoesNotContain("WebView2", project);
+            string feature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Unl", "QuickLineFeature.cs"));
+            Assert.DoesNotContain("Line3d", feature);
+            Assert.DoesNotContain("IsometricScene", feature);
+            Assert.DoesNotContain("SchematicLayout", feature);
         }
 
         [Fact]

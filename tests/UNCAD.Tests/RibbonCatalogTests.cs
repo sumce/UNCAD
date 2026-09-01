@@ -17,7 +17,7 @@ namespace UNCAD.Tests
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(15, primary.Length);
+            Assert.Equal(14, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));
@@ -30,12 +30,8 @@ namespace UNCAD.Tests
             RibbonItemDefinition quickLine = Assert.Single(primary,
                 item => string.Equals(item.Command, CommandIds.LineQuick,
                     StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("3D 线路编辑", quickLine.Text);
-            Assert.Contains("选择", quickLine.ToolTip);
-            RibbonItemDefinition quickDraw = Assert.Single(primary,
-                item => string.Equals(item.Command, CommandIds.Line3d,
-                    StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("3D 快速绘图", quickDraw.Text);
+            Assert.Equal("快速标注距离", quickLine.Text);
+            Assert.Contains("标注", quickLine.ToolTip);
         }
 
         [Fact]

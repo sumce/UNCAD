@@ -75,7 +75,7 @@ function Get-PackageInfo {
     # keyboard compatibility commands may trigger package loading. Keep this list in exact
     # sync with CommandIds.Registered; BundleLoadingTests enforces that contract.
     $expectedCommands = @(
-        "U1L", "U1LX", "U1X", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "U1HELP",
+        "U1L", "U1LX", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "U1HELP",
         "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
@@ -93,7 +93,7 @@ function Get-PackageInfo {
     $requiredFiles = @(
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
-        "OpenTK.dll", "OpenTK.GLControl.dll", "BOQ_Template.xlsx"
+        "BOQ_Template.xlsx"
     )
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }

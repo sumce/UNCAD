@@ -31,9 +31,8 @@ namespace UNCAD.Infra
             new List<CommandHelpEntry>
             {
                 E(CommandIds.Line, "带标注线段", "U1L", "连续绘制独立 Line 并生成长度文字", "正式命令；长度设置必须为正数毫米，非法值回退 2000mm。"),
-                E(CommandIds.LineQuick, "3D 线路编辑", "U1LX", "选择一根已有 U1L 线段并载入相连路线", "可快速修改真实距离；写回时优化长短线比例并将整体范围限制在 78021×78021。"),
-                E(CommandIds.Line3d, "3D 快速绘图", "U1X", "无需选择线段，直接打开东南等轴侧 3D 正交绘图器", "点击六个正交方向绘制线段并输入真实距离；写回时压缩过长段、放大过短段，整体严格限制在 78021×78021，毫米标注不缩放。"),
-                E(CommandIds.LegacyLineQuick, "3D 线路编辑", "UNLX", "调用 U1LX 的选线编辑功能", "兼容旧键盘命令名。"),
+                E(CommandIds.LineQuick, "快速标注距离", "U1LX", "点选一根 LINE 线段,从点击端起沿连通路线逐段填写毫米标注", "输入距离回车即写入并自动跳到下一段;直接回车保留原值,Esc 结束;点击在段中部时会询问向哪端走。"),
+                E(CommandIds.LegacyLineQuick, "快速标注距离", "UNLX", "调用 U1LX 的快速标注功能", "兼容旧键盘命令名。"),
                 E(CommandIds.LegacyLine, "带标注线段", "UNL", "调用 U1L 的连续线段绘制功能", "兼容旧命令名。"),
                 E(CommandIds.Arch, "拱桥开洞", "U1R", "在线段交叉位置生成拱桥开洞", "生成后将两侧直线和半圆弧合并为一条 Polyline；直径使用 U1SET 设置。"),
                 E(CommandIds.LegacyArch, "拱桥开洞", "UNR", "调用 U1R 的拱桥开洞功能", "兼容旧命令名。"),

@@ -119,9 +119,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("WebView2", installer);
             Assert.DoesNotContain("Web\\QuickLine3D", installer);
             Assert.DoesNotContain("Microsoft.Web.WebView2", csproj);
-            Assert.Contains("OpenTK.GLControl", csproj);
-            Assert.Contains("OpenTK.dll", installer);
-            Assert.Contains("OpenTK.GLControl.dll", installer);
+            Assert.DoesNotContain("OpenTK", csproj);
+            Assert.DoesNotContain("OpenTK", installer);
         }
 
         [Fact]

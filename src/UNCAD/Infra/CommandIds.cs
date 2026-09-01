@@ -19,7 +19,6 @@ namespace UNCAD.Infra
         public const string Tray400 = "U1Q4";
         public const string Line = "U1L";
         public const string LineQuick = "U1LX";
-        public const string Line3d = "U1X";
         public const string Arch = "U1R";
 
         public const string LegacyLine = "UNL";
@@ -36,7 +35,7 @@ namespace UNCAD.Infra
         public const string ConduitFeatureCommands = Conduit;
         public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
         public const string LineFeatureCommands = Line;
-        public const string QuickLineFeatureCommands = LineQuick + ";" + Line3d + ";" + LegacyLineQuick;
+        public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
@@ -44,7 +43,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, LineQuick, Line3d, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DwgExport, XLayout, Help
         };
 
@@ -56,7 +55,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, LineQuick, Line3d, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DwgExport, XLayout, Help,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics

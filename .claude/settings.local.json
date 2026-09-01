@@ -30,7 +30,11 @@
       "Bash(unzip -l artifacts/UNCAD-v2.2.0.0-temp-20260908.zip)",
       "Bash(git commit -q -m 'feat\\(u1x\\): pure mouse drawing with locked-axis handles, no input box *)",
       "Bash(git commit -q -m 'feat\\(u1x\\): CAD polar-tracking guide line with sticky axis, click-to-place *)",
-      "Bash(git commit -q -m 'fix\\(u1x\\): SketchUp-style screen-space axis snapping stops guide flicker *)"
+      "Bash(git commit -q -m 'fix\\(u1x\\): SketchUp-style screen-space axis snapping stops guide flicker *)",
+      "Bash(python *)",
+      "Bash(tasklist //FI \"IMAGENAME eq dotnet.exe\")",
+      "Bash(git commit -q -m 'feat\\(u1lx\\): command-line fast millimetre annotation along connected route *)",
+      "Bash(git commit -q -m 'chore: remove 3D circuit editor entirely \\(U1X, OpenTK, scene/layout stack\\) *)"
     ]
   }
 }
