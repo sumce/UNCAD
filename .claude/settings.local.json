@@ -29,7 +29,8 @@
       "Bash(git commit -q -m 'chore: drop stale WebView2/web files from bundle output *)",
       "Bash(unzip -l artifacts/UNCAD-v2.2.0.0-temp-20260908.zip)",
       "Bash(git commit -q -m 'feat\\(u1x\\): pure mouse drawing with locked-axis handles, no input box *)",
-      "Bash(git commit -q -m 'feat\\(u1x\\): CAD polar-tracking guide line with sticky axis, click-to-place *)"
+      "Bash(git commit -q -m 'feat\\(u1x\\): CAD polar-tracking guide line with sticky axis, click-to-place *)",
+      "Bash(git commit -q -m 'fix\\(u1x\\): SketchUp-style screen-space axis snapping stops guide flicker *)"
     ]
   }
 }

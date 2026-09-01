@@ -32,8 +32,12 @@ namespace UNCAD.UI.QuickLine3d
             (QuickLineSpatialAxis.Z, 1), (QuickLineSpatialAxis.Z, -1)
         };
         private const double SnapMillimetres = 100.0;
-        /// <summary>方向粘滞余量:新轴点积领先当前轴这么多才切换,防止辅助线乱跳。</summary>
-        private const float StickyMargin = 0.12f;
+        /// <summary>轴线吸附半径(光标到轴线的垂直像素距离)。</summary>
+        private const float SnapRadiusPx = 28f;
+        /// <summary>换轴粘滞:另一条轴线必须更近这么多像素才切换。</summary>
+        private const float SwitchMarginPx = 6f;
+        /// <summary>节点死区(像素):太靠近节点时不判轴。</summary>
+        private const float NodeDeadZonePx = 10f;
         private int _stickyAxis = -1;
         private PointF _cursorClient;
 
@@ -118,45 +122,80 @@ namespace UNCAD.UI.QuickLine3d
         }
 
         /// <summary>
-        /// CAD 极轴追踪:光标世界坐标相对活动节点的矢量,与 6 个单位轴取点积,
-        /// 最大者为吸附方向;长度 = 该方向的投影长度(连续)。带方向粘滞,
-        /// 越过 45° 边界一定余量才切换,辅助线不乱跳。
+        /// SketchUp 式轴线吸附(屏幕空间):光标到某条轴线(过活动节点的
+        /// 屏幕方向线)的垂直像素距离 &lt; SnapRadiusPx 才吸附;换轴需要
+        /// 另一条线更近 SwitchMarginPx 像素;都不近则维持当前轴。
+        /// 距离判据单调、与长度无关,辅助线不会乱跳。
         /// </summary>
         private void TrackPolarAxis(Point location, MouseEventArgs e)
         {
             _cursorClient = location;
+            Matrix4 view = View;
+            Matrix4 projection = Projection;
             Vector3 node = ToVector(_state.NodePosition(_state.ActiveNodeId));
-            Vector3 cursor = _camera.ClientToWorldOnTargetPlane(location,
-                View, Projection, Width, Height);
-            Vector3 delta = cursor - node;
-            if (delta.LengthSquared < 1e-6f) return;
+            Vector3 nodeClient = ToClient(node, view, projection);
+            Vector3 cursorClient = new Vector3(location.X, location.Y, 0);
+            Vector3 offset = cursorClient - nodeClient;
+            if (offset.LengthSquared < NodeDeadZonePx * NodeDeadZonePx) return;
 
-            int best = 0;
-            float bestDot = float.NegativeInfinity;
+            int best = -1;
+            float bestDistance = float.MaxValue;
             for (int i = 0; i < Handles.Length; i++)
             {
-                float d = Vector3.Dot(delta, AxisWorldVector(Handles[i].axis,
-                    Handles[i].sign));
-                if (d > bestDot) { bestDot = d; best = i; }
-            }
-            if (_stickyAxis >= 0 && best != _stickyAxis)
-            {
-                float stickyDot = Vector3.Dot(delta, AxisWorldVector(
-                    Handles[_stickyAxis].axis, Handles[_stickyAxis].sign));
-                // 粘滞:新方向必须明显更优才切换;否则维持原方向。
-                if (bestDot > stickyDot * (1f + StickyMargin))
-                    _stickyAxis = best;
-                best = _stickyAxis;
-            }
-            else
-            {
-                _stickyAxis = best;
+                (Vector3 axisDir, float _) = AxisScreenGeometry(i,
+                    node, nodeClient, view, projection);
+                float along = Vector3.Dot(offset, axisDir);
+                if (along <= 0) continue; // 只吸附正方向一侧
+                float perpendicular = Vector3.Distance(offset, axisDir * along);
+                if (perpendicular < bestDistance)
+                {
+                    bestDistance = perpendicular;
+                    best = i;
+                }
             }
 
-            double rawLength = Math.Max(0f, bestDot);
+            // 粘滞:当前轴仍然有效且不比最优轴差太多时,维持当前轴。
+            if (_stickyAxis >= 0 && best != _stickyAxis)
+            {
+                (Vector3 stickyDir, float _) = AxisScreenGeometry(
+                    _stickyAxis, node, nodeClient, view, projection);
+                float stickyAlong = Vector3.Dot(offset, stickyDir);
+                if (stickyAlong > 0)
+                {
+                    float stickyPerp = Vector3.Distance(offset, stickyDir * stickyAlong);
+                    if (best < 0 || stickyPerp <= bestDistance + SwitchMarginPx)
+                        best = _stickyAxis;
+                }
+            }
+            if (best < 0) return; // 不在任何一个方向扇区内:保持现状,不跳
+            _stickyAxis = best;
+
+            (Vector3 dir, float worldPerPixel) = AxisScreenGeometry(best,
+                node, nodeClient, view, projection);
+            double rawLength = Math.Max(0f, Vector3.Dot(offset, dir)) * worldPerPixel;
             double length = (Control.ModifierKeys & Keys.Shift) != 0 ? rawLength
                 : Math.Round(rawLength / SnapMillimetres) * SnapMillimetres;
             _state.ArmPreview(Handles[best].axis, Handles[best].sign, length);
+        }
+
+        /// <summary>世界坐标 → 客户区像素(Vector3 形式,z=0)。</summary>
+        private Vector3 ToClient(Vector3 world, Matrix4 view, Matrix4 projection)
+        {
+            PointF point = _camera.WorldToClient(world, view, projection, Width, Height);
+            return new Vector3(point.X, point.Y, 0);
+        }
+
+        /// <summary>指定轴在屏幕上的单位方向与每像素对应的世界长度。</summary>
+        private (Vector3 dir, float worldPerPixel) AxisScreenGeometry(int index,
+            Vector3 node, Vector3 nodeClient, Matrix4 view, Matrix4 projection)
+        {
+            var (axis, sign) = Handles[index];
+            float worldStep = Math.Max(100f, _camera.ViewHalfWidth * 0.25f);
+            Vector3 tip = node + AxisWorldVector(axis, sign) * worldStep;
+            Vector3 tipClient = ToClient(tip, view, projection);
+            Vector3 screen = tipClient - nodeClient;
+            float pixelLength = Math.Max(screen.Length, 1f);
+            return (screen / pixelLength, worldStep / pixelLength);
         }
 
         private void OnCanvasMouseUp(object sender, MouseEventArgs e)
