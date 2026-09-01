@@ -43,6 +43,7 @@ namespace UNCAD.UI.QuickLine3d
         private const string RootId = "N1";
         private int _nextNode;
         private int _nextSegment;
+        private double _previewLength;
 
         public event Action Changed;
 
@@ -119,6 +120,37 @@ namespace UNCAD.UI.QuickLine3d
             PreviewSign = sign < 0 ? -1 : 1;
             RaiseChanged();
         }
+
+        /// <summary>
+        /// 鼠标绘制:锁定方向并开始/继续预览。方向一经锁定,
+        /// 预览只沿该轴伸缩,不会来回跳。
+        /// </summary>
+        public void ArmPreview(QuickLineSpatialAxis axis, int sign, double lengthMillimetres)
+        {
+            if (!Drawing) return;
+            PreviewAxis = axis;
+            PreviewSign = sign < 0 ? -1 : 1;
+            _previewLength = Math.Max(0.0, lengthMillimetres);
+            RaiseChanged();
+        }
+
+        /// <summary>更新已锁定方向的预览长度(拖拽中调用)。</summary>
+        public void SetPreviewLength(double lengthMillimetres)
+        {
+            if (!Drawing || !PreviewAxis.HasValue) return;
+            _previewLength = Math.Max(0.0, lengthMillimetres);
+            RaiseChanged();
+        }
+
+        /// <summary>提交当前预览(使用已积累的拖拽长度);返回段 id 或 null。</summary>
+        public string CommitArmedPreview()
+        {
+            if (!PreviewAxis.HasValue || _previewLength <= 0.0) return null;
+            return CommitPreview(_previewLength);
+        }
+
+        /// <summary>当前预览长度(未锁定时为 0)。</summary>
+        public double PreviewLength => PreviewAxis.HasValue ? _previewLength : 0.0;
 
         public void ClearPreview()
         {

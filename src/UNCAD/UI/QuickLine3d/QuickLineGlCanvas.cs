@@ -24,6 +24,23 @@ namespace UNCAD.UI.QuickLine3d
         private readonly Font _labelFont;
         private readonly Font _hintFont;
 
+        // 鼠标绘制状态:方向手柄 + 拖拽/点动两种画法。
+        private static readonly (QuickLineSpatialAxis axis, int sign)[] Handles =
+        {
+            (QuickLineSpatialAxis.X, 1), (QuickLineSpatialAxis.X, -1),
+            (QuickLineSpatialAxis.Y, 1), (QuickLineSpatialAxis.Y, -1),
+            (QuickLineSpatialAxis.Z, 1), (QuickLineSpatialAxis.Z, -1)
+        };
+        private const float HandleRadiusPx = 9f;
+        private const float HandleReachPx = 26f;
+        private const double SnapMillimetres = 100.0;
+        private int _hoverHandle = -1;
+        private int _activeHandle = -1;   // 拖拽或点动锁定的手柄
+        private bool _dragging;
+        private bool _dragMoved;
+        private Point _dragStart;
+        private PointF _cursorClient;
+
         public QuickLineGlCanvas(QuickLineSceneState state)
             : base(new GraphicsMode(new ColorFormat(8, 8, 8, 8), 24, 0, 0),
                 3, 0, GraphicsContextFlags.Default)
@@ -57,13 +74,35 @@ namespace UNCAD.UI.QuickLine3d
         private void OnCanvasMouseDown(object sender, MouseEventArgs e)
         {
             _lastMouse = e.Location;
-            if (e.Button == MouseButtons.Left)
+            if (e.Button == MouseButtons.Middle)
             {
-                // 编辑模式:先尝试点选线段,点到线段则选中而不进入轨道。
-                if (!_state.Drawing && TryPickSegment(e.Location)) return;
-                _orbiting = true;
+                _panning = true;
+                return;
             }
-            else if (e.Button == MouseButtons.Middle) _panning = true;
+            if (e.Button != MouseButtons.Left) return;
+
+            if (_state.Drawing)
+            {
+                // 已锁定方向(点动模式)时,再次单击 = 按当前预览长度提交。
+                if (_activeHandle >= 0 && !_dragging)
+                {
+                    CommitArmed();
+                    return;
+                }
+                int handle = HitHandle(e.Location);
+                if (handle >= 0)
+                {
+                    // 按下手柄:进入拖拽;若松开时几乎没动则切换为点动模式。
+                    _dragging = true;
+                    _dragMoved = false;
+                    _dragStart = e.Location;
+                    _activeHandle = handle;
+                    ArmFromPointer(e.Location, e);
+                    return;
+                }
+            }
+            else if (TryPickSegment(e.Location)) return; // 编辑模式点选线段
+            _orbiting = true;
         }
 
         private void OnCanvasMouseMove(object sender, MouseEventArgs e)
@@ -86,18 +125,26 @@ namespace UNCAD.UI.QuickLine3d
                     + up * delta.Height * worldPerPixel);
                 Invalidate();
             }
+            else if (_state.Drawing && _dragging && _activeHandle >= 0)
+            {
+                // 拖拽:方向已锁定,预览只沿该轴伸缩,不会乱跳。
+                if (Math.Abs(e.X - _dragStart.X) + Math.Abs(e.Y - _dragStart.Y) > 6)
+                    _dragMoved = true;
+                ArmFromPointer(e.Location, e);
+            }
             else if (_state.Drawing)
             {
-                // 鼠标跟随:从活动节点向光标方向拾取最贴近的轴,更新预览。
-                Matrix4 view = View;
-                Matrix4 projection = Projection;
-                Vector3 cursor = _camera.ClientToWorldOnTargetPlane(e.Location,
-                    view, projection, Width, Height);
-                Vector3 active = ToVector(_state.NodePosition(_state.ActiveNodeId));
-                if (QuickLineAxisInput.PickAxis(cursor, active,
-                        out QuickLineSpatialAxis axis, out int sign))
-                    _state.SetPreview(axis, sign);
-                Invalidate();
+                _cursorClient = e.Location;
+                int hover = HitHandle(e.Location);
+                if (hover != _hoverHandle)
+                {
+                    _hoverHandle = hover;
+                    Invalidate();
+                }
+                else if (_activeHandle >= 0)
+                {
+                    ArmFromPointer(e.Location, e); // 点动模式:移动更新长度
+                }
             }
             _lastMouse = e.Location;
         }
@@ -106,6 +153,83 @@ namespace UNCAD.UI.QuickLine3d
         {
             _orbiting = false;
             _panning = false;
+            if (_dragging && _activeHandle >= 0)
+            {
+                _dragging = false;
+                if (_dragMoved)
+                {
+                    CommitArmed(); // 拖拽松手 = 画下这一段
+                }
+                // 没怎么动 → 保持锁定,进入"点一下手柄、移动、再点一下"的点动画法。
+            }
+        }
+
+        private void CommitArmed()
+        {
+            _state.CommitArmedPreview();
+            _activeHandle = -1;
+            _hoverHandle = -1;
+            _cursorClient = PointF.Empty;
+        }
+
+        private void ArmFromPointer(Point location, MouseEventArgs e)
+        {
+            (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) =
+                HandleGeometry(_activeHandle);
+            float t = Vector3.Dot(new Vector3(location.X, location.Y, 0) - nodeClient,
+                axisDir);
+            double rawLength = Math.Max(0f, t) * worldPerPixel;
+            double length = (Control.ModifierKeys & Keys.Shift) != 0 ? rawLength
+                : Math.Round(rawLength / SnapMillimetres) * SnapMillimetres;
+            var (axis, sign) = Handles[_activeHandle];
+            _state.ArmPreview(axis, sign, length);
+        }
+
+        /// <summary>活动节点在屏幕上的位置与指定手柄的屏幕方向、每像素世界长度。</summary>
+        private (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) HandleGeometry(
+            int index)
+        {
+            Matrix4 view = View;
+            Matrix4 projection = Projection;
+            Vector3 node = ToVector(_state.NodePosition(_state.ActiveNodeId));
+            PointF nodeClient = _camera.WorldToClient(node, view, projection, Width, Height);
+            float worldStep = Math.Max(100f, _camera.ViewHalfWidth * 0.25f);
+            var (axis, sign) = Handles[index];
+            Vector3 tip = node + AxisWorldVector(axis, sign) * worldStep;
+            PointF tipClient = _camera.WorldToClient(tip, view, projection, Width, Height);
+            Vector3 direction = Vector3.Normalize(new Vector3(
+                tipClient.X - nodeClient.X, tipClient.Y - nodeClient.Y, 0));
+            float worldPerPixel = Vector3.Distance(node, tip)
+                / Math.Max(1f, Vector3.Distance(new Vector3(nodeClient.X, nodeClient.Y, 0),
+                    new Vector3(tipClient.X, tipClient.Y, 0)));
+            return (new Vector3(nodeClient.X, nodeClient.Y, 0), direction, worldPerPixel);
+        }
+
+        /// <summary>命中测试:光标是否落在某个方向手柄上。</summary>
+        private int HitHandle(Point location)
+        {
+            for (int i = 0; i < Handles.Length; i++)
+            {
+                (Vector3 nodeClient, Vector3 axisDir, float worldPerPixel) =
+                    HandleGeometry(i);
+                Vector3 offset = new Vector3(location.X, location.Y, 0) - nodeClient;
+                float along = Vector3.Dot(offset, axisDir);
+                float reach = Vector3.Distance(offset, axisDir * along);
+                if (along > 0 && along < HandleReachPx * 2.4f && reach <= HandleReachPx)
+                    return i;
+            }
+            return -1;
+        }
+
+        private static Vector3 AxisWorldVector(QuickLineSpatialAxis axis, int sign)
+        {
+            int s = sign < 0 ? -1 : 1;
+            switch (axis)
+            {
+                case QuickLineSpatialAxis.X: return Vector3.UnitX * s;
+                case QuickLineSpatialAxis.Y: return Vector3.UnitY * s;
+                default: return Vector3.UnitZ * s;
+            }
         }
 
         private void OnCanvasMouseWheel(object sender, MouseEventArgs e)
@@ -217,11 +341,11 @@ namespace UNCAD.UI.QuickLine3d
                 DrawLine(a, b, color, view, projection, dashed);
             }
             QuickLineMutableSegment preview = _state.PreviewSegment;
-            if (preview != null)
+            if (preview != null && _state.PreviewLength > 0.0)
             {
                 Vector3 a = ToVector(_state.NodePosition(_state.ActiveNodeId));
-                Vector3 b = a + CoreVector(preview.Axis, preview.DirectionSign)
-                    * 1500f;
+                Vector3 b = a + AxisWorldVector(preview.Axis, preview.DirectionSign)
+                    * (float)_state.PreviewLength;
                 DrawLine(a, b, UiTheme.Accent, view, projection, true);
             }
             SwapBuffers();
@@ -230,17 +354,6 @@ namespace UNCAD.UI.QuickLine3d
 
         private static Color SelectedColor(QuickLineMutableSegment segment)
             => segment.Completed ? UiTheme.TextPrimary : UiTheme.BrandOrange;
-
-        private static Vector3 CoreVector(QuickLineSpatialAxis axis, int sign)
-        {
-            int s = sign < 0 ? -1 : 1;
-            switch (axis)
-            {
-                case QuickLineSpatialAxis.X: return Vector3.UnitX * s;
-                case QuickLineSpatialAxis.Y: return Vector3.UnitY * s;
-                default: return Vector3.UnitZ * s;
-            }
-        }
 
         private void DrawGrid(Matrix4 view, Matrix4 projection)
         {
@@ -313,10 +426,36 @@ namespace UNCAD.UI.QuickLine3d
                     : TextFormatter.FormatNum(segment.DisplayDistanceMillimetres) + "mm(未确认)";
                 DrawShadowText(g, text, point, _labelFont, UiTheme.TextSecondary);
             }
-            Vector3 active = ToVector(_state.NodePosition(_state.ActiveNodeId));
-            PointF anchor = _camera.WorldToClient(active, view, projection, Width, Height);
-            DrawShadowText(g, "当前节点 " + _state.ActiveNodeId, anchor,
-                _hintFont, UiTheme.Accent);
+            if (_state.Drawing) DrawDirectionHandles(g, view, projection);
+        }
+
+        /// <summary>绘制模式:活动节点周围的 6 个方向手柄与拖拽长度提示。</summary>
+        private void DrawDirectionHandles(Graphics g, Matrix4 view, Matrix4 projection)
+        {
+            for (int i = 0; i < Handles.Length; i++)
+            {
+                (Vector3 nodeClient, Vector3 axisDir, _) = HandleGeometry(i);
+                var center = new PointF(nodeClient.X + axisDir.X * HandleReachPx * 2.4f,
+                    nodeClient.Y + axisDir.Y * HandleReachPx * 2.4f);
+                bool highlighted = i == _hoverHandle || i == _activeHandle;
+                using var fill = new SolidBrush(highlighted
+                    ? UiTheme.Accent : Color.FromArgb(150, UiTheme.AccentSoft));
+                using var stroke = new Pen(highlighted ? UiTheme.AccentHover : UiTheme.Accent,
+                    highlighted ? 2f : 1.2f);
+                g.FillEllipse(fill, center.X - HandleRadiusPx,
+                    center.Y - HandleRadiusPx, HandleRadiusPx * 2, HandleRadiusPx * 2);
+                g.DrawEllipse(stroke, center.X - HandleRadiusPx,
+                    center.Y - HandleRadiusPx, HandleRadiusPx * 2, HandleRadiusPx * 2);
+            }
+            if (_state.PreviewLength > 0.0)
+            {
+                Vector3 active = ToVector(_state.NodePosition(_state.ActiveNodeId));
+                PointF anchor = _camera.WorldToClient(active, view, projection,
+                    Width, Height);
+                DrawShadowText(g, TextFormatter.FormatNum(_state.PreviewLength) + "mm",
+                    new PointF(anchor.X, anchor.Y - HandleReachPx * 3.2f),
+                    _labelFont, UiTheme.Accent);
+            }
         }
 
         private static void DrawShadowText(Graphics g, string text, PointF point,

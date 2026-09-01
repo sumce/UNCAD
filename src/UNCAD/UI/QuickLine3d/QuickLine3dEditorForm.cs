@@ -25,6 +25,7 @@ namespace UNCAD.UI.QuickLine3d
         private readonly QuickLineGlCanvas _canvas;
         private readonly TextBox _input;
         private readonly Label _hint;
+        private readonly TableLayoutPanel _commandLine;
         private readonly ListView _list;
         private readonly Label _summary;
         private readonly Button _commit;
@@ -64,7 +65,7 @@ namespace UNCAD.UI.QuickLine3d
                 ForeColor = UiTheme.TextSecondary,
                 AutoEllipsis = true
             };
-            var commandLine = new TableLayoutPanel
+            var commandLine = _commandLine = new TableLayoutPanel
             {
                 Dock = DockStyle.Bottom,
                 AutoSize = true,
@@ -176,10 +177,17 @@ namespace UNCAD.UI.QuickLine3d
 
         private void OnFormKeyDown(object sender, KeyEventArgs e)
         {
-            if (Drawing && QuickLineAxisInput.TryFromKey(e.KeyCode,
+            if (!Drawing) return;
+            if (QuickLineAxisInput.TryFromKey(e.KeyCode,
                     out QuickLineSpatialAxis axis, out int sign))
             {
-                _state.SetPreview(axis, sign);
+                // 键盘快捷画法:沿用上一段的长度(首段 2000)。
+                double lastLength = _state.Segments.Count > 0
+                    ? _state.Segments[_state.Segments.Count - 1].DistanceMillimetres
+                    : 2000.0;
+                _state.ArmPreview(axis, sign, lastLength);
+                _state.CommitArmedPreview();
+                _canvas.FitRoute();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
             }
@@ -283,10 +291,11 @@ namespace UNCAD.UI.QuickLine3d
             finally { _list.EndUpdate(); }
             int done = _state.Segments.Count(item => item.Completed);
             _summary.Text = Drawing
-                ? $"共 {_state.Segments.Count} 段(全部完成)。方向键选轴,输入毫米值回车;Backspace 撤销。"
+                ? $"共 {_state.Segments.Count} 段(全部完成)。拖拽或点选方向手柄画段;Backspace 撤销。"
                 : $"共 {_state.Segments.Count} 段,已完成 {done} 段;本次已修改 {_state.ModifiedSegmentIds.Count} 段。";
+            _commandLine.Visible = !Drawing;
             _hint.Text = Drawing
-                ? "←→ = X∓  ↓↑ = Y∓  PgUp/PgDn = Z∓,或移动鼠标跟随"
+                ? "在手柄上按下并拖拽松手,或点一下手柄再点一下确认;按住 Shift 微调,默认 100mm 吸附"
                 : "点击线段后输入新距离,回车确认";
             _undo.Visible = Drawing;
             _commit.Enabled = Drawing || _state.ModifiedSegmentIds.Count > 0;
