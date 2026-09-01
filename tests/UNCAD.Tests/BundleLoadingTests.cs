@@ -94,6 +94,29 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Installer_ClearsStaleCommandRegistrationCacheOnInstallAndUninstall()
+        {
+            string script = File.ReadAllText(RepoFile("installer.ps1"));
+
+            // 缓存清理函数必须存在,并在安装成功与卸载时都被调用;
+            // 覆盖 HKCU 与 HKLM 两个注册表分支。
+            Assert.Contains("function Clear-CommandRegistrationCache", script);
+            Assert.Contains("Applications\\UNCAD", script);
+            int install = script.IndexOf("Restart AutoCAD 2022.", StringComparison.Ordinal);
+            int installCall = script.IndexOf("Clear-CommandRegistrationCache", install,
+                StringComparison.Ordinal);
+            Assert.True(installCall > install,
+                "Install path must clear the stale command registration cache.");
+            int uninstall = script.IndexOf("function Uninstall-Bundle", StringComparison.Ordinal);
+            int uninstallCall = script.IndexOf("Clear-CommandRegistrationCache", uninstall,
+                StringComparison.Ordinal);
+            Assert.True(uninstallCall > uninstall,
+                "Uninstall path must clear the stale command registration cache.");
+            Assert.Contains("\"HKCU:\"", script);
+            Assert.Contains("\"HKLM:\"", script);
+        }
+
+        [Fact]
         public void Release_RejectsStaleOrMismatchedBuildOutput()
         {
             string script = File.ReadAllText(RepoFile("release.ps1"));

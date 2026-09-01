@@ -237,6 +237,38 @@ function Recover-InterruptedInstall {
     }
 }
 
+# 清除 AutoCAD 的按需加载命令注册缓存(HKCU/HKLM 下各配置文件的
+# Applications\UNCAD 键)。历次安装/升级会在这里累积陈旧命令条目,
+# 导致新命令"未知命令"或已删除命令仍可调用;删除后下次启动
+# AutoCAD 会依据 bundle 重新生成干净的缓存。
+function Clear-CommandRegistrationCache {
+    $removed = 0
+    foreach ($hive in @("HKCU:", "HKLM:")) {
+        $releases = Get-ChildItem (Join-Path $hive "SOFTWARE\Autodesk\AutoCAD") `
+            -ErrorAction SilentlyContinue
+        foreach ($release in $releases) {
+            $versions = Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue
+            foreach ($version in $versions) {
+                $cacheKey = Join-Path $version.PSPath "Applications\UNCAD"
+                if (-not (Test-Path $cacheKey)) { continue }
+                try {
+                    Remove-Item -LiteralPath $cacheKey -Recurse -Force `
+                        -ErrorAction Stop
+                    $removed++
+                    Write-SetupLog "Cleared stale command registration cache: $cacheKey" DarkGray
+                }
+                catch {
+                    Write-SetupLog ("Could not clear command cache " + $cacheKey `
+                        + " ( HKLM needs administrator): $($_.Exception.Message)") DarkYellow
+                }
+            }
+        }
+    }
+    if ($removed -eq 0) {
+        Write-SetupLog "No stale command registration cache found." DarkGray
+    }
+}
+
 function Install-Bundle {
     param([ValidateSet("User", "Machine")][string]$Scope)
     Assert-AutoCADClosed
@@ -282,6 +314,7 @@ function Install-Bundle {
             "Scope: current Windows user only. Use InstallAll on shared computers."
         } else { "Scope: all Windows users on this computer." }) Cyan
         Write-SetupLog "Restart AutoCAD 2022. The UNCAD tab registers automatically; use AutoCAD RIBBON if hidden." Green
+        Clear-CommandRegistrationCache
     }
     catch {
         $failure = $_
@@ -339,6 +372,7 @@ function Uninstall-Bundle {
     }
     Remove-Item -LiteralPath $destination -Recurse -Force
     if (Test-Path $destination) { throw "Uninstall verification failed: folder still exists." }
+    Clear-CommandRegistrationCache
     Write-SetupLog "UNINSTALLATION SUCCESSFUL: $destination" Green
 }
 

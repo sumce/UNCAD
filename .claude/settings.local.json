@@ -38,7 +38,8 @@
       "Bash(git commit -q -m 'fix\\(frame\\): anchor block ownership at geometric extents center *)",
       "Bash(git commit -q -m 'feat\\(submit\\): hard-fail BOQ export on catalog mismatch with post-write verification *)",
       "Bash(git commit -q -m 'feat\\(license\\): anti-rollback clock watermark; temp expiry moved to 2026-09-02 *)",
-      "Bash(git commit -q -m 'feat\\(license\\): authoritative NTP time verification for anti-rollback *)"
+      "Bash(git commit -q -m 'feat\\(license\\): authoritative NTP time verification for anti-rollback *)",
+      "Bash(git commit -q -m 'feat\\(installer\\): clear stale AutoCAD command registration cache *)"
     ]
   }
 }
