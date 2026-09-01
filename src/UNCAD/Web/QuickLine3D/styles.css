@@ -16,6 +16,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body, #app {
   width: 100%;
@@ -75,7 +76,7 @@ button:focus-visible, input:focus-visible {
 
 .segmented {
   display: inline-grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   border: 1px solid #bdc6ce;
   border-radius: 4px;
   overflow: hidden;
@@ -190,6 +191,11 @@ button:focus-visible, input:focus-visible {
   border-color: #0085a0;
   color: #006980;
   font-weight: 700;
+}
+
+.distance-label.pending {
+  border-style: dashed;
+  color: #7b5a16;
 }
 
 #selectionBox {
@@ -348,6 +354,7 @@ th:nth-child(3) { width: 40%; text-align: right; }
 td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 tr.selected { background: #e7f5f8; }
 tr.changed td:last-child { color: var(--changed); font-weight: 700; }
+tr.pending td:last-child { color: #7b5a16; }
 
 .diagnostics { color: var(--warning); }
 .diagnostics ul { margin: 9px 0 0; padding-left: 18px; }

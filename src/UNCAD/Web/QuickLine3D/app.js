@@ -7,9 +7,11 @@ const elements = {
   labelsLayer: document.getElementById('labelsLayer'),
   selectionBox: document.getElementById('selectionBox'),
   loading: document.getElementById('loadingState'),
+  drawMode: document.getElementById('drawMode'),
   orbitMode: document.getElementById('orbitMode'),
   selectMode: document.getElementById('selectMode'),
   fitView: document.getElementById('fitView'),
+  undo: document.getElementById('undoButton'),
   orthographicPlane: document.getElementById('orthographicPlane'),
   labelsToggle: document.getElementById('labelsToggle'),
   swapAxes: document.getElementById('swapAxes'),
@@ -35,7 +37,8 @@ const elements = {
 };
 
 const state = {
-  mode: 'orbit',
+  mode: 'draw',
+  drawing: true,
   projectionMode: 'Isometric',
   sessionId: '',
   revision: 0,
@@ -55,7 +58,13 @@ const state = {
   pointerStart: null,
   pointerCurrent: null,
   viewHeight: 1000,
-  initialized: false
+  squareFit: false,
+  squareReferenceMm: 1,
+  squareMinMm: 0,
+  squareMaxMm: 0,
+  initialized: false,
+  activeNodeId: 'N1',
+  pendingDraw: null
 };
 
 let renderer;
@@ -64,6 +73,7 @@ let camera;
 let controls;
 let routeLines;
 let jointPoints;
+let axisGuides;
 let resizeObserver;
 let toastTimer;
 
@@ -126,9 +136,11 @@ function initializeThree() {
 }
 
 function bindUi() {
+  elements.drawMode.addEventListener('click', () => setMode('draw'));
   elements.orbitMode.addEventListener('click', () => setMode('orbit'));
   elements.selectMode.addEventListener('click', () => setMode('select'));
   elements.fitView.addEventListener('click', fitView);
+  elements.undo.addEventListener('click', undoLastSegment);
   elements.orthographicPlane.addEventListener('change', remapAxes);
   elements.labelsToggle.addEventListener('change', updateLabels);
   elements.swapAxes.addEventListener('change', remapAxes);
@@ -150,6 +162,10 @@ function bindUi() {
   window.addEventListener('keydown', event => {
     if (handleQuickInputKey(event)) return;
     if (event.key === 'Escape') {
+      if (state.pendingDraw) {
+        cancelPendingDraw();
+        return;
+      }
       cancelQuickEdit();
       setSelection([]);
     }
@@ -179,6 +195,11 @@ function initializeScene(envelope) {
     payload.projectionMode || payload.ProjectionMode || 'Isometric');
   state.diagnostics = payload.diagnostics || payload.Diagnostics || [];
   state.segments = rawSegments.map(normalizeSegment);
+  state.drawing = String(envelope.mode || payload.mode || '').toLowerCase() === 'draw'
+    || state.segments.length === 0;
+  state.mode = state.drawing ? 'draw' : 'orbit';
+  state.activeNodeId = state.rootNodeId;
+  state.pendingDraw = null;
   state.selected.clear();
   state.changed.clear();
   state.quickVisited.clear();
@@ -186,6 +207,7 @@ function initializeScene(envelope) {
   state.quickCursor = -1;
   state.quickIndex = -1;
   state.inputBuffer = '';
+  state.squareFit = !state.drawing && allSegmentsCompleted();
   state.adjacency = buildAdjacency();
   state.initialized = true;
   elements.loading.style.display = 'none';
@@ -193,6 +215,7 @@ function initializeScene(envelope) {
   elements.status.textContent = `已载入 ${state.segments.length} 根相连线段`;
   elements.commit.disabled = false;
   syncProjectionControls();
+  setMode(state.mode);
   rebuildRoute();
   rebuildTable();
   rebuildDiagnostics();
@@ -207,6 +230,11 @@ function normalizeProjectionMode(value) {
 
 function syncProjectionControls() {
   const orthographic = state.projectionMode === 'Orthographic';
+  elements.drawMode.hidden = !state.drawing;
+  elements.undo.hidden = !state.drawing;
+  elements.orthographicPlane.closest('.projection-control').hidden = state.drawing;
+  elements.swapAxes.closest('.toggle').hidden = state.drawing;
+  elements.flipZ.closest('.toggle').hidden = state.drawing;
   elements.orthographicPlane.disabled = !orthographic;
   elements.swapAxes.disabled = orthographic;
   elements.orthographicPlane.title = orthographic
@@ -216,6 +244,11 @@ function syncProjectionControls() {
 
 function normalizeSegment(source, index) {
   const axisValue = source.axis ?? source.Axis ?? 'X';
+  const distanceMm = finiteNonNegative(source.distanceMm
+    ?? source.DistanceMillimetres ?? source.DistanceMm ?? 0);
+  const displayDistanceMm = finiteNonNegative(source.displayDistanceMm
+    ?? source.DisplayDistanceMillimetres ?? source.DisplayDistanceMm
+    ?? distanceMm);
   return {
     id: String(source.id ?? source.Id ?? `S${index + 1}`),
     startNodeId: String(source.startNodeId ?? source.StartNodeId ?? `N${index + 1}`),
@@ -223,11 +256,53 @@ function normalizeSegment(source, index) {
     axis: typeof axisValue === 'number' ? ['?', 'X', 'Y', 'Z'][axisValue] : String(axisValue).toUpperCase(),
     directionSign: Number(source.directionSign ?? source.DirectionSign ?? 1) < 0 ? -1 : 1,
     planAngleDegrees: Number(source.planAngleDegrees ?? source.PlanAngleDegrees ?? 0),
-    distanceMm: Number(source.distanceMm ?? source.DistanceMillimetres ?? source.DistanceMm ?? 0),
+    distanceMm,
+    displayDistanceMm,
+    renderDistanceMm: displayDistanceMm,
     completed: Boolean(source.completed ?? source.Completed ?? false),
     start: new THREE.Vector3(),
     end: new THREE.Vector3()
   };
+}
+
+function finiteNonNegative(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
+function allSegmentsCompleted() {
+  return state.segments.length > 0
+    && state.segments.every(segment => segment.completed);
+}
+
+function updateSquareScale() {
+  const lengths = state.segments
+    .map(segment => finiteNonNegative(segment.renderDistanceMm))
+    .filter(length => length > 0)
+    .sort((left, right) => left - right);
+  if (!lengths.length) {
+    state.squareReferenceMm = 1;
+    state.squareMinMm = 1;
+    state.squareMaxMm = 1;
+    return;
+  }
+  // A geometric median is stable when a route has one very long trunk and
+  // many short branches. It keeps the compact view monotonic without letting
+  // one outlier determine the whole square.
+  const middle = (lengths.length - 1) / 2;
+  const reference = middle % 1 === 0
+    ? lengths[middle]
+    : Math.sqrt(lengths[Math.floor(middle)] * lengths[Math.ceil(middle)]);
+  state.squareReferenceMm = Math.max(reference, 1e-9);
+  state.squareMinMm = state.squareReferenceMm * 0.35;
+  state.squareMaxMm = state.squareReferenceMm * 2.75;
+}
+
+function squareDisplayDistance(segment) {
+  const length = finiteNonNegative(segment.renderDistanceMm);
+  if (!state.squareFit) return length;
+  return Math.min(state.squareMaxMm,
+    Math.max(state.squareMinMm, length));
 }
 
 function recomputeTopology() {
@@ -255,7 +330,7 @@ function recomputeTopology() {
   for (const segment of state.segments) {
     if (!positions.has(segment.startNodeId) && !positions.has(segment.endNodeId)) {
       const anchor = new THREE.Vector3(disconnectedOffset, 0, 0);
-      disconnectedOffset += Math.max(1000, segment.distanceMm * 1.2);
+      disconnectedOffset += Math.max(1000, squareDisplayDistance(segment) * 1.2);
       positions.set(segment.startNodeId, anchor);
       positions.set(segment.endNodeId, anchor.clone().add(segmentVector(segment)));
     }
@@ -279,13 +354,14 @@ function segmentVector(segment) {
   }
   let sign = segment.directionSign;
   if (verticalAxis && elements.flipZ.checked) sign *= -1;
-  const distance = Math.max(0, Number(segment.distanceMm) || 0) * sign;
+  const distance = squareDisplayDistance(segment) * sign;
   if (axis === 'Y') return new THREE.Vector3(0, distance, 0);
   if (axis === 'Z') return new THREE.Vector3(0, 0, distance);
   return new THREE.Vector3(distance, 0, 0);
 }
 
 function rebuildRoute() {
+  updateSquareScale();
   recomputeTopology();
   if (routeLines) {
     scene.remove(routeLines);
@@ -323,7 +399,43 @@ function rebuildRoute() {
   jointPoints = new THREE.Points(jointGeometry,
     new THREE.PointsMaterial({ color: 0x2f3942, size: 5, sizeAttenuation: false }));
   scene.add(jointPoints);
+  rebuildAxisGuides();
   rebuildLabels();
+}
+
+function rebuildAxisGuides() {
+  if (axisGuides) {
+    scene.remove(axisGuides);
+    axisGuides.geometry.dispose();
+    axisGuides.material.dispose();
+    axisGuides = null;
+  }
+  if (!state.drawing) return;
+  const origin = state.nodePositions.get(state.activeNodeId)
+    || new THREE.Vector3(0, 0, 0);
+  const length = Math.max(state.viewHeight * 0.18, 120);
+  const vectors = [
+    new THREE.Vector3(length, 0, 0), new THREE.Vector3(-length, 0, 0),
+    new THREE.Vector3(0, length, 0), new THREE.Vector3(0, -length, 0),
+    new THREE.Vector3(0, 0, length), new THREE.Vector3(0, 0, -length)
+  ];
+  const positions = [];
+  const colors = [];
+  vectors.forEach((vector, index) => {
+    const color = index < 2 ? axisColors.X : index < 4 ? axisColors.Y : axisColors.Z;
+    positions.push(origin.x, origin.y, origin.z,
+      origin.x + vector.x, origin.y + vector.y, origin.z + vector.z);
+    colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  axisGuides = new THREE.LineSegments(geometry,
+    new THREE.LineDashedMaterial({ vertexColors: true, transparent: true,
+      opacity: 0.36, dashSize: length * 0.08, gapSize: length * 0.05 }));
+  axisGuides.computeLineDistances();
+  axisGuides.frustumCulled = false;
+  scene.add(axisGuides);
 }
 
 function rebuildLabels() {
@@ -331,7 +443,8 @@ function rebuildLabels() {
   state.labels = state.segments.map((segment, index) => {
     const label = document.createElement('div');
     label.className = 'distance-label';
-    label.textContent = formatDistance(segment.distanceMm);
+    label.textContent = displayDistanceText(segment);
+    label.classList.toggle('pending', !segment.completed);
     label.dataset.index = String(index);
     elements.labelsLayer.appendChild(label);
     return label;
@@ -356,8 +469,9 @@ function updateLabels() {
     label.style.display = onScreen ? 'block' : 'none';
     label.style.left = `${x}px`;
     label.style.top = `${y}px`;
-    label.textContent = formatDistance(segment.distanceMm);
+    label.textContent = displayDistanceText(segment);
     label.classList.toggle('selected', state.selected.has(index));
+    label.classList.toggle('pending', !segment.completed);
   });
 }
 
@@ -366,7 +480,7 @@ function rebuildTable() {
   state.segments.forEach((segment, index) => {
     const row = document.createElement('tr');
     row.dataset.index = String(index);
-    row.innerHTML = `<td>${escapeHtml(segment.id)}</td><td>${escapeHtml(displayAxis(segment))}</td><td>${escapeHtml(formatDistance(segment.distanceMm))}</td>`;
+    row.innerHTML = `<td>${escapeHtml(segment.id)}</td><td>${escapeHtml(displayAxis(segment))}</td><td>${escapeHtml(displayDistanceText(segment))}</td>`;
     row.addEventListener('click', event => {
       const additive = event.ctrlKey || event.shiftKey;
       if (!additive) {
@@ -397,15 +511,20 @@ function rebuildDiagnostics() {
 function setMode(mode) {
   state.mode = mode;
   controls.enabled = mode === 'orbit';
+  elements.drawMode.classList.toggle('active', mode === 'draw');
   elements.orbitMode.classList.toggle('active', mode === 'orbit');
   elements.selectMode.classList.toggle('active', mode === 'select');
-  renderer.domElement.style.cursor = mode === 'select' ? 'crosshair' : 'grab';
+  renderer.domElement.style.cursor = mode === 'draw' || mode === 'select'
+    ? 'crosshair' : 'grab';
   cancelSelectionBox();
 }
 
 function beginSelection(event) {
   if (event.button !== 0 || !state.initialized) return;
-  if (state.mode === 'select') renderer.domElement.setPointerCapture(event.pointerId);
+  // Keep the release event when drawing starts at a node and ends outside the
+  // canvas. This also makes drag-to-draw reliable on a dense route.
+  if (state.mode === 'select' || state.mode === 'draw')
+    renderer.domElement.setPointerCapture(event.pointerId);
   state.pointerStart = localPoint(event);
   state.pointerCurrent = state.pointerStart;
 }
@@ -424,6 +543,11 @@ function finishSelection(event) {
   const start = state.pointerStart;
   const end = localPoint(event);
   const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  if (state.mode === 'draw') {
+    finishDrawingPointer(start, end, distance);
+    cancelSelectionBox();
+    return;
+  }
   if (distance < 4) {
     const hit = raycastHit(end);
     if (hit) {
@@ -443,6 +567,176 @@ function finishSelection(event) {
     setSelection(next);
   }
   cancelSelectionBox();
+}
+
+function finishDrawingPointer(start, end, distance) {
+  if (state.pendingDraw) {
+    elements.validation.textContent = '请先输入当前线段距离并按 Enter';
+    updateQuickInputUi();
+    return;
+  }
+
+  // A drag is an explicit direction/length gesture. It must be handled
+  // before hit testing so an existing line cannot swallow the next segment.
+  if (distance >= 8) {
+    createDrawSegment(end);
+    return;
+  }
+
+  const joint = nearestJoint(end, 16);
+  const hit = joint ? null : raycastHit(end);
+  if (joint) {
+    state.activeNodeId = joint.nodeId;
+    rebuildAxisGuides();
+    showToast(`已从节点 ${state.activeNodeId} 继续绘图`);
+    return;
+  }
+  if (hit) {
+    const segment = state.segments[hit.index];
+    const region = classifyScreenClick(segment, end);
+    if (region === 'interior') {
+      startQuickEdit(hit.index, end);
+      return;
+    }
+    const startPoint = projectPoint(segment.start);
+    const endPoint = projectPoint(segment.end);
+    state.activeNodeId = Math.hypot(end.x - startPoint.x, end.y - startPoint.y)
+      <= Math.hypot(end.x - endPoint.x, end.y - endPoint.y)
+      ? segment.startNodeId : segment.endNodeId;
+    rebuildAxisGuides();
+    showToast(`已从节点 ${state.activeNodeId} 继续绘图`);
+    return;
+  }
+  createDrawSegment(end);
+}
+
+function nearestJoint(point, threshold) {
+  let best = null;
+  for (const [nodeId, position] of state.nodePositions) {
+    const screen = projectPoint(position);
+    const distance = Math.hypot(point.x - screen.x, point.y - screen.y);
+    if (distance <= threshold && (!best || distance < best.distance))
+      best = { nodeId, distance };
+  }
+  return best;
+}
+
+function createDrawSegment(screenPoint) {
+  if (state.pendingDraw) {
+    elements.validation.textContent = '请先输入当前线段距离并按 Enter';
+    updateQuickInputUi();
+    return;
+  }
+  const origin = state.nodePositions.get(state.activeNodeId)
+    || new THREE.Vector3(0, 0, 0);
+  const originScreen = projectPoint(origin);
+  const pointer = new THREE.Vector2(screenPoint.x - originScreen.x,
+    screenPoint.y - originScreen.y);
+  if (pointer.length() < 6) {
+    showToast('请在起点外侧点击以确定方向');
+    return;
+  }
+  pointer.normalize();
+  const directions = [
+    ['X', 1, new THREE.Vector3(1, 0, 0)],
+    ['X', -1, new THREE.Vector3(-1, 0, 0)],
+    ['Y', 1, new THREE.Vector3(0, 1, 0)],
+    ['Y', -1, new THREE.Vector3(0, -1, 0)],
+    ['Z', 1, new THREE.Vector3(0, 0, 1)],
+    ['Z', -1, new THREE.Vector3(0, 0, -1)]
+  ];
+  let best = null;
+  for (const [axis, sign, vector] of directions) {
+    const projected = projectPoint(origin.clone().add(vector));
+    const screenDirection = new THREE.Vector2(projected.x - originScreen.x,
+      projected.y - originScreen.y);
+    if (screenDirection.lengthSq() < 1e-8) continue;
+    screenDirection.normalize();
+    const score = pointer.dot(screenDirection);
+    if (!best || score > best.score) best = { axis, sign, score };
+  }
+  if (!best) return;
+
+  const rect = elements.viewport.getBoundingClientRect();
+  const screenDistance = Math.hypot(screenPoint.x - originScreen.x,
+    screenPoint.y - originScreen.y);
+  const displayDistance = Math.max(10,
+    screenDistance * state.viewHeight / Math.max(rect.height, 1) / camera.zoom);
+  const segmentId = nextIdentifier('S', state.segments.map(item => item.id));
+  const nodeIds = new Set([state.rootNodeId]);
+  state.segments.forEach(item => {
+    nodeIds.add(item.startNodeId);
+    nodeIds.add(item.endNodeId);
+  });
+  const endNodeId = nextIdentifier('N', Array.from(nodeIds));
+  const segment = normalizeSegment({
+    id: segmentId,
+    startNodeId: state.activeNodeId,
+    endNodeId,
+    axis: best.axis,
+    directionSign: best.sign,
+    planAngleDegrees: best.axis === 'X' ? 30 : best.axis === 'Y' ? 150 : 90,
+    distanceMm: 0,
+    displayDistanceMm: displayDistance,
+    completed: false
+  }, state.segments.length);
+  state.segments.push(segment);
+  state.pendingDraw = segmentId;
+  state.adjacency = buildAdjacency();
+  state.quickIndex = state.segments.length - 1;
+  state.quickPlan = [{ index: state.quickIndex }];
+  state.quickCursor = 0;
+  state.inputBuffer = '';
+  state.squareFit = false;
+  rebuildRoute();
+  rebuildTable();
+  setSelection(new Set([state.quickIndex]));
+  elements.segmentCount.textContent = `${state.segments.length} 段`;
+  elements.validation.textContent = '';
+  renderer.domElement.focus();
+  updateQuickInputUi();
+}
+
+function nextIdentifier(prefix, identifiers) {
+  let maximum = 0;
+  for (const id of identifiers) {
+    const match = new RegExp(`^${prefix}(\\d+)$`, 'i').exec(String(id));
+    if (match) maximum = Math.max(maximum, Number(match[1]));
+  }
+  return `${prefix}${maximum + 1}`;
+}
+
+function cancelPendingDraw() {
+  if (!state.pendingDraw) return;
+  const index = state.segments.findIndex(item => item.id === state.pendingDraw);
+  if (index >= 0) {
+    state.activeNodeId = state.segments[index].startNodeId;
+    state.segments.splice(index, 1);
+  }
+  state.pendingDraw = null;
+  state.adjacency = buildAdjacency();
+  cancelQuickEdit();
+  rebuildRoute();
+  rebuildTable();
+  setSelection([]);
+  elements.segmentCount.textContent = `${state.segments.length} 段`;
+  showToast('已取消当前线段');
+}
+
+function undoLastSegment() {
+  if (!state.drawing || !state.segments.length) return;
+  const segment = state.segments.pop();
+  state.activeNodeId = segment.startNodeId;
+  state.pendingDraw = null;
+  state.changed.delete(segment.id);
+  state.revision += 1;
+  state.adjacency = buildAdjacency();
+  cancelQuickEdit();
+  rebuildRoute();
+  rebuildTable();
+  setSelection([]);
+  elements.segmentCount.textContent = `${state.segments.length} 段`;
+  showToast(`已撤销 ${segment.id}`);
 }
 
 function cancelSelectionBox() {
@@ -519,8 +813,10 @@ function handleQuickInputKey(event) {
       return true;
     }
     const value = Number(state.inputBuffer);
-    if (!Number.isFinite(value) || value < 0) {
-      elements.validation.textContent = '请输入有效的非负毫米数';
+    if (!Number.isFinite(value) || value < 0
+      || (state.drawing && value <= 0)) {
+      elements.validation.textContent = state.drawing
+        ? '请输入大于 0 的毫米距离' : '请输入有效的非负毫米数';
       updateQuickInputUi();
       return true;
     }
@@ -625,8 +921,8 @@ function reachableCount(index, entryEndpoint, blocked) {
   let count = 0;
   while (queue.length) {
     const currentIndex = queue.shift();
-    count++;
     const current = state.segments[currentIndex];
+    if (!current.completed) count++;
     for (const endpoint of ['start', 'end']) {
       for (const entry of neighbors(currentIndex, endpoint, visited)) {
         visited.add(entry.index);
@@ -691,25 +987,60 @@ function createTraversalPlan(startIndex, point, blocked) {
     entryEndpoint = next.endpoint;
     exitEndpoint = otherEndpoint(entryEndpoint);
   }
-  return plan;
+  // Already confirmed segments remain part of the connectivity walk, but do
+  // not interrupt the fast-fill sequence. Clicking one explicitly still
+  // keeps it as the first editable item.
+  return plan.filter((item, planIndex) => planIndex === 0
+    || !state.segments[item.index].completed);
 }
 
 function applyQuickDistance(value) {
   const index = state.quickIndex;
   const segment = state.segments[index];
   if (!segment) return;
-  if (Math.abs(segment.distanceMm - value) > 1e-8) {
+  const wasCompleted = segment.completed;
+  const routeWasCompleted = allSegmentsCompleted();
+  if (Math.abs(segment.distanceMm - value) > 1e-8 || !wasCompleted) {
     segment.distanceMm = value;
     state.changed.add(segment.id);
+  }
+  segment.distanceMm = value;
+  segment.renderDistanceMm = value;
+  segment.completed = true;
+  if (state.drawing && state.pendingDraw === segment.id) {
+    state.pendingDraw = null;
+    state.activeNodeId = segment.endNodeId;
+    state.quickIndex = -1;
+    state.quickPlan = [];
+    state.quickCursor = -1;
+    state.inputBuffer = '';
+    state.revision += 1;
+    state.adjacency = buildAdjacency();
+    state.squareFit = false;
+    rebuildRoute();
+    rebuildTable();
+    setSelection(new Set([index]));
+    fitView();
+    rebuildAxisGuides();
+    elements.segmentCount.textContent = `${state.segments.length} 段`;
+    elements.validation.textContent = '';
+    showToast(`已设置 ${formatDistance(value)}，继续点击绘制下一段`);
+    updateQuickInputUi();
+    return;
   }
   state.quickVisited.add(index);
   state.inputBuffer = '';
   state.revision += 1;
+  const completedNow = allSegmentsCompleted();
+  const enabledSquareFit = !state.drawing && !routeWasCompleted && completedNow;
+  if (enabledSquareFit) state.squareFit = true;
   rebuildRoute();
+  if (enabledSquareFit) fitView();
 
   let nextCursor = state.quickCursor + 1;
   while (nextCursor < state.quickPlan.length
-    && state.quickVisited.has(state.quickPlan[nextCursor].index)) nextCursor++;
+    && (state.quickVisited.has(state.quickPlan[nextCursor].index)
+      || state.segments[state.quickPlan[nextCursor].index].completed)) nextCursor++;
   if (nextCursor < state.quickPlan.length) {
     state.quickCursor = nextCursor;
     state.quickIndex = state.quickPlan[nextCursor].index;
@@ -720,7 +1051,9 @@ function applyQuickDistance(value) {
     state.quickCursor = -1;
     state.quickIndex = -1;
     setSelection(new Set([index]));
-    showToast(`已设置 ${formatDistance(value)}，该方向没有更多相连线段`);
+    showToast(completedNow
+      ? `已设置 ${formatDistance(value)}，线路已完成并启用方形适配`
+      : `已设置 ${formatDistance(value)}，该方向没有更多相连线段`);
   }
   elements.validation.textContent = '';
   updateQuickInputUi();
@@ -755,15 +1088,18 @@ function updateSelectionUi() {
   elements.axisMetric.textContent = commonValue(selected.map(displayAxis)) || '-';
   const angles = selected.map(item => `${formatNumber(item.planAngleDegrees)}°`);
   elements.angleMetric.textContent = commonValue(angles) || '-';
-  const distances = selected.map(item => item.distanceMm);
-  const commonDistance = commonNumber(distances);
+  const distanceTexts = selected.map(displayDistanceText);
+  const commonDistance = commonValue(distanceTexts);
   elements.distanceMetric.textContent = count
-    ? (commonDistance === null ? '混合' : formatDistance(commonDistance)) : '-';
+    ? (commonDistance ? commonDistance : '混合') : '-';
   elements.changedCount.textContent = `${state.changed.size} 项修改`;
   const active = state.quickIndex >= 0 && state.segments[state.quickIndex];
   elements.status.textContent = active
     ? `当前 ${active.id}：输入距离并按 Enter`
-    : (count ? `已选择 ${count} 根线段` : `已载入 ${state.segments.length} 根相连线段`);
+    : (state.drawing
+      ? `从 ${state.activeNodeId} 绘图：点击任意方向，系统自动吸附 X/Y/Z 轴`
+      : (count ? `已选择 ${count} 根线段`
+        : `已载入 ${state.segments.length} 根相连线段，${pendingSegmentCount()} 根待填写`));
   updateQuickInputUi();
 }
 
@@ -771,10 +1107,13 @@ function updateQuickInputUi() {
   if (!elements.quickInputDisplay) return;
   const active = state.quickIndex >= 0 && state.segments[state.quickIndex];
   if (!active) {
-    elements.quickInputDisplay.textContent = '点击 3D 线段开始';
+    elements.quickInputDisplay.textContent = state.drawing
+      ? '点击画布绘制线段' : '点击 3D 线段开始';
     elements.quickInputDisplay.classList.remove('active');
     if (elements.quickInputHint)
-      elements.quickInputHint.textContent = '直接输入数字，按 Enter 写入当前线段';
+      elements.quickInputHint.textContent = state.drawing
+        ? '自动正交吸附，落线后直接输入距离并按 Enter'
+        : '直接输入数字，按 Enter 写入当前线段';
     return;
   }
   elements.quickInputDisplay.textContent = state.inputBuffer || '输入距离...';
@@ -789,8 +1128,11 @@ function updateTableSelection() {
     row.classList.toggle('selected', state.selected.has(index));
     row.classList.toggle('changed', state.changed.has(state.segments[index]?.id));
     const distanceCell = row.cells[2];
-    if (distanceCell && state.segments[index])
-      distanceCell.textContent = formatDistance(state.segments[index].distanceMm);
+    if (distanceCell && state.segments[index]) {
+      distanceCell.textContent = displayDistanceText(state.segments[index]);
+    }
+    if (state.segments[index])
+      row.classList.toggle('pending', !state.segments[index].completed);
   }
 }
 
@@ -801,6 +1143,16 @@ function commitEditor() {
     updateQuickInputUi();
     return;
   }
+  const pending = pendingSegmentCount();
+  if (pending > 0) {
+    elements.validation.textContent = `还有 ${pending} 根线段未填写，不能写回 CAD`;
+    updateQuickInputUi();
+    return;
+  }
+  if (state.drawing && state.segments.length === 0) {
+    elements.validation.textContent = '请至少绘制一根线段';
+    return;
+  }
   const updates = state.segments
     .filter(segment => state.changed.has(segment.id))
     .map(segment => ({ segmentId: segment.id, distanceMm: segment.distanceMm }));
@@ -809,13 +1161,25 @@ function commitEditor() {
     return;
   }
   elements.commit.disabled = true;
-  postHost({
+  const message = {
     type: 'commit',
     schemaVersion: 1,
     sessionId: state.sessionId,
     revision: state.revision,
     updates
-  });
+  };
+  if (state.drawing) {
+    delete message.updates;
+    message.segments = state.segments.map(segment => ({
+      id: segment.id,
+      startNodeId: segment.startNodeId,
+      endNodeId: segment.endNodeId,
+      axis: segment.axis,
+      directionSign: segment.directionSign,
+      distanceMm: segment.distanceMm
+    }));
+  }
+  postHost(message);
 }
 
 function cancelEditor() {
@@ -841,8 +1205,27 @@ function displayAxis(segment) {
   return segment.axis;
 }
 
+function displayDistanceText(segment) {
+  if (!segment.completed)
+    return state.drawing ? `${formatDistance(segment.renderDistanceMm)}（预览）`
+      : `${formatDistance(segment.renderDistanceMm)}（原线长）`;
+  return formatDistance(segment.distanceMm);
+}
+
+function pendingSegmentCount() {
+  return state.segments.filter(segment => !segment.completed).length;
+}
+
 function fitView() {
-  if (!state.segments.length) return;
+  if (!state.segments.length) {
+    state.viewHeight = 1000;
+    camera.position.set(1600, -1800, 1400);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    updateCameraFrustum();
+    rebuildAxisGuides();
+    return;
+  }
   const box = new THREE.Box3();
   for (const segment of state.segments) {
     box.expandByPoint(segment.start);
@@ -860,6 +1243,7 @@ function fitView() {
   controls.target.copy(center);
   controls.update();
   updateCameraFrustum();
+  rebuildAxisGuides();
 }
 
 function resizeRenderer() {
@@ -992,21 +1376,14 @@ function fail(message) {
 function demoEnvelope() {
   return {
     type: 'initialize',
+    mode: 'draw',
     schemaVersion: 1,
     sessionId: 'browser-preview',
     revision: 0,
     scene: {
       rootNodeId: 'N1',
       diagnostics: [],
-      segments: [
-        segment('16CB', 'N1', 'N2', 'X', 1, 30, 3400),
-        segment('16CD', 'N2', 'N3', 'Z', 1, 90, 1500),
-        segment('16CF', 'N3', 'N4', 'Y', 1, 150, 3200),
-        segment('16D1', 'N4', 'N5', 'X', -1, 30, 2100),
-        segment('1751', 'N5', 'N6', 'Z', -1, 90, 1200),
-        segment('1753', 'N6', 'N7', 'Y', -1, 150, 4100),
-        segment('1755', 'N7', 'N8', 'X', 1, 30, 2000)
-      ]
+      segments: []
     }
   };
 }

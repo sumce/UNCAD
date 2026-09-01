@@ -34,7 +34,8 @@ namespace UNCAD.Core.QuickLine
     {
         internal QuickLineIsometricSegment(string id, string startNodeId,
             string endNodeId, QuickLineSpatialAxis axis, int directionSign,
-            double planAngleDegrees, double distanceMillimetres)
+            double planAngleDegrees, double distanceMillimetres,
+            double displayDistanceMillimetres, bool completed)
         {
             Id = id;
             StartNodeId = startNodeId;
@@ -43,6 +44,8 @@ namespace UNCAD.Core.QuickLine
             DirectionSign = directionSign;
             PlanAngleDegrees = planAngleDegrees;
             DistanceMillimetres = distanceMillimetres;
+            DisplayDistanceMillimetres = displayDistanceMillimetres;
+            Completed = completed;
         }
 
         public string Id { get; }
@@ -51,6 +54,40 @@ namespace UNCAD.Core.QuickLine
         public QuickLineSpatialAxis Axis { get; }
         public int DirectionSign { get; }
         public double PlanAngleDegrees { get; }
+        /// <summary>The actual millimetre value retained for labels and CAD writes.</summary>
+        public double DistanceMillimetres { get; }
+        /// <summary>
+        /// Initial editor geometry length. Unconfirmed U1L placeholders use
+        /// their source CAD line length until the user enters a real value.
+        /// </summary>
+        public double DisplayDistanceMillimetres { get; }
+        public bool Completed { get; }
+    }
+
+    /// <summary>
+    /// One orthogonal segment created in the U1LX drawing editor. The axis
+    /// and sign describe its true 3D direction; the distance is the actual
+    /// millimetre value that must be retained in the CAD annotation.
+    /// </summary>
+    public sealed class QuickLineCreatedSegment
+    {
+        public QuickLineCreatedSegment(string id, string startNodeId,
+            string endNodeId, QuickLineSpatialAxis axis, int directionSign,
+            double distanceMillimetres)
+        {
+            Id = id;
+            StartNodeId = startNodeId;
+            EndNodeId = endNodeId;
+            Axis = axis;
+            DirectionSign = directionSign;
+            DistanceMillimetres = distanceMillimetres;
+        }
+
+        public string Id { get; }
+        public string StartNodeId { get; }
+        public string EndNodeId { get; }
+        public QuickLineSpatialAxis Axis { get; }
+        public int DirectionSign { get; }
         public double DistanceMillimetres { get; }
     }
 

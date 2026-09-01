@@ -22,17 +22,20 @@ namespace UNCAD.UI
             QuickLine3dEditorMessageKind kind,
             int revision,
             IReadOnlyDictionary<string, double> updates,
+            IReadOnlyList<QuickLineCreatedSegment> createdSegments,
             string errorMessage)
         {
             Kind = kind;
             Revision = revision;
             Updates = updates;
+            CreatedSegments = createdSegments ?? Array.Empty<QuickLineCreatedSegment>();
             ErrorMessage = errorMessage ?? "";
         }
 
         public QuickLine3dEditorMessageKind Kind { get; }
         public int Revision { get; }
         public IReadOnlyDictionary<string, double> Updates { get; }
+        public IReadOnlyList<QuickLineCreatedSegment> CreatedSegments { get; }
         public string ErrorMessage { get; }
     }
 
@@ -47,6 +50,7 @@ namespace UNCAD.UI
         private const int MaxMessageCharacters = 4 * 1024 * 1024;
         private const int MaxIdentifierCharacters = 256;
         private const int MaxErrorCharacters = 4096;
+        private const int MaxCreatedSegments = 10000;
 
         private static readonly IReadOnlyDictionary<string, double> EmptyUpdates =
             new ReadOnlyDictionary<string, double>(
@@ -138,7 +142,7 @@ namespace UNCAD.UI
             _readyAccepted = true;
             message = new QuickLine3dEditorProtocolMessage(
                 QuickLine3dEditorMessageKind.Ready, InitialRevision,
-                EmptyUpdates, "");
+                EmptyUpdates, Array.Empty<QuickLineCreatedSegment>(), "");
             return true;
         }
 
@@ -154,6 +158,10 @@ namespace UNCAD.UI
             if (!TryReadInteger(values, "revision", out int revision)
                 || revision < InitialRevision)
                 return Fail("浏览器提交的 revision 无效。", out error);
+            bool drawingCommit = values.TryGetValue("segments", out object rawSegments);
+            if (drawingCommit)
+                return AcceptCreatedSegments(rawSegments, revision,
+                    out message, out error);
             if (!values.TryGetValue("updates", out object rawUpdates)
                 || !(rawUpdates is IList updates))
                 return Fail("浏览器提交缺少 updates 数组。", out error);
@@ -184,8 +192,90 @@ namespace UNCAD.UI
             _terminalAccepted = true;
             var readOnly = new ReadOnlyDictionary<string, double>(accepted);
             message = new QuickLine3dEditorProtocolMessage(
-                QuickLine3dEditorMessageKind.Commit, revision, readOnly, "");
+                QuickLine3dEditorMessageKind.Commit, revision, readOnly,
+                Array.Empty<QuickLineCreatedSegment>(), "");
             return true;
+        }
+
+        private bool AcceptCreatedSegments(object rawSegments, int revision,
+            out QuickLine3dEditorProtocolMessage message, out string error)
+        {
+            message = null;
+            error = "";
+            if (!(rawSegments is IList segments)
+                || segments.Count == 0 || segments.Count > MaxCreatedSegments)
+                return Fail("浏览器提交必须包含 1 至 " + MaxCreatedSegments
+                    + " 根新建线段。", out error);
+
+            var accepted = new List<QuickLineCreatedSegment>(segments.Count);
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            var nodes = new HashSet<string>(StringComparer.Ordinal);
+            var edges = new List<Tuple<string, string>>();
+            foreach (object raw in segments)
+            {
+                var value = raw as Dictionary<string, object>;
+                if (value == null
+                    || !TryReadString(value, "id", MaxIdentifierCharacters,
+                        out string id)
+                    || !TryReadString(value, "startNodeId", MaxIdentifierCharacters,
+                        out string start)
+                    || !TryReadString(value, "endNodeId", MaxIdentifierCharacters,
+                        out string end)
+                    || !TryReadString(value, "axis", 8, out string axisText)
+                    || !TryReadInteger(value, "directionSign", out int sign)
+                    || !TryReadNumber(value, "distanceMm", out double distance)
+                    || !ids.Add(id) || string.Equals(start, end,
+                        StringComparison.Ordinal)
+                    || (sign != -1 && sign != 1)
+                    || !IsFinite(distance) || distance <= 0.0)
+                    return Fail("浏览器提交包含无效的新建线段。", out error);
+                if (!Enum.TryParse(axisText, true, out QuickLineSpatialAxis axis)
+                    || !Enum.IsDefined(typeof(QuickLineSpatialAxis), axis))
+                    return Fail("浏览器提交包含无效的空间轴。", out error);
+                nodes.Add(start);
+                nodes.Add(end);
+                edges.Add(Tuple.Create(start, end));
+                accepted.Add(new QuickLineCreatedSegment(id, start, end,
+                    axis, sign, distance));
+            }
+
+            if (!nodes.Contains("N1") || !IsConnected("N1", edges))
+                return Fail("浏览器提交的新建线段必须从 N1 开始且保持连通。", out error);
+            if (revision <= InitialRevision)
+                return Fail("包含新建线段的提交必须提高 revision。", out error);
+
+            _terminalAccepted = true;
+            message = new QuickLine3dEditorProtocolMessage(
+                QuickLine3dEditorMessageKind.Commit, revision, EmptyUpdates,
+                new ReadOnlyCollection<QuickLineCreatedSegment>(accepted), "");
+            return true;
+        }
+
+        private static bool IsConnected(string root,
+            IEnumerable<Tuple<string, string>> edges)
+        {
+            var adjacency = new Dictionary<string, List<string>>(
+                StringComparer.Ordinal);
+            foreach (Tuple<string, string> edge in edges)
+            {
+                if (!adjacency.ContainsKey(edge.Item1))
+                    adjacency[edge.Item1] = new List<string>();
+                if (!adjacency.ContainsKey(edge.Item2))
+                    adjacency[edge.Item2] = new List<string>();
+                adjacency[edge.Item1].Add(edge.Item2);
+                adjacency[edge.Item2].Add(edge.Item1);
+            }
+            var seen = new HashSet<string>(StringComparer.Ordinal) { root };
+            var queue = new Queue<string>();
+            queue.Enqueue(root);
+            while (queue.Count > 0)
+            {
+                string current = queue.Dequeue();
+                if (!adjacency.TryGetValue(current, out List<string> next)) continue;
+                foreach (string id in next)
+                    if (seen.Add(id)) queue.Enqueue(id);
+            }
+            return adjacency.Keys.All(seen.Contains);
         }
 
         private bool AcceptCancel(IDictionary<string, object> values,
@@ -201,7 +291,7 @@ namespace UNCAD.UI
             _terminalAccepted = true;
             message = new QuickLine3dEditorProtocolMessage(
                 QuickLine3dEditorMessageKind.Cancel, InitialRevision,
-                EmptyUpdates, "");
+                EmptyUpdates, Array.Empty<QuickLineCreatedSegment>(), "");
             return true;
         }
 
@@ -219,7 +309,7 @@ namespace UNCAD.UI
             _terminalAccepted = true;
             message = new QuickLine3dEditorProtocolMessage(
                 QuickLine3dEditorMessageKind.RenderError, InitialRevision,
-                EmptyUpdates, renderError);
+                EmptyUpdates, Array.Empty<QuickLineCreatedSegment>(), renderError);
             return true;
         }
 
@@ -250,7 +340,9 @@ namespace UNCAD.UI
                     ["axis"] = item.Axis.ToString(),
                     ["directionSign"] = item.DirectionSign,
                     ["planAngleDegrees"] = item.PlanAngleDegrees,
-                    ["distanceMm"] = item.DistanceMillimetres
+                    ["distanceMm"] = item.DistanceMillimetres,
+                    ["displayDistanceMm"] = item.DisplayDistanceMillimetres,
+                    ["completed"] = item.Completed
                 }).ToArray();
             var sceneValue = new Dictionary<string, object>
             {
@@ -260,7 +352,7 @@ namespace UNCAD.UI
                 ["segments"] = segments,
                 ["diagnostics"] = scene.Diagnostics.ToArray()
             };
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 ["type"] = "initialize",
                 ["schemaVersion"] = SchemaVersion,
@@ -268,6 +360,8 @@ namespace UNCAD.UI
                 ["revision"] = InitialRevision,
                 ["scene"] = sceneValue
             };
+            result["mode"] = scene.Segments.Count == 0 ? "draw" : "edit";
+            return result;
         }
 
         private static void ValidateScene(QuickLineIsometricScene scene)
@@ -276,8 +370,8 @@ namespace UNCAD.UI
             if (scene.ProjectionMode != QuickLineProjectionMode.Isometric
                 && scene.ProjectionMode != QuickLineProjectionMode.Orthographic)
                 throw new ArgumentException("3D 场景投影模式无效。", nameof(scene));
-            if (scene.Segments == null || scene.Segments.Count == 0)
-                throw new ArgumentException("3D 场景没有可编辑线段。", nameof(scene));
+            if (scene.Segments == null)
+                throw new ArgumentException("3D 场景线段集合无效。", nameof(scene));
             ValidateIdentifier(scene.RootNodeId, "根节点");
 
             var nodeIds = new HashSet<string>(StringComparer.Ordinal);
@@ -310,7 +404,9 @@ namespace UNCAD.UI
                     || (segment.DirectionSign != -1 && segment.DirectionSign != 1)
                     || !IsFinite(segment.PlanAngleDegrees)
                     || !IsFinite(segment.DistanceMillimetres)
-                    || segment.DistanceMillimetres < 0.0)
+                    || segment.DistanceMillimetres < 0.0
+                    || !IsFinite(segment.DisplayDistanceMillimetres)
+                    || segment.DisplayDistanceMillimetres < 0.0)
                     throw new ArgumentException("3D 场景线段参数无效。", nameof(scene));
             }
         }

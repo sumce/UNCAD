@@ -11,24 +11,88 @@ namespace UNCAD.Tests
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Unl", "QuickLineFeature.cs"));
-            int scene = source.IndexOf("QuickLineIsometricSceneBuilder.Build(",
+            int scene = source.IndexOf("CreateDrawingScene()",
                 StringComparison.Ordinal);
             int modal = source.IndexOf("AcApplication.ShowModalDialog(form)",
                 StringComparison.Ordinal);
             int accepted = source.IndexOf("result != DialogResult.OK",
                 StringComparison.Ordinal);
+            int insertion = source.IndexOf(
+                "PromptPointOptions(\"\\n请点击平面图插入点: \")",
+                StringComparison.Ordinal);
             int batch = source.IndexOf(
-                "QuickLineCadService.TryUpdateMillimetreLabels(ctx, cadUpdates)",
+                "QuickLineCadService.TryCreatePlanRoute(ctx,",
                 StringComparison.Ordinal);
 
             Assert.True(scene >= 0, "The 3D scene builder was not found.");
             Assert.True(modal > scene, "The scene must be built before opening the editor.");
             Assert.True(accepted > modal,
                 "The modal result must be checked before any CAD write.");
-            Assert.True(batch > accepted,
-                "The batch write must occur only after editor acceptance.");
+            Assert.True(insertion > accepted,
+                "The insertion point must be picked after editor acceptance.");
+            Assert.True(batch > insertion,
+                "The batch write must occur only after the insertion point is picked.");
             Assert.DoesNotContain("QuickLineDistanceForm", source);
             Assert.DoesNotContain("TryUpdateMillimetreLabel(ctx, current", source);
+        }
+
+        [Fact]
+        public void QuickLineStartsBlankWithoutScanningOrSelectingCadEntities()
+        {
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Unl", "QuickLineFeature.cs"));
+
+            Assert.Contains("CreateDrawingScene()", source);
+            Assert.Contains("form.CreatedSegments", source);
+            Assert.Contains("ExecuteSelected", source);
+            Assert.Contains("GetEntity(", source);
+        }
+
+        [Fact]
+        public void WebEditorSeparatesActualRenderAndSquareFitLengths()
+        {
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Web",
+                "QuickLine3D", "app.js"));
+
+            Assert.Contains("renderDistanceMm: displayDistanceMm", source);
+            Assert.Contains("segment.renderDistanceMm = value", source);
+            Assert.Contains("segment.completed = true", source);
+            Assert.Contains("const distance = squareDisplayDistance(segment)", source);
+            Assert.Contains("state.squareReferenceMm * 0.35", source);
+            Assert.Contains("state.squareReferenceMm * 2.75", source);
+            Assert.Contains("distanceMm: segment.distanceMm", source);
+            Assert.Contains("state.squareFit = !state.drawing && allSegmentsCompleted()", source);
+            Assert.Contains("message.segments = state.segments.map", source);
+            Assert.DoesNotContain("exportSquareImage", source);
+            Assert.DoesNotContain("exportButton", source);
+        }
+
+        [Fact]
+        public void WebEditorDrawing_AllowsDragContinuationWithoutStealingLineEditClicks()
+        {
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Web",
+                "QuickLine3D", "app.js"));
+
+            int finish = source.IndexOf("function finishSelection(",
+                StringComparison.Ordinal);
+            int drawing = source.IndexOf("function finishDrawingPointer(",
+                StringComparison.Ordinal);
+            int drag = source.IndexOf("if (distance >= 8)", drawing,
+                StringComparison.Ordinal);
+            int hitEdit = source.IndexOf("startQuickEdit(hit.index, end)", drawing,
+                StringComparison.Ordinal);
+            int capture = source.IndexOf(
+                "state.mode === 'select' || state.mode === 'draw'",
+                StringComparison.Ordinal);
+
+            Assert.True(finish >= 0 && drawing > finish,
+                "Drawing pointer handling must be explicit and reachable.");
+            Assert.True(drag > drawing,
+                "A drag must create the next orthogonal segment.");
+            Assert.True(hitEdit > drag,
+                "A short click on an existing line must still enter distance editing.");
+            Assert.True(capture >= 0,
+                "Drawing must capture the pointer so the release event is not lost.");
         }
 
         [Fact]

@@ -30,6 +30,67 @@ namespace UNCAD.Tests
             Assert.Equal("A", segment["id"]);
             Assert.Equal("X", segment["axis"]);
             Assert.Equal(1250d, Convert.ToDouble(segment["distanceMm"]));
+            Assert.Equal(1250d, Convert.ToDouble(segment["displayDistanceMm"]));
+            Assert.True(Convert.ToBoolean(segment["completed"]));
+        }
+
+        [Fact]
+        public void DrawingInitialization_AllowsBlankSceneAndDeclaresDrawMode()
+        {
+            var protocol = new QuickLine3dEditorProtocol(
+                QuickLineIsometricSceneBuilder.CreateDrawingScene());
+            var json = Assert.IsType<Dictionary<string, object>>(
+                new JavaScriptSerializer().DeserializeObject(
+                    protocol.InitializationJson));
+
+            Assert.Equal("draw", json["mode"]);
+            var scene = Assert.IsType<Dictionary<string, object>>(json["scene"]);
+            Assert.Equal("N1", scene["rootNodeId"]);
+            Assert.Empty(Assert.IsType<object[]>(scene["segments"]));
+        }
+
+        [Fact]
+        public void DrawingCommit_AcceptsConnectedPositiveOrthogonalSegments()
+        {
+            var protocol = new QuickLine3dEditorProtocol(
+                QuickLineIsometricSceneBuilder.CreateDrawingScene());
+            Assert.True(protocol.TryAccept(
+                "{\"type\":\"ready\",\"schemaVersion\":1}", out _, out _));
+            string commit = "{\"type\":\"commit\",\"schemaVersion\":1,"
+                + "\"sessionId\":\"" + protocol.SessionId + "\",\"revision\":2,"
+                + "\"segments\":["
+                + "{\"id\":\"S1\",\"startNodeId\":\"N1\",\"endNodeId\":\"N2\","
+                + "\"axis\":\"X\",\"directionSign\":1,\"distanceMm\":1250},"
+                + "{\"id\":\"S2\",\"startNodeId\":\"N2\",\"endNodeId\":\"N3\","
+                + "\"axis\":\"Z\",\"directionSign\":-1,\"distanceMm\":300}]}";
+
+            Assert.True(protocol.TryAccept(commit,
+                out QuickLine3dEditorProtocolMessage accepted, out string error), error);
+            Assert.Equal(2, accepted.CreatedSegments.Count);
+            Assert.Equal(QuickLineSpatialAxis.Z, accepted.CreatedSegments[1].Axis);
+            Assert.Equal(300, accepted.CreatedSegments[1].DistanceMillimetres);
+        }
+
+        [Theory]
+        [InlineData("Y", 1, 0)]
+        [InlineData("BAD", 1, 100)]
+        [InlineData("X", 0, 100)]
+        public void DrawingCommit_RejectsInvalidAxisDirectionOrDistance(
+            string axis, int sign, double distance)
+        {
+            var protocol = new QuickLine3dEditorProtocol(
+                QuickLineIsometricSceneBuilder.CreateDrawingScene());
+            Assert.True(protocol.TryAccept(
+                "{\"type\":\"ready\",\"schemaVersion\":1}", out _, out _));
+            string commit = "{\"type\":\"commit\",\"schemaVersion\":1,"
+                + "\"sessionId\":\"" + protocol.SessionId + "\",\"revision\":1,"
+                + "\"segments\":[{\"id\":\"S1\",\"startNodeId\":\"N1\","
+                + "\"endNodeId\":\"N2\",\"axis\":\"" + axis + "\","
+                + "\"directionSign\":" + sign + ",\"distanceMm\":"
+                + distance.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + "}]}";
+
+            Assert.False(protocol.TryAccept(commit, out _, out _));
         }
 
         [Fact]

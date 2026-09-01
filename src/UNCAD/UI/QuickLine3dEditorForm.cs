@@ -21,6 +21,8 @@ namespace UNCAD.UI
         private static readonly IReadOnlyDictionary<string, double> NoUpdates =
             new ReadOnlyDictionary<string, double>(
                 new Dictionary<string, double>(StringComparer.Ordinal));
+        private static readonly IReadOnlyList<QuickLineCreatedSegment> NoCreatedSegments =
+            Array.Empty<QuickLineCreatedSegment>();
 
         private readonly QuickLine3dEditorProtocol _protocol;
         private readonly string _webRoot;
@@ -65,8 +67,10 @@ namespace UNCAD.UI
             _protocol = new QuickLine3dEditorProtocol(scene);
             _webRoot = ValidateWebRoot(webRoot);
             Updates = NoUpdates;
+            CreatedSegments = NoCreatedSegments;
 
-            DialogLayout.Apply(this, "U1LX 3D 距离编辑",
+            DialogLayout.Apply(this, scene.Segments.Count == 0
+                ? "U1X 3D 正交快速绘图" : "U1LX 3D 距离编辑",
                 new Size(1180, 760), new Size(900, 600), resizable: true);
             Name = nameof(QuickLine3dEditorForm);
             ShowInTaskbar = false;
@@ -93,6 +97,7 @@ namespace UNCAD.UI
         }
 
         public IReadOnlyDictionary<string, double> Updates { get; private set; }
+        public IReadOnlyList<QuickLineCreatedSegment> CreatedSegments { get; private set; }
         public int Revision { get; private set; }
         public string SessionId => _protocol.SessionId;
 
@@ -135,6 +140,7 @@ namespace UNCAD.UI
             {
                 DialogResult = DialogResult.Cancel;
                 Updates = NoUpdates;
+                CreatedSegments = NoCreatedSegments;
             }
             base.OnFormClosing(e);
         }
@@ -221,6 +227,7 @@ namespace UNCAD.UI
                     break;
                 case QuickLine3dEditorMessageKind.Commit:
                     Updates = message.Updates;
+                    CreatedSegments = message.CreatedSegments;
                     Revision = message.Revision;
                     DialogResult = DialogResult.OK;
                     Close();
@@ -251,6 +258,7 @@ namespace UNCAD.UI
             if (_fatal || IsDisposed || Disposing) return;
             _fatal = true;
             Updates = NoUpdates;
+            CreatedSegments = NoCreatedSegments;
             _errorMessage.Text = message;
             _webView.Visible = false;
             _webView.Enabled = false;

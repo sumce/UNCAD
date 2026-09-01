@@ -6,12 +6,24 @@ namespace UNCAD.Core.QuickLine
 {
     /// <summary>
     /// Reconstructs a connected isometric or orthographic sketch as an
-    /// orthogonal X/Y/Z route. Segment lengths come from confirmed millimetre
-    /// labels, never from the arbitrary 2D drawing length.
+    /// orthogonal X/Y/Z route. Actual label values and initial editor geometry
+    /// lengths are kept separate so U1L placeholders do not distort the view.
     /// </summary>
     public static class QuickLineIsometricSceneBuilder
     {
         private const double DefaultAngleToleranceDegrees = 3.0;
+
+        /// <summary>Creates the blank southeast-isometric drawing workspace.</summary>
+        public static QuickLineIsometricScene CreateDrawingScene()
+            => new QuickLineIsometricScene("N1",
+                QuickLineProjectionMode.Isometric,
+                new List<QuickLineIsometricNode>
+                {
+                    new QuickLineIsometricNode("N1",
+                        new QuickLineSpatialPoint(0.0, 0.0, 0.0))
+                },
+                new List<QuickLineIsometricSegment>(),
+                new List<string>());
 
         public static QuickLineIsometricScene Build(QuickLineGraph graph,
             string selectedSegmentId,
@@ -19,9 +31,29 @@ namespace UNCAD.Core.QuickLine
             double angleToleranceDegrees = DefaultAngleToleranceDegrees,
             QuickLineProjectionMode projectionMode = QuickLineProjectionMode.Auto)
         {
+            if (distancesMillimetres == null)
+                throw new ArgumentNullException(nameof(distancesMillimetres));
+            return Build(graph, selectedSegmentId, distancesMillimetres,
+                distancesMillimetres, new HashSet<string>(
+                    distancesMillimetres.Keys, StringComparer.OrdinalIgnoreCase),
+                angleToleranceDegrees, projectionMode);
+        }
+
+        public static QuickLineIsometricScene Build(QuickLineGraph graph,
+            string selectedSegmentId,
+            IReadOnlyDictionary<string, double> distancesMillimetres,
+            IReadOnlyDictionary<string, double> displayDistancesMillimetres,
+            ISet<string> completedSegmentIds,
+            double angleToleranceDegrees = DefaultAngleToleranceDegrees,
+            QuickLineProjectionMode projectionMode = QuickLineProjectionMode.Auto)
+        {
             if (graph == null) throw new ArgumentNullException(nameof(graph));
             if (distancesMillimetres == null)
                 throw new ArgumentNullException(nameof(distancesMillimetres));
+            if (displayDistancesMillimetres == null)
+                throw new ArgumentNullException(nameof(displayDistancesMillimetres));
+            if (completedSegmentIds == null)
+                throw new ArgumentNullException(nameof(completedSegmentIds));
             ValidateTolerance(angleToleranceDegrees);
             ValidateProjectionMode(projectionMode);
 
@@ -67,13 +99,22 @@ namespace UNCAD.Core.QuickLine
                     || distance < 0.0)
                     throw new ArgumentException("线段 " + segment.Id
                         + " 缺少有效毫米距离。", nameof(distancesMillimetres));
+                if (!displayDistancesMillimetres.TryGetValue(segment.Id,
+                        out double displayDistance)
+                    || double.IsNaN(displayDistance)
+                    || double.IsInfinity(displayDistance)
+                    || displayDistance < 0.0)
+                    throw new ArgumentException("线段 " + segment.Id
+                        + " 缺少有效初始显示距离。",
+                        nameof(displayDistancesMillimetres));
 
                 AxisMatch match = classified[segment.Id];
                 sceneSegments.Add(new QuickLineIsometricSegment(segment.Id,
                     nodeIds[Key(segment.Id, QuickLineEndpoint.Start)],
                     nodeIds[Key(segment.Id, QuickLineEndpoint.End)],
                     match.Axis, match.DirectionSign, match.PlanAngleDegrees,
-                    distance));
+                    distance, displayDistance,
+                    completedSegmentIds.Contains(segment.Id)));
             }
 
             string rootNodeId = nodeIds[Key(selected.Id, QuickLineEndpoint.Start)];
@@ -189,7 +230,7 @@ namespace UNCAD.Core.QuickLine
                         StringComparison.OrdinalIgnoreCase);
                     string otherId = fromStart ? edge.EndNodeId : edge.StartNodeId;
                     QuickLineSpatialVector delta = AxisVector(edge.Axis)
-                        * (edge.DirectionSign * edge.DistanceMillimetres);
+                        * (edge.DirectionSign * edge.DisplayDistanceMillimetres);
                     QuickLineSpatialPoint candidate = fromStart
                         ? current + delta : current - delta;
                     if (!positions.TryGetValue(otherId,

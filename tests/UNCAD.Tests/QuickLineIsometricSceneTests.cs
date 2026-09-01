@@ -39,6 +39,22 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_KeepsPlaceholderValueSeparateFromInitialDisplayLength()
+        {
+            QuickLineSegment line = Polar("A", new QuickLinePoint(0, 0), 30, 8500);
+            QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder.Build(
+                QuickLineGraph.Build(new[] { line }), "A",
+                Distances(("A", 2000)), Distances(("A", line.Length)),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+            QuickLineIsometricSegment segment = Segment(scene, "A");
+            Assert.Equal(2000, segment.DistanceMillimetres);
+            Assert.Equal(8500, segment.DisplayDistanceMillimetres, 6);
+            Assert.False(segment.Completed);
+            AssertPoint(scene, segment.EndNodeId, 8500, 0, 0);
+        }
+
+        [Fact]
         public void Build_AutoDetectsOrthographicHorizontalAndVerticalLines()
         {
             var horizontal = new QuickLineSegment("H",

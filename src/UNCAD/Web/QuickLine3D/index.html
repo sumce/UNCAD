@@ -5,23 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>U1LX 3D 距离编辑</title>
+  <title>U1X / U1LX 3D 绘图编辑器</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="app">
     <header class="topbar">
-      <div class="brand" aria-label="U1LX 3D 距离编辑">
-        <span class="brand-code">U1LX</span>
-        <span class="brand-title">3D 距离编辑</span>
+      <div class="brand" aria-label="U1X 3D 正交快速绘图">
+        <span class="brand-code">U1X</span>
+        <span class="brand-title">3D 正交快速绘图</span>
       </div>
-      <div class="toolbar" role="toolbar" aria-label="三维视图工具">
+      <div class="toolbar" role="toolbar" aria-label="三维绘图工具">
         <div class="segmented" aria-label="操作模式">
-          <button id="orbitMode" class="tool active" type="button" title="旋转与平移视图">旋转</button>
+          <button id="drawMode" class="tool active" type="button" title="点击画布沿正交轴创建线段">绘图</button>
+          <button id="orbitMode" class="tool" type="button" title="旋转与平移视图">旋转</button>
           <button id="selectMode" class="tool" type="button" title="单击或拖框选择线段">框选</button>
         </div>
         <button id="fitView" class="tool command" type="button" title="使全部线段适应窗口">适应视图</button>
-        <label class="projection-control" title="选择正交草图的两个实际空间轴">
+        <button id="undoButton" class="tool command" type="button" title="撤销上一根新建线段">撤销</button>
+        <label class="projection-control" title="正交草图兼容设置">
           <span>正交平面</span>
           <select id="orthographicPlane" aria-label="正交平面">
             <option value="XZ" selected>X / Z</option>
@@ -49,7 +52,7 @@
     </header>
 
     <main class="workspace">
-      <section id="viewport" aria-label="三维线路视图">
+      <section id="viewport" aria-label="三维正交绘图视图">
         <div id="canvasHost"></div>
         <div id="labelsLayer" aria-hidden="true"></div>
         <div id="selectionBox" aria-hidden="true"></div>
@@ -58,27 +61,27 @@
           <span class="axis-y">Y</span>
           <span class="axis-z">Z</span>
         </div>
-        <div id="loadingState" role="status">正在建立三维线路...</div>
+        <div id="loadingState" role="status">正在启动三维绘图器...</div>
       </section>
 
       <aside class="inspector" aria-label="线段属性">
         <section class="inspector-section selection-section">
           <div class="section-heading">
-            <h2>选中线段</h2>
+            <h2>当前线段</h2>
             <button id="clearSelection" type="button" class="text-command">清除</button>
           </div>
           <div class="metric-grid">
             <div><span class="metric-label">数量</span><strong id="selectedMetric">0</strong></div>
             <div><span class="metric-label">方向</span><strong id="axisMetric">-</strong></div>
             <div><span class="metric-label">平面角</span><strong id="angleMetric">-</strong></div>
-            <div><span class="metric-label">当前距离</span><strong id="distanceMetric">-</strong></div>
+            <div><span class="metric-label">实际距离</span><strong id="distanceMetric">-</strong></div>
           </div>
         </section>
 
         <section class="inspector-section distance-section">
           <label>快速填写距离</label>
-          <div id="quickInputDisplay" class="quick-input-display">点击 3D 线段开始</div>
-          <div id="quickInputHint" class="quick-input-hint">直接输入数字，按 Enter 写入当前线段</div>
+          <div id="quickInputDisplay" class="quick-input-display">点击画布绘制线段</div>
+          <div id="quickInputHint" class="quick-input-hint">落线后直接输入数字，按 Enter 确认</div>
           <div id="validationMessage" class="validation" role="alert"></div>
         </section>
 
@@ -89,9 +92,7 @@
           </div>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>线段</th><th>轴</th><th>距离</th></tr>
-              </thead>
+              <thead><tr><th>线段</th><th>轴</th><th>距离</th></tr></thead>
               <tbody id="segmentRows"></tbody>
             </table>
           </div>
@@ -105,7 +106,7 @@
     </main>
 
     <footer class="commandbar">
-      <div id="statusText" role="status">等待线路数据</div>
+      <div id="statusText" role="status">等待绘图</div>
       <div class="footer-actions">
         <button id="cancelButton" type="button" class="secondary">取消</button>
         <button id="commitButton" type="button" class="primary">写回 CAD</button>
