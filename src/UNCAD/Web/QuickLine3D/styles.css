@@ -4,15 +4,15 @@
   font-size: 14px;
   color: #20252b;
   background: #eef1f4;
-  --border: #d5dbe1;
-  --muted: #68727d;
+  --border: #e1e4e8;
+  --muted: #5f6b76;
   --surface: #ffffff;
   --surface-subtle: #f7f8fa;
-  --accent: #146c94;
-  --accent-hover: #0f587a;
-  --selected: #00a7c7;
-  --changed: #16784a;
-  --warning: #9a6200;
+  --accent: #0e6fd1;
+  --accent-hover: #0b5aab;
+  --selected: #0e6fd1;
+  --changed: #1e7a45;
+  --warning: #8a5300;
 }
 
 * { box-sizing: border-box; }

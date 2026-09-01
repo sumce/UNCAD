@@ -455,6 +455,7 @@ function rebuildLabels() {
 function updateLabels() {
   const visible = elements.labelsToggle.checked;
   const rect = elements.viewport.getBoundingClientRect();
+  const placed = [];
   state.labels.forEach((label, index) => {
     if (!visible) {
       label.style.display = 'none';
@@ -462,10 +463,21 @@ function updateLabels() {
     }
     const segment = state.segments[index];
     const midpoint = segment.start.clone().add(segment.end).multiplyScalar(0.5).project(camera);
-    const x = (midpoint.x * 0.5 + 0.5) * rect.width;
-    const y = (-midpoint.y * 0.5 + 0.5) * rect.height;
+    let x = (midpoint.x * 0.5 + 0.5) * rect.width;
+    let y = (-midpoint.y * 0.5 + 0.5) * rect.height;
     const onScreen = midpoint.z >= -1 && midpoint.z <= 1
       && x >= -40 && x <= rect.width + 40 && y >= -20 && y <= rect.height + 20;
+    if (onScreen) {
+      // 与已放置标签太近时向下错开,避免密集路线的标注互相覆盖。
+      let offset = 0;
+      const minGap = 20;
+      while (placed.some(item =>
+        Math.abs(item.x - x) < minGap && Math.abs(item.y - y - offset) < minGap)) {
+        offset += minGap;
+      }
+      y += offset;
+      placed.push({ x, y });
+    }
     label.style.display = onScreen ? 'block' : 'none';
     label.style.left = `${x}px`;
     label.style.top = `${y}px`;
@@ -510,13 +522,43 @@ function rebuildDiagnostics() {
 
 function setMode(mode) {
   state.mode = mode;
-  controls.enabled = mode === 'orbit';
+  // 缩放(滚轮)与平移(中键)在任何模式下都保持可用;仅左键行为随模式切换。
+  controls.enabled = true;
+  controls.enableZoom = true;
+  controls.enablePan = true;
+  if (mode === 'orbit') {
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+  } else {
+    // 绘制/框选模式:左键留给画布交互,右键拖拽仍可旋转视角。
+    controls.mouseButtons = {
+      LEFT: null,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
+  }
   elements.drawMode.classList.toggle('active', mode === 'draw');
   elements.orbitMode.classList.toggle('active', mode === 'orbit');
   elements.selectMode.classList.toggle('active', mode === 'select');
   renderer.domElement.style.cursor = mode === 'draw' || mode === 'select'
     ? 'crosshair' : 'grab';
   cancelSelectionBox();
+}
+
+/// 路线超出当前视野时才重新取景,避免每次加段都重置用户已调好的缩放。
+function ensureRouteVisible() {
+  const box = new THREE.Box3();
+  for (const segment of state.segments) {
+    box.expandByPoint(segment.start);
+    box.expandByPoint(segment.end);
+  }
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3());
+  const extent = Math.max(size.x, size.y, size.z, 100);
+  if (extent * 1.45 > state.viewHeight * 1.15) fitView();
 }
 
 function beginSelection(event) {
@@ -1020,7 +1062,7 @@ function applyQuickDistance(value) {
     rebuildRoute();
     rebuildTable();
     setSelection(new Set([index]));
-    fitView();
+    ensureRouteVisible();
     rebuildAxisGuides();
     elements.segmentCount.textContent = `${state.segments.length} 段`;
     elements.validation.textContent = '';
