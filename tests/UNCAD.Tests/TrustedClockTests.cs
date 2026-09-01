@@ -62,6 +62,41 @@ namespace UNCAD.Tests
             Assert.Equal(future, effective);
         }
 
+        [Fact]
+        public void Evaluate_NetworkTime_ClampsLocalRollback()
+        {
+            // 断网改时间再上线:网络时间远大于被回拨的本地时间。
+            var network = Build.AddDays(4);
+            var rolledBack = Build.AddDays(-1);
+            DateTime effective = TrustedClock.Evaluate(rolledBack, Build,
+                new List<DateTime>(), out bool tampered, network);
+            Assert.True(tampered);
+            Assert.Equal(network, effective);
+        }
+
+        [Fact]
+        public void Evaluate_NetworkTime_AuthoritativeEvenWithoutMarkers()
+        {
+            // 用户清空了所有水位线:只要在线,真实时间仍然是权威。
+            var network = Build.AddDays(9);
+            var faked = Build.AddDays(2);
+            DateTime effective = TrustedClock.Evaluate(faked, Build,
+                new List<DateTime>(), out bool tampered, network);
+            Assert.True(tampered); // 本地落后网络 7 天 → 判回拨
+            Assert.Equal(network, effective);
+        }
+
+        [Fact]
+        public void Evaluate_OfflineWithClearedMarkers_FallsBackToBuildFloor()
+        {
+            // 全部水位线被删且离线:构建时间下限仍兜底。
+            var faked = Build.AddHours(-48);
+            DateTime effective = TrustedClock.Evaluate(faked, Build,
+                new List<DateTime>(), out bool tampered, null);
+            Assert.True(tampered);
+            Assert.Equal(Build, effective);
+        }
+
         private static DateTime Evaluate(DateTime now, out bool tampered,
             List<DateTime> markers = null)
             => TrustedClock.Evaluate(now, Build, markers, out tampered);
