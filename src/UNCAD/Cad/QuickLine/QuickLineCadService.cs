@@ -42,29 +42,6 @@ namespace UNCAD.Cad.QuickLine
     }
 
     /// <summary>
-    /// One atomic U1LX result: actual millimetres for the annotation and
-    /// schematic endpoints for the CAD Line display geometry.
-    /// </summary>
-    public sealed class QuickLineSchematicUpdate
-    {
-        public QuickLineSchematicUpdate(ObjectId lineId, ObjectId labelId,
-            double millimetres, Point3d startPoint, Point3d endPoint)
-        {
-            LineId = lineId;
-            LabelId = labelId;
-            Millimetres = millimetres;
-            StartPoint = startPoint;
-            EndPoint = endPoint;
-        }
-
-        public ObjectId LineId { get; }
-        public ObjectId LabelId { get; }
-        public double Millimetres { get; }
-        public Point3d StartPoint { get; }
-        public Point3d EndPoint { get; }
-    }
-
-    /// <summary>
     /// AutoCAD adapter used by U1LX.  It deliberately keeps the scan and each
     /// mutation in a short transaction so a cancelled interaction does not
     /// hold database objects open.
@@ -443,6 +420,65 @@ namespace UNCAD.Cad.QuickLine
                 && TryUpdateMillimetreLabel(ctx, segment.LabelId, millimetres);
 
         /// <summary>
+        /// 快速标注:更新线段已有标注;没有标注时在线段中点新建一个并写
+        /// XData 关联。供 U1LX 逐段命令行填写使用。
+        /// </summary>
+        public static bool TryWriteSegmentMillimetre(CadContext ctx,
+            QuickLineSegment segment, double millimetres)
+        {
+            if (segment == null) return false;
+            if (!segment.LabelId.IsNull
+                && TryUpdateMillimetreLabel(ctx, segment, millimetres)) return true;
+            if (double.IsNaN(millimetres)
+                || double.IsInfinity(millimetres) || millimetres < 0.0)
+                return false;
+            try
+            {
+                using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
+                    double height = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
+                    if (!IsFinite(height) || height <= 0.0) height = 180.0;
+                    double offset = Settings.GetDouble(ConfigKeys.UnlOffset, 0.0);
+                    if (!IsFinite(offset) || offset < 0.0) offset = 0.0;
+                    string pos = Settings.Get(ConfigKeys.UnlPos, "1");
+                    Point3d midpoint = segment.MidPoint;
+                    double angle = GeoMath.ReadableAngle(segment.StartPoint,
+                        segment.EndPoint);
+                    AttachmentPoint alignment;
+                    bool above = string.Equals(pos, "2",
+                        StringComparison.OrdinalIgnoreCase);
+                    if (string.Equals(pos, "0", StringComparison.OrdinalIgnoreCase))
+                    {
+                        alignment = AttachmentPoint.MiddleCenter;
+                    }
+                    else
+                    {
+                        alignment = above ? AttachmentPoint.BottomCenter
+                            : AttachmentPoint.TopCenter;
+                        midpoint = GeoMath.Polar(midpoint,
+                            GeoMath.SideDirection(angle, above), offset);
+                    }
+                    DBText label = EntityFactory.DBText(ctx,
+                        QuickLineMillimeterText.Format(millimetres), midpoint,
+                        height, angle, alignment, textStyleId: styleId);
+                    ctx.AddToCurrentSpace(tr, label);
+                    if (!TryLinkLineAndLabel(ctx, tr, segment.LineId, label.Id))
+                    {
+                        tr.Abort();
+                        return false;
+                    }
+                    tr.Commit();
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Applies all edits from one 3D editor session in a single transaction.
         /// Every object and value is validated before the first text is changed;
         /// disposal without Commit rolls the complete batch back on any failure.
@@ -504,268 +540,6 @@ namespace UNCAD.Cad.QuickLine
             }
             catch
             {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Updates every route Line, moves its annotation with the midpoint,
-        /// and writes the actual millimetre text in one transaction.
-        /// Validation completes before the first entity is changed.
-        /// </summary>
-        public static bool TryApplySchematicLayout(CadContext ctx,
-            IEnumerable<QuickLineSchematicUpdate> updates)
-        {
-            if (ctx == null || updates == null) return false;
-            List<QuickLineSchematicUpdate> batch;
-            try
-            {
-                batch = updates.ToList();
-            }
-            catch
-            {
-                return false;
-            }
-            if (batch.Count == 0) return true;
-
-            var lineIds = new HashSet<ObjectId>();
-            var labelIds = new HashSet<ObjectId>();
-            foreach (QuickLineSchematicUpdate update in batch)
-            {
-                if (update == null || update.LineId.IsNull
-                    || !update.LineId.IsValid || !lineIds.Add(update.LineId)
-                    || update.LabelId.IsNull || !update.LabelId.IsValid
-                    || !labelIds.Add(update.LabelId)
-                    || double.IsNaN(update.Millimetres)
-                    || double.IsInfinity(update.Millimetres)
-                    || update.Millimetres < 0.0
-                    || !IsFinite(update.StartPoint)
-                    || !IsFinite(update.EndPoint)
-                    || update.StartPoint.DistanceTo(update.EndPoint) <= Epsilon)
-                    return false;
-            }
-
-            try
-            {
-                using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
-                {
-                    var mutations = new List<Action>(batch.Count * 2);
-                    var labelMutations = new List<LabelMutation>(batch.Count);
-                    foreach (QuickLineSchematicUpdate update in batch)
-                    {
-                        var line = tr.GetObject(update.LineId,
-                            OpenMode.ForWrite, false) as Line;
-                        var label = tr.GetObject(update.LabelId,
-                            OpenMode.ForWrite, false) as Entity;
-                        if (line == null || line.IsErased || label == null
-                            || label.IsErased
-                            || !TryPrepareLabelUpdate(label, update.Millimetres,
-                                out LabelMutation labelMutation)) return false;
-
-                        Point3d oldMidpoint = line.StartPoint
-                            + (line.EndPoint - line.StartPoint) / 2.0;
-                        Point3d newMidpoint = update.StartPoint
-                            + (update.EndPoint - update.StartPoint) / 2.0;
-                        Vector3d labelDisplacement = newMidpoint - oldMidpoint;
-                        mutations.Add(() =>
-                        {
-                            line.StartPoint = update.StartPoint;
-                            line.EndPoint = update.EndPoint;
-                            if (labelDisplacement.Length > Epsilon)
-                                label.TransformBy(Matrix3d.Displacement(
-                                    labelDisplacement));
-                        });
-                        labelMutations.Add(labelMutation);
-                    }
-
-                    if (!EnsureMetadataApplication(ctx.Db, tr)) return false;
-                    foreach (Action mutation in mutations) mutation();
-                    foreach (LabelMutation mutation in labelMutations)
-                    {
-                        string associatedLine = ReadAssociatedLineHandle(
-                            mutation.Entity);
-                        mutation.Apply();
-                        mutation.Entity.XData = BuildMetadata(mutation.Entity,
-                            associatedLine, true);
-                    }
-                    tr.Commit();
-                    return true;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Creates a complete U1LX route in the current drawing. The 3D route
-        /// is projected to southeast-isometric XY geometry, centred on the
-        /// current view target and written together with real millimetre
-        /// labels in one transaction.
-        /// </summary>
-        public static bool TryCreateSchematicRoute(CadContext ctx,
-            IReadOnlyList<QuickLineCreatedSegment> createdSegments,
-            out int createdCount)
-        {
-            createdCount = 0;
-            if (ctx == null || createdSegments == null
-                || createdSegments.Count == 0) return false;
-            QuickLineSchematicLayout layout;
-            try
-            {
-                layout = QuickLineSchematicLayoutBuilder.BuildCreated(
-                    createdSegments, QuickLineSchematicLayoutBuilder.DefaultMaximumSide);
-            }
-            catch
-            {
-                return false;
-            }
-
-            Point3d center;
-            try
-            {
-                using (ViewTableRecord view = ctx.Ed.GetCurrentView())
-                {
-                    if (view == null) return false;
-                    center = ToWorldCoordinates(new Point3d(view.CenterPoint.X,
-                        view.CenterPoint.Y, 0.0), view.ViewDirection,
-                        view.Target, view.ViewTwist);
-                }
-            }
-            catch
-            {
-                return false;
-            }
-
-            double height = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
-            if (!IsFinite(height) || height <= 0.0) height = 180.0;
-            double offset = Settings.GetDouble(ConfigKeys.UnlOffset, 0.0);
-            if (!IsFinite(offset) || offset < 0.0) offset = 0.0;
-            string pos = Settings.Get(ConfigKeys.UnlPos, "1");
-            try
-            {
-                using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
-                {
-                    ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
-                    bool metadataReady = EnsureMetadataApplication(ctx.Db, tr);
-                    foreach (QuickLineCreatedSegment source in createdSegments)
-                    {
-                        QuickLineSchematicSegment schematic = layout.Segments
-                            .First(item => string.Equals(item.Id, source.Id,
-                                StringComparison.OrdinalIgnoreCase));
-                        Point3d start = new Point3d(center.X + schematic.Start.X,
-                            center.Y + schematic.Start.Y, center.Z);
-                        Point3d end = new Point3d(center.X + schematic.End.X,
-                            center.Y + schematic.End.Y, center.Z);
-                        Line line = EntityFactory.Line(ctx, start, end);
-                        ctx.AddToCurrentSpace(tr, line);
-
-                        Point3d midpoint = GeoMath.Mid(start, end);
-                        double angle = GeoMath.ReadableAngle(start, end);
-                        AttachmentPoint alignment;
-                        bool above = string.Equals(pos, "2",
-                            StringComparison.OrdinalIgnoreCase);
-                        if (string.Equals(pos, "0", StringComparison.OrdinalIgnoreCase))
-                        {
-                            alignment = AttachmentPoint.MiddleCenter;
-                        }
-                        else
-                        {
-                            alignment = above ? AttachmentPoint.BottomCenter
-                                : AttachmentPoint.TopCenter;
-                            midpoint = GeoMath.Polar(midpoint,
-                                GeoMath.SideDirection(angle, above), offset);
-                        }
-                        DBText label = EntityFactory.DBText(ctx,
-                            QuickLineMillimeterText.Format(source.DistanceMillimetres),
-                            midpoint, height, angle, alignment, textStyleId: styleId);
-                        ctx.AddToCurrentSpace(tr, label);
-                        if (metadataReady)
-                            label.XData = BuildMetadata(label,
-                                line.Id.Handle.ToString(), true);
-                        createdCount++;
-                    }
-                    tr.Commit();
-                    return true;
-                }
-            }
-            catch
-            {
-                createdCount = 0;
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 把 3D 绘制的回路按标准等轴测展开为平面线并写入当前空间:
-        /// 等轴测 X → 平面 +X,Y → 平面 +Y,垂直段不生成线;长度 1:1 保留
-        /// 键入毫米值,起点为用户指定的插入点。单事务,失败整体回滚。
-        /// </summary>
-        public static bool TryCreatePlanRoute(CadContext ctx,
-            IReadOnlyList<QuickLineCreatedSegment> createdSegments,
-            Point3d basePoint, out int createdCount)
-        {
-            createdCount = 0;
-            if (ctx == null || createdSegments == null
-                || createdSegments.Count == 0) return false;
-
-            IReadOnlyList<QuickLinePlanSegment> planSegments =
-                QuickLinePlanUnfold.Build(createdSegments);
-            if (planSegments.Count == 0) return false;
-
-            double height = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
-            if (!IsFinite(height) || height <= 0.0) height = 180.0;
-            double offset = Settings.GetDouble(ConfigKeys.UnlOffset, 0.0);
-            if (!IsFinite(offset) || offset < 0.0) offset = 0.0;
-            string pos = Settings.Get(ConfigKeys.UnlPos, "1");
-            try
-            {
-                using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
-                {
-                    ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, tr);
-                    bool metadataReady = EnsureMetadataApplication(ctx.Db, tr);
-                    foreach (QuickLinePlanSegment segment in planSegments)
-                    {
-                        Point3d start = new Point3d(basePoint.X + segment.StartX,
-                            basePoint.Y + segment.StartY, basePoint.Z);
-                        Point3d end = new Point3d(basePoint.X + segment.EndX,
-                            basePoint.Y + segment.EndY, basePoint.Z);
-                        Line line = EntityFactory.Line(ctx, start, end);
-                        ctx.AddToCurrentSpace(tr, line);
-
-                        Point3d midpoint = GeoMath.Mid(start, end);
-                        double angle = GeoMath.ReadableAngle(start, end);
-                        AttachmentPoint alignment;
-                        bool above = string.Equals(pos, "2",
-                            StringComparison.OrdinalIgnoreCase);
-                        if (string.Equals(pos, "0", StringComparison.OrdinalIgnoreCase))
-                        {
-                            alignment = AttachmentPoint.MiddleCenter;
-                        }
-                        else
-                        {
-                            alignment = above ? AttachmentPoint.BottomCenter
-                                : AttachmentPoint.TopCenter;
-                            midpoint = GeoMath.Polar(midpoint,
-                                GeoMath.SideDirection(angle, above), offset);
-                        }
-                        DBText label = EntityFactory.DBText(ctx,
-                            QuickLineMillimeterText.Format(segment.DistanceMillimetres),
-                            midpoint, height, angle, alignment, textStyleId: styleId);
-                        ctx.AddToCurrentSpace(tr, label);
-                        if (metadataReady)
-                            label.XData = BuildMetadata(label,
-                                line.Id.Handle.ToString(), true);
-                        createdCount++;
-                    }
-                    tr.Commit();
-                    return true;
-                }
-            }
-            catch
-            {
-                createdCount = 0;
                 return false;
             }
         }
