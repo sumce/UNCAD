@@ -7,7 +7,7 @@ namespace UNCAD.Tests
     public sealed class UpstreamConnectionFeatureContractTests
     {
         [Fact]
-        public void FillAndBatchUpdate_EnsureUpstreamInfoConnections()
+        public void FillAndBatchUpdate_GateUpstreamConnectionsBehindDisabledByDefaultSetting()
         {
             string fill = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Fill", "FillFeature.cs"));
@@ -20,6 +20,10 @@ namespace UNCAD.Tests
 
             Assert.Contains("UpstreamConnectionLineWriter.Ensure", fill);
             Assert.Contains("UpstreamConnectionLineWriter.Ensure", batch);
+            Assert.Contains("ConfigKeys.FillUpstreamConnectionEnabled, false", fill);
+            Assert.Contains("ConfigKeys.FillUpstreamConnectionEnabled, false", batch);
+            Assert.Contains(": FillWriteResult.Empty", fill);
+            Assert.Contains(": FillWriteResult.Empty", batch);
             Assert.Contains("UNCAD_UPSTREAM_LINK", writer);
             Assert.Contains("ReadExistingLines", writer);
             Assert.Contains("SetLinkData", writer);

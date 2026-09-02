@@ -72,6 +72,11 @@ namespace UNCAD.UI
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
+        private readonly CheckBox _fillUpstreamConnection = new CheckBox
+        {
+            Text = "U1F/U1U 自动连接 upstream_info 与 upstream（实验性）",
+            AutoSize = true
+        };
 
         public UnifiedSettingsForm(int tabIndex)
         {
@@ -195,6 +200,8 @@ namespace UNCAD.UI
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
+            _fillUpstreamConnection.Checked = Settings.GetBool(
+                ConfigKeys.FillUpstreamConnectionEnabled, false);
         }
 
         // ---------- 保存（含数据校验） ----------
@@ -247,11 +254,15 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
+            Settings.SetBool(ConfigKeys.FillUpstreamConnectionEnabled,
+                _fillUpstreamConnection.Checked);
         }
 
         private void ConfigureStatisticsToolTips()
         {
             _toolTips.ShowAlways = true;
+            _toolTips.SetToolTip(_fillUpstreamConnection,
+                "默认关闭。开启后才自动创建或更新连接线；关闭不会删除已有线段。");
             _toolTips.SetToolTip(_statText, "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
             _toolTips.SetToolTip(_statMText, "读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
             _toolTips.SetToolTip(_statCable, "严格格式示例：2000mm；不允许前后缀或备注。");
@@ -405,7 +416,7 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(7);
+            var g = Grid(8);
             // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 1); g.Controls.Add(_fillTblRow, 1, 1);
@@ -415,6 +426,8 @@ namespace UNCAD.UI
             g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
             g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
             var page = Page("Excel 数据", g);
+            g.Controls.Add(Lbl("上游自动连线:"), 0, 7);
+            g.Controls.Add(_fillUpstreamConnection, 1, 7);
             page.Controls.Add(new Label
             {
                 Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",

@@ -74,6 +74,10 @@ namespace UNCAD.Tests
                 ConfigKeys.FillIncludeUnmatchedConduits);
             Assert.NotEqual(ConfigKeys.FillClearRows,
                 ConfigKeys.FillFlexibleConduitMeters);
+            Assert.Equal("UNC_FILL_UPSTREAM_CONNECTION_ENABLED",
+                ConfigKeys.FillUpstreamConnectionEnabled);
+            Assert.NotEqual(ConfigKeys.FillFlexibleConduitMeters,
+                ConfigKeys.FillUpstreamConnectionEnabled);
         }
 
         [Fact]

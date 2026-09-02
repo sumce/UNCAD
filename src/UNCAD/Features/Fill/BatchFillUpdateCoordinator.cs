@@ -190,6 +190,8 @@ namespace UNCAD.Features.Fill
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
             int upstreamConnectionLines = 0;
+            bool upstreamConnectionEnabled = Settings.GetBool(
+                ConfigKeys.FillUpstreamConnectionEnabled, false);
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     plans.Select(plan => plan.Machine.MachineId))))
@@ -233,9 +235,11 @@ namespace UNCAD.Features.Fill
                         FillWriteResult upstreamState = CadDynamicBlockStateService.FillUpstreamState(
                             ctx, transaction, plan.Selection.UpstreamStateBlockIds,
                             plan.Machine.Next);
-                        FillWriteResult upstreamConnection = UpstreamConnectionLineWriter.Ensure(ctx,
-                            transaction, plan.Selection.UpstreamInfoBlockIds,
-                            plan.Selection.UpstreamStateBlockIds);
+                        FillWriteResult upstreamConnection = upstreamConnectionEnabled
+                            ? UpstreamConnectionLineWriter.Ensure(ctx, transaction,
+                                plan.Selection.UpstreamInfoBlockIds,
+                                plan.Selection.UpstreamStateBlockIds)
+                            : FillWriteResult.Empty;
                         upstreamConnectionLines += upstreamConnection.Blocks;
                         FillWriteResult upstreamAxis = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamAxisBlockIds,

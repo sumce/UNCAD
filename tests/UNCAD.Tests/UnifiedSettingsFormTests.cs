@@ -72,6 +72,8 @@ namespace UNCAD.Tests
                         TabControl tabs = Find<TabControl>(form);
                         Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
                         List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
+                        Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab),
+                            check => check.Text.Contains("upstream_info"));
                         Assert.Equal(4, numbers.Count);
                         NumericUpDown clearRows = Assert.Single(numbers, number =>
                             number.DecimalPlaces == 0 && number.Minimum == 1m

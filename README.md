@@ -13,6 +13,7 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 - 版本号升级为 2.2.1（程序集/Bundle 版本 2.2.1.0），保持当前 24 个公开命令和已验证的 U1/U1Q/XLAYOUT/XSTS/Xmerge 功能。
 - 新增 `UNCAD-JSWY` 客户授权构建：授权给江苏文炎建设工程有限公司客户李小亮，项目授权模式到期时间为北京时间 `2026-10-01 00:00:00 UTC+8`，预计授权周期记录为 10 年。到期后通过发布新版本续期，不把授权时间写成 10 年后的固定日期。
 - 使用 `release-jswy.ps1` 生成客户包；正式 `Release` 构建仍为永久授权，`Temporary` 构建仍使用独立试用授权。
+- `U1SET → Excel 数据` 新增上游自动连线开关。由于 `upstream` 动态块存在多种形态，该实验功能默认关闭；关闭时 U1F/U1U 不创建或更新连接线，也不会删除已有线段。
 
 开发者：**UNSIAO.Ltd** · 官网：**www.unsiao.com**
 

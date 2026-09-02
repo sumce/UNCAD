@@ -315,6 +315,8 @@ namespace UNCAD.Features.Fill
                 upstreamInfoResult;
             FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult,
                 upstreamConnectionResult;
+            bool upstreamConnectionEnabled = Settings.GetBool(
+                ConfigKeys.FillUpstreamConnectionEnabled, false);
             AutomaticSubmissionWriteResult automaticExcel;
             // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
             // 文件快照覆盖到 CAD Commit，任一失败都不留下单边更新。
@@ -345,9 +347,10 @@ namespace UNCAD.Features.Fill
                     ConnectionBlockFiller.UpstreamInfo(picked), true);
                 upstreamStateResult = CadDynamicBlockStateService.FillUpstreamState(ctx,
                     transaction, selection.UpstreamStateBlockIds, picked.Next);
-                upstreamConnectionResult = UpstreamConnectionLineWriter.Ensure(ctx,
-                    transaction, selection.UpstreamInfoBlockIds,
-                    selection.UpstreamStateBlockIds);
+                upstreamConnectionResult = upstreamConnectionEnabled
+                    ? UpstreamConnectionLineWriter.Ensure(ctx, transaction,
+                        selection.UpstreamInfoBlockIds, selection.UpstreamStateBlockIds)
+                    : FillWriteResult.Empty;
                 upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                     selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
                     ConnectionBlockFiller.UpstreamAxis(picked), false);

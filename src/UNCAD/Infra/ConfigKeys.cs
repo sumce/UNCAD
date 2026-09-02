@@ -49,6 +49,8 @@ namespace UNCAD.Infra
         public const string FillBridge = "UNC_FILL_BRIDGE";      // 图框块 BRIDGE_FRAME_INFO 内容（空=不写）
         public const string FillFlexibleConduitMeters =
             "UNC_FILL_FLEXIBLE_CONDUIT_METERS"; // 软管默认长度，单位米
+        public const string FillUpstreamConnectionEnabled =
+            "UNC_FILL_UPSTREAM_CONNECTION_ENABLED";
         public const string FillIncludeUnmatchedConduits =
             "UNC_FILL_INCLUDE_UNMATCHED_CONDUITS"; // 仅兼容旧配置；运行时固定忽略
         public const string FillRecentCatalogItems =
