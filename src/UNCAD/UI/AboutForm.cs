@@ -92,7 +92,7 @@ namespace UNCAD.UI
         private static TabPage BuildProductTab(AboutInfo info)
         {
             var page = new TabPage("产品信息") { Padding = new Padding(18) };
-            var layout = DetailLayout(7);
+            var layout = DetailLayout(8); // product details
             AddDetail(layout, 0, "产品", info.ProductName);
             AddDetail(layout, 1, "版本", info.Version);
             AddDetail(layout, 2, "构建时间", info.BuildTime);
@@ -100,6 +100,7 @@ namespace UNCAD.UI
             AddDetail(layout, 4, "开发者", info.CompanyName);
             AddDetail(layout, 5, "官网", info.Website);
             AddDetail(layout, 6, "版权", info.Copyright);
+            AddDetail(layout, 7, "客户代码", info.CustomerCode);
             page.Controls.Add(layout);
             return page;
         }
@@ -107,8 +108,18 @@ namespace UNCAD.UI
         private static TabPage BuildLicenseTab(AboutInfo info)
         {
             LicenseSnapshot license = info.License;
+            // Customer-specific builds expose the licensee information directly in the
+            // authorization page; perpetual and trial builds render a dash for these rows.
+            string licenseeCompany = string.IsNullOrWhiteSpace(info.LicenseeCompany)
+                ? "—" : info.LicenseeCompany;
+            string licenseeName = string.IsNullOrWhiteSpace(info.LicenseeName)
+                ? "—" : info.LicenseeName;
             var page = new TabPage("授权状态") { Padding = new Padding(18) };
-            var layout = DetailLayout(5);
+            TableLayoutPanel layout = DetailLayout(8);
+            AddDetail(layout, 5, "授权公司", licenseeCompany);
+            AddDetail(layout, 6, "授权客户", licenseeName);
+            AddDetail(layout, 7, "预计授权时间", info.ExpectedAuthorizationYears.HasValue
+                ? info.ExpectedAuthorizationYears.Value + " 年" : "—");
             AddDetail(layout, 0, "授权状态", license.StatusText, license.IsExpired);
             AddDetail(layout, 1, "授权模式", ModeText(license.Mode));
             AddDetail(layout, 2, "有效期至", license.ExpiryText);

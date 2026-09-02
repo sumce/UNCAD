@@ -50,6 +50,8 @@ namespace UNCAD.Infra
                 E(CommandIds.Settings, "配置中心", "U1SET", "集中设置绘图、统计、清单和输出参数", "保存前验证路径和数值范围。"),
                 E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812 图框", "同机台图框在独立 DWG 中横向排列。"),
                 E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "直接回车使用原点；每行首框左侧生成高度 25000 的机台 ID 文字。"),
+                E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路优先读取 U1SET 配置的机台 Excel。"),
+                E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),
                 E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "统计分类可在 U1SET 独立开关。"),
                 E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。")
             };

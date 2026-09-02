@@ -32,17 +32,29 @@ namespace UNCAD.Tests
             else
             {
                 Assert.NotNull(license.ExpiresUtc);
-                Assert.Equal("2026-09-02 23:59:59 UTC+8", license.ExpiryText);
+                Assert.Equal(ProductMetadata.BuildLicenseMode == LicenseMode.Project
+                    ? "2026-10-01 00:00:00 UTC+8"
+                    : "2026-09-03 00:00:00 UTC+8", license.ExpiryText);
             }
         }
 
         [Fact]
         public void BuildConfiguration_SelectsMatchingLicenseFlavor()
         {
-            if (ProductMetadata.BuildConfiguration == "Temporary")
+            if (ProductMetadata.BuildConfiguration == "JSWY")
+            {
+                Assert.Equal(LicenseMode.Project, ProductMetadata.BuildLicenseMode);
+                Assert.Equal("2026-10-01T00:00:00+08:00",
+                    ProductMetadata.BuildLicenseExpiresUtc);
+                Assert.Equal("UNCAD-JSWY", ProductMetadata.BuildCustomerCode);
+                Assert.Equal("江苏文炎建设工程有限公司", ProductMetadata.LicenseeCompany);
+                Assert.Equal("李小亮", ProductMetadata.LicenseeName);
+                Assert.Equal(10, ProductMetadata.ExpectedAuthorizationYears);
+            }
+            else if (ProductMetadata.BuildConfiguration == "Temporary")
             {
                 Assert.Equal(LicenseMode.Trial, ProductMetadata.BuildLicenseMode);
-                Assert.Equal("2026-09-02T23:59:59+08:00",
+                Assert.Equal("2026-09-03T00:00:00+08:00",
                     ProductMetadata.BuildLicenseExpiresUtc);
             }
             else
@@ -55,16 +67,32 @@ namespace UNCAD.Tests
         [Fact]
         public void TemporaryLicense_ExpiresAtConfiguredUtcPlus8Deadline()
         {
-            const string expiry = "2026-09-02T23:59:59+08:00";
+            const string expiry = "2026-09-03T00:00:00+08:00";
             LicenseSnapshot active = ProductMetadata.EvaluateLicense(LicenseMode.Trial,
-                expiry, new DateTime(2026, 9, 2, 15, 59, 58, DateTimeKind.Utc));
-            LicenseSnapshot expired = ProductMetadata.EvaluateLicense(LicenseMode.Trial,
                 expiry, new DateTime(2026, 9, 2, 15, 59, 59, DateTimeKind.Utc));
+            LicenseSnapshot expired = ProductMetadata.EvaluateLicense(LicenseMode.Trial,
+                expiry, new DateTime(2026, 9, 2, 16, 0, 0, DateTimeKind.Utc));
 
             Assert.False(active.IsExpired);
-            Assert.Equal(0, active.DaysRemaining);
+            Assert.Equal(1, active.DaysRemaining);
             Assert.True(expired.IsExpired);
-            Assert.Equal("2026-09-02 23:59:59 UTC+8", expired.ExpiryText);
+            Assert.Equal("2026-09-03 00:00:00 UTC+8", expired.ExpiryText);
+        }
+
+        [Fact]
+        public void JswyProjectLicense_UsesOctoberFirstDeadline()
+        {
+            if (ProductMetadata.BuildConfiguration != "JSWY") return;
+
+            const string expiry = "2026-10-01T00:00:00+08:00";
+            LicenseSnapshot active = ProductMetadata.EvaluateLicense(LicenseMode.Project,
+                expiry, new DateTime(2026, 9, 30, 15, 59, 59, DateTimeKind.Utc));
+            LicenseSnapshot expired = ProductMetadata.EvaluateLicense(LicenseMode.Project,
+                expiry, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc));
+
+            Assert.False(active.IsExpired);
+            Assert.True(expired.IsExpired);
+            Assert.Equal("2026-10-01 00:00:00 UTC+8", expired.ExpiryText);
         }
 
         [Fact]

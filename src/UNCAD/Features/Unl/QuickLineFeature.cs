@@ -27,9 +27,6 @@ namespace UNCAD.Features.Unl
         [CommandMethod(CommandIds.LineQuick)]
         public void QuickLine() => Run();
 
-        [CommandMethod(CommandIds.LegacyLineQuick)]
-        public void QuickLineLegacy() => Run();
-
         protected override void Execute(CadContext ctx) => FastAnnotate(ctx);
 
         private static void FastAnnotate(CadContext ctx)

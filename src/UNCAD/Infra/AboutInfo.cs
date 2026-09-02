@@ -17,6 +17,10 @@ namespace UNCAD.Infra
         public string BuildTime { get; set; }
         public string UpdatedOn { get; set; }
         public string Authorization { get; set; }
+        public string CustomerCode { get; set; }
+        public string LicenseeCompany { get; set; }
+        public string LicenseeName { get; set; }
+        public int? ExpectedAuthorizationYears { get; set; }
         public LicenseSnapshot License { get; set; }
 
         public static AboutInfo Current()
@@ -26,7 +30,7 @@ namespace UNCAD.Infra
             LicenseSnapshot license = ProductMetadata.CurrentLicense();
             return new AboutInfo
             {
-                ProductName = ProductMetadata.ProductName,
+                ProductName = ProductMetadata.DisplayName,
                 Subtitle = ProductMetadata.ProductSubtitle,
                 CompanyName = ProductMetadata.CompanyName,
                 Website = ProductMetadata.Website,
@@ -36,6 +40,10 @@ namespace UNCAD.Infra
                 BuildTime = ParseBuildTime(file.ProductVersion),
                 UpdatedOn = ProductMetadata.ReleaseDateUtc,
                 Authorization = license.StatusText,
+                CustomerCode = ProductMetadata.BuildCustomerCode,
+                LicenseeCompany = ProductMetadata.LicenseeCompany,
+                LicenseeName = ProductMetadata.LicenseeName,
+                ExpectedAuthorizationYears = ProductMetadata.ExpectedAuthorizationYears,
                 License = license
             };
         }

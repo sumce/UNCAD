@@ -16,12 +16,29 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.2.0", info.Version);
+            Assert.Equal("2.2.1", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
-            Assert.Equal("2026-08-30", info.UpdatedOn);
+            Assert.Equal("2026-09-02", info.UpdatedOn);
+            if (ProductMetadata.BuildLicenseMode == LicenseMode.Project)
+            {
+                Assert.Contains("项目授权版", info.Authorization);
+                Assert.Equal("UNCAD-JSWY", info.CustomerCode);
+                Assert.Equal("江苏文炎建设工程有限公司", info.LicenseeCompany);
+                Assert.Equal("李小亮", info.LicenseeName);
+                Assert.Equal(10, info.ExpectedAuthorizationYears);
+                return;
+            }
             Assert.Contains(ProductMetadata.BuildLicenseMode == LicenseMode.Perpetual
-                ? "正式版" : "试用版", info.Authorization);
+                ? "正式版"
+                : ProductMetadata.CurrentLicense().IsExpired ? "已过期" : "试用版", info.Authorization);
             Assert.Equal("UNSIAO.Ltd", Branding.Developer);
+            if (ProductMetadata.BuildConfiguration == "JSWY")
+            {
+                Assert.Equal("UNCAD-JSWY", info.CustomerCode);
+                Assert.Equal("江苏文炎建设工程有限公司", info.LicenseeCompany);
+                Assert.Equal("李小亮", info.LicenseeName);
+                Assert.Equal(10, info.ExpectedAuthorizationYears);
+            }
         }
 
         [Fact]

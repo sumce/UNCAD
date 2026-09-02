@@ -97,6 +97,16 @@ namespace UNCAD.Tests
             Assert.Equal(Build, effective);
         }
 
+        [Fact]
+        public void Evaluate_IsPureAndDoesNotPersistTestWatermark()
+        {
+            // Evaluation must not write a future marker into the user's real profile.
+            DateTime effective = Evaluate(Build.AddDays(5), out bool tampered,
+                markers: new List<DateTime> { Build });
+            Assert.False(tampered);
+            Assert.Equal(Build.AddDays(5), effective);
+        }
+
         private static DateTime Evaluate(DateTime now, out bool tampered,
             List<DateTime> markers = null)
             => TrustedClock.Evaluate(now, Build, markers, out tampered);

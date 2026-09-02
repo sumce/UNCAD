@@ -79,6 +79,13 @@ namespace UNCAD.Features.Submit
             // Batch U1U follows the same post-edit contract as single-frame U1U.
             => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false);
 
+        public static AutomaticSubmissionWriteResult WriteBatchWithDefaults(
+            CadContext ctx, Transaction transaction, string filePath,
+            IEnumerable<ObjectId[]> sourceGroups, FileBatchRollback batch)
+            // Batch U1U explicitly confirmed fallback rows. Keep CAD changes, submit only
+            // fixed-catalog materials, and report rows that cannot be keyed in the BOQ.
+            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false, true);
+
         public static IReadOnlyList<string> TargetPaths(string outputRoot,
             IEnumerable<string> machineIds)
             => (machineIds ?? Enumerable.Empty<string>())
@@ -87,7 +94,8 @@ namespace UNCAD.Features.Submit
 
         private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
             Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
-            FileBatchRollback externalBatch, bool inferLegacySocketPanels)
+            FileBatchRollback externalBatch, bool inferLegacySocketPanels,
+            bool allowUnmatchedDefaults = false)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (string.IsNullOrWhiteSpace(filePath))
@@ -117,7 +125,7 @@ namespace UNCAD.Features.Submit
             // 与图框实际内容不一致。报错中止,列出每一行,让用户先在 CAD 表中解决。
             var dropped = records.Where(record =>
                 record.DroppedRows != null && record.DroppedRows.Count > 0).ToList();
-            if (dropped.Count > 0)
+            if (dropped.Count > 0 && !allowUnmatchedDefaults)
             {
                 string detail = string.Join("\n", dropped.Select(record =>
                     "  机台 " + record.MachineId.Trim() + " / " + record.DeviceName.Trim()
@@ -127,6 +135,16 @@ namespace UNCAD.Features.Submit
                     "图框内存在无法匹配固定清单的手动材料行,BOQ 导出已中止"
                     + "（xlsx 将与图框内容不一致）:\n" + detail
                     + "\n请删除这些行或在 U1F/U1U 中替换为固定清单项目后重试。");
+            }
+
+            if (dropped.Count > 0 && allowUnmatchedDefaults)
+            {
+                foreach (SubmissionRecord record in dropped)
+                    Log.Warn("U1U accepted unmatched BOQ rows for " + record.MachineId
+                        + " / " + record.DeviceName + ": "
+                        + string.Join(" || ", record.DroppedRows));
+                ctx.Write("\n[U1U] 已按确认保留未匹配清单行；无固定项目编码的行未写入自动 BOQ。"
+                    + "已匹配项目仍会正常同步。\n");
             }
 
             // PrepareTargetPath returns the selected root directory, not a file path.

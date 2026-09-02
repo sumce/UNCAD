@@ -144,6 +144,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("Microsoft.Web.WebView2", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);
+            Assert.Contains("temporaryDllNames", temporary);
+            Assert.Contains("Remove-Item -Force", temporary);
         }
 
         [Fact]
@@ -153,10 +155,25 @@ namespace UNCAD.Tests
 
             Assert.Contains("$configuration = \"Temporary\"", script);
             Assert.Contains("$licenseMode = \"Trial\"", script);
-            Assert.Contains("2026-09-02T23:59:59+08:00", script);
-            Assert.Contains("temp-20260902", script);
+            Assert.Contains("2026-09-03T00:00:00+08:00", script);
+            Assert.Contains("temp-20260903", script);
             Assert.Contains("SkipBundle = $true", script);
             Assert.Contains("$stageBundle", script);
+            Assert.Contains("-Mode VerifyPackage", script);
+        }
+
+        [Fact]
+        public void CustomerRelease_DeclaresJiangsuWenyanLicenseMetadata()
+        {
+            string script = File.ReadAllText(RepoFile("release-jswy.ps1"));
+
+            Assert.Contains("$configuration = \"JSWY\"", script);
+            Assert.Contains("$licenseMode = \"Project\"", script);
+            Assert.Contains("2026-10-01T00:00:00+08:00", script);
+            Assert.Contains("UNCAD-JSWY", script);
+            Assert.Contains("0x6C5F", script);
+            Assert.Contains("0x674E", script);
+            Assert.Contains("$expectedAuthorizationYears = \"10\"", script);
             Assert.Contains("-Mode VerifyPackage", script);
         }
 

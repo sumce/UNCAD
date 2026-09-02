@@ -2,6 +2,18 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
+Current 2.2.1 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
+
+`XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
+
+`U1F/U1U` automatically connect `upstream_info` and `upstream` blocks with a horizontal stub below the info block plus a directional diagonal segment. The upstream symbol uses the stub's left end when it is on the left, and the right end when it is on the right. Repeated runs update the existing pair instead of accumulating duplicate lines.
+
+## v2.2.1 重点更新
+
+- 版本号升级为 2.2.1（程序集/Bundle 版本 2.2.1.0），保持当前 24 个公开命令和已验证的 U1/U1Q/XLAYOUT/XSTS/Xmerge 功能。
+- 新增 `UNCAD-JSWY` 客户授权构建：授权给江苏文炎建设工程有限公司客户李小亮，项目授权模式到期时间为北京时间 `2026-10-01 00:00:00 UTC+8`，预计授权周期记录为 10 年。到期后通过发布新版本续期，不把授权时间写成 10 年后的固定日期。
+- 使用 `release-jswy.ps1` 生成客户包；正式 `Release` 构建仍为永久授权，`Temporary` 构建仍使用独立试用授权。
+
 开发者：**UNSIAO.Ltd** · 官网：**www.unsiao.com**
 
 将 `./Max` 目录下的 4 个 AutoLISP 轻量插件移植为 C# .NET 插件。
@@ -83,7 +95,7 @@
 
 ## v1.9.7.14 重点更新
 
-- 新增独立临时授权构建与发布包，有效期至北京时间 `2026-09-08 23:59:59 UTC+8`；正式版继续保持无期限，两个构建互不覆盖。
+- 新增独立临时授权构建与发布包，有效期至北京时间 `2026-09-03 00:00:00 UTC+8`；正式版继续保持无期限，两个构建互不覆盖。
 - 关于与授权页面按构建类型显示正式版或试用版状态；临时授权到期后继续允许查看授权和条款，但阻止 U1F、U1U、U1DWG 写入/导出。
 
 ## v1.9.7.13 重点更新

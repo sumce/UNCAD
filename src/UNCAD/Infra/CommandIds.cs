@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.2.0.</summary>
+    /// <summary>Public AutoCAD command contract for v2.2.1.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -11,6 +11,8 @@ namespace UNCAD.Infra
         public const string Settings = "U1SET";
         public const string DwgExport = "U1DWG";
         public const string XLayout = "XLAYOUT";
+        public const string Statistics = "XSTS";
+        public const string Merge = "Xmerge";
         public const string Help = "U1HELP";
         public const string About = "U1A";
         public const string Conduit = "U1C";
@@ -39,12 +41,14 @@ namespace UNCAD.Infra
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
+        public const string XstsFeatureCommands = Statistics;
+        public const string MergeFeatureCommands = Merge;
         public const string HelpFeatureCommands = Help;
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
             Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout, Help
+            Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help
         };
 
         public static IReadOnlyList<string> Legacy { get; } = new[]
@@ -56,7 +60,7 @@ namespace UNCAD.Infra
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
             Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout, Help,
+            Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics
         };

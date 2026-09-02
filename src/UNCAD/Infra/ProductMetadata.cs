@@ -28,14 +28,30 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-08-30";
-        public const string VersionLabel = "2.2.0";
+        public const string ReleaseDateUtc = "2026-09-02";
+        public const string VersionLabel = "2.2.1";
 
-        // Temporary builds use a separate configuration and package; Release remains perpetual.
-#if UNCAD_TEMPORARY_LICENSE
+#if UNCAD_JSWY_LICENSE
+        public const string BuildCustomerCode = "UNCAD-JSWY";
+        public const string LicenseeCompany = "江苏文炎建设工程有限公司";
+        public const string LicenseeName = "李小亮";
+        public static readonly int? ExpectedAuthorizationYears = 10;
+#else
+        public const string BuildCustomerCode = "UNCAD";
+        public const string LicenseeCompany = "";
+        public const string LicenseeName = "";
+        public static readonly int? ExpectedAuthorizationYears = null;
+#endif
+
+        // Customer and temporary builds use separate configurations and packages; Release remains perpetual.
+#if UNCAD_JSWY_LICENSE
+        public static readonly string BuildConfiguration = "JSWY";
+        public static readonly LicenseMode BuildLicenseMode = LicenseMode.Project;
+        public const string BuildLicenseExpiresUtc = "2026-10-01T00:00:00+08:00";
+#elif UNCAD_TEMPORARY_LICENSE
         public static readonly string BuildConfiguration = "Temporary";
         public static readonly LicenseMode BuildLicenseMode = LicenseMode.Trial;
-        public const string BuildLicenseExpiresUtc = "2026-09-02T23:59:59+08:00";
+        public const string BuildLicenseExpiresUtc = "2026-09-03T00:00:00+08:00";
 #else
         public static readonly string BuildConfiguration = "Release";
         public static readonly LicenseMode BuildLicenseMode = LicenseMode.Perpetual;
@@ -45,6 +61,11 @@ namespace UNCAD.Infra
         public static string Version
         {
             get { return VersionLabel; }
+        }
+
+        public static string DisplayName
+        {
+            get { return BuildCustomerCode == ProductName ? ProductName : BuildCustomerCode; }
         }
 
         public static LicenseSnapshot CurrentLicense()

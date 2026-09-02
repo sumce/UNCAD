@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
-    Name="UNCAD" LicenseMode="Perpetual" LicenseExpiresUtc="" Website="https://www.unsiao.com"
+    Name="UNCAD" LicenseMode="Perpetual" LicenseExpiresUtc="" CustomerCode="UNCAD" LicenseeCompany="" LicenseeName="" ExpectedAuthorizationYears="" Website="https://www.unsiao.com"
     Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
-    AppVersion="2.2.0.0"
+    AppVersion="2.2.1.0"
     ProductType="Application"
     ProductCode="{523252D0-54CF-46C3-8AB0-2943BAE99995}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
@@ -30,6 +30,8 @@
         <Command Global="U1SET" />
         <Command Global="U1DWG" />
         <Command Global="XLAYOUT" />
+        <Command Global="XSTS" />
+        <Command Global="Xmerge" />
         <Command Global="U1HELP" />
         <Command Global="UNL" />
         <Command Global="UNLX" />

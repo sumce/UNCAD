@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-$buildTarget = if ($Configuration -eq "Temporary") {
+$buildTarget = if ($Configuration -in @("Temporary", "JSWY")) {
     "$root\tests\UNCAD.Tests\UNCAD.Tests.csproj"
 } else {
     "$root\UNCAD.slnx"
@@ -28,7 +28,14 @@ Write-Host "Build succeeded: $dll" -ForegroundColor Green
 if (-not $SkipBundle) {
     $bundleDir = "$root\bundle\UNCAD.bundle"
     if (-not (Test-Path $bundleDir)) { New-Item -ItemType Directory -Path $bundleDir -Force | Out-Null }
-    Get-ChildItem "$outputDir\*.dll" | Copy-Item -Destination $bundleDir -Force
+    $outputDlls = @(Get-ChildItem "$outputDir\*.dll" -File)
+    $outputDllNames = @($outputDlls | ForEach-Object { $_.Name })
+    # Keep the bundle's DLL set identical to the verified build output. This removes
+    # dependencies left by deleted features (for example the old OpenTK editor).
+    Get-ChildItem "$bundleDir\*.dll" -File -ErrorAction SilentlyContinue |
+        Where-Object { $outputDllNames -notcontains $_.Name } |
+        Remove-Item -Force
+    $outputDlls | Copy-Item -Destination $bundleDir -Force
 
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }

@@ -58,6 +58,20 @@ namespace UNCAD.Core.Excel
             }
         }
 
+        /// <summary>Reads every machine/circuit row from the configured workbook.</summary>
+        public static List<MachineRow> ReadRows(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException(
+                "机台数据 Excel 路径不能为空。", nameof(filePath));
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite))
+            {
+                var wb = new XSSFWorkbook(fs);
+                try { return ReadAll(wb); }
+                finally { wb.Close(); }
+            }
+        }
+
         public static List<string> DistinctMachineIds(string filePath)
         {
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))

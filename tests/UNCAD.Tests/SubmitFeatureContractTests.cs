@@ -55,6 +55,20 @@ namespace UNCAD.Tests
                 "Batch U1U must identify the machine before reporting table-shape errors.");
         }
 
+        [Fact]
+        public void BatchU1U_UsesExplicitFallbackWriterOnlyAfterConfirmation()
+        {
+            string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Submit", "AutomaticSubmissionService.cs"));
+            string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "BatchFillUpdateCoordinator.cs"));
+
+            Assert.Contains("WriteBatchWithDefaults", service);
+            Assert.Contains("allowUnmatchedDefaults = false", service);
+            Assert.Contains("plans.Any(plan => plan.AllowUnmatchedDefaults)", batch);
+            Assert.Contains("WriteBatchWithDefaults(ctx, transaction", batch);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

@@ -197,7 +197,7 @@ namespace UNCAD.Features.Fill
                             ruanguan.Add(id);
                         if (FrameInfoJsonBlockWriter.IsJsonHostBlock(tr, block))
                             frameInfoJson.Add(id);
-                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
+                        if (IsUpstreamInfoBlock(tr, block))
                             upstreamInfo.Add(id);
                         if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
                             upstreamState.Add(id);
@@ -240,6 +240,26 @@ namespace UNCAD.Features.Fill
             catch (System.Exception ex)
             {
                 throw new InvalidOperationException("无法识别 Ruanguan 块。", ex);
+            }
+        }
+
+        private static bool IsUpstreamInfoBlock(Transaction tr, BlockReference block)
+        {
+            if (block == null) return false;
+            if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
+                return true;
+            try
+            {
+                ObjectId definitionId = block.IsDynamicBlock
+                    ? block.DynamicBlockTableRecord : block.BlockTableRecord;
+                BlockTableRecord definition = tr.GetObject(definitionId, OpenMode.ForRead, true)
+                    as BlockTableRecord;
+                string name = definition?.Name ?? "";
+                return name.StartsWith("upstream_info", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
             }
         }
 

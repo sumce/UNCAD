@@ -36,7 +36,11 @@ namespace UNCAD.Infra
             DateTime now = DateTime.UtcNow;
             DateTime? build = BuildTimestampUtc();
             DateTime? network = TryGetNetworkTimeUtcThrottled();
-            return Evaluate(now, build, ReadMarkers(), out clockTampered, network);
+            DateTime effective = Evaluate(now, build, ReadMarkers(), out clockTampered, network);
+            // Only a real clock read advances the persistent watermark. Evaluate is also
+            // the deterministic calculation API used by tests and must not mutate user state.
+            WriteMarkers(effective);
+            return effective;
         }
 
         /// <summary>纯计算核心,供测试:输入当前时间/构建时间/已有水位线。</summary>
@@ -74,7 +78,6 @@ namespace UNCAD.Infra
                     clockTampered = true;
                 if (networkTimeUtc.Value > effective) effective = networkTimeUtc.Value;
             }
-            WriteMarkers(effective);
             return effective;
         }
 
@@ -194,7 +197,7 @@ namespace UNCAD.Infra
                 | DateTimeStyles.AdjustToUniversal, out marker)
                 && marker > new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        /// <summary>从程序集 InformationalVersion(2.2.0+build.yyyyMMddHHmmss)解析构建时间。</summary>
+        /// <summary>从程序集 InformationalVersion(2.2.1+build.yyyyMMddHHmmss)解析构建时间。</summary>
         internal static DateTime? BuildTimestampUtc()
         {
             try

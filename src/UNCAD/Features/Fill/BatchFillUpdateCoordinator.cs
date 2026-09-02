@@ -189,6 +189,7 @@ namespace UNCAD.Features.Fill
             int frameBlocks = 0;
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
+            int upstreamConnectionLines = 0;
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     plans.Select(plan => plan.Machine.MachineId))))
@@ -232,6 +233,10 @@ namespace UNCAD.Features.Fill
                         FillWriteResult upstreamState = CadDynamicBlockStateService.FillUpstreamState(
                             ctx, transaction, plan.Selection.UpstreamStateBlockIds,
                             plan.Machine.Next);
+                        FillWriteResult upstreamConnection = UpstreamConnectionLineWriter.Ensure(ctx,
+                            transaction, plan.Selection.UpstreamInfoBlockIds,
+                            plan.Selection.UpstreamStateBlockIds);
+                        upstreamConnectionLines += upstreamConnection.Blocks;
                         FillWriteResult upstreamAxis = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamAxisBlockIds,
                             ConnectionBlockFiller.TagUpstreamAxis,
@@ -251,9 +256,13 @@ namespace UNCAD.Features.Fill
                     }
                     // Read the modified entities through the same transaction. If BOQ output
                     // fails, disposing this transaction rolls back the whole CAD batch.
-                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
-                        automaticExcelPath, regions.Select(region => region.EntityIds.ToArray()),
-                        outputBatch);
+                    automaticExcel = plans.Any(plan => plan.AllowUnmatchedDefaults)
+                        ? AutomaticSubmissionService.WriteBatchWithDefaults(ctx, transaction,
+                            automaticExcelPath,
+                            regions.Select(region => region.EntityIds.ToArray()), outputBatch)
+                        : AutomaticSubmissionService.Write(ctx, transaction,
+                            automaticExcelPath,
+                            regions.Select(region => region.EntityIds.ToArray()), outputBatch);
                     transaction.Commit();
                     outputBatch.Complete();
                 }
@@ -267,6 +276,9 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
+            if (upstreamConnectionLines > 0)
+                ctx.Write("\n[U1U] upstream_info 与 upstream 连接线已创建或更新 "
+                    + upstreamConnectionLines + " 段。");
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks

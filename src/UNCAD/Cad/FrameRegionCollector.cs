@@ -269,7 +269,10 @@ namespace UNCAD.Cad
                 as BlockTableRecord;
             if (record != null && string.Equals(record.Name, "frameinfo_json",
                 StringComparison.OrdinalIgnoreCase)) return true;
-            return record != null && DynamicBlockStatePolicy.IsUpstreamBlock(record.Name);
+            return record != null
+                && (DynamicBlockStatePolicy.IsUpstreamBlock(record.Name)
+                    || record.Name.StartsWith("upstream_info",
+                        StringComparison.OrdinalIgnoreCase));
         }
 
         private static bool IsSupportedFrame(Transaction transaction, BlockReference block)
