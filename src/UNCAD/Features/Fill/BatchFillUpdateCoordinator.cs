@@ -189,9 +189,10 @@ namespace UNCAD.Features.Fill
             int frameBlocks = 0;
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
-            int upstreamConnectionLines = 0;
-            bool upstreamConnectionEnabled = Settings.GetBool(
-                ConfigKeys.FillUpstreamConnectionEnabled, false);
+            int deviceColorBlocks = 0;
+            int upstreamColorBlocks = 0;
+            short deviceColorIndex = FillColorSettings.DeviceColorIndex();
+            short upstreamColorIndex = FillColorSettings.UpstreamColorIndex();
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     plans.Select(plan => plan.Machine.MachineId))))
@@ -235,12 +236,6 @@ namespace UNCAD.Features.Fill
                         FillWriteResult upstreamState = CadDynamicBlockStateService.FillUpstreamState(
                             ctx, transaction, plan.Selection.UpstreamStateBlockIds,
                             plan.Machine.Next);
-                        FillWriteResult upstreamConnection = upstreamConnectionEnabled
-                            ? UpstreamConnectionLineWriter.Ensure(ctx, transaction,
-                                plan.Selection.UpstreamInfoBlockIds,
-                                plan.Selection.UpstreamStateBlockIds)
-                            : FillWriteResult.Empty;
-                        upstreamConnectionLines += upstreamConnection.Blocks;
                         FillWriteResult upstreamAxis = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamAxisBlockIds,
                             ConnectionBlockFiller.TagUpstreamAxis,
@@ -249,6 +244,14 @@ namespace UNCAD.Features.Fill
                             transaction, plan.Selection.DownstreamAxisBlockIds,
                             ConnectionBlockFiller.TagDownstreamAxis,
                             ConnectionBlockFiller.DownstreamAxis(plan.Machine), false);
+                        deviceColorBlocks += CadBlockColorWriter.Apply(transaction,
+                            plan.Selection.DeviceBlockIds.Concat(
+                                plan.Selection.DownstreamAxisBlockIds), deviceColorIndex);
+                        upstreamColorBlocks += CadBlockColorWriter.Apply(transaction,
+                            plan.Selection.UpstreamStateBlockIds
+                                .Concat(plan.Selection.UpstreamInfoBlockIds)
+                                .Concat(plan.Selection.UpstreamAxisBlockIds),
+                            upstreamColorIndex);
                         frameBlocks += frame.Blocks + device.Blocks + ruanguan.Blocks
                             + frameInfo.Blocks
                             + upstreamInfo.Blocks
@@ -280,10 +283,10 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            if (upstreamConnectionLines > 0)
-                ctx.Write("\n[U1U] upstream_info 与 upstream 连接线已创建或更新 "
-                    + upstreamConnectionLines + " 段。");
             SelectionService.ClearPickFirst(ctx);
+            if (deviceColorBlocks + upstreamColorBlocks > 0)
+                ctx.Write("\n[U1U] 颜色已校正：设备端 " + deviceColorBlocks
+                    + " 个块，上游端 " + upstreamColorBlocks + " 个块。");
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性。"

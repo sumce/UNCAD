@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Windows.Forms;
@@ -72,11 +73,8 @@ namespace UNCAD.UI
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
-        private readonly CheckBox _fillUpstreamConnection = new CheckBox
-        {
-            Text = "U1F/U1U 自动连接 upstream_info 与 upstream（实验性）",
-            AutoSize = true
-        };
+        private readonly ComboBox _fillDeviceColor = ColorBox();
+        private readonly ComboBox _fillUpstreamColor = ColorBox();
 
         public UnifiedSettingsForm(int tabIndex)
         {
@@ -200,8 +198,8 @@ namespace UNCAD.UI
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
-            _fillUpstreamConnection.Checked = Settings.GetBool(
-                ConfigKeys.FillUpstreamConnectionEnabled, false);
+            SelectColor(_fillDeviceColor, FillColorSettings.DeviceColorIndex());
+            SelectColor(_fillUpstreamColor, FillColorSettings.UpstreamColorIndex());
         }
 
         // ---------- 保存（含数据校验） ----------
@@ -254,15 +252,19 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
-            Settings.SetBool(ConfigKeys.FillUpstreamConnectionEnabled,
-                _fillUpstreamConnection.Checked);
+            Settings.Set(ConfigKeys.FillDeviceColorIndex,
+                SelectedColorIndex(_fillDeviceColor,
+                    FillColorSettings.DefaultDeviceColorIndex)
+                .ToString(CultureInfo.InvariantCulture));
+            Settings.Set(ConfigKeys.FillUpstreamColorIndex,
+                SelectedColorIndex(_fillUpstreamColor,
+                    FillColorSettings.DefaultUpstreamColorIndex)
+                .ToString(CultureInfo.InvariantCulture));
         }
 
         private void ConfigureStatisticsToolTips()
         {
             _toolTips.ShowAlways = true;
-            _toolTips.SetToolTip(_fillUpstreamConnection,
-                "默认关闭。开启后才自动创建或更新连接线；关闭不会删除已有线段。");
             _toolTips.SetToolTip(_statText, "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
             _toolTips.SetToolTip(_statMText, "读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
             _toolTips.SetToolTip(_statCable, "严格格式示例：2000mm；不允许前后缀或备注。");
@@ -270,6 +272,85 @@ namespace UNCAD.UI
             _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
             _toolTips.SetToolTip(_fillFlexibleMeters, "仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。");
+            _toolTips.SetToolTip(_fillDeviceColor,
+                "U1F/U1U 用于设备块和设备轴位块（DS）的 AutoCAD ACI 颜色。");
+            _toolTips.SetToolTip(_fillUpstreamColor,
+                "U1F/U1U 用于 upstream、上游信息/编号块和上游轴位块（US）的 AutoCAD ACI 颜色。");
+        }
+
+        private static ComboBox ColorBox()
+        {
+            var box = new ComboBox
+            {
+                Width = 190,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                DrawMode = DrawMode.OwnerDrawFixed,
+                ItemHeight = 22
+            };
+            box.Items.AddRange(new object[]
+            {
+                new CadColorChoice(1, "红色", Color.Red),
+                new CadColorChoice(2, "黄色", Color.Yellow),
+                new CadColorChoice(3, "绿色", Color.Lime),
+                new CadColorChoice(4, "青色", Color.Cyan),
+                new CadColorChoice(5, "蓝色", Color.Blue),
+                new CadColorChoice(6, "洋红", Color.Fuchsia),
+                new CadColorChoice(7, "白色", Color.White),
+                new CadColorChoice(8, "深灰", Color.Gray),
+                new CadColorChoice(9, "浅灰", Color.LightGray)
+            });
+            box.DrawItem += DrawColorChoice;
+            return box;
+        }
+
+        private static void DrawColorChoice(object sender, DrawItemEventArgs e)
+        {
+            e.DrawBackground();
+            var box = sender as ComboBox;
+            if (box == null || e.Index < 0 || e.Index >= box.Items.Count) return;
+            var choice = box.Items[e.Index] as CadColorChoice;
+            if (choice == null) return;
+
+            var swatch = new Rectangle(e.Bounds.Left + 5, e.Bounds.Top + 4, 20,
+                e.Bounds.Height - 8);
+            using (var brush = new SolidBrush(choice.Preview))
+                e.Graphics.FillRectangle(brush, swatch);
+            e.Graphics.DrawRectangle(Pens.DimGray, swatch);
+            TextRenderer.DrawText(e.Graphics, choice.ToString(), e.Font,
+                new Rectangle(swatch.Right + 8, e.Bounds.Top,
+                    e.Bounds.Width - swatch.Width - 16, e.Bounds.Height),
+                e.ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+            e.DrawFocusRectangle();
+        }
+
+        private static void SelectColor(ComboBox box, short colorIndex)
+        {
+            for (int index = 0; index < box.Items.Count; index++)
+            {
+                if (!(box.Items[index] is CadColorChoice choice)
+                    || choice.Index != colorIndex) continue;
+                box.SelectedIndex = index;
+                return;
+            }
+            box.SelectedIndex = 0;
+        }
+
+        private static short SelectedColorIndex(ComboBox box, short fallback)
+            => box.SelectedItem is CadColorChoice choice ? choice.Index : fallback;
+
+        private sealed class CadColorChoice
+        {
+            public CadColorChoice(short index, string name, Color preview)
+            {
+                Index = index;
+                Name = name;
+                Preview = preview;
+            }
+
+            public short Index { get; }
+            public string Name { get; }
+            public Color Preview { get; }
+            public override string ToString() => Name + " (ACI " + Index + ")";
         }
 
         private static NumericUpDown IntegerBox(decimal value, decimal minimum, decimal maximum)
@@ -416,7 +497,7 @@ namespace UNCAD.UI
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(8);
+            var g = Grid(9);
             // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
             g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
             g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 1); g.Controls.Add(_fillTblRow, 1, 1);
@@ -425,9 +506,9 @@ namespace UNCAD.UI
             g.Controls.Add(Lbl("软管手动数量 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
             g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
             g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
+            g.Controls.Add(Lbl("设备端颜色:"), 0, 7); g.Controls.Add(_fillDeviceColor, 1, 7);
+            g.Controls.Add(Lbl("上游端颜色:"), 0, 8); g.Controls.Add(_fillUpstreamColor, 1, 8);
             var page = Page("Excel 数据", g);
-            g.Controls.Add(Lbl("上游自动连线:"), 0, 7);
-            g.Controls.Add(_fillUpstreamConnection, 1, 7);
             page.Controls.Add(new Label
             {
                 Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",

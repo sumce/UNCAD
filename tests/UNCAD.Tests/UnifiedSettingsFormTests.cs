@@ -72,8 +72,17 @@ namespace UNCAD.Tests
                         TabControl tabs = Find<TabControl>(form);
                         Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
                         List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                        Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab),
-                            check => check.Text.Contains("upstream_info"));
+                        List<ComboBox> colors = FindAll<ComboBox>(tabs.SelectedTab);
+                        Assert.Equal(2, colors.Count);
+                        Assert.All(colors, color =>
+                        {
+                            Assert.Equal(ComboBoxStyle.DropDownList, color.DropDownStyle);
+                            Assert.Equal(DrawMode.OwnerDrawFixed, color.DrawMode);
+                            Assert.Contains(color.Items.Cast<object>(),
+                                item => item.ToString().Contains("ACI 3"));
+                            Assert.Contains(color.Items.Cast<object>(),
+                                item => item.ToString().Contains("ACI 6"));
+                        });
                         Assert.Equal(4, numbers.Count);
                         NumericUpDown clearRows = Assert.Single(numbers, number =>
                             number.DecimalPlaces == 0 && number.Minimum == 1m
