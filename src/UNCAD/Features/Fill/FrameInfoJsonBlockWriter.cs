@@ -1,8 +1,6 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Script.Serialization;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
@@ -18,7 +16,6 @@ namespace UNCAD.Features.Fill
     internal static class FrameInfoJsonBlockWriter
     {
         private const string DefinitionName = "frameinfo_json";
-        private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
         public static FrameInfoJsonRecord Read(CadContext ctx, ObjectId[] blockIds)
         {
@@ -43,7 +40,7 @@ namespace UNCAD.Features.Fill
                 foreach (AttributeReference attribute in attributes)
                 {
                     if (!IsJsonTag(attribute.Tag) && attributes.Count != 1) continue;
-                    FrameInfoJsonRecord record = Parse(AttributeText(attribute));
+                    FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(AttributeText(attribute));
                     if (record != null) return record;
                 }
                 if (block.IsDynamicBlock)
@@ -55,7 +52,7 @@ namespace UNCAD.Features.Fill
                         in dynamicProperties.Where(property => IsJsonTag(property.PropertyName)
                             || (dynamicProperties.Length == 1 && property.Value is string)))
                     {
-                        FrameInfoJsonRecord record = Parse(Convert.ToString(property.Value));
+                        FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(Convert.ToString(property.Value));
                         if (record != null) return record;
                     }
                 }
@@ -88,8 +85,9 @@ namespace UNCAD.Features.Fill
                     EnsureJsonAttributeReference(ctx.Db, transaction, block);
 
                 FrameInfoJsonRecord previous = ReadBlock(transaction, block);
-                FrameInfoJsonRecord next = Build(previous, machine, review, commandName);
-                string payload = Serialize(next);
+                FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previous,
+                    machine, review, commandName, DateTime.UtcNow);
+                string payload = FrameInfoJsonCodec.Serialize(next);
                 bool touched = false;
                 List<AttributeReference> attributes = Attributes(transaction, block).ToList();
                 List<AttributeReference> jsonAttributes = attributes
@@ -219,7 +217,7 @@ namespace UNCAD.Features.Fill
             {
                 if (!IsJsonTag(attribute.Tag)
                     && block.AttributeCollection.Count != 1) continue;
-                FrameInfoJsonRecord record = Parse(AttributeText(attribute));
+                FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(AttributeText(attribute));
                 if (record != null) return record;
             }
             return null;
@@ -442,178 +440,6 @@ namespace UNCAD.Features.Fill
             transaction.AddNewlyCreatedDBObject(reference, true);
             return true;
         }
-
-        private static FrameInfoJsonRecord Build(FrameInfoJsonRecord previous,
-            MachineRow machine, FillReviewData review, string commandName)
-        {
-            previous = previous ?? new FrameInfoJsonRecord();
-            string original = FirstNonEmpty(previous.OriginalCableModel,
-                review?.OriginalCableModel, machine.Cable);
-            string boq = FirstNonEmpty(review?.BoqCableModel,
-                previous.BoqCableModel, original);
-            var next = new FrameInfoJsonRecord
-            {
-                SchemaVersion = "1",
-                MachineId = machine.MachineId ?? "",
-                DeviceName = machine.CircuitName ?? "",
-                Region = machine.Region ?? "",
-                OriginalCableModel = original,
-                BoqCableModel = boq,
-                Fr = machine.Fr ?? "",
-                Detail = machine.Detail ?? "",
-                Seq = machine.Seq ?? "",
-                HoseDiameter = FirstNonEmpty(review?.Machine?.Dia, machine.Dia),
-                Next = machine.Next ?? "",
-                UpstreamAxis = machine.UpstreamAxis ?? "",
-                DownstreamAxis = machine.DownstreamAxis ?? "",
-                LastModifiedUtc = DateTime.UtcNow.ToString("o"),
-                Changes = previous.Changes ?? new List<FrameInfoJsonChange>()
-            };
-            AddChange(previous, next, "MachineId", commandName);
-            AddChange(previous, next, "DeviceName", commandName);
-            AddChange(previous, next, "OriginalCableModel", commandName);
-            AddChange(previous, next, "BoqCableModel", commandName);
-            AddChange(previous, next, "Fr", commandName);
-            AddChange(previous, next, "Detail", commandName);
-            AddChange(previous, next, "Seq", commandName);
-            AddChange(previous, next, "HoseDiameter", commandName);
-            AddChange(previous, next, "Next", commandName);
-            AddChange(previous, next, "UpstreamAxis", commandName);
-            AddChange(previous, next, "DownstreamAxis", commandName);
-            if (next.Changes.Count > 200)
-                next.Changes = next.Changes.Skip(next.Changes.Count - 200).ToList();
-            return next;
-        }
-
-        private static void AddChange(FrameInfoJsonRecord before,
-            FrameInfoJsonRecord after, string field, string command)
-        {
-            string oldValue = Value(before, field);
-            string newValue = Value(after, field);
-            if (string.Equals(oldValue, newValue, StringComparison.Ordinal)) return;
-            after.Changes.Add(new FrameInfoJsonChange
-            {
-                TimestampUtc = after.LastModifiedUtc,
-                Command = command ?? "U1F",
-                Field = field,
-                Before = oldValue,
-                After = newValue,
-                Note = "U1F/U1U 自动同步"
-            });
-        }
-
-        private static string Value(FrameInfoJsonRecord record, string field)
-        {
-            if (record == null) return "";
-            switch (field)
-            {
-                case "MachineId": return record.MachineId ?? "";
-                case "DeviceName": return record.DeviceName ?? "";
-                case "OriginalCableModel": return record.OriginalCableModel ?? "";
-                case "BoqCableModel": return record.BoqCableModel ?? "";
-                case "Fr": return record.Fr ?? "";
-                case "Detail": return record.Detail ?? "";
-                case "Seq": return record.Seq ?? "";
-                case "HoseDiameter": return record.HoseDiameter ?? "";
-                case "Next": return record.Next ?? "";
-                case "UpstreamAxis": return record.UpstreamAxis ?? "";
-                case "DownstreamAxis": return record.DownstreamAxis ?? "";
-                default: return "";
-            }
-        }
-
-        private static string Serialize(FrameInfoJsonRecord record)
-        {
-            var payload = new Dictionary<string, object>(StringComparer.Ordinal)
-            {
-                ["schemaVersion"] = record.SchemaVersion,
-                ["machineId"] = record.MachineId,
-                ["deviceName"] = record.DeviceName,
-                ["region"] = record.Region,
-                ["originalCableModel"] = record.OriginalCableModel,
-                ["boqCableModel"] = record.BoqCableModel,
-                ["fr"] = record.Fr,
-                ["detail"] = record.Detail,
-                ["seq"] = record.Seq,
-                ["hoseDiameter"] = record.HoseDiameter,
-                ["next"] = record.Next,
-                ["upstreamAxis"] = record.UpstreamAxis,
-                ["downstreamAxis"] = record.DownstreamAxis,
-                ["lastModifiedUtc"] = record.LastModifiedUtc,
-                ["changes"] = (record.Changes ?? new List<FrameInfoJsonChange>()).Select(change =>
-                    new Dictionary<string, object>
-                    {
-                        ["timestampUtc"] = change.TimestampUtc,
-                        ["command"] = change.Command,
-                        ["field"] = change.Field,
-                        ["before"] = change.Before,
-                        ["after"] = change.After,
-                        ["note"] = change.Note
-                    }).ToList()
-            };
-            return Json.Serialize(payload);
-        }
-
-        private static FrameInfoJsonRecord Parse(string value)
-        {
-            string text = (value ?? "").Trim();
-            if (text.Length == 0 || text[0] != '{') return null;
-            try
-            {
-                var root = Json.DeserializeObject(text) as IDictionary<string, object>;
-                if (root == null) return null;
-                var record = new FrameInfoJsonRecord
-                {
-                    SchemaVersion = Get(root, "schemaVersion", "1"),
-                    MachineId = Get(root, "machineId"),
-                    DeviceName = Get(root, "deviceName"),
-                    Region = Get(root, "region"),
-                    OriginalCableModel = Get(root, "originalCableModel"),
-                    BoqCableModel = Get(root, "boqCableModel"),
-                    Fr = Get(root, "fr"),
-                    Detail = Get(root, "detail"),
-                    Seq = Get(root, "seq"),
-                    HoseDiameter = Get(root, "hoseDiameter"),
-                    Next = Get(root, "next"),
-                    UpstreamAxis = Get(root, "upstreamAxis"),
-                    DownstreamAxis = Get(root, "downstreamAxis"),
-                    LastModifiedUtc = Get(root, "lastModifiedUtc")
-                };
-                if (root.TryGetValue("changes", out object rawChanges)
-                    && rawChanges is IEnumerable changes)
-                {
-                    foreach (object raw in changes)
-                    {
-                        if (!(raw is IDictionary<string, object> item)) continue;
-                        record.Changes.Add(new FrameInfoJsonChange
-                        {
-                            TimestampUtc = Get(item, "timestampUtc"),
-                            Command = Get(item, "command"),
-                            Field = Get(item, "field"),
-                            Before = Get(item, "before"),
-                            After = Get(item, "after"),
-                            Note = Get(item, "note")
-                        });
-                    }
-                }
-                return record;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-        }
-
-        private static string Get(IDictionary<string, object> values,
-            string name, string fallback = "")
-        {
-            object value = values.FirstOrDefault(pair =>
-                string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
-            return value == null ? fallback : Convert.ToString(value) ?? fallback;
-        }
-
-        private static string FirstNonEmpty(params string[] values)
-            => values?.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "";
 
         private static string AttributeText(AttributeReference attribute)
         {

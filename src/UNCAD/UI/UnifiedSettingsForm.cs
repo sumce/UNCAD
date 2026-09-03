@@ -2,7 +2,9 @@ using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
@@ -130,7 +132,12 @@ namespace UNCAD.UI
             _conduitDia.Text = diameter;
             // 用户只需要提供机台/设备表；固定清单随插件内嵌，不再有清单路径校验。
             string machinePath = _fillExcel.Text.Trim();
-            if (machinePath.Length > 0 && !File.Exists(machinePath))
+            // A machine workbook may be a manually selected local file or a
+            // manually entered HTTP(S) source that is refreshed from this page.
+            // Do not treat a valid remote source as a missing local path.
+            if (machinePath.Length > 0
+                && !MachineWorkbookSource.IsRemote(machinePath)
+                && !File.Exists(machinePath))
             {
                 ShowPathError(_fillExcel, "机台数据 Excel 不存在。");
                 return;
@@ -554,7 +561,48 @@ namespace UNCAD.UI
                     if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.FileName;
                 }
             };
-            return PickerPanel(target, button);
+            var refresh = UiTheme.Button("刷新");
+            refresh.Click += (sender, args) => RefreshMachineWorkbook(target, refresh);
+            var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+            row.Controls.Add(target, 0, 0);
+            row.Controls.Add(button, 1, 0);
+            row.Controls.Add(refresh, 2, 0);
+            return row;
+        }
+
+        private async void RefreshMachineWorkbook(TextBox target, Button button)
+        {
+            string source = target.Text.Trim();
+            if (!MachineWorkbookSource.IsRemote(source))
+            {
+                MessageBox.Show(this, "刷新仅支持 HTTP/HTTPS Excel 地址。", "U1SET",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            button.Enabled = false;
+            string oldText = button.Text;
+            button.Text = "刷新中...";
+            try
+            {
+                MachineWorkbookSourceResult result = await Task.Run(() => MachineWorkbookSource.Refresh(source));
+                string message = result.Updated ? "网络 Excel 已刷新并通过校验。" : "网络 Excel 未变化，继续使用现有缓存。";
+                if (result.UsedCachedFallback) message += "\n网络暂时不可用，已使用缓存。";
+                MessageBox.Show(this, message, "U1SET", MessageBoxButtons.OK,
+                    result.UsedCachedFallback ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "刷新失败：" + ex.Message, "U1SET",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                button.Text = oldText;
+                button.Enabled = true;
+            }
         }
 
         private static Control PickerPanel(TextBox target, Button button)

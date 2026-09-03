@@ -21,9 +21,10 @@ namespace UNCAD.Tests
             Version version = typeof(CommandIds).Assembly.GetName().Version;
             string expected = version.ToString();
             Assert.Equal(expected, (string)package.Attribute("AppVersion"));
-            Assert.Equal("UNCAD", (string)package.Attribute("Name"));
-            Assert.Equal("Perpetual", (string)package.Attribute("LicenseMode"));
+            Assert.Equal("UNCAD Pro", (string)package.Attribute("Name"));
+            Assert.Equal("Online", (string)package.Attribute("LicenseMode"));
             Assert.Equal("", (string)package.Attribute("LicenseExpiresUtc"));
+            Assert.Equal("", (string)package.Attribute("CustomerCode"));
             Assert.Equal("https://www.unsiao.com", (string)package.Attribute("Website"));
             Assert.Equal("UNSIAO.Ltd", (string)package.Element("CompanyDetails")?.Attribute("Name"));
             Assert.Equal("https://www.unsiao.com", (string)package.Element("CompanyDetails")?.Attribute("Website"));
@@ -131,50 +132,47 @@ namespace UNCAD.Tests
         public void PackagePipeline_ShipsNativeEditorWithoutWebPayload()
         {
             string build = File.ReadAllText(RepoFile("build.ps1"));
-            string temporary = File.ReadAllText(RepoFile("release-temp.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
             string csproj = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
 
             // WebView2 与 Web 资源已随原生 OpenTK 编辑器移除。
             Assert.DoesNotContain("WebView2", build);
             Assert.DoesNotContain("Web\\QuickLine3D", build);
-            Assert.DoesNotContain("WebView2", temporary);
             Assert.DoesNotContain("WebView2", installer);
             Assert.DoesNotContain("Web\\QuickLine3D", installer);
             Assert.DoesNotContain("Microsoft.Web.WebView2", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);
-            Assert.Contains("temporaryDllNames", temporary);
-            Assert.Contains("Remove-Item -Force", temporary);
+            Assert.DoesNotContain("UNCAD_TEMPORARY_LICENSE", csproj);
+            Assert.DoesNotContain("UNCAD_JSWY_LICENSE", csproj);
         }
 
         [Fact]
-        public void TemporaryRelease_UsesUtcPlus8ExpiryAndIsolatedBundle()
+        public void LegacyReleaseScripts_AreDisabled()
         {
-            string script = File.ReadAllText(RepoFile("release-temp.ps1"));
+            string temporary = File.ReadAllText(RepoFile("release-temp.ps1"));
+            string customer = File.ReadAllText(RepoFile("release-jswy.ps1"));
 
-            Assert.Contains("$configuration = \"Temporary\"", script);
-            Assert.Contains("$licenseMode = \"Trial\"", script);
-            Assert.Contains("2026-09-03T00:00:00+08:00", script);
-            Assert.Contains("temp-20260903", script);
-            Assert.Contains("SkipBundle = $true", script);
-            Assert.Contains("$stageBundle", script);
-            Assert.Contains("-Mode VerifyPackage", script);
+            Assert.Contains("Trial releases are disabled", temporary);
+            Assert.Contains("Customer-specific releases are disabled", customer);
+            Assert.Contains("release.ps1", temporary);
+            Assert.Contains("release.ps1", customer);
         }
 
         [Fact]
-        public void CustomerRelease_DeclaresJiangsuWenyanLicenseMetadata()
+        public void UnifiedRelease_ContainsNoCustomerOrExpiryMetadata()
         {
-            string script = File.ReadAllText(RepoFile("release-jswy.ps1"));
+            string script = File.ReadAllText(RepoFile("release.ps1"));
 
-            Assert.Contains("$configuration = \"JSWY\"", script);
-            Assert.Contains("$licenseMode = \"Project\"", script);
-            Assert.Contains("2026-10-01T00:00:00+08:00", script);
-            Assert.Contains("UNCAD-JSWY", script);
-            Assert.Contains("0x6C5F", script);
-            Assert.Contains("0x674E", script);
-            Assert.Contains("$expectedAuthorizationYears = \"10\"", script);
+            Assert.Contains("$productName = \"UNCAD Pro\"", script);
+            Assert.Contains("UNCAD-Pro-v", script);
+            Assert.Contains("artifacts\\Pro", script);
+            Assert.Contains("LicenseMode -ne \"Online\"", script);
+            Assert.Contains("supplied by pro.key", script);
             Assert.Contains("-Mode VerifyPackage", script);
+            Assert.Contains("Remove-Item $stage -Recurse -Force", script);
+            Assert.DoesNotContain("UNCAD-JSWY", script);
+            Assert.DoesNotContain("UNCAD-JSHY", script);
         }
 
         private static XElement LoadManifest()

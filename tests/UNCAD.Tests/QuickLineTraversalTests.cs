@@ -253,6 +253,20 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_LargeDisconnectedSetDoesNotCreateFalseConnections()
+        {
+            var segments = Enumerable.Range(0, 5000)
+                .Select(index => Line("L" + index, index * 10.0, 0,
+                    index * 10.0 + 1, 0))
+                .ToArray();
+
+            QuickLineGraph graph = QuickLineGraph.Build(segments, 0.001);
+
+            Assert.Equal(segments.Length, graph.Segments.Count);
+            Assert.All(segments, segment => Assert.Empty(graph.GetConnections(segment.Id)));
+        }
+
+        [Fact]
         public void CreatePlan_RejectsNegativeToleranceOtherThanDefaultSentinel()
         {
             var graph = QuickLineGraph.Build(new[] { Line("A", 0, 0, 1, 0) });

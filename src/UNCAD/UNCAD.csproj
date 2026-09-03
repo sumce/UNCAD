@@ -28,17 +28,10 @@
     <StartWorkingDirectory>$(AutoCADDir)</StartWorkingDirectory>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Temporary'">
-    <DefineConstants>$(DefineConstants);UNCAD_TEMPORARY_LICENSE</DefineConstants>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'JSWY'">
-    <DefineConstants>$(DefineConstants);UNCAD_JSWY_LICENSE</DefineConstants>
-  </PropertyGroup>
-
   <ItemGroup>
     <None Update="BOQ模板.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="BOQ_Template.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Resources\XFrameTemplate.dwg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

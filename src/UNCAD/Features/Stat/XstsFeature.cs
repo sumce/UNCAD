@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -29,7 +30,8 @@ namespace UNCAD.Features.Stat
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.Statistics);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请选择要统计的 frame_20260812 图纸: ", new TypedValue(0, "INSERT"));
+                "\n请选择要统计的图框（frame_20260812/xframe）: ",
+                new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
                 ctx.Write("\n[XSTS] 未选择图纸，未执行统计。");
@@ -50,17 +52,73 @@ namespace UNCAD.Features.Stat
             var selectedRows = new List<XstsCircuitRecord>();
             foreach (FrameRegionGroup region in regions.Groups)
             {
-                SubmissionRecord record = FrameIdentityReader.Read(ctx, region);
-                selectedRows.Add(new XstsCircuitRecord(record.MachineId, record.DeviceName));
+                try
+                {
+                    SubmissionRecord record = FrameIdentityReader.Read(ctx, region);
+                    selectedRows.Add(new XstsCircuitRecord(record.MachineId,
+                        record.DeviceName));
+                }
+                catch (System.Exception ex)
+                {
+                    // One malformed/legacy frame must not discard the other selected
+                    // machines. Keep an explicit issue row for the report and continue.
+                    string detail = "图框 " + region.Handle + " 身份读取失败: " + ex.Message;
+                    ctx.Write("\n[XSTS] " + detail);
+                    selectedRows.Add(new XstsCircuitRecord("", "", detail));
+                }
             }
 
             // When an Excel machine workbook is configured, use it as the expected set,
             // but scope it strictly to machine IDs present in the current selection.
             // Never compare one drawing against the whole project workbook: that makes
             // unrelated machines appear as thousands of missing circuits.
-            var expectedRows = new List<XstsCircuitRecord>(selectedRows);
-            string workbookPath = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
-            if (File.Exists(workbookPath))
+            var expectedRows = new List<XstsCircuitRecord>();
+            XstsExpectedDataStatus expectedStatus;
+            string expectedDetail;
+            string configuredPath = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+            string workbookPath = configuredPath;
+            if (workbookPath.Length == 0)
+            {
+                using (var dialog = new OpenFileDialog
+                {
+                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
+                    Title = "选择机台数据 Excel",
+                    CheckFileExists = true
+                })
+                {
+                    if (dialog.ShowDialog(new WindowWrapper(
+                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
+                        == DialogResult.OK)
+                    {
+                        workbookPath = dialog.FileName;
+                        Settings.Set(ConfigKeys.FillExcelPath, workbookPath);
+                    }
+                }
+            }
+            bool remote = MachineWorkbookSource.IsRemote(configuredPath);
+            bool remoteCacheMissing = false;
+            if (remote)
+            {
+                if (MachineWorkbookSource.TryGetCachedPath(configuredPath,
+                    out string cachedPath)) workbookPath = cachedPath;
+                else remoteCacheMissing = true;
+            }
+            if (workbookPath.Length == 0)
+            {
+                expectedStatus = XstsExpectedDataStatus.NotConfigured;
+                expectedDetail = "未配置机台 Excel";
+            }
+            else if (remoteCacheMissing)
+            {
+                expectedStatus = XstsExpectedDataStatus.FileNotFound;
+                expectedDetail = "网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”";
+            }
+            else if (!File.Exists(workbookPath))
+            {
+                expectedStatus = XstsExpectedDataStatus.FileNotFound;
+                expectedDetail = "机台 Excel 不存在: " + workbookPath;
+            }
+            else
             {
                 try
                 {
@@ -73,13 +131,17 @@ namespace UNCAD.Features.Stat
                         if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
                         expectedRows.Add(new XstsCircuitRecord(row.MachineId, row.CircuitName));
                     }
+                    expectedStatus = XstsExpectedDataStatus.Available;
+                    expectedDetail = remote ? "网络 Excel 手动刷新缓存" : workbookPath;
                 }
                 catch (System.Exception ex)
                 {
-                    ctx.Write("\n[XSTS] Excel 期望回路读取失败，已按当前图纸统计: " + ex.Message);
+                    expectedStatus = XstsExpectedDataStatus.ReadFailed;
+                    expectedDetail = "机台 Excel 读取失败: " + ex.Message;
                 }
             }
-            XstsReport report = XstsReportBuilder.Build(selectedRows, expectedRows);
+            XstsReport report = XstsReportBuilder.Build(selectedRows, expectedRows,
+                expectedStatus, expectedDetail);
             string outputRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
             if (outputRoot.Length == 0) outputRoot = Environment.GetFolderPath(
                 Environment.SpecialFolder.MyDocuments);
@@ -87,10 +149,14 @@ namespace UNCAD.Features.Stat
             string path = Path.Combine(outputRoot, "UNCAD_XSTS_"
                 + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".xlsx");
             XstsExcelReporter.WriteToFile(report, path);
+            string coverage = report.ExpectedDataAvailable
+                ? "缺少 " + report.MissingCircuitCount + " 个回路，多出 "
+                    + report.UnexpectedCircuitCount + " 个回路"
+                : "缺少回路无法判断（" + report.ExpectedDataDetail + "）";
             ctx.Write("\n[XSTS] 统计完成: " + report.Machines.Count + " 个机台、"
                 + report.FrameCount + " 张图纸，"
-                + report.SelectedCircuitCount + " 个已选回路，缺少 "
-                + report.MissingCircuitCount + " 个回路。Excel: " + path);
+                + report.SelectedCircuitCount + " 个有效已选回路，" + coverage
+                + "，异常 " + report.Issues.Count + " 项。Excel: " + path);
             using (var form = new XstsForm(report, path))
                 Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
         }

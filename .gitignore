@@ -36,6 +36,7 @@ venv/
 
 # AutoCAD drawings and transient files
 *.dwg
+!src/UNCAD/Resources/XFrameTemplate.dwg
 *.dxf
 *.bak
 *.sv$

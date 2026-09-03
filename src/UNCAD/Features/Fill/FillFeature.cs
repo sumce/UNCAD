@@ -77,11 +77,9 @@ namespace UNCAD.Features.Fill
             // 阶段2：冻结配置并按实际标注求和，后续预览和写入复用同一结果。
             FillRuntimeOptions options = FillSettings.Current();
             SummationOutput summation = FillStatisticsModule.Execute(ctx,
-                selection.TextIds, options.MmPerGrid);
+                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
             CableStatResult statistics = summation.Statistics;
-            if (updateMode && statistics.CableSum <= 0 && statistics.Bridges.Count == 0
-                && statistics.Conduits.Count == 0)
-                ctx.Write("\n[SUM-STAT/求和统计] 本次未读取到新的电缆、桥架或线管长度，U1U 将保留清单中的现有数量并继续同步块状态。");
+            if (updateMode) WriteMeasurementState(ctx, statistics);
 
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
@@ -168,21 +166,33 @@ namespace UNCAD.Features.Fill
                 picked, catalog, statistics, options.Planning);
             List<TableFillRow> plannedRows = tablePlan.CopyDefaultRows();
             if (updateMode)
-                plannedRows = MergeExistingRowsForUpdate(ctx, selection, plannedRows, statistics);
+                plannedRows = FillUpdateRowMerger.Merge(ctx, selection, plannedRows, statistics);
             // U1U treats existing CAD outlet rows as authoritative for quantity and
             // material.  U1F starts from a clean generated list instead.
             List<TableFillRow> existingOutlets = updateMode
                 ? CadExistingOutletReader.Read(ctx, selection.TableIds,
                     startRow, clearRowCount)
                 : new List<TableFillRow>();
-            bool deviceHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
-                selection.DeviceBlockIds, out string deviceState);
+            CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
+                selection.DeviceBlockIds, out bool deviceHasOutlet,
+                out bool deviceOutletStateKnown, out string deviceState);
             TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
-            List<TableFillRow> socketAdjustedRows = updateMode
-                ? DeviceOutletPolicy.ApplyForUpdate(plannedRows,
-                    deviceHasOutlet, deviceOutlet, existingOutlets)
-                : DeviceOutletPolicy.Apply(plannedRows,
-                    deviceHasOutlet, deviceOutlet);
+            List<TableFillRow> socketAdjustedRows;
+            if (updateMode && !deviceOutletStateKnown)
+            {
+                // Missing/legacy Device blocks do not prove that an outlet was removed.
+                // Preserve the current CAD outlet rows and let the user decide in review.
+                socketAdjustedRows = UpdateOutletPolicy.PreserveExisting(
+                    plannedRows, existingOutlets);
+            }
+            else
+            {
+                socketAdjustedRows = updateMode
+                    ? DeviceOutletPolicy.ApplyForUpdate(plannedRows,
+                        deviceHasOutlet, deviceOutlet, existingOutlets)
+                    : DeviceOutletPolicy.Apply(plannedRows,
+                        deviceHasOutlet, deviceOutlet);
+            }
             tablePlan = new TableGenerationOutput(socketAdjustedRows,
                 tablePlan.DefaultCableMeters);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -259,10 +269,17 @@ namespace UNCAD.Features.Fill
                 }
                 deviceOutlet = reviewedOutlet;
             }
-            tableRows = updateMode
-                ? DeviceOutletPolicy.ApplyForUpdate(tableRows, deviceHasOutlet,
-                    deviceOutlet, existingOutlets)
-                : DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
+            if (updateMode && !deviceOutletStateKnown)
+            {
+                tableRows = UpdateOutletPolicy.PreserveExisting(tableRows, existingOutlets);
+            }
+            else
+            {
+                tableRows = updateMode
+                    ? DeviceOutletPolicy.ApplyForUpdate(tableRows, deviceHasOutlet,
+                        deviceOutlet, existingOutlets)
+                    : DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
+            }
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
             Log.Info("U1F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
@@ -311,6 +328,7 @@ namespace UNCAD.Features.Fill
 
             int filled;
             int migratedBridgeLabels;
+            XFrameMigrationResult xframeMigration;
             FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
                 upstreamInfoResult;
             FillWriteResult upstreamStateResult, upstreamAxisResult, downstreamAxisResult;
@@ -325,16 +343,23 @@ namespace UNCAD.Features.Fill
                     new[] { picked.MachineId })))
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
+                    new[] { selection });
                 migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
                     selection.TextIds, options.MmPerGrid);
                 filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
                     startRow, clearRowCount, tableRows, textHeight);
                 if (filled < 0) return;
+                CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
+                    picked, DateTime.Now);
                 frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
-                    selection.FrameBlockIds, picked, bridgeInfo, statistics,
-                    updateMode && statistics.CableSum <= 0,
-                    updateMode && statistics.Bridges.Count == 0,
-                    updateMode && statistics.Conduits.Count == 0);
+                    selection.FrameBlockIds, picked,
+                    updateMode && statistics.BridgeState == MeasurementState.ConfirmedEmpty
+                        ? "" : bridgeInfo,
+                    statistics,
+                    updateMode && statistics.CableState == MeasurementState.Unknown,
+                    updateMode && statistics.BridgeState == MeasurementState.Unknown,
+                    updateMode && statistics.ConduitState == MeasurementState.Unknown);
                 deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
                     selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
                 ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
@@ -354,12 +379,13 @@ namespace UNCAD.Features.Fill
                     selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
                     ConnectionBlockFiller.DownstreamAxis(picked), false);
                 deviceColorBlocks = CadBlockColorWriter.Apply(transaction,
-                    selection.DeviceBlockIds.Concat(selection.DownstreamAxisBlockIds),
-                    deviceColorIndex);
+                    selection.DeviceBlockIds.Concat(selection.DownstreamAxisBlockIds)
+                        .Concat(selection.DeviceColorBlockIds), deviceColorIndex);
                 upstreamColorBlocks = CadBlockColorWriter.Apply(transaction,
                     selection.UpstreamStateBlockIds
                         .Concat(selection.UpstreamInfoBlockIds)
-                        .Concat(selection.UpstreamAxisBlockIds),
+                        .Concat(selection.UpstreamAxisBlockIds)
+                        .Concat(selection.UpstreamColorBlockIds),
                     upstreamColorIndex);
                 // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
                 automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
@@ -369,6 +395,12 @@ namespace UNCAD.Features.Fill
             }
 
             SelectionService.ClearPickFirst(ctx);
+            if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
+                || xframeMigration.DrawingInfoTables > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 图框已升级：xframe " + xframeMigration.Frames
+                    + " 个，BOQ 表替换 " + xframeMigration.BoqTables
+                    + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] 完成：表格写入 " + filled + " 行；块属性更新 "
                 + frameResult.Blocks + " 个块共 " + frameResult.Values + " 项；统计电缆 "
@@ -420,116 +452,6 @@ namespace UNCAD.Features.Fill
             return capacity == int.MaxValue ? 0 : capacity;
         }
 
-        /// <summary>
-        /// U1U may be run after a user selects only the frame or after the measurement text
-        /// was removed. In that case a zero statistic means "no new measurement", not
-        /// "erase every existing quantity". Reuse existing cable/bridge/rigid-conduit
-        /// rows only for categories that had no fresh statistic; Ruanguan is handled
-        /// separately because deleting its block is an explicit delete operation.
-        /// </summary>
-        internal static List<TableFillRow> MergeExistingRowsForUpdate(CadContext ctx,
-            FillSelection selection, List<TableFillRow> planned, CableStatResult statistics)
-        {
-            planned = planned ?? new List<TableFillRow>();
-            statistics = statistics ?? new CableStatResult();
-            if (selection?.TableIds == null || selection.TableIds.Length == 0) return planned;
-            if (statistics.CableSum > 0 && statistics.Bridges.Count > 0
-                && statistics.Conduits.Count > 0) return planned;
-
-            SubmissionSourceData source = CadSubmissionReader.Read(ctx, selection.TableIds);
-            var existing = new List<TableFillRow>();
-            foreach (List<string> cells in source.TableRows ?? new List<List<string>>())
-            {
-                if (cells == null || cells.Count < 5) continue;
-                string number = Cell(cells, 0);
-                string name = Cell(cells, 1);
-                string description = Cell(cells, 2);
-                string unit = Cell(cells, 3);
-                string quantity = Cell(cells, 4);
-                string code = Cell(cells, 5);
-                if (TableLayoutClassifier.IsHeaderLike(number, name, code)) continue;
-                TableFillCategory? category = ExistingCategory(number, name, code);
-                if (!category.HasValue || category.Value == TableFillCategory.FlexibleConduit
-                    || category.Value == TableFillCategory.Outlet
-                    || category.Value == TableFillCategory.OutletPanel
-                    || category.Value == TableFillCategory.Breaker
-                    || category.Value == TableFillCategory.BusPlugBox)
-                    continue;
-                existing.Add(new TableFillRow
-                {
-                    Category = category.Value,
-                    SortOrder = existing.Count + 1,
-                    Name = name,
-                    Description = description,
-                    Unit = unit,
-                    Quantity = quantity,
-                    Code = code.Length > 0 ? code : number,
-                    CatalogMatched = code.Length > 0 || number.Length > 0
-                });
-            }
-
-            foreach (TableFillRow old in existing)
-            {
-                bool categoryMissing = old.Category == TableFillCategory.Cable
-                    ? statistics.CableSum <= 0
-                    : old.Category == TableFillCategory.Bridge
-                        ? statistics.Bridges.Count == 0
-                        : old.Category == TableFillCategory.RigidConduit
-                            && statistics.Conduits.Count == 0;
-                if (!categoryMissing) continue;
-
-                TableFillRow current = planned.FirstOrDefault(row =>
-                    row.Category == old.Category && SameMaterial(row, old));
-                if (current != null)
-                {
-                    if (string.IsNullOrWhiteSpace(current.Quantity))
-                        current.Quantity = old.Quantity;
-                    if (string.IsNullOrWhiteSpace(current.Code)) current.Code = old.Code;
-                    if (!current.CatalogMatched && old.CatalogMatched)
-                        current.CatalogMatched = true;
-                    continue;
-                }
-                planned.Add(old);
-            }
-            return planned.OrderBy(row => row.SortOrder)
-                .ThenBy(row => row.Code ?? "", StringComparer.Ordinal).ToList();
-        }
-
-        internal static List<TableFillRow> MergeExistingRowsForBatchUpdate(CadContext ctx,
-            FillSelection selection, List<TableFillRow> planned, CableStatResult statistics)
-            => MergeExistingRowsForUpdate(ctx, selection, planned, statistics);
-
-        private static TableFillCategory? ExistingCategory(string number, string name,
-            string code)
-        {
-            string key = code.Length > 0 ? code : number;
-            if (key.StartsWith("1.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("电缆", StringComparison.OrdinalIgnoreCase) >= 0)
-                return TableFillCategory.Cable;
-            if (key.StartsWith("2.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("桥架", StringComparison.OrdinalIgnoreCase) >= 0)
-                return TableFillCategory.Bridge;
-            if (key.StartsWith("3.8", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("软管", StringComparison.OrdinalIgnoreCase) >= 0)
-                return TableFillCategory.FlexibleConduit;
-            if (key.StartsWith("3.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("线管", StringComparison.OrdinalIgnoreCase) >= 0)
-                return TableFillCategory.RigidConduit;
-            return null;
-        }
-
-        private static bool SameMaterial(TableFillRow left, TableFillRow right)
-        {
-            if (!string.IsNullOrWhiteSpace(left.Code) && !string.IsNullOrWhiteSpace(right.Code))
-                return string.Equals(left.Code.Trim(), right.Code.Trim(),
-                    StringComparison.OrdinalIgnoreCase);
-            return string.Equals((left.Name ?? "").Trim(), (right.Name ?? "").Trim(),
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string Cell(List<string> row, int index)
-            => index >= 0 && index < row.Count ? (row[index] ?? "").Trim() : "";
-
         internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
             FillReviewData review)
             => ApplyRuanguanLength(ctx, selection, review, null,
@@ -547,7 +469,9 @@ namespace UNCAD.Features.Fill
                 // Ruanguan is the only source of hose length; absent/invalid values mean no hose row.
                 FillReviewItem existing = review.FlexibleConduitItem();
                 if (existing != null) review.RemoveItem(existing);
-                ctx.Write("\n[U1F/U1U] 未找到 Ruanguan 有效软管长度，已不加入软管清单。");
+                if (selection?.RuanguanBlockIds?.Length > 0)
+                    ctx.Write("\n[U1F/U1U] 已找到 Ruanguan 块，但没有有效软管长度，"
+                        + "已不加入软管清单。");
                 return;
             }
             FillReviewItem flexible = review.FlexibleConduitItem();
@@ -690,13 +614,47 @@ namespace UNCAD.Features.Fill
             statistics.CableFormatted.Clear();
             statistics.CableSum = parsed && meters > 0 ? meters : 0;
             if (statistics.CableSum > 0)
+            {
                 statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
+                statistics.CableState = MeasurementState.Measured;
+            }
+            else
+            {
+                statistics.CableState = MeasurementState.ConfirmedEmpty;
+            }
+        }
+
+        private static void WriteMeasurementState(CadContext ctx, CableStatResult statistics)
+        {
+            string StateText(MeasurementState state)
+            {
+                switch (state)
+                {
+                    case MeasurementState.Measured: return "已测量";
+                    case MeasurementState.ConfirmedEmpty: return "确认清空";
+                    default: return "未完整选择，保留旧值";
+                }
+            }
+            ctx.Write("\n[SUM-STAT/求和统计] 电缆 " + StateText(statistics.CableState)
+                + "；桥架 " + StateText(statistics.BridgeState)
+                + "；线管 " + StateText(statistics.ConduitState) + "。");
         }
 
         internal static string ResolveMachineWorkbookPath(
             CadContext ctx, string configuredPath)
         {
             string path = (configuredPath ?? "").Trim();
+            if (MachineWorkbookSource.IsRemote(path))
+            {
+                if (MachineWorkbookSource.TryGetCachedPath(path, out string cachedPath))
+                {
+                    ctx.Write("\n[U1F/U1U] 使用 U1SET 手动刷新后的网络 Excel 缓存: " + cachedPath);
+                    return cachedPath;
+                }
+                ctx.Write("\n[U1F/U1U] 网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”。");
+                Log.Warn("网络机台 Excel 尚未缓存，U1F/U1U 未访问网络。源: " + path);
+                return null;
+            }
             if (!string.IsNullOrEmpty(path) && File.Exists(path))
             {
                 ctx.Write("\n[U1F] 使用上次 Excel: " + path
@@ -738,8 +696,9 @@ namespace UNCAD.Features.Fill
             List<TableFillRow> plannedRows = TableGenerationModule.Plan(
                 new TableGenerationRequest(row, catalog, statistics, options.Planning))
                 .CopyDefaultRows();
-            bool previewHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
-                selection?.DeviceBlockIds, out string previewDeviceState);
+            CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
+                selection?.DeviceBlockIds, out bool previewHasOutlet,
+                out _, out string previewDeviceState);
             plannedRows = DeviceOutletPolicy.Apply(plannedRows, previewHasOutlet,
                 TableFillPlanner.BuildOutletRow(row.Detail, catalog));
             TableFillRow previewHose = plannedRows.FirstOrDefault(item =>

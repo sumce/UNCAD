@@ -115,7 +115,7 @@ namespace UNCAD.UI
             string licenseeName = string.IsNullOrWhiteSpace(info.LicenseeName)
                 ? "—" : info.LicenseeName;
             var page = new TabPage("授权状态") { Padding = new Padding(18) };
-            TableLayoutPanel layout = DetailLayout(8);
+            TableLayoutPanel layout = DetailLayout(ProductMetadata.RequiresOnlineLicense ? 9 : 8);
             AddDetail(layout, 5, "授权公司", licenseeCompany);
             AddDetail(layout, 6, "授权客户", licenseeName);
             AddDetail(layout, 7, "预计授权时间", info.ExpectedAuthorizationYears.HasValue
@@ -129,6 +129,28 @@ namespace UNCAD.UI
                 ? "CAD 写入、BOQ 输出和 DWG 导出已停止。"
                 : license.Mode == LicenseMode.Perpetual
                     ? "当前版本无到期限制。" : "请在授权有效期内使用本软件。");
+            if (ProductMetadata.RequiresOnlineLicense)
+            {
+                var update = UiTheme.Button("更新授权码");
+                update.Click += (sender, args) =>
+                {
+                    using (var form = new OnlineLicenseForm(
+                        OnlineLicenseMonitor.Current.FailureReason))
+                    {
+                        if (form.ShowDialog(page.FindForm()) == DialogResult.OK)
+                            page.FindForm()?.Close();
+                    }
+                };
+                layout.Controls.Add(new Label
+                {
+                    Text = "在线授权",
+                    Dock = DockStyle.Fill,
+                    ForeColor = Muted,
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Margin = new Padding(0, 4, 12, 4)
+                }, 0, 8);
+                layout.Controls.Add(update, 1, 8);
+            }
             page.Controls.Add(layout);
             return page;
         }
@@ -220,7 +242,6 @@ namespace UNCAD.UI
         {
             switch (mode)
             {
-                case LicenseMode.Trial: return "试用版";
                 case LicenseMode.Project: return "项目授权版";
                 default: return "正式版";
             }

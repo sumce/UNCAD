@@ -27,7 +27,10 @@ namespace UNCAD.Core.Submission
         private static readonly Regex DetailRating = new Regex(
             @"(\d+)\s*P\s*(\d+)\s*A", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex CatalogCode = new Regex(
-            @"^\d+(?:\.\d+)+$", RegexOptions.Compiled);
+            @"^\d+\.\d+$", RegexOptions.Compiled);
+
+        internal static bool IsCatalogCode(string value)
+            => CatalogCode.IsMatch((value ?? "").Trim());
 
         public static SubmissionRecord Extract(SubmissionSourceData source)
             => Extract(source, true);
@@ -262,12 +265,13 @@ namespace UNCAD.Core.Submission
                     && quantity.Length == 0) continue;
                 if (name.Length == 0 && description.Length == 0
                     && unit.Length == 0 && quantity.Length == 0 && code.Length == 0) continue;
-                // Batch U1U can explicitly keep an unmatched fallback row in the CAD table.
-                // Its generated ordinal (1, 2, ...) is not a BOQ item code; omit that row
-                // from automatic material submission instead of guessing a catalog item.
-                // The omission is recorded so the submission layer can hard-fail instead
-                // of silently writing an xlsx that disagrees with the frame contents.
-                if (code.Length == 0 && !CatalogCode.IsMatch(number))
+                // A fixed BOQ row must carry a real catalog code.  Prefer the explicit
+                // code column, but accept a legacy table that stored the code in NO.;
+                // generated ordinals (1, 2, ...) and arbitrary manual text are not
+                // safe identities and are omitted from automatic BOQ submission.
+                string catalogCode = IsCatalogCode(code) ? code
+                    : IsCatalogCode(number) ? number : "";
+                if (catalogCode.Length == 0)
                 {
                     droppedRows.Add(string.Join(" | ", new[]
                         { number, name, description, unit, quantity }
@@ -282,7 +286,7 @@ namespace UNCAD.Core.Submission
                     Description = NormalizeTableText(description),
                     Unit = unit,
                     Quantity = quantity,
-                    Code = code
+                    Code = catalogCode
                 });
             }
             if (inferLegacySocketPanels)

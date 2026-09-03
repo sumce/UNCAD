@@ -9,7 +9,8 @@ namespace UNCAD.Core.Fill
         /// <summary>设备动态块显示所选 Excel 回路名称。</summary>
         public static string BuildValue(MachineRow row)
         {
-            return (row?.CircuitName ?? "").Trim();
+            string circuit = (row?.CircuitName ?? "").Trim();
+            return circuit.Length > 0 ? circuit : (row?.MachineId ?? "").Trim();
         }
     }
 }

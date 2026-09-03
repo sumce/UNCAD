@@ -26,6 +26,7 @@ namespace UNCAD.Features.Unadd
 
         protected override void Execute(CadContext ctx)
         {
+            ProductMetadata.EnsureCommandAllowed(CommandIds.LegacyStatistics);
             CableStatResult stat = CollectAndCalculate(ctx);
             if (stat == null) return;
             if (stat.CableSum <= 0 && stat.Bridges.Count == 0

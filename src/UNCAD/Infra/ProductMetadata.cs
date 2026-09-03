@@ -6,7 +6,6 @@ namespace UNCAD.Infra
     public enum LicenseMode
     {
         Perpetual,
-        Trial,
         Project
     }
 
@@ -18,6 +17,7 @@ namespace UNCAD.Infra
         public int? DaysRemaining { get; set; }
         public string StatusText { get; set; }
         public string ExpiryText { get; set; }
+        public string BlockReason { get; set; }
     }
 
     public static class ProductMetadata
@@ -31,33 +31,6 @@ namespace UNCAD.Infra
         public const string ReleaseDateUtc = "2026-09-02";
         public const string VersionLabel = "2.2.1";
 
-#if UNCAD_JSWY_LICENSE
-        public const string BuildCustomerCode = "UNCAD-JSWY";
-        public const string LicenseeCompany = "江苏文炎建设工程有限公司";
-        public const string LicenseeName = "李小亮";
-        public static readonly int? ExpectedAuthorizationYears = 10;
-#else
-        public const string BuildCustomerCode = "UNCAD";
-        public const string LicenseeCompany = "";
-        public const string LicenseeName = "";
-        public static readonly int? ExpectedAuthorizationYears = null;
-#endif
-
-        // Customer and temporary builds use separate configurations and packages; Release remains perpetual.
-#if UNCAD_JSWY_LICENSE
-        public static readonly string BuildConfiguration = "JSWY";
-        public static readonly LicenseMode BuildLicenseMode = LicenseMode.Project;
-        public const string BuildLicenseExpiresUtc = "2026-10-01T00:00:00+08:00";
-#elif UNCAD_TEMPORARY_LICENSE
-        public static readonly string BuildConfiguration = "Temporary";
-        public static readonly LicenseMode BuildLicenseMode = LicenseMode.Trial;
-        public const string BuildLicenseExpiresUtc = "2026-09-03T00:00:00+08:00";
-#else
-        public static readonly string BuildConfiguration = "Release";
-        public static readonly LicenseMode BuildLicenseMode = LicenseMode.Perpetual;
-        public const string BuildLicenseExpiresUtc = "";
-#endif
-
         public static string Version
         {
             get { return VersionLabel; }
@@ -65,19 +38,83 @@ namespace UNCAD.Infra
 
         public static string DisplayName
         {
-            get { return BuildCustomerCode == ProductName ? ProductName : BuildCustomerCode; }
+            get { return "UNCAD Pro"; }
+        }
+
+        public static bool RequiresOnlineLicense
+        {
+            get { return true; }
+        }
+
+        internal static string CurrentCustomerCode
+        {
+            get
+            {
+                OnlineLicenseState online = OnlineLicenseMonitor.Current;
+                return online.HasResponse && !string.IsNullOrWhiteSpace(online.CustomerCode)
+                    ? online.CustomerCode : "—";
+            }
+        }
+
+        internal static string CurrentLicenseeCompany
+        {
+            get
+            {
+                OnlineLicenseState online = OnlineLicenseMonitor.Current;
+                return online.HasResponse
+                    && !string.IsNullOrWhiteSpace(online.Company)
+                        ? online.Company : "";
+            }
+        }
+
+        internal static string CurrentLicenseeName
+        {
+            get
+            {
+                OnlineLicenseState online = OnlineLicenseMonitor.Current;
+                return online.HasResponse
+                    && !string.IsNullOrWhiteSpace(online.Licensee)
+                        ? online.Licensee : "";
+            }
+        }
+
+        internal static int? CurrentExpectedAuthorizationYears
+        {
+            get
+            {
+                OnlineLicenseState online = OnlineLicenseMonitor.Current;
+                return online.HasResponse
+                    && online.ExpectedAuthorizationYears.HasValue
+                        ? online.ExpectedAuthorizationYears : null;
+            }
         }
 
         public static LicenseSnapshot CurrentLicense()
         {
             // 防回拨时钟:有效时间取水位线最大值,检测到回拨立即视为过期。
             DateTime now = TrustedClock.NowUtc(out bool clockTampered);
-            LicenseSnapshot license = EvaluateLicense(
-                BuildLicenseMode, BuildLicenseExpiresUtc, now);
+            OnlineLicenseState online = OnlineLicenseMonitor.Current;
+            LicenseMode mode = online.HasResponse
+                ? online.LicenseMode : LicenseMode.Project;
+            string expiresAt = online.ExpiresAt.HasValue
+                ? online.ExpiresAt.Value.ToString("o", CultureInfo.InvariantCulture)
+                : "";
+            LicenseSnapshot license = EvaluateLicense(mode, expiresAt, now);
+            string edition = mode == LicenseMode.Perpetual
+                ? "正式版" : "项目授权版";
+            license.StatusText = online.IsActive && !license.IsExpired
+                ? edition + " · 在线有效" : online.Status == "pending"
+                    ? "UNCAD Pro · 在线验证中" : edition + " · 在线不可用";
+            if (!online.HasResponse || !online.IsActive)
+            {
+                license.IsExpired = true;
+                license.BlockReason = online.FailureReason;
+            }
             if (clockTampered && !license.IsExpired)
             {
                 license.IsExpired = true;
                 license.StatusText = "已过期 · 检测到系统时间被回拨";
+                license.BlockReason = "检测到系统时间被回拨，授权验证失败。";
             }
             return license;
         }
@@ -104,8 +141,7 @@ namespace UNCAD.Infra
                 IsExpired = expired,
                 DaysRemaining = days,
                 StatusText = expired ? "已过期" : mode == LicenseMode.Perpetual
-                    ? "正式版 · 无期限" : mode == LicenseMode.Trial
-                        ? "试用版 · 有效" : "项目授权版 · 有效",
+                    ? "正式版 · 无期限" : "项目授权版 · 有效",
                 ExpiryText = mode == LicenseMode.Perpetual
                     ? "无期限" : configuredExpiry.HasValue
                         ? configuredExpiry.Value.ToString("yyyy-MM-dd HH:mm:ss 'UTC'zzz", CultureInfo.InvariantCulture)
@@ -118,8 +154,9 @@ namespace UNCAD.Infra
         {
             LicenseSnapshot license = CurrentLicense();
             if (license.IsExpired)
-                throw new InvalidOperationException("授权已于 " + license.ExpiryText
-                    + " 到期，命令“" + (command ?? "") + "”已停止执行。请联系 " + CompanyName
+                throw new InvalidOperationException((string.IsNullOrWhiteSpace(license.BlockReason)
+                    ? "授权已于 " + license.ExpiryText + " 到期。" : license.BlockReason)
+                    + " 命令“" + (command ?? "") + "”已停止执行。请联系 " + CompanyName
                     + "（" + Website + "）获取有效授权。");
         }
 

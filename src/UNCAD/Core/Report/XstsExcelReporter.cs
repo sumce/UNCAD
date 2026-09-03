@@ -38,24 +38,61 @@ namespace UNCAD.Core.Report
                 "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
             Set(sheet.CreateRow(row++), 0, "框选机台数量");
             Set(sheet.GetRow(row - 1), 1, report.FrameCount.ToString(CultureInfo.InvariantCulture));
+            Set(sheet.CreateRow(row++), 0, "回路基准状态");
+            Set(sheet.GetRow(row - 1), 1, ExpectedStatusText(report));
+            Set(sheet.GetRow(row - 1), 2, report.ExpectedDataDetail);
             Set(sheet.CreateRow(row++), 0, "机台 ID", workbook, true);
             Set(sheet.GetRow(row - 1), 1, "已选回路", workbook, true);
             Set(sheet.GetRow(row - 1), 2, "应有回路", workbook, true);
             Set(sheet.GetRow(row - 1), 3, "缺少回路", workbook, true);
+            Set(sheet.GetRow(row - 1), 4, "多出回路", workbook, true);
             foreach (XstsMachineSummary item in report.Machines)
             {
                 IRow current = sheet.CreateRow(row++);
                 Set(current, 0, item.MachineId);
                 Set(current, 1, item.SelectedCircuitCount.ToString(CultureInfo.InvariantCulture));
-                Set(current, 2, item.ExpectedCircuitCount.ToString(CultureInfo.InvariantCulture));
+                Set(current, 2, item.ExpectedCircuitText);
                 Set(current, 3, item.MissingText);
+                Set(current, 4, item.UnexpectedText);
             }
             Set(sheet.CreateRow(row++), 0, "合计", workbook, true);
             Set(sheet.GetRow(row - 1), 1, report.SelectedCircuitCount.ToString(CultureInfo.InvariantCulture));
-            Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitCount.ToString(CultureInfo.InvariantCulture));
-            Set(sheet.GetRow(row - 1), 3, report.MissingCircuitCount.ToString(CultureInfo.InvariantCulture));
-            for (int i = 0; i < 4; i++) sheet.SetColumnWidth(i, (i == 3 ? 45 : 18) * 256);
+            Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitText);
+            Set(sheet.GetRow(row - 1), 3, report.MissingCircuitText);
+            Set(sheet.GetRow(row - 1), 4, report.ExpectedDataAvailable
+                ? report.UnexpectedCircuitCount.ToString(CultureInfo.InvariantCulture)
+                : "无法判断");
+
+            ISheet issues = workbook.CreateSheet("异常图框");
+            IRow issueHeader = issues.CreateRow(0);
+            Set(issueHeader, 0, "图框序号", workbook, true);
+            Set(issueHeader, 1, "机台 ID", workbook, true);
+            Set(issueHeader, 2, "回路名称", workbook, true);
+            Set(issueHeader, 3, "问题", workbook, true);
+            for (int index = 0; index < report.Issues.Count; index++)
+            {
+                XstsFrameIssue issue = report.Issues[index];
+                IRow issueRow = issues.CreateRow(index + 1);
+                Set(issueRow, 0, issue.FrameNumber == 0 ? "" : issue.FrameNumber.ToString(
+                    CultureInfo.InvariantCulture));
+                Set(issueRow, 1, issue.MachineId);
+                Set(issueRow, 2, issue.CircuitName);
+                Set(issueRow, 3, issue.Description);
+            }
+            for (int i = 0; i < 5; i++) sheet.SetColumnWidth(i, (i >= 3 ? 38 : 18) * 256);
+            for (int i = 0; i < 4; i++) issues.SetColumnWidth(i, (i == 3 ? 42 : 18) * 256);
             return workbook;
+        }
+
+        private static string ExpectedStatusText(XstsReport report)
+        {
+            switch (report.ExpectedDataStatus)
+            {
+                case XstsExpectedDataStatus.Available: return "已读取";
+                case XstsExpectedDataStatus.NotConfigured: return "未配置，无法判断缺少回路";
+                case XstsExpectedDataStatus.FileNotFound: return "文件不存在，无法判断缺少回路";
+                default: return "读取失败，无法判断缺少回路";
+            }
         }
 
         private static void Set(IRow row, int index, string value, IWorkbook workbook = null,

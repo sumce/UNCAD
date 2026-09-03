@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace UNCAD.Infra
@@ -29,13 +30,15 @@ namespace UNCAD.Infra
         private static readonly TimeSpan NetworkSyncInterval = TimeSpan.FromMinutes(30);
         private static DateTime _lastNetworkAttemptUtc = DateTime.MinValue;
         private static DateTime? _lastNetworkTimeUtc;
+        private static readonly object NetworkSync = new object();
+        private static bool _networkSyncRunning;
 
         /// <summary>读取当前时间并更新水位线;clockTampered 表示检测到回拨。</summary>
         public static DateTime NowUtc(out bool clockTampered)
         {
             DateTime now = DateTime.UtcNow;
             DateTime? build = BuildTimestampUtc();
-            DateTime? network = TryGetNetworkTimeUtcThrottled();
+            DateTime? network = CachedNetworkTimeAndStartRefresh();
             DateTime effective = Evaluate(now, build, ReadMarkers(), out clockTampered, network);
             // Only a real clock read advances the persistent watermark. Evaluate is also
             // the deterministic calculation API used by tests and must not mutate user state.
@@ -82,18 +85,46 @@ namespace UNCAD.Infra
         }
 
         /// <summary>联网获取权威时间;失败(离线)返回 null,退回本地+水位线。</summary>
-        private static DateTime? TryGetNetworkTimeUtcThrottled()
+        private static DateTime? CachedNetworkTimeAndStartRefresh()
         {
             DateTime now = DateTime.UtcNow;
-            if (_lastNetworkTimeUtc.HasValue
-                && now - _lastNetworkTimeUtc.Value < NetworkSyncInterval)
-                return _lastNetworkTimeUtc.Value;
-            if (now - _lastNetworkAttemptUtc < NetworkSyncInterval)
-                return null;
-            _lastNetworkAttemptUtc = now;
-            DateTime? network = TryGetNetworkTimeUtc();
-            if (network.HasValue) _lastNetworkTimeUtc = network;
-            return network;
+            DateTime? cached;
+            bool startRefresh = false;
+            lock (NetworkSync)
+            {
+                cached = _lastNetworkTimeUtc;
+                if (!_networkSyncRunning
+                    && now - _lastNetworkAttemptUtc >= NetworkSyncInterval)
+                {
+                    _lastNetworkAttemptUtc = now;
+                    _networkSyncRunning = true;
+                    startRefresh = true;
+                }
+            }
+            if (startRefresh)
+                ThreadPool.QueueUserWorkItem(_ => RefreshNetworkTime());
+            return cached;
+        }
+
+        private static void RefreshNetworkTime()
+        {
+            try
+            {
+                DateTime? network = TryGetNetworkTimeUtc();
+                if (!network.HasValue) return;
+                lock (NetworkSync) _lastNetworkTimeUtc = network;
+                DateTime effective = Evaluate(DateTime.UtcNow, BuildTimestampUtc(),
+                    ReadMarkers(), out _, network);
+                WriteMarkers(effective);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("后台网络校时失败: " + ex.Message);
+            }
+            finally
+            {
+                lock (NetworkSync) _networkSyncRunning = false;
+            }
         }
 
         private static DateTime? TryGetNetworkTimeUtc()

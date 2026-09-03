@@ -95,7 +95,7 @@ namespace UNCAD.Tests
                         }
                     }
                 });
-                Assert.False(File.Exists(target + ".boq.lock"));
+                Assert.False(File.Exists(target + ".uncad.lock"));
 
                 using (var stream = new FileStream(target, FileMode.Open, FileAccess.Read))
                 {
@@ -284,6 +284,46 @@ namespace UNCAD.Tests
                 {
                     var result = new XSSFWorkbook(stream);
                     Assert.Equal(1d, result.GetSheet("Sheet1").GetRow(0)
+                        .GetCell(11).NumericCellValue);
+                    result.Close();
+                }
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void Write_AllowEmptyMaterialsClearsExistingDeviceColumn()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_boq_empty_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string template = Path.Combine(root, "template.xlsx");
+            string target = Path.Combine(root, "machine", "[BOQ]MACHINE01.xlsx");
+            try
+            {
+                var workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                sheet.CreateRow(0).CreateCell(0).SetCellValue("1.1");
+                sheet.GetRow(0).CreateCell(11).SetCellValue(42d);
+                sheet.CreateRow(4).CreateCell(11).SetCellValue("璁惧");
+                using (var stream = new FileStream(template, FileMode.CreateNew))
+                    workbook.Write(stream);
+                workbook.Close();
+
+                BoqWorkbookWriter.Write(target, template, new[]
+                {
+                    new SubmissionRecord
+                    {
+                        MachineId = "MACHINE01",
+                        DeviceName = "璁惧",
+                        Materials = new List<SubmissionMaterial>()
+                    }
+                }, true);
+
+                using (var stream = new FileStream(target, FileMode.Open, FileAccess.Read))
+                {
+                    var result = new XSSFWorkbook(stream);
+                    Assert.Equal(0d, result.GetSheet("Sheet1").GetRow(0)
                         .GetCell(11).NumericCellValue);
                     result.Close();
                 }

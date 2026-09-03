@@ -69,6 +69,19 @@ namespace UNCAD.Tests
             Assert.Contains("WriteBatchWithDefaults(ctx, transaction", batch);
         }
 
+        [Fact]
+        public void FillWriters_AllowEmptyMaterialsToClearBoqColumns()
+        {
+            string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Submit", "AutomaticSubmissionService.cs"));
+
+            // The final two arguments are allowUnmatchedDefaults and
+            // allowEmptyMaterials. U1F/U1U must pass true for both so a deliberately
+            // empty CAD table clears the corresponding BOQ device column.
+            Assert.Contains("sourceGroups, null, false, true, true);", service);
+            Assert.Contains("sourceGroups, batch, false, true, true);", service);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

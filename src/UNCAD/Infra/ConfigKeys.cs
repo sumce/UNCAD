@@ -60,6 +60,8 @@ namespace UNCAD.Infra
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹
         // 试用授权防回拨:系统时间水位线(max-seen UTC,yyyyMMddHHmmss)。
         public const string ClockWatermarkUtc = "UNC_CLOCK_WATERMARK";
+        // 专业版在线授权码：由用户首次使用时输入，升级后继续沿用。
+        public const string OnlineAuthorizationCode = "UNC_ONLINE_AUTHORIZATION_CODE";
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";

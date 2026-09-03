@@ -31,6 +31,7 @@ namespace UNCAD.Features.Fill
             public List<TableFillRow> Rows { get; set; }
             public FillReviewData Review { get; set; }
             public string DeviceState { get; set; }
+            public bool DeviceOutletStateKnown { get; set; }
             public string CableRequestKey { get; set; }
             public bool HoseWasMissingBeforeCableChoice { get; set; }
             public bool AllowUnmatchedDefaults { get; set; }
@@ -189,6 +190,7 @@ namespace UNCAD.Features.Fill
             int frameBlocks = 0;
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
+            XFrameMigrationResult xframeMigration = new XFrameMigrationResult(0, 0, 0);
             int deviceColorBlocks = 0;
             int upstreamColorBlocks = 0;
             short deviceColorIndex = FillColorSettings.DeviceColorIndex();
@@ -200,6 +202,8 @@ namespace UNCAD.Features.Fill
             {
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
                 {
+                    xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
+                        plans.Select(plan => plan.Selection));
                     foreach (Plan plan in plans)
                     {
                         migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
@@ -211,13 +215,17 @@ namespace UNCAD.Features.Fill
                             throw new InvalidOperationException("图框 " + plan.Region.Handle
                                 + " 的清单表写入失败。");
                         tableRows += filled;
+                        CadDrawingInfoTableWriter.Write(transaction,
+                            plan.Selection.DrawingInfoTableIds, plan.Machine, DateTime.Now);
 
                         FillWriteResult frame = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                             plan.Selection.FrameBlockIds, plan.Machine,
-                            options.BridgeInfo, plan.Statistics,
-                            plan.Statistics.CableSum <= 0,
-                            plan.Statistics.Bridges.Count == 0,
-                            plan.Statistics.Conduits.Count == 0);
+                            plan.Statistics.BridgeState == MeasurementState.ConfirmedEmpty
+                                ? "" : options.BridgeInfo,
+                            plan.Statistics,
+                            plan.Statistics.CableState == MeasurementState.Unknown,
+                            plan.Statistics.BridgeState == MeasurementState.Unknown,
+                            plan.Statistics.ConduitState == MeasurementState.Unknown);
                         FillWriteResult device = CadBlockAttributeWriter.FillDeviceName(ctx,
                             transaction, plan.Selection.DeviceBlockIds,
                             DeviceBlockFiller.BuildValue(plan.Machine));
@@ -246,11 +254,13 @@ namespace UNCAD.Features.Fill
                             ConnectionBlockFiller.DownstreamAxis(plan.Machine), false);
                         deviceColorBlocks += CadBlockColorWriter.Apply(transaction,
                             plan.Selection.DeviceBlockIds.Concat(
-                                plan.Selection.DownstreamAxisBlockIds), deviceColorIndex);
+                                plan.Selection.DownstreamAxisBlockIds)
+                                .Concat(plan.Selection.DeviceColorBlockIds), deviceColorIndex);
                         upstreamColorBlocks += CadBlockColorWriter.Apply(transaction,
                             plan.Selection.UpstreamStateBlockIds
                                 .Concat(plan.Selection.UpstreamInfoBlockIds)
-                                .Concat(plan.Selection.UpstreamAxisBlockIds),
+                                .Concat(plan.Selection.UpstreamAxisBlockIds)
+                                .Concat(plan.Selection.UpstreamColorBlockIds),
                             upstreamColorIndex);
                         frameBlocks += frame.Blocks + device.Blocks + ruanguan.Blocks
                             + frameInfo.Blocks
@@ -266,10 +276,10 @@ namespace UNCAD.Features.Fill
                     automaticExcel = plans.Any(plan => plan.AllowUnmatchedDefaults)
                         ? AutomaticSubmissionService.WriteBatchWithDefaults(ctx, transaction,
                             automaticExcelPath,
-                            regions.Select(region => region.EntityIds.ToArray()), outputBatch)
+                            plans.Select(plan => plan.Selection.SourceIds), outputBatch)
                         : AutomaticSubmissionService.Write(ctx, transaction,
                             automaticExcelPath,
-                            regions.Select(region => region.EntityIds.ToArray()), outputBatch);
+                            plans.Select(plan => plan.Selection.SourceIds), outputBatch);
                     transaction.Commit();
                     outputBatch.Complete();
                 }
@@ -284,6 +294,11 @@ namespace UNCAD.Features.Fill
             }
 
             SelectionService.ClearPickFirst(ctx);
+            if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
+                || xframeMigration.DrawingInfoTables > 0)
+                ctx.Write("\n[U1U] 图框已升级：xframe " + xframeMigration.Frames
+                    + " 个，BOQ 表替换 " + xframeMigration.BoqTables
+                    + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[U1U] 颜色已校正：设备端 " + deviceColorBlocks
                     + " 个块，上游端 " + upstreamColorBlocks + " 个块。");
@@ -305,7 +320,8 @@ namespace UNCAD.Features.Fill
             List<BatchCableCatalogRequest> cableRequests)
         {
             string prefix = "图框 " + region.Handle + "：";
-            FillSelection selection = FillSelectionCollector.Split(ctx, region.EntityIds.ToArray());
+            FillSelection selection = FillSelectionCollector.Split(ctx,
+                region.EntityIds.ToArray(), true);
             if (selection.FrameBlockIds.Length != 1)
             {
                 errors.Add(prefix + "没有读取到唯一图框块。");
@@ -343,11 +359,13 @@ namespace UNCAD.Features.Fill
                 return;
 
             SummationOutput summation = FillStatisticsModule.Execute(ctx,
-                selection.TextIds, options.MmPerGrid);
+                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
             CableStatResult statistics = summation.Statistics;
-            if (statistics.CableSum <= 0 && statistics.Bridges.Count == 0
-                && statistics.Conduits.Count == 0)
-                ctx.Write("\n[U1U] " + prefix + "未读取到新的长度文字，将保留现有数量。");
+            if (statistics.CableState == MeasurementState.Unknown
+                || statistics.BridgeState == MeasurementState.Unknown
+                || statistics.ConduitState == MeasurementState.Unknown)
+                ctx.Write("\n[U1U] " + prefix
+                    + "存在未启用或不完整的统计类别，仅这些类别保留旧值。");
 
             try
             {
@@ -363,14 +381,16 @@ namespace UNCAD.Features.Fill
             FlexibleConduitCableMap.ApplyTo(machine);
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);
-            List<TableFillRow> plannedRows = FillFeature.MergeExistingRowsForBatchUpdate(
+            List<TableFillRow> plannedRows = FillUpdateRowMerger.Merge(
                 ctx, selection, tablePlan.CopyDefaultRows(), statistics);
             bool deviceHasOutlet;
+            bool deviceOutletStateKnown;
             string deviceState;
             try
             {
-                deviceHasOutlet = CadDynamicBlockStateService.ReadDeviceHasOutlet(ctx,
-                    selection.DeviceBlockIds, out deviceState);
+                CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
+                    selection.DeviceBlockIds, out deviceHasOutlet,
+                    out deviceOutletStateKnown, out deviceState);
             }
             catch (Exception ex)
             {
@@ -385,8 +405,11 @@ namespace UNCAD.Features.Fill
             // stale 8.x rows when the device is back to equipment.
             List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(ctx,
                 selection.TableIds, options.StartRow, options.ClearRows);
-            tablePlan = new TableGenerationOutput(DeviceOutletPolicy.ApplyForUpdate(
-                plannedRows, deviceHasOutlet, deviceOutlet, existingOutlets),
+            List<TableFillRow> socketRows = deviceOutletStateKnown
+                ? DeviceOutletPolicy.ApplyForUpdate(plannedRows, deviceHasOutlet,
+                    deviceOutlet, existingOutlets)
+                : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
+            tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
             FillFeature.ApplyRuanguanLength(ctx, selection, review, workbook.Catalog,
@@ -417,7 +440,8 @@ namespace UNCAD.Features.Fill
                     Review = review,
                     CableRequestKey = requestKey,
                     HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
-                    DeviceState = deviceState
+                    DeviceState = deviceState,
+                    DeviceOutletStateKnown = deviceOutletStateKnown
                 });
                 return;
             }
@@ -432,7 +456,8 @@ namespace UNCAD.Features.Fill
                 Review = review,
                 Rows = review.SelectedRows(),
                 HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
-                DeviceState = deviceState
+                DeviceState = deviceState,
+                DeviceOutletStateKnown = deviceOutletStateKnown
             });
         }
 

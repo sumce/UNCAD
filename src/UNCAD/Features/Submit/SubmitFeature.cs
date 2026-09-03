@@ -23,7 +23,7 @@ namespace UNCAD.Features.Submit
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.Submit);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请框选或点选需要提交的 frame_20260812 图框: ",
+                "\n请框选或点选需要提交的图框（frame_20260812/xframe）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
@@ -40,7 +40,7 @@ namespace UNCAD.Features.Submit
             }
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[U1S] 未找到有效的 frame_20260812 图框。");
+                ctx.Write("\n[U1S] 未找到有效图框（frame_20260812/xframe）。");
                 return;
             }
 

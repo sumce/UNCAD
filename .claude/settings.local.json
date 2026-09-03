@@ -39,7 +39,15 @@
       "Bash(git commit -q -m 'feat\\(submit\\): hard-fail BOQ export on catalog mismatch with post-write verification *)",
       "Bash(git commit -q -m 'feat\\(license\\): anti-rollback clock watermark; temp expiry moved to 2026-09-02 *)",
       "Bash(git commit -q -m 'feat\\(license\\): authoritative NTP time verification for anti-rollback *)",
-      "Bash(git commit -q -m 'feat\\(installer\\): clear stale AutoCAD command registration cache *)"
+      "Bash(git commit -q -m 'feat\\(installer\\): clear stale AutoCAD command registration cache *)",
+      "Read(//d/Program Files/Autodesk/AutoCAD 2022/**)",
+      "Read(//d/Program Files/Autodesk/AutoCAD 2022/UserDataCache/Template/**)",
+      "Bash(cd /tmp)",
+      "Bash(\"/d/Program Files/Autodesk/AutoCAD 2022/accoreconsole.exe\" /i \"C:\\\\Users\\\\unsia\\\\Desktop\\\\Drawing1.dwg\" /s \"C:\\\\\\\\Users\\\\\\\\unsia\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\u1a-test.scr\" /l en-US)",
+      "Bash(git -C /d/Workspace/UNCAD status --short)",
+      "Bash(git -C /d/Workspace/UNCAD log --oneline -15)",
+      "Bash(git -C /d/Workspace/UNCAD diff --stat)",
+      "Bash(git *)"
     ]
   }
 }

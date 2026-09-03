@@ -141,9 +141,11 @@ namespace UNCAD.Cad
                     if (metadataReady)
                         ParallelAnnotationMetadata.Set(text, options.AnnotationKind,
                             id.Handle.ToString());
-                    if (metadataReady)
-                        RemoveLegacyDuplicates(ctx, transaction, text, selected.Entities,
-                            options.ColorIndex);
+                    // Remove output produced by pre-metadata versions as well. The
+                    // generated ObjectIds are excluded so a metadata registration
+                    // failure cannot erase the result we just added.
+                    RemoveLegacyDuplicates(ctx, transaction, id, text, selected.Entities,
+                        options.ColorIndex);
                     ErasePrevious(transaction, previous, id.Handle.ToString());
                     selected.Detach();
                     count++;
@@ -205,16 +207,21 @@ namespace UNCAD.Cad
         /// geometry/text is identical to the newly generated result.
         /// </summary>
         private static void RemoveLegacyDuplicates(CadContext ctx, Transaction transaction,
-            DBText currentText, IEnumerable<Entity> currentCurves, short colorIndex)
+            ObjectId sourceId, DBText currentText, IEnumerable<Entity> currentCurves,
+            short colorIndex)
         {
             BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
                 OpenMode.ForRead, false) as BlockTableRecord;
             if (space == null) return;
             Entity[] generated = (currentCurves ?? Enumerable.Empty<Entity>()).ToArray();
+            HashSet<ObjectId> generatedIds = new HashSet<ObjectId>(
+                generated.Select(entity => entity.ObjectId));
             foreach (ObjectId id in space)
             {
                 Entity candidate = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                if (candidate == null || candidate.ObjectId == currentText.ObjectId
+                if (candidate == null || candidate.ObjectId == sourceId
+                    || candidate.ObjectId == currentText.ObjectId
+                    || generatedIds.Contains(candidate.ObjectId)
                     || (ParallelAnnotationMetadata.TryRead(candidate,
                         out _, out _))) continue;
                 if (candidate is DBText oldText && oldText.ColorIndex == colorIndex

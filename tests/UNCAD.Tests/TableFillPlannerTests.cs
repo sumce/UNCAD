@@ -238,7 +238,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_Alias1Migrates32mmSourceToConfigured38mmCatalogMaterial()
+        public void Build_Alias1DoesNotCrossMaterialCategories()
         {
             ListItem migratedTarget = Item("3.3", "镀锌穿线管",
                 "固定清单38mm模板", "m", "38mm");
@@ -252,11 +252,7 @@ namespace UNCAD.Tests
             TableFillRow flexible = TableFillPlanner.BuildFlexibleConduitRow(
                 "32mm", catalog, FillPlanningOptions.Default);
 
-            Assert.Equal("3.3", flexible.Code);
-            Assert.Equal("镀锌穿线管", flexible.Name);
-            Assert.Equal("固定清单38mm模板", flexible.Description);
-            Assert.Equal("1.5", flexible.Quantity);
-            Assert.True(flexible.CatalogMatched);
+            Assert.Equal("", flexible.Code);
         }
 
         [Fact]

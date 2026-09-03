@@ -10,7 +10,6 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.QuickLine;
 using UNCAD.Infra;
 using AcApplication = Autodesk.AutoCAD.ApplicationServices.Application;
-using CadQuickLineSegment = UNCAD.Cad.QuickLine.QuickLineSegment;
 
 namespace UNCAD.Features.Unl
 {
@@ -32,14 +31,6 @@ namespace UNCAD.Features.Unl
         private static void FastAnnotate(CadContext ctx)
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.LineQuick);
-            IReadOnlyList<CadQuickLineSegment> scanned = QuickLineCadService.Scan(ctx,
-                new QuickLineScanOptions { IncludeUnlabelled = true });
-            if (scanned.Count == 0)
-            {
-                ctx.Write("\n[U1LX] 当前空间没有 U1L 线段。");
-                return;
-            }
-
             PromptEntityResult selected;
             try
             {
@@ -55,7 +46,19 @@ namespace UNCAD.Features.Unl
                 return;
             }
             if (selected == null || selected.Status != PromptStatus.OK) return;
-            CadQuickLineSegment start = scanned.FirstOrDefault(item =>
+            IReadOnlyList<QuickLineCadSegment> scanned = QuickLineCadService.Scan(ctx,
+                new QuickLineScanOptions
+                {
+                    IncludeUnlabelled = true,
+                    RootLineId = selected.ObjectId,
+                    EndpointTolerance = 1.0
+                });
+            if (scanned.Count == 0)
+            {
+                ctx.Write("\n[U1LX] 选中的线段无效或不在当前空间。");
+                return;
+            }
+            QuickLineCadSegment start = scanned.FirstOrDefault(item =>
                 item.LineId == selected.ObjectId);
             if (start == null)
             {
@@ -84,7 +87,7 @@ namespace UNCAD.Features.Unl
             for (int i = 0; i < plan.Steps.Count; i++)
             {
                 QuickLineTraversalStep step = plan.Steps[i];
-                CadQuickLineSegment segment = byId[step.SegmentId];
+                QuickLineCadSegment segment = byId[step.SegmentId];
                 double? value = PromptMillimetres(ctx, segment, i + 1, plan.Steps.Count);
                 if (value == null) break; // Esc / 取消:保留已完成部分
                 if (!QuickLineCadService.TryWriteSegmentMillimetre(ctx, segment, value.Value))
@@ -104,7 +107,7 @@ namespace UNCAD.Features.Unl
 
         /// <summary>构建遍历计划;点击在段中部时询问用户向哪端走。</summary>
         private static QuickLineTraversalPlan BuildPlan(QuickLineGraph graph,
-            string startId, CadQuickLineSegment start, Point3d pickedPoint, CadContext ctx)
+            string startId, QuickLineCadSegment start, Point3d pickedPoint, CadContext ctx)
         {
             var click = new QuickLinePoint(pickedPoint.X, pickedPoint.Y);
             QuickLineTraversalPlan plan = QuickLineTraversal.CreatePlan(graph, startId, click);
@@ -115,6 +118,8 @@ namespace UNCAD.Features.Unl
             options.Keywords.Add("Start", "Start", "起点端(Start)");
             options.Keywords.Add("End", "End", "终点端(End)");
             PromptResult choice = ctx.Ed.GetKeywords(options);
+            if (choice == null || choice.Status != PromptStatus.OK)
+                return null;
             var anchor = choice != null
                     && string.Equals(choice.StringResult, "End", StringComparison.OrdinalIgnoreCase)
                 ? new QuickLinePoint(start.EndPoint.X, start.EndPoint.Y)
@@ -124,7 +129,7 @@ namespace UNCAD.Features.Unl
 
         /// <summary>提示输入距离;回车 = null 表示保留原值,Esc 取消遍历。</summary>
         private static double? PromptMillimetres(CadContext ctx,
-            CadQuickLineSegment segment, int index, int total)
+            QuickLineCadSegment segment, int index, int total)
         {
             double current = segment.LabelMillimetres ?? segment.Length;
             var options = new PromptDoubleOptions(

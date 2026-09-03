@@ -59,6 +59,10 @@ namespace UNCAD.Features.DwgExport
                 StringComparer.OrdinalIgnoreCase).ToList();
             var paths = machineGroups.Select(machine => Path.Combine(outputRoot, machine.Key,
                 machine.Key + ".dwg")).ToList();
+            // FileBatchRollback also protects first-time outputs that do not exist yet. Ensure
+            // their parent folders exist before it creates the per-file lock sidecars.
+            foreach (string path in paths)
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
             // Export all selected machines as one batch. A later failure restores files written
             // earlier in the same command.
             using (var batch = new FileBatchRollback(paths))
@@ -69,7 +73,6 @@ namespace UNCAD.Features.DwgExport
                     {
                         IGrouping<string, DwgExportFrame> machine = machineGroups[exportIndex];
                         string target = paths[exportIndex];
-                        Directory.CreateDirectory(Path.GetDirectoryName(target));
                         IReadOnlyList<DwgFramePlacement> layout = DwgExportLayout.Arrange(machine);
                         WriteMachine(ctx.Db, target, layout, machine.Key);
                     }

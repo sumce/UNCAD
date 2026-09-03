@@ -6,13 +6,14 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
-`U1F/U1U` automatically connect `upstream_info` and `upstream` blocks with a horizontal stub below the info block plus a directional diagonal segment. The upstream symbol uses the stub's left end when it is on the left, and the right end when it is on the right. Repeated runs update the existing pair instead of accumulating duplicate lines.
+`U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
 
 ## v2.2.1 重点更新
 
 - 版本号升级为 2.2.1（程序集/Bundle 版本 2.2.1.0），保持当前 24 个公开命令和已验证的 U1/U1Q/XLAYOUT/XSTS/Xmerge 功能。
-- 新增 `UNCAD-JSWY` 客户授权构建：授权给江苏文炎建设工程有限公司客户李小亮，项目授权模式到期时间为北京时间 `2026-10-01 00:00:00 UTC+8`，预计授权周期记录为 10 年。到期后通过发布新版本续期，不把授权时间写成 10 年后的固定日期。
-- 使用 `release-jswy.ps1` 生成客户包；正式 `Release` 构建仍为永久授权，`Temporary` 构建仍使用独立试用授权。
+- 只发布统一的 `UNCAD Pro`，安装包不再内置客户、授权人、授权模式或到期时间，也不再生成客户专版和试用版。
+- 唯一发行包输出到 `artifacts\Pro\UNCAD-Pro-v2.2.1.0.zip`；服务器 Key 按授权码存放在 `artifacts\Pro\server-key`。
+- 首次使用时由客户输入授权码，授权码只保存在客户机注册表而不嵌入程序；客户信息、授权模式、到期时间和通知全部从 Key 读取，并每 5 分钟后台刷新。密钥缺失、请求失败、状态停用或到期时可立即更换授权码；授权服务器地址不在界面、日志和发行说明中展示。
 - 移除不适用于多形态 `upstream` 动态块的自动连线功能；U1F/U1U 不再创建或修改连接线。
 - U1F/U1U 自动统一端点块颜色：设备块和设备轴位块（DS）默认使用绿色，`upstream`、上游信息/编号块和上游轴位块（US）默认使用洋红；两组 ACI 颜色可在 `U1SET → Excel 数据` 中通过色块下拉框配置。
 
@@ -40,7 +41,7 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 - XLAYOUT 机台 ID 改用固定左侧定位距离 300000，所有行共用同一文字起点，不再依赖不同字符串长度的动态对齐。
 - 修复 U1U 多选图框时对象同时归属多个图框的问题，U1U/U1S/U1DWG/XLAYOUT 统一使用稳定的实体锚点归属。
 - 保留图框排版、鼠标指定位置、回车使用默认原点和 25000 文字高度功能。
-- `U1LX`（兼容命令 `UNLX`）选择已有 U1L 线段并在 3D 窗口中编辑相连线路；`U1X` 无需选择，直接进入东南等轴侧正交绘图器。两者写回时都会优化长短线显示并限制在 `78021×78021`，距离文字保留真实毫米数。
+- 历史版本曾提供 `U1LX`/`U1X` 的 3D 编辑器；当前 2.2.1 使用 `U1LX`（兼容命令 `UNLX`）在命令行中选择已有 U1L 线段并逐段填写真实毫米距离，已移除的 `U1X` 仅保留在历史说明中。
 
 ## v2.1.5 重点更新
 
@@ -281,7 +282,7 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 
 - **VS 2026**：打开 `UNCAD.slnx` 直接生成（F5 会启动 AutoCAD 2022 并附加调试器）。
 - **命令行**：`.\build.ps1`（等价 `dotnet build UNCAD.slnx`）。依赖已还原时可用 `.\build.ps1 -NoRestore` 快速刷新 Bundle。
-- **测试**：`dotnet test UNCAD.slnx -c Release`；发布脚本 `release.ps1` 会把测试作为正式打包前置门禁，并校验 bundle DLL、安装清单和 BOQ 模板。
+- **测试与发布**：`dotnet test UNCAD.slnx -c Release`；仅使用 `release.ps1` 生成统一 `UNCAD Pro` 包。发布脚本会把测试作为打包前置门禁，并校验 bundle DLL、安装清单和 BOQ 模板。
 - AutoCAD 不在默认路径时：`dotnet build UNCAD.slnx -p:AutoCADDir="你的 AutoCAD 目录"`。
 
 ## 加载与调试
@@ -323,10 +324,12 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 
 `U1F` 和 `U1U` 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 
-- **机台数据 Excel**：按规范化完整路径和 SHA-256 内容指纹缓存，文件变化后自动失效并重新读取；缓存返回副本，避免预览编辑污染后续命令。
+- **机台数据 Excel**：本地文件按规范化完整路径和 SHA-256 内容指纹缓存，缓存返回副本，避免预览编辑污染后续命令；HTTP/HTTPS 地址只在 `U1SET` 中点击“刷新”时下载，`U1F/U1U` 始终使用上次成功的本地缓存，不会自动联网。
+- 合并单元格按 Excel 语义读取其左上角值，仅对实际位于合并区域内的空单元格展开；没有合并关系的空白仍保持为空，避免把上一行数据错误复制到下一条回路。
+- 统一数据表中“回路名称”带删除线的行视为已作废，不进入 `U1F/U1U/XSTS` 的机台和回路数据。
 - 固定 BOQ 清单随插件程序集内嵌，启动填充时建立一次索引；用户不提供也不能配置外部清单文件。
 - 每次填充只读取一个机台数据工作簿，机台与回路切换预览不重复扫描整张表。
-- Sheet1 按表头名称绑定字段，允许调整列顺序；缺失或重复必需字段会中止并报告具体字段。
+- 机台数据由用户在 `U1SET` 中手动选择工作簿；读取器只接受包含统一 `U_` 字段和普通 `回路名称` 的数据表，缺失或重复必需字段会中止，绝不回退到旧字段或自动猜测其他表。
 - 当前固定模板的规格列表头为空时，仍兼容第 6 列；建议后续将该表头明确命名为“规格”。
 - 刚性线管和软管先按类别和主别名严格匹配；主别名未命中时，仅允许按数据库的全局唯一`别名1`迁移到指定行，例如`32mm`迁移到该行的`38mm`材料。两列都未命中时必须从固定清单替换或删除，不能直接生成。
 - 选择设备/回路后会打开“填充确认”：自动匹配到的电缆、桥架、线管、软管、断路器、插座等默认全部勾选。

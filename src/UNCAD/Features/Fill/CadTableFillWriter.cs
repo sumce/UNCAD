@@ -87,7 +87,6 @@ namespace UNCAD.Features.Fill
                 {
                     table.SuppressRegenerateTable(false);
                     RestoreTableDimensions(table, rowHeights, columnWidths);
-                    LockGeneratedRowHeights(table, row, plannedRows.Count);
                 }
                 filled += plannedRows.Count;
             }
@@ -145,20 +144,6 @@ namespace UNCAD.Features.Fill
                 catch (System.Exception ex)
                 {
                     Log.Warn("U1F restore column width " + column + " failed: " + ex.Message);
-                }
-            }
-        }
-
-        private static void LockGeneratedRowHeights(Table table, int startRow, int count)
-        {
-            int endRow = Math.Min(table.Rows.Count, startRow + count);
-            for (int row = Math.Max(0, startRow); row < endRow; row++)
-            {
-                try { table.Rows[row].Height = TableFillFormatter.GeneratedRowHeight; }
-                catch (System.Exception ex)
-                {
-                    Log.Warn("U1F lock generated row height " + row + " failed: "
-                        + ex.Message);
                 }
             }
         }

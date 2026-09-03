@@ -40,10 +40,10 @@ namespace UNCAD.Infra
                 BuildTime = ParseBuildTime(file.ProductVersion),
                 UpdatedOn = ProductMetadata.ReleaseDateUtc,
                 Authorization = license.StatusText,
-                CustomerCode = ProductMetadata.BuildCustomerCode,
-                LicenseeCompany = ProductMetadata.LicenseeCompany,
-                LicenseeName = ProductMetadata.LicenseeName,
-                ExpectedAuthorizationYears = ProductMetadata.ExpectedAuthorizationYears,
+                CustomerCode = ProductMetadata.CurrentCustomerCode,
+                LicenseeCompany = ProductMetadata.CurrentLicenseeCompany,
+                LicenseeName = ProductMetadata.CurrentLicenseeName,
+                ExpectedAuthorizationYears = ProductMetadata.CurrentExpectedAuthorizationYears,
                 License = license
             };
         }

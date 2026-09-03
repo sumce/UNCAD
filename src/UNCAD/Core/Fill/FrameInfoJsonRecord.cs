@@ -19,6 +19,9 @@ namespace UNCAD.Core.Fill
         public string Next { get; set; } = "";
         public string UpstreamAxis { get; set; } = "";
         public string DownstreamAxis { get; set; } = "";
+        public string DeviceFloor { get; set; } = "";
+        public string PanelFloor { get; set; } = "";
+        public string FacilitySwitch { get; set; } = "";
         public string LastModifiedUtc { get; set; } = "";
         public List<FrameInfoJsonChange> Changes { get; set; }
             = new List<FrameInfoJsonChange>();

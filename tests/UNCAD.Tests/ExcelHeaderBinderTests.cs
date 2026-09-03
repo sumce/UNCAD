@@ -30,5 +30,17 @@ namespace UNCAD.Tests
                 ExcelHeaderBinder.Require(header, "机台", "回路名称", "设备名称"));
             Assert.Contains("回路名称", error.Message);
         }
+
+        [Fact]
+        public void OccurrenceBinding_SelectsIntentionalDuplicateColumns()
+        {
+            var workbook = new XSSFWorkbook();
+            var header = workbook.CreateSheet("机台").CreateRow(0);
+            header.CreateCell(0).SetCellValue("机台ID");
+            header.CreateCell(1).SetCellValue("机台ID");
+
+            Assert.Equal(0, ExcelHeaderBinder.RequireFirst(header, "机台", "机台ID"));
+            Assert.Equal(1, ExcelHeaderBinder.RequireLast(header, "机台", "机台ID"));
+        }
     }
 }

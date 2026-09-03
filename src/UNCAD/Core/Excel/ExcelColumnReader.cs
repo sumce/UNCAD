@@ -52,6 +52,11 @@ namespace UNCAD.Core.Excel
                 case CellType.Boolean:
                     return cell.BooleanCellValue ? "TRUE" : "FALSE";
                 case CellType.Formula:
+                    // NPOI represents a freshly-created ="" formula as numeric
+                    // zero when no cached result exists. Keep missing U_ caches
+                    // blank instead of fabricating an ID or quantity.
+                    if (string.Equals((cell.CellFormula ?? "").Trim(), "\"\"",
+                        StringComparison.Ordinal)) return "";
                     // 读缓存的计算结果（NPOI 不重新计算公式）
                     switch (cell.CachedFormulaResultType)
                     {

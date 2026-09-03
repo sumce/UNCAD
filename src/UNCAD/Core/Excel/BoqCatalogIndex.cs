@@ -151,7 +151,17 @@ namespace UNCAD.Core.Excel
         }
 
         private ListItem FindWithMigration(Dictionary<string, ListItem> primary, string key)
-            => Find(primary, key) ?? Find(_migrationAliases, key);
+        {
+            ListItem direct = Find(primary, key);
+            if (direct != null) return direct;
+
+            // Migration aliases are stored globally for validation, but the result must
+            // still belong to the category represented by this primary index.  Without
+            // this guard an alias such as 32mm could map a rigid conduit row into the
+            // flexible-conduit (hose) slot.
+            ListItem migrated = Find(_migrationAliases, key);
+            return migrated != null && primary.Values.Contains(migrated) ? migrated : null;
+        }
 
         private static ListItem Find(Dictionary<string, ListItem> index, string key)
             => key.Length > 0 && index.TryGetValue(key, out ListItem item) ? item : null;

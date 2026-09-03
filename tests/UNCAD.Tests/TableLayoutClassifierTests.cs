@@ -29,5 +29,27 @@ namespace UNCAD.Tests
         {
             Assert.False(TableLayoutClassifier.IsHeaderLike("NO.2", "设备名称变更", "1.2"));
         }
+
+        [Fact]
+        public void DrawingInfoHeader_RecognizesCurrentAndSplitSequences()
+        {
+            Assert.True(TableLayoutClassifier.IsCurrentDrawingInfoHeader(
+                "专业", "楼层", "制图", "审核", "日期", "版本"));
+            Assert.True(TableLayoutClassifier.IsDrawingInfoHeader(
+                "专业", "设备楼层", "上游楼层", "制图", "审核", "日期", "版本"));
+            Assert.True(TableLayoutClassifier.IsDrawingInfoHeader(
+                "专业", "楼层", "制图", "审核", "日期", "版本"));
+            Assert.True(TableLayoutClassifier.IsDrawingInfoHeader(
+                @"{\fSimSun|b0|i0|c134|p2;专业}",
+                @"{\fSimSun|b0|i0|c134|p2;楼层}",
+                @"{\fSimSun|b0|i0|c134|p2;制图}",
+                @"{\fSimSun|b0|i0|c134|p2;审核}",
+                @"{\fSimSun|b0|i0|c134|p2;日期}",
+                @"{\fSimSun|b0|i0|c134|p2;版本}"));
+            Assert.False(TableLayoutClassifier.IsDrawingInfoHeader(
+                "专业", "楼层", "审核", "制图", "日期", "版本"));
+            Assert.False(TableLayoutClassifier.IsCurrentDrawingInfoHeader(
+                "专业", "设备楼层", "上游楼层", "制图", "审核", "日期", "版本"));
+        }
     }
 }

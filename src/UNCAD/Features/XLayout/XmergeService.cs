@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.Geometry;
+using UNCAD.Infra;
 
 namespace UNCAD.Features.XLayout
 {
@@ -28,9 +29,17 @@ namespace UNCAD.Features.XLayout
         public static XmergeResult Merge(CadContext ctx, IEnumerable<string> filePaths)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
-            string[] files = (filePaths ?? Enumerable.Empty<string>()).Where(File.Exists)
-                .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray();
+            string activeDrawing = GetFullPathOrEmpty(ctx.Db.Filename);
+            var fileSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string raw in filePaths ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(raw) || !File.Exists(raw)) continue;
+                string path = GetFullPathOrEmpty(raw);
+                if (path.Length > 0 && !string.Equals(path, activeDrawing,
+                    StringComparison.OrdinalIgnoreCase)) fileSet.Add(path);
+            }
+            string[] files = fileSet.OrderBy(value => value,
+                StringComparer.OrdinalIgnoreCase).ToArray();
             if (files.Length == 0) throw new InvalidDataException("没有可合并的 DWG 文件。");
 
             var imported = new List<ImportedDrawing>();
@@ -59,7 +68,7 @@ namespace UNCAD.Features.XLayout
                     {
                         var mapping = new IdMapping();
                         drawing.Database.WblockCloneObjects(drawing.EntityIds, target.ObjectId,
-                            mapping, DuplicateRecordCloning.Ignore, false);
+                            mapping, DuplicateRecordCloning.MangleName, false);
                         foreach (ImportedFrame frame in drawing.Frames)
                         {
                             XLayoutPlacement placement = placementByItem[itemByFrame[frame]];
@@ -89,6 +98,17 @@ namespace UNCAD.Features.XLayout
             }
         }
 
+        private static string GetFullPathOrEmpty(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return "";
+            try { return Path.GetFullPath(path); }
+            catch (Exception ex)
+            {
+                Log.Warn("Xmerge 忽略无效 DWG 路径: " + path + "，" + ex.Message);
+                return "";
+            }
+        }
+
         private static ImportedDrawing ReadSource(string path)
         {
             var database = new Database(false, true);
@@ -98,8 +118,13 @@ namespace UNCAD.Features.XLayout
                 database.CloseInput(true);
                 using (Transaction transaction = database.TransactionManager.StartTransaction())
                 {
-                    BlockTableRecord space = transaction.GetObject(database.CurrentSpaceId,
-                        OpenMode.ForRead) as BlockTableRecord;
+                    var blockTable = transaction.GetObject(database.BlockTableId,
+                        OpenMode.ForRead) as BlockTable;
+                    ObjectId modelSpaceId = blockTable?[BlockTableRecord.ModelSpace]
+                        ?? ObjectId.Null;
+                    BlockTableRecord space = modelSpaceId.IsNull ? null
+                        : transaction.GetObject(modelSpaceId,
+                            OpenMode.ForRead) as BlockTableRecord;
                     var ids = new ObjectIdCollection();
                     var entities = new List<SourceEntity>();
                     if (space != null)
@@ -154,8 +179,7 @@ namespace UNCAD.Features.XLayout
                     ? block.DynamicBlockTableRecord : block.BlockTableRecord;
                 BlockTableRecord definition = transaction.GetObject(definitionId,
                     OpenMode.ForRead, true) as BlockTableRecord;
-                return string.Equals(definition?.Name, FrameRegionCollector.SupportedFrameName,
-                    StringComparison.OrdinalIgnoreCase);
+                return FrameRegionCollector.IsSupportedFrameName(definition?.Name);
             }
             catch { return false; }
         }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Microsoft.Win32;
 using UNCAD.Core.Contracts;
@@ -92,8 +94,72 @@ namespace UNCAD.Infra
 
         public void Set(string name, string value)
         {
-            WriteKey(ProfileVariablesPath, name, value);
-            WriteKey(ProductRootKey + @"\" + VariablesKey, name, value);
+            SetMany(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [name] = value
+            });
+        }
+
+        public void SetMany(IReadOnlyDictionary<string, string> values)
+        {
+            if (values == null) throw new ArgumentNullException(nameof(values));
+            if (values.Count == 0) return;
+            foreach (KeyValuePair<string, string> item in values)
+                if (string.IsNullOrWhiteSpace(item.Key))
+                    throw new ArgumentException("配置键名不能为空。", nameof(values));
+
+            string[] paths = new[]
+            {
+                ProfileVariablesPath,
+                ProductRootKey + @"\" + VariablesKey
+            }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var opened = new List<RegistryKey>();
+            var snapshots = new List<RegistrySnapshot>();
+            try
+            {
+                foreach (string path in paths)
+                {
+                    RegistryKey key = Registry.CurrentUser.CreateSubKey(path);
+                    if (key == null) throw new InvalidOperationException(
+                        "无法打开配置注册表路径: " + path);
+                    opened.Add(key);
+                    foreach (KeyValuePair<string, string> item in values)
+                    {
+                        object oldValue = key.GetValue(item.Key, null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames);
+                        snapshots.Add(new RegistrySnapshot(key, item.Key, oldValue,
+                            oldValue != null));
+                        key.SetValue(item.Key, item.Value ?? "", RegistryValueKind.String);
+                    }
+                }
+
+                foreach (RegistryKey key in opened)
+                foreach (KeyValuePair<string, string> item in values)
+                {
+                    string saved = Convert.ToString(key.GetValue(item.Key, null,
+                        RegistryValueOptions.DoNotExpandEnvironmentNames)) ?? "";
+                    if (!string.Equals(saved, item.Value ?? "", StringComparison.Ordinal))
+                        throw new InvalidOperationException("配置写入后校验失败: " + item.Key);
+                }
+            }
+            catch (Exception ex)
+            {
+                for (int index = snapshots.Count - 1; index >= 0; index--)
+                {
+                    try { snapshots[index].Restore(); }
+                    catch (Exception restoreEx)
+                    {
+                        Log.Error("配置写入失败后的恢复也失败: " + snapshots[index].Name,
+                            restoreEx);
+                    }
+                }
+                Log.Error("配置批量写入失败", ex);
+                throw new InvalidOperationException("配置无法写入注册表，原配置已尽力恢复。", ex);
+            }
+            finally
+            {
+                foreach (RegistryKey key in opened) key.Dispose();
+            }
         }
 
         private static string ReadKey(string path, string name)
@@ -110,16 +176,26 @@ namespace UNCAD.Infra
             }
         }
 
-        private static void WriteKey(string path, string name, string value)
+        private sealed class RegistrySnapshot
         {
-            try
+            private readonly RegistryKey _key;
+            private readonly object _value;
+            private readonly bool _existed;
+
+            public RegistrySnapshot(RegistryKey key, string name, object value, bool existed)
             {
-                using (var key = Registry.CurrentUser.CreateSubKey(path))
-                    key?.SetValue(name, value, RegistryValueKind.String);
+                _key = key;
+                Name = name;
+                _value = value;
+                _existed = existed;
             }
-            catch (System.Exception ex)
+
+            public string Name { get; }
+
+            public void Restore()
             {
-                Log.Warn("注册表写入异常: " + path + "\\" + name + " → " + ex.Message);
+                if (_existed) _key.SetValue(Name, _value);
+                else _key.DeleteValue(Name, false);
             }
         }
     }

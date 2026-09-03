@@ -265,7 +265,9 @@ namespace UNCAD.UI
 
             foreach (var r in _current)
             {
-                var item = new ListViewItem(r.CircuitName) { Tag = r };
+                string displayName = string.IsNullOrWhiteSpace(r.CircuitName)
+                    ? r.MachineId : r.CircuitName;
+                var item = new ListViewItem(displayName) { Tag = r };
                 item.SubItems.Add(DisplayPanelType(r.Next));
                 item.SubItems.Add(r.Detail);
                 item.UseItemStyleForSubItems = false;

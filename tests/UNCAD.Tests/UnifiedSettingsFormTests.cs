@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Threading;
 using System.Windows.Forms;
 using UNCAD.UI;
@@ -72,7 +73,10 @@ namespace UNCAD.Tests
                         TabControl tabs = Find<TabControl>(form);
                         Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
                         List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                        List<ComboBox> colors = FindAll<ComboBox>(tabs.SelectedTab);
+                        List<ComboBox> combos = FindAll<ComboBox>(tabs.SelectedTab);
+                        Assert.Equal(2, combos.Count);
+                        List<ComboBox> colors = combos.Where(color =>
+                            color.DrawMode == DrawMode.OwnerDrawFixed).ToList();
                         Assert.Equal(2, colors.Count);
                         Assert.All(colors, color =>
                         {
@@ -84,6 +88,10 @@ namespace UNCAD.Tests
                                 item => item.ToString().Contains("ACI 6"));
                         });
                         Assert.Equal(4, numbers.Count);
+                        Assert.Contains(FindAll<Button>(tabs.SelectedTab), button =>
+                            button.Text == "浏览...");
+                        Assert.Contains(FindAll<Button>(tabs.SelectedTab), button =>
+                            button.Text == "刷新");
                         NumericUpDown clearRows = Assert.Single(numbers, number =>
                             number.DecimalPlaces == 0 && number.Minimum == 1m
                                 && number.Maximum == 100m);
@@ -104,6 +112,18 @@ namespace UNCAD.Tests
             thread.Start();
             thread.Join();
             if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void ExcelRefresh_DownloadsAndParsesOffTheUiThread()
+        {
+            string source = File.ReadAllText(Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "UNCAD", "UI", "UnifiedSettingsForm.cs")));
+
+            Assert.Contains("private async void RefreshMachineWorkbook", source);
+            Assert.Contains("await Task.Run", source);
+            Assert.Contains("button.Text = \"刷新中...\"", source);
         }
 
         private static T Find<T>(Control root) where T : Control

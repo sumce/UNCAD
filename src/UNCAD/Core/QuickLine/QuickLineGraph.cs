@@ -179,22 +179,77 @@ namespace UNCAD.Core.QuickLine
         private void BuildConnections(IReadOnlyList<QuickLineSegment> segments)
         {
             double toleranceSquared = EndpointTolerance * EndpointTolerance;
-            for (int i = 0; i < segments.Count; i++)
+            if (EndpointTolerance == 0)
             {
-                for (int j = i + 1; j < segments.Count; j++)
+                BuildExactConnections(segments);
+                return;
+            }
+
+            var buckets = new Dictionary<GridCell, List<IndexedEndpoint>>();
+            foreach (QuickLineSegment segment in segments)
+            {
+                IndexEndpoint(segment, QuickLineEndpoint.Start, buckets, toleranceSquared);
+                IndexEndpoint(segment, QuickLineEndpoint.End, buckets, toleranceSquared);
+            }
+        }
+
+        private void BuildExactConnections(IReadOnlyList<QuickLineSegment> segments)
+        {
+            var points = new Dictionary<QuickLinePoint, List<IndexedEndpoint>>();
+            foreach (QuickLineSegment segment in segments)
+            {
+                IndexExactEndpoint(segment, QuickLineEndpoint.Start, points);
+                IndexExactEndpoint(segment, QuickLineEndpoint.End, points);
+            }
+        }
+
+        private void IndexEndpoint(QuickLineSegment segment, QuickLineEndpoint endpoint,
+            IDictionary<GridCell, List<IndexedEndpoint>> buckets, double toleranceSquared)
+        {
+            QuickLinePoint point = segment.PointAt(endpoint);
+            GridCell cell = GridCell.From(point, EndpointTolerance);
+            for (long x = cell.X - 1; x <= cell.X + 1; x++)
+            for (long y = cell.Y - 1; y <= cell.Y + 1; y++)
+            {
+                if (!buckets.TryGetValue(new GridCell(x, y),
+                        out List<IndexedEndpoint> candidates)) continue;
+                foreach (IndexedEndpoint candidate in candidates)
                 {
-                    QuickLineSegment left = segments[i];
-                    QuickLineSegment right = segments[j];
-                    AddIfConnected(left, QuickLineEndpoint.Start, right,
-                        QuickLineEndpoint.Start, toleranceSquared);
-                    AddIfConnected(left, QuickLineEndpoint.Start, right,
-                        QuickLineEndpoint.End, toleranceSquared);
-                    AddIfConnected(left, QuickLineEndpoint.End, right,
-                        QuickLineEndpoint.Start, toleranceSquared);
-                    AddIfConnected(left, QuickLineEndpoint.End, right,
-                        QuickLineEndpoint.End, toleranceSquared);
+                    if (string.Equals(candidate.Segment.Id, segment.Id,
+                            StringComparison.OrdinalIgnoreCase)) continue;
+                    AddIfConnected(candidate.Segment, candidate.Endpoint, segment,
+                        endpoint, toleranceSquared);
                 }
             }
+
+            if (!buckets.TryGetValue(cell, out List<IndexedEndpoint> items))
+            {
+                items = new List<IndexedEndpoint>();
+                buckets.Add(cell, items);
+            }
+            items.Add(new IndexedEndpoint(segment, endpoint));
+        }
+
+        private void IndexExactEndpoint(QuickLineSegment segment, QuickLineEndpoint endpoint,
+            IDictionary<QuickLinePoint, List<IndexedEndpoint>> points)
+        {
+            QuickLinePoint point = segment.PointAt(endpoint);
+            if (!points.TryGetValue(point, out List<IndexedEndpoint> items))
+            {
+                items = new List<IndexedEndpoint>();
+                points.Add(point, items);
+            }
+            else
+            {
+                foreach (IndexedEndpoint candidate in items)
+                {
+                    if (string.Equals(candidate.Segment.Id, segment.Id,
+                            StringComparison.OrdinalIgnoreCase)) continue;
+                    AddIfConnected(candidate.Segment, candidate.Endpoint, segment,
+                        endpoint, 0);
+                }
+            }
+            items.Add(new IndexedEndpoint(segment, endpoint));
         }
 
         private void AddIfConnected(QuickLineSegment left, QuickLineEndpoint leftEndpoint,
@@ -234,6 +289,41 @@ namespace UNCAD.Core.QuickLine
         {
             if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance < 0)
                 throw new ArgumentOutOfRangeException("endpointTolerance");
+        }
+
+        private struct IndexedEndpoint
+        {
+            public IndexedEndpoint(QuickLineSegment segment, QuickLineEndpoint endpoint)
+            {
+                Segment = segment;
+                Endpoint = endpoint;
+            }
+
+            public QuickLineSegment Segment { get; }
+            public QuickLineEndpoint Endpoint { get; }
+        }
+
+        private struct GridCell : IEquatable<GridCell>
+        {
+            public GridCell(long x, long y)
+            {
+                X = x;
+                Y = y;
+            }
+
+            public long X { get; }
+            public long Y { get; }
+
+            public static GridCell From(QuickLinePoint point, double size)
+                => new GridCell((long)Math.Floor(point.X / size),
+                    (long)Math.Floor(point.Y / size));
+
+            public bool Equals(GridCell other) => X == other.X && Y == other.Y;
+            public override bool Equals(object obj) => obj is GridCell other && Equals(other);
+            public override int GetHashCode()
+            {
+                unchecked { return (X.GetHashCode() * 397) ^ Y.GetHashCode(); }
+            }
         }
     }
 }

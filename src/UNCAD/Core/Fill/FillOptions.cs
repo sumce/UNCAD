@@ -1,4 +1,5 @@
 using System;
+using UNCAD.Core.Excel;
 
 namespace UNCAD.Core.Fill
 {
@@ -43,11 +44,13 @@ namespace UNCAD.Core.Fill
         public const double MaximumTextHeight = 100000.0;
         public const double MaximumMmPerGrid = 100000.0;
 
-        private FillRuntimeOptions(string machineWorkbookPath, int startRow, int clearRows,
+        private FillRuntimeOptions(string machineWorkbookPath, MachineWorkbookLayout machineWorkbookLayout,
+            int startRow, int clearRows,
             double textHeight, double mmPerGrid, string bridgeInfo,
             FillPlanningOptions planning)
         {
             MachineWorkbookPath = machineWorkbookPath;
+            MachineWorkbookLayout = machineWorkbookLayout;
             StartRow = startRow;
             ClearRows = clearRows;
             TextHeight = textHeight;
@@ -57,6 +60,9 @@ namespace UNCAD.Core.Fill
         }
 
         public string MachineWorkbookPath { get; }
+        /// <summary>Retained for source compatibility; the reader always uses U_ schema.</summary>
+        [Obsolete("机台表已统一使用 U_ 字段。")]
+        public MachineWorkbookLayout MachineWorkbookLayout { get; }
         public int StartRow { get; }
         public int ClearRows { get; }
         public double TextHeight { get; }
@@ -67,9 +73,17 @@ namespace UNCAD.Core.Fill
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             string bridgeInfo, FillPlanningOptions planning)
+            => Create(machineWorkbookPath, MachineWorkbookLayout.A1, startRow, clearRows,
+                textHeight, mmPerGrid, bridgeInfo, planning);
+
+        public static FillRuntimeOptions Create(string machineWorkbookPath,
+            MachineWorkbookLayout machineWorkbookLayout, int startRow, int clearRows,
+            double textHeight, double mmPerGrid,
+            string bridgeInfo, FillPlanningOptions planning)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
+                machineWorkbookLayout,
                 Clamp(startRow, 1, MaximumStartRow, DefaultStartRow),
                 Clamp(clearRows, 1, MaximumClearRows, TableClearPolicy.DefaultRows),
                 PositiveWithin(textHeight, MaximumTextHeight,

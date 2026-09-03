@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Threading;
+using UNCAD.Core.IO;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -42,7 +42,8 @@ namespace UNCAD.Core.Submission
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
                 throw new DirectoryNotFoundException("自动记录文件夹不存在: " + folder);
 
-            using (FileStream updateLock = AcquireUpdateLock(fullPath))
+            using (IDisposable updateLock = FileUpdateLock.Acquire(fullPath,
+                "提交表正在被另一个 UNCAD 用户更新，请稍后重试。"))
             {
                 if (File.Exists(fullPath))
                 {
@@ -63,122 +64,10 @@ namespace UNCAD.Core.Submission
         public static SubmissionWriteResult Upsert(string filePath, SubmissionRecord record,
             DateTimeOffset submittedNow)
         {
-            if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("提交文件路径为空。", nameof(filePath));
             if (record == null) throw new ArgumentNullException(nameof(record));
-            if (string.IsNullOrWhiteSpace(record.MachineId) || string.IsNullOrWhiteSpace(record.DeviceName))
-                throw new InvalidDataException("机台ID和设备名称不能为空。");
-
-            string fullPath = Path.GetFullPath(filePath);
-            string folder = Path.GetDirectoryName(fullPath);
-            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
-                throw new DirectoryNotFoundException("提交文件夹不存在: " + folder);
-
-            // 先取得进程间锁，再读取基线，避免等待锁期间的合法更新被误判为冲突。
-            FileStream updateLock = AcquireUpdateLock(fullPath);
-            IWorkbook workbook = null;
-            bool existedBeforeRead = false;
-            byte[] originalFingerprint = null;
-            string temporary = Path.Combine(folder, "." + Path.GetFileName(fullPath)
-                + "." + Guid.NewGuid().ToString("N") + ".tmp");
-            string backup = temporary + ".bak";
-            try
-            {
-                existedBeforeRead = File.Exists(fullPath);
-                originalFingerprint = existedBeforeRead
-                    ? ComputeFingerprint(fullPath) : null;
-                workbook = LoadOrCreate(fullPath);
-                ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.CreateSheet(SheetName);
-                Dictionary<string, int> columns = EnsureHeader(workbook, sheet, Headers);
-                MigrateLegacyCableColumns(sheet, columns);
-                ISheet detailSheet = workbook.GetSheet(DetailSheetName)
-                    ?? workbook.CreateSheet(DetailSheetName);
-                Dictionary<string, int> detailColumns = EnsureHeader(
-                    workbook, detailSheet, DetailHeaders);
-                CompactLegacyDetailRows(detailSheet, detailColumns);
-                // 提交记录是不可删除的历史日志；同一机台/设备是否出现过只影响“最新数据替换”计数。
-                bool hadExistingSubmission = false;
-                for (int rowIndex = 1; rowIndex <= sheet.LastRowNum; rowIndex++)
-                {
-                    if (SameKey(sheet.GetRow(rowIndex), columns, record))
-                    {
-                        hadExistingSubmission = true;
-                        break;
-                    }
-                }
-                // 清单明细是当前状态视图：同一机台/设备更新时先移除全部旧材料行。
-                int removedDetailRows = 0;
-                for (int rowIndex = detailSheet.LastRowNum; rowIndex >= 1; rowIndex--)
-                {
-                    if (!SameKey(detailSheet.GetRow(rowIndex), detailColumns, record)) continue;
-                    RemoveRow(detailSheet, rowIndex);
-                    removedDetailRows++;
-                }
-
-                string now = submittedNow.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-                string submitted = now;
-                IRow target = sheet.CreateRow(Math.Max(1, sheet.LastRowNum + 1));
-                Set(target, columns, "机台ID", record.MachineId);
-                Set(target, columns, "设备名称", record.DeviceName);
-                Set(target, columns, "盘柜类型", record.PanelType);
-                // Keep the legacy column current so existing workbook formulas still work.
-                Set(target, columns, "电缆型号", record.Cable);
-                Set(target, columns, "设备原电缆型号", record.OriginalCable);
-                Set(target, columns, "清单电缆型号", record.Cable);
-                Set(target, columns, "电缆米数", record.CableMeters);
-                Set(target, columns, "FR", record.Fr);
-                Set(target, columns, "配电详情", record.Detail);
-                Set(target, columns, "软管直径", record.Diameter);
-                Set(target, columns, "软管米数", record.FlexibleConduitMeters);
-                Set(target, columns, "桥架信息", record.BridgeInfo);
-                Set(target, columns, "桥架米数", record.BridgeMeters);
-                Set(target, columns, "线管信息", record.ConduitInfo);
-                Set(target, columns, "线管米数", record.ConduitMeters);
-                Set(target, columns, "下游轴位", record.DownstreamAxis);
-                Set(target, columns, "上游轴位", record.UpstreamAxis);
-                Set(target, columns, "提交时间", submitted);
-                Set(target, columns, "更新时间", now);
-
-                WriteCompactDetailRow(detailSheet, detailColumns, record, submitted, now);
-                GroupRowsByMachineId(sheet, columns);
-                GroupRowsByMachineId(detailSheet, detailColumns);
-                ApplyWidths(sheet, columns);
-                ApplyWidths(detailSheet, detailColumns);
-
-                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                    workbook.Write(stream);
-                workbook.Close();
-                workbook = null;
-                if (existedBeforeRead)
-                {
-                    if (!File.Exists(fullPath))
-                        throw new IOException("提交表在读取期间被删除，未覆盖原文件。");
-                    if (!SameFingerprint(originalFingerprint, ComputeFingerprint(fullPath)))
-                        throw new IOException("提交表在读取期间发生外部修改，未覆盖最新内容。");
-                    ReplaceExisting(temporary, fullPath, backup, originalFingerprint);
-                    backup = "";
-                }
-                else
-                {
-                    if (File.Exists(fullPath))
-                        throw new IOException("提交表在写入期间被其他程序创建，未覆盖该文件。");
-                    File.Move(temporary, fullPath);
-                }
-
-                return new SubmissionWriteResult
-                {
-                    ReplacedExisting = hadExistingSubmission,
-                    RemovedDetailRows = removedDetailRows,
-                    FilePath = fullPath,
-                    SubmittedAt = submitted,
-                    UpdatedAt = now
-                };
-            }
-            finally
-            {
-                workbook?.Close();
-                updateLock.Dispose();
-                TryDelete(temporary);
-            }
+            SubmissionBatchWriteResult batch = UpsertMany(filePath,
+                new[] { record }, submittedNow);
+            return batch.Records.Single();
         }
 
         /// <summary>
@@ -212,7 +101,8 @@ namespace UNCAD.Core.Submission
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
                 throw new DirectoryNotFoundException("提交文件夹不存在: " + folder);
 
-            FileStream updateLock = AcquireUpdateLock(fullPath);
+            IDisposable updateLock = FileUpdateLock.Acquire(fullPath,
+                "提交表正在被另一个 UNCAD 用户更新，请稍后重试。");
             IWorkbook workbook = null;
             bool existedBeforeRead = false;
             byte[] originalFingerprint = null;
@@ -391,26 +281,6 @@ namespace UNCAD.Core.Submission
                     File.Move(backup, target);
                 throw;
             }
-        }
-
-        private static FileStream AcquireUpdateLock(string workbookPath)
-        {
-            string lockPath = workbookPath + ".uncad.lock";
-            for (int attempt = 0; attempt < 20; attempt++)
-            {
-                try
-                {
-                    var stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                    try { File.SetAttributes(lockPath, File.GetAttributes(lockPath) | FileAttributes.Hidden); }
-                    catch { }
-                    return stream;
-                }
-                catch (IOException) when (attempt < 19)
-                {
-                    Thread.Sleep(150);
-                }
-            }
-            throw new IOException("提交表正在被另一个 UNCAD 用户更新，请稍后重试。");
         }
 
         private static IWorkbook LoadOrCreate(string path)

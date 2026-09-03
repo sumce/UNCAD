@@ -52,7 +52,13 @@ namespace UNCAD.Core.Fill
             MachineRow match = machines.FirstOrDefault(row => string.Equals(
                 (row.CircuitName ?? "").Trim(), identity.DeviceName,
                 StringComparison.OrdinalIgnoreCase));
-            if (match == null && machines.Count == 1) match = machines[0];
+            // U1U is an update operation, so an existing device name is an identity
+            // key, not a hint.  Falling back to the only row would let a renamed or
+            // stale frame redirect its quantities to an unrelated Excel circuit.
+            // A blank device name is the only safe case for the legacy single-row
+            // fallback (old frames may not have carried the device attribute).
+            if (match == null && string.IsNullOrWhiteSpace(identity.DeviceName)
+                && machines.Count == 1) match = machines[0];
             if (match == null)
             {
                 error = "机台 “" + identity.MachineId + "” 在Excel中有多个回路，"
@@ -61,7 +67,8 @@ namespace UNCAD.Core.Fill
             }
             MachineRow result = Clone(match);
             result.MachineId = identity.MachineId;
-            result.CircuitName = identity.DeviceName;
+            result.CircuitName = string.IsNullOrWhiteSpace(identity.DeviceName)
+                ? match.CircuitName : identity.DeviceName;
             return result;
         }
 
@@ -115,7 +122,10 @@ namespace UNCAD.Core.Fill
                 Dia = source.Dia,
                 Next = source.Next,
                 DownstreamAxis = source.DownstreamAxis,
-                UpstreamAxis = source.UpstreamAxis
+                UpstreamAxis = source.UpstreamAxis,
+                DeviceFloor = source.DeviceFloor,
+                PanelFloor = source.PanelFloor,
+                FacilitySwitch = source.FacilitySwitch
             };
         }
     }

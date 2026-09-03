@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UNCAD.Core.IO;
 
 namespace UNCAD.Infra
 {
@@ -13,6 +14,7 @@ namespace UNCAD.Infra
             public string Target { get; set; }
             public string Backup { get; set; }
             public bool Existed { get; set; }
+            public IDisposable UpdateLock { get; set; }
         }
 
         private readonly List<Entry> _entries = new List<Entry>();
@@ -20,29 +22,43 @@ namespace UNCAD.Infra
 
         public FileBatchRollback(IEnumerable<string> paths)
         {
-            foreach (string path in (paths ?? Enumerable.Empty<string>())
+            string[] targets = (paths ?? Enumerable.Empty<string>())
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => Path.GetFullPath(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            try
             {
-                var entry = new Entry
+                foreach (string path in targets)
                 {
-                    Target = path,
-                    Existed = File.Exists(path)
-                };
-                if (entry.Existed)
-                {
-                    entry.Backup = path + ".uncad-batch-" + Guid.NewGuid().ToString("N") + ".bak";
-                    File.Copy(path, entry.Backup, false);
+                    var entry = new Entry
+                    {
+                        Target = path,
+                        UpdateLock = FileUpdateLock.Acquire(path),
+                        Existed = File.Exists(path)
+                    };
+                    _entries.Add(entry);
+                    if (entry.Existed)
+                    {
+                        entry.Backup = path + ".uncad-batch-" + Guid.NewGuid().ToString("N") + ".bak";
+                        File.Copy(path, entry.Backup, false);
+                    }
                 }
-                _entries.Add(entry);
+            }
+            catch
+            {
+                DeleteBackups();
+                ReleaseLocks();
+                throw;
             }
         }
 
         public void Complete()
         {
             _completed = true;
-            DeleteBackups();
+            try { DeleteBackups(); }
+            finally { ReleaseLocks(); }
         }
 
         public void Rollback()
@@ -67,8 +83,12 @@ namespace UNCAD.Infra
                     failures.Add(new IOException("无法恢复输出文件：" + entry.Target, ex));
                 }
             }
-            DeleteBackups();
-            _completed = true;
+            try { DeleteBackups(); }
+            finally
+            {
+                _completed = true;
+                ReleaseLocks();
+            }
             if (failures.Count > 0)
                 throw new AggregateException("批次输出失败后无法完整恢复原文件。", failures);
         }
@@ -99,6 +119,16 @@ namespace UNCAD.Infra
                 {
                     Log.Warn("无法删除批次备份文件：" + entry.Backup);
                 }
+            }
+        }
+
+        private void ReleaseLocks()
+        {
+            for (int index = _entries.Count - 1; index >= 0; index--)
+            {
+                try { _entries[index].UpdateLock?.Dispose(); }
+                catch (Exception ex) { Log.Warn("无法释放输出文件锁：" + ex.Message); }
+                _entries[index].UpdateLock = null;
             }
         }
     }

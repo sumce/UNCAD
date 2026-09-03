@@ -8,7 +8,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-if ($Configuration -ne "Release") { throw "release.ps1 只允许生成永久 Release 包；临时版请使用 release-temp.ps1。" }
+if ($Configuration -ne "Release") { throw "Only the unified UNCAD Pro Release configuration is supported." }
+$productName = "UNCAD Pro"
 $bundle = Join-Path $root "bundle\UNCAD.bundle"
 
 function Assert-FileMatches {
@@ -46,10 +47,12 @@ if (-not $NoBuild) {
 # 即使显式跳过构建，也禁止针对旧输出运行测试或打包。
 $buildOutput = Join-Path $root ("src\UNCAD\bin\" + $Configuration + "\net48\UNCAD.dll")
 $bundleModule = Join-Path $bundle "UNCAD.dll"
+$buildFrameTemplate = Join-Path (Split-Path -Parent $buildOutput) "Resources\XFrameTemplate.dwg"
+$bundleFrameTemplate = Join-Path $bundle "Resources\XFrameTemplate.dwg"
 if (-not (Test-Path $buildOutput -PathType Leaf)) { throw "Build output is missing: $buildOutput" }
 if ($NoBuild) {
     $sourceInputs = @(Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
-        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".html", ".css", ".js", ".txt") })
+        Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".dwg", ".html", ".css", ".js", ".txt") })
     $sourceInputs += @(Get-ChildItem $root -File |
         Where-Object { $_.Extension -in @(".xlsx") })
     $newerInput = $sourceInputs |
@@ -62,6 +65,7 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
     (Get-FileHash $bundleModule -Algorithm SHA256).Hash) {
     throw "Bundle UNCAD.dll does not match the verified build output. Run release.ps1 without -NoBuild."
 }
+Assert-FileMatches $buildFrameTemplate $bundleFrameTemplate "Resources\XFrameTemplate.dwg"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.
@@ -76,13 +80,14 @@ if ($LASTEXITCODE -ne 0) { throw "Release package validation failed." }
 [xml]$manifest = Get-Content (Join-Path $bundle "PackageContents.xml") -Raw -Encoding UTF8
 $package = $manifest.ApplicationPackage
 $version = [string]$package.AppVersion
-if ([string]$package.LicenseMode -ne "Perpetual" -or
+if ([string]$package.Name -ne $productName -or
+    [string]$package.LicenseMode -ne "Online" -or
     -not [string]::IsNullOrWhiteSpace([string]$package.LicenseExpiresUtc)) {
-    throw "Permanent package must use LicenseMode=Perpetual with an empty LicenseExpiresUtc."
+    throw "Unified Pro package metadata is inconsistent."
 }
-$baseName = "UNCAD-v" + $version
+$baseName = "UNCAD-Pro-v" + $version
 if (-not [string]::IsNullOrWhiteSpace($Suffix)) { $baseName += "-" + $Suffix.Trim("-") }
-$artifacts = Join-Path $root "artifacts"
+$artifacts = Join-Path $root "artifacts\Pro"
 $stage = Join-Path $artifacts $baseName
 $archive = Join-Path $artifacts ($baseName + ".zip")
 $distributionFiles = @(
@@ -97,8 +102,14 @@ if (Test-Path $archive) { Remove-Item $archive -Force }
 New-Item (Join-Path $stage "bundle") -ItemType Directory -Force | Out-Null
 Copy-Item $bundle (Join-Path $stage "bundle\UNCAD.bundle") -Recurse -Force
 Copy-Item ($distributionFiles | ForEach-Object { Join-Path $root $_ }) $stage -Force
+
+& (Join-Path $stage "installer.ps1") -Mode VerifyPackage
+if ($LASTEXITCODE -ne 0) { throw "Unified Pro package validation failed." }
+
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
+Remove-Item $stage -Recurse -Force
 $hash = (Get-FileHash $archive -Algorithm SHA256).Hash
-Write-Host "Release archive: $archive" -ForegroundColor Green
+Write-Host "UNCAD Pro release archive: $archive" -ForegroundColor Green
+Write-Host "Customer and expiry metadata are supplied by pro.key." -ForegroundColor Cyan
 Write-Host "SHA-256: $hash" -ForegroundColor Green
 Write-Host "Installer files: $($distributionFiles.Count)" -ForegroundColor Cyan

@@ -67,7 +67,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void MatchMachine_UsesOnlyMachineRowAndKeepsCurrentDeviceName()
+        public void MatchMachine_RejectsUnknownDeviceEvenWhenMachineHasOneRow()
         {
             var identity = new ExistingFillIdentity { MachineId = "M01", DeviceName = "现场改名" };
             MachineRow match = ExistingFillIdentityResolver.MatchMachine(identity, new[]
@@ -75,10 +75,10 @@ namespace UNCAD.Tests
                 new MachineRow { MachineId = "M01", CircuitName = "Excel旧名称", Cable = "C1" }
             }, out string error);
 
-            Assert.NotNull(match);
-            Assert.Equal("", error);
+            Assert.Null(match);
+            Assert.Contains("Excel", error);
+            if (match == null) return;
             Assert.Equal("现场改名", match.CircuitName);
-            Assert.Equal("C1", match.Cable);
         }
 
         [Fact]

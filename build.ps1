@@ -7,12 +7,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-
-$buildTarget = if ($Configuration -in @("Temporary", "JSWY")) {
-    "$root\tests\UNCAD.Tests\UNCAD.Tests.csproj"
-} else {
-    "$root\UNCAD.slnx"
+if ($Configuration -ne "Release") {
+    throw "Only the unified UNCAD Pro Release configuration is supported."
 }
+
+$buildTarget = "$root\UNCAD.slnx"
 $buildArgs = @(
     "build", $buildTarget, "-c", $Configuration,
     "-p:AutoCADDir=$AutoCADDir"
@@ -40,6 +39,11 @@ if (-not $SkipBundle) {
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
     Copy-Item -LiteralPath $template -Destination (Join-Path $bundleDir "BOQ_Template.xlsx") -Force
+    $frameTemplate = Join-Path $outputDir "Resources\XFrameTemplate.dwg"
+    if (-not (Test-Path -LiteralPath $frameTemplate -PathType Leaf)) { throw "xframe template is missing: $frameTemplate" }
+    $bundleResources = Join-Path $bundleDir "Resources"
+    if (-not (Test-Path $bundleResources)) { New-Item -ItemType Directory -Path $bundleResources -Force | Out-Null }
+    Copy-Item -LiteralPath $frameTemplate -Destination (Join-Path $bundleResources "XFrameTemplate.dwg") -Force
     Write-Host "Bundle updated: $bundleDir" -ForegroundColor Green
     Write-Host "Run release.ps1 to create the complete installer ZIP; users start with setup.bat." -ForegroundColor Yellow
 }

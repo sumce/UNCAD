@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ApplicationPackage SchemaVersion="1.0"
     AutodeskProduct="AutoCAD"
-    Name="UNCAD" LicenseMode="Perpetual" LicenseExpiresUtc="" CustomerCode="UNCAD" LicenseeCompany="" LicenseeName="" ExpectedAuthorizationYears="" Website="https://www.unsiao.com"
+    Name="UNCAD Pro" LicenseMode="Online" LicenseExpiresUtc="" CustomerCode="" LicenseeCompany="" LicenseeName="" ExpectedAuthorizationYears="" Website="https://www.unsiao.com"
     Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
     AppVersion="2.2.1.0"
     ProductType="Application"

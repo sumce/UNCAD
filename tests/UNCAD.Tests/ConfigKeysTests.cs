@@ -19,26 +19,10 @@ namespace UNCAD.Tests
             Assert.Equal("2.2.1", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal("2026-09-02", info.UpdatedOn);
-            if (ProductMetadata.BuildLicenseMode == LicenseMode.Project)
-            {
-                Assert.Contains("项目授权版", info.Authorization);
-                Assert.Equal("UNCAD-JSWY", info.CustomerCode);
-                Assert.Equal("江苏文炎建设工程有限公司", info.LicenseeCompany);
-                Assert.Equal("李小亮", info.LicenseeName);
-                Assert.Equal(10, info.ExpectedAuthorizationYears);
-                return;
-            }
-            Assert.Contains(ProductMetadata.BuildLicenseMode == LicenseMode.Perpetual
-                ? "正式版"
-                : ProductMetadata.CurrentLicense().IsExpired ? "已过期" : "试用版", info.Authorization);
+            Assert.Equal("UNCAD Pro", info.ProductName);
+            Assert.Equal("—", info.CustomerCode);
+            Assert.Contains("在线", info.Authorization);
             Assert.Equal("UNSIAO.Ltd", Branding.Developer);
-            if (ProductMetadata.BuildConfiguration == "JSWY")
-            {
-                Assert.Equal("UNCAD-JSWY", info.CustomerCode);
-                Assert.Equal("江苏文炎建设工程有限公司", info.LicenseeCompany);
-                Assert.Equal("李小亮", info.LicenseeName);
-                Assert.Equal(10, info.ExpectedAuthorizationYears);
-            }
         }
 
         [Fact]
@@ -47,6 +31,11 @@ namespace UNCAD.Tests
             Assert.Equal("UNC_SUBMIT_FOLDER", ConfigKeys.SubmitFolder);
             Assert.NotEqual(ConfigKeys.FillExcelPath, ConfigKeys.SubmitFolder);
         }
+
+        [Fact]
+        public void OnlineAuthorizationCode_HasPersistentRuntimeKey()
+            => Assert.Equal("UNC_ONLINE_AUTHORIZATION_CODE",
+                ConfigKeys.OnlineAuthorizationCode);
 
         [Fact]
         public void EmbeddedCatalog_LeavesOnlyTheMachineWorkbookAsUserInput()

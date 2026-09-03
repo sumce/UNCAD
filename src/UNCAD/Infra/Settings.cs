@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Globalization;
 using UNCAD.Core.Contracts;
 
@@ -12,6 +13,8 @@ namespace UNCAD.Infra
 
         public static string Get(string name, string defaultValue) => Store.Get(name, defaultValue);
         public static void Set(string name, string value) => Store.Set(name, value);
+        public static void SetMany(IReadOnlyDictionary<string, string> values)
+            => Store.SetMany(values);
 
         public static bool GetBool(string name, bool defaultValue)
         {

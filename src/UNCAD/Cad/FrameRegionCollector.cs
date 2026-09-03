@@ -33,6 +33,11 @@ namespace UNCAD.Cad
     internal static class FrameRegionCollector
     {
         public const string SupportedFrameName = "frame_20260812";
+        public const string XFrameName = "xframe";
+
+        internal static bool IsSupportedFrameName(string name)
+            => string.Equals(name, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, XFrameName, StringComparison.OrdinalIgnoreCase);
 
         private sealed class FrameBorderBounds
         {
@@ -281,8 +286,7 @@ namespace UNCAD.Cad
                 ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             BlockTableRecord record = transaction.GetObject(recordId, OpenMode.ForRead, true)
                 as BlockTableRecord;
-            return record != null && string.Equals(record.Name, SupportedFrameName,
-                StringComparison.OrdinalIgnoreCase);
+            return record != null && IsSupportedFrameName(record.Name);
         }
 
         private static FrameRegionGroup SelectAnchorOwner(

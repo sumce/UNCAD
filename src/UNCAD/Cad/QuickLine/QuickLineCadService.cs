@@ -26,6 +26,14 @@ namespace UNCAD.Cad.QuickLine
         /// for diagnostics; U1LX can choose to stop or report these lines.
         /// </summary>
         public bool IncludeUnlabelled { get; set; } = true;
+
+        /// <summary>
+        /// When set, only the endpoint-connected component containing this line is returned.
+        /// The initial entity pass stays linear while label matching is limited to the route.
+        /// </summary>
+        public ObjectId RootLineId { get; set; } = ObjectId.Null;
+
+        public double EndpointTolerance { get; set; } = 1.0;
     }
 
     /// <summary>One validated distance edit returned by the 3D editor.</summary>
@@ -55,9 +63,7 @@ namespace UNCAD.Cad.QuickLine
         /// label is moved, and the completion flag remains valid when the
         /// measured value happens to equal the placeholder.
         /// </summary>
-        public const string MetadataApplicationName = "UNCAD_U1LX";
-        private const string LineAssociationKey = "LINE";
-        private const string CompletedKey = "COMPLETED";
+        public const string MetadataApplicationName = QuickLineMetadataStore.ApplicationName;
 
         /// <summary>
         /// Scans only the active model/paper space.  Every Line is returned;
@@ -66,7 +72,7 @@ namespace UNCAD.Cad.QuickLine
         /// observations and take precedence over a still-unedited U1L
         /// placeholder label when both are present.
         /// </summary>
-        public static IReadOnlyList<QuickLineSegment> Scan(CadContext ctx,
+        public static IReadOnlyList<QuickLineCadSegment> Scan(CadContext ctx,
             QuickLineScanOptions options = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
@@ -83,7 +89,7 @@ namespace UNCAD.Cad.QuickLine
                 if (space == null)
                 {
                     tr.Commit();
-                    return Array.Empty<QuickLineSegment>();
+                    return Array.Empty<QuickLineCadSegment>();
                 }
 
                 foreach (ObjectId id in space)
@@ -164,6 +170,11 @@ namespace UNCAD.Cad.QuickLine
                 }
                 tr.Commit();
             }
+
+            if (!options.RootLineId.IsNull)
+                lines = ConnectedComponent(lines, options.RootLineId,
+                    options.EndpointTolerance);
+            if (lines.Count == 0) return Array.Empty<QuickLineCadSegment>();
 
             // A native DIMENSION describes the measured geometry itself.  Keep
             // it separate from ordinary text labels so a dimension can enrich
@@ -281,7 +292,7 @@ namespace UNCAD.Cad.QuickLine
                 options.LabelSearchDistance, assignedDimensions,
                 new HashSet<ObjectId>());
 
-            var result = new List<QuickLineSegment>(lines.Count);
+            var result = new List<QuickLineCadSegment>(lines.Count);
             foreach (LineSnapshot line in lines)
             {
                 assignedLines.TryGetValue(line.Id, out LabelSnapshot label);
@@ -293,7 +304,7 @@ namespace UNCAD.Cad.QuickLine
                         : label.WithObservation(dimension);
                 }
                 if (label == null && !options.IncludeUnlabelled) continue;
-                result.Add(new QuickLineSegment(line.Id, line.Start, line.End,
+                result.Add(new QuickLineCadSegment(line.Id, line.Start, line.End,
                     label?.Id ?? ObjectId.Null,
                     label?.Text ?? string.Empty,
                     label?.Millimetres,
@@ -301,6 +312,31 @@ namespace UNCAD.Cad.QuickLine
                     label?.SourceKind ?? string.Empty));
             }
             return result;
+        }
+
+        private static List<LineSnapshot> ConnectedComponent(
+            IReadOnlyList<LineSnapshot> lines, ObjectId rootLineId, double tolerance)
+        {
+            LineSnapshot root = lines.FirstOrDefault(line => line.Id == rootLineId);
+            if (root == null) return new List<LineSnapshot>();
+
+            var byHandle = lines.Where(line => !string.IsNullOrEmpty(line.Handle))
+                .ToDictionary(line => line.Handle, StringComparer.OrdinalIgnoreCase);
+            QuickLineGraph graph = QuickLineGraph.Build(byHandle.Values.Select(line =>
+                new UNCAD.Core.QuickLine.QuickLineSegment(line.Handle,
+                    new QuickLinePoint(line.Start.X, line.Start.Y),
+                    new QuickLinePoint(line.End.X, line.End.Y))), tolerance);
+            var connected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var queue = new Queue<string>();
+            connected.Add(root.Handle);
+            queue.Enqueue(root.Handle);
+            while (queue.Count > 0)
+            {
+                foreach (QuickLineConnection connection in graph.GetConnections(queue.Dequeue()))
+                    if (connected.Add(connection.ConnectedSegmentId))
+                        queue.Enqueue(connection.ConnectedSegmentId);
+            }
+            return lines.Where(line => connected.Contains(line.Handle)).ToList();
         }
 
         /// <summary>
@@ -323,9 +359,10 @@ namespace UNCAD.Cad.QuickLine
                     as DBText;
                 if (text == null || text.IsErased) return false;
 
-                bool completed = HasCompletionMarker(text);
-                if (!EnsureMetadataApplication(ctx.Db, transaction)) return false;
-                text.XData = BuildMetadata(text, lineId.Handle.ToString(), completed);
+                bool completed = QuickLineMetadataStore.HasCompletionMarker(text);
+                if (!QuickLineMetadataStore.EnsureApplication(ctx.Db, transaction)) return false;
+                text.XData = QuickLineMetadataStore.Build(text,
+                    lineId.Handle.ToString(), completed);
                 return true;
             }
             catch
@@ -400,9 +437,9 @@ namespace UNCAD.Cad.QuickLine
                     // If registration/XData is unavailable, the text update is
                     // still committed and the legacy non-placeholder heuristic
                     // remains available to the next scan.
-                    if (EnsureMetadataApplication(ctx.Db, tr))
-                        entity.XData = BuildMetadata(entity,
-                            ReadAssociatedLineHandle(entity), true);
+                    if (QuickLineMetadataStore.EnsureApplication(ctx.Db, tr))
+                        entity.XData = QuickLineMetadataStore.Build(entity,
+                            QuickLineMetadataStore.ReadAssociatedLineHandle(entity), true);
                     tr.Commit();
                     return true;
                 }
@@ -415,7 +452,7 @@ namespace UNCAD.Cad.QuickLine
 
         /// <summary>Updates a segment's associated label, if one was discovered.</summary>
         public static bool TryUpdateMillimetreLabel(CadContext ctx,
-            QuickLineSegment segment, double millimetres)
+            QuickLineCadSegment segment, double millimetres)
             => segment != null
                 && TryUpdateMillimetreLabel(ctx, segment.LabelId, millimetres);
 
@@ -424,7 +461,7 @@ namespace UNCAD.Cad.QuickLine
         /// XData 关联。供 U1LX 逐段命令行填写使用。
         /// </summary>
         public static bool TryWriteSegmentMillimetre(CadContext ctx,
-            QuickLineSegment segment, double millimetres)
+            QuickLineCadSegment segment, double millimetres)
         {
             if (segment == null) return false;
             if (!segment.LabelId.IsNull
@@ -463,11 +500,13 @@ namespace UNCAD.Cad.QuickLine
                         QuickLineMillimeterText.Format(millimetres), midpoint,
                         height, angle, alignment, textStyleId: styleId);
                     ctx.AddToCurrentSpace(tr, label);
+                    // XData is an acceleration/association hint, not a prerequisite for
+                    // drawing the label. Restricted or legacy drawings may reject RegApp
+                    // registration; keep the visible measurement and let the next scan
+                    // fall back to geometric matching.
                     if (!TryLinkLineAndLabel(ctx, tr, segment.LineId, label.Id))
-                    {
-                        tr.Abort();
-                        return false;
-                    }
+                        Log.Warn("U1LX 无法写入线段关联元数据，已保留毫米标注: "
+                            + segment.LineId.Handle);
                     tr.Commit();
                     return true;
                 }
@@ -479,7 +518,7 @@ namespace UNCAD.Cad.QuickLine
         }
 
         /// <summary>
-        /// Applies all edits from one 3D editor session in a single transaction.
+        /// Applies a batch of label edits in a single transaction.
         /// Every object and value is validated before the first text is changed;
         /// disposal without Commit rolls the complete batch back on any failure.
         /// </summary>
@@ -525,14 +564,15 @@ namespace UNCAD.Cad.QuickLine
                         mutations.Add(mutation);
                     }
 
-                    if (!EnsureMetadataApplication(ctx.Db, tr)) return false;
+                    bool metadataReady = QuickLineMetadataStore.EnsureApplication(ctx.Db, tr);
                     foreach (LabelMutation mutation in mutations)
                     {
-                        string associatedLine = ReadAssociatedLineHandle(
+                        string associatedLine = QuickLineMetadataStore.ReadAssociatedLineHandle(
                             mutation.Entity);
                         mutation.Apply();
-                        mutation.Entity.XData = BuildMetadata(mutation.Entity,
-                            associatedLine, true);
+                        if (metadataReady)
+                            mutation.Entity.XData = QuickLineMetadataStore.Build(mutation.Entity,
+                                associatedLine, true);
                     }
                     tr.Commit();
                     return true;
@@ -665,7 +705,7 @@ namespace UNCAD.Cad.QuickLine
             }
         }
 
-        public static bool TryCenterView(CadContext ctx, QuickLineSegment segment)
+        public static bool TryCenterView(CadContext ctx, QuickLineCadSegment segment)
             => segment != null && TryCenterView(ctx, segment.MidPoint);
 
         private static Point3d ToDisplayCoordinates(Point3d point,
@@ -682,17 +722,6 @@ namespace UNCAD.Cad.QuickLine
             return point.TransformBy(displayToWorld.Inverse());
         }
 
-        private static Point3d ToWorldCoordinates(Point3d point,
-            Vector3d viewDirection, Point3d target, double viewTwist)
-        {
-            Matrix3d displayToWorld = Matrix3d.PlaneToWorld(viewDirection);
-            displayToWorld = Matrix3d.Displacement(target - Point3d.Origin)
-                * displayToWorld;
-            displayToWorld = Matrix3d.Rotation(-viewTwist, viewDirection, target)
-                * displayToWorld;
-            return point.TransformBy(displayToWorld);
-        }
-
         private static void ValidateScanOptions(QuickLineScanOptions options)
         {
             if (double.IsNaN(options.LabelSearchDistance)
@@ -700,6 +729,11 @@ namespace UNCAD.Cad.QuickLine
                 || options.LabelSearchDistance < 0.0)
                 throw new ArgumentOutOfRangeException(nameof(options.LabelSearchDistance),
                     "Label search distance must be finite and non-negative.");
+            if (double.IsNaN(options.EndpointTolerance)
+                || double.IsInfinity(options.EndpointTolerance)
+                || options.EndpointTolerance < 0.0)
+                throw new ArgumentOutOfRangeException(nameof(options.EndpointTolerance),
+                    "Endpoint tolerance must be finite and non-negative.");
         }
 
         private static void TryAddDbTextLabel(DBText text, ObjectId id,
@@ -707,7 +741,7 @@ namespace UNCAD.Cad.QuickLine
         {
             try
             {
-                string associatedLineHandle = ReadAssociatedLineHandle(text);
+                string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(text);
                 bool parsed = TryParseTextValue(text.TextString, out double mm);
                 // A user may have edited a linked U1L label from "2000mm" to
                 // a bare number.  Bare numbers are accepted only with the
@@ -720,7 +754,7 @@ namespace UNCAD.Cad.QuickLine
                 labels.Add(new LabelSnapshot(id, text.TextString, mm,
                     GetTextReferences(text), Math.Max(0.0, text.Height), order,
                     ReadLayer(text), associatedLineHandle,
-                    HasCompletionMarker(text), ReadRotation(text), false,
+                    QuickLineMetadataStore.HasCompletionMarker(text), ReadRotation(text), false,
                     null, null, "DBText"));
             }
             catch
@@ -735,7 +769,7 @@ namespace UNCAD.Cad.QuickLine
         {
             try
             {
-                string associatedLineHandle = ReadAssociatedLineHandle(attribute);
+                string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(attribute);
                 bool parsed = TryParseTextValue(attribute.TextString,
                     out double mm);
                 if (!parsed && !string.IsNullOrEmpty(associatedLineHandle))
@@ -745,7 +779,7 @@ namespace UNCAD.Cad.QuickLine
                 labels.Add(new LabelSnapshot(id, attribute.TextString, mm,
                     GetTextReferences(attribute), Math.Max(0.0, attribute.Height),
                     order, ReadLayer(attribute), associatedLineHandle,
-                    HasCompletionMarker(attribute), ReadRotation(attribute), false,
+                    QuickLineMetadataStore.HasCompletionMarker(attribute), ReadRotation(attribute), false,
                     null, null, "Attribute"));
             }
             catch
@@ -761,7 +795,7 @@ namespace UNCAD.Cad.QuickLine
             {
                 string raw = text.Contents;
                 if (string.IsNullOrWhiteSpace(raw)) raw = text.Text;
-                string associatedLineHandle = ReadAssociatedLineHandle(text);
+                string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(text);
                 bool parsed = TryParseTextValue(raw, out double mm);
                 if (!parsed && !string.IsNullOrEmpty(associatedLineHandle))
                     parsed = QuickLineMillimeterText.TryParseBareNumber(
@@ -770,7 +804,7 @@ namespace UNCAD.Cad.QuickLine
                 labels.Add(new LabelSnapshot(id, raw, mm,
                     GetTextReferences(text), Math.Max(0.0, text.TextHeight), order,
                     ReadLayer(text), associatedLineHandle,
-                    HasCompletionMarker(text), ReadRotation(text), false,
+                    QuickLineMetadataStore.HasCompletionMarker(text), ReadRotation(text), false,
                     null, null, "MText"));
             }
             catch
@@ -801,8 +835,8 @@ namespace UNCAD.Cad.QuickLine
                 AddReference(references, GetExtentsCenter(dimension));
                 labels.Add(new LabelSnapshot(id, dimension.DimensionText,
                     mm, references, Math.Max(0.0, dimension.Dimtxt), order,
-                    ReadLayer(dimension), ReadAssociatedLineHandle(dimension),
-                    HasCompletionMarker(dimension), ReadRotation(dimension), true,
+                    ReadLayer(dimension), QuickLineMetadataStore.ReadAssociatedLineHandle(dimension),
+                    QuickLineMetadataStore.HasCompletionMarker(dimension), ReadRotation(dimension), true,
                     first, second, "Dimension"));
             }
             catch
@@ -918,147 +952,6 @@ namespace UNCAD.Cad.QuickLine
                 // Fall through to the invalid marker used by adjacency matching.
             }
             return double.NaN;
-        }
-
-        private static string ReadAssociatedLineHandle(DBObject entity)
-        {
-            if (entity == null) return string.Empty;
-            try
-            {
-                using (ResultBuffer data = entity.GetXDataForApplication(
-                    MetadataApplicationName))
-                {
-                    if (data == null) return string.Empty;
-                    bool lineKey = false;
-                    foreach (TypedValue value in data)
-                    {
-                        if (value.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
-                        {
-                            string token = Convert.ToString(value.Value,
-                                CultureInfo.InvariantCulture) ?? string.Empty;
-                            lineKey = string.Equals(token, LineAssociationKey,
-                                StringComparison.OrdinalIgnoreCase);
-                            continue;
-                        }
-                        if (lineKey && value.TypeCode
-                            == (int)DxfCode.ExtendedDataHandle)
-                        {
-                            return Convert.ToString(value.Value,
-                                CultureInfo.InvariantCulture) ?? string.Empty;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Unregistered apps and malformed legacy XData are normal for
-                // old drawings; they simply use geometry fallback matching.
-            }
-            return string.Empty;
-        }
-
-        private static bool HasCompletionMarker(DBObject entity)
-        {
-            if (entity == null) return false;
-            try
-            {
-                using (ResultBuffer data = entity.GetXDataForApplication(
-                    MetadataApplicationName))
-                {
-                    if (data == null) return false;
-                    foreach (TypedValue value in data)
-                    {
-                        if (value.TypeCode != (int)DxfCode.ExtendedDataAsciiString)
-                            continue;
-                        string token = Convert.ToString(value.Value,
-                            CultureInfo.InvariantCulture) ?? string.Empty;
-                        if (string.Equals(token, CompletedKey,
-                            StringComparison.OrdinalIgnoreCase)) return true;
-                    }
-                }
-            }
-            catch
-            {
-                // Treat unreadable metadata as not marked; text/value matching
-                // remains a safe fallback.
-            }
-            return false;
-        }
-
-        private static bool EnsureMetadataApplication(Database database,
-            Transaction transaction)
-        {
-            try
-            {
-                var table = transaction.GetObject(database.RegAppTableId,
-                    OpenMode.ForRead, false) as RegAppTable;
-                if (table == null) return false;
-                if (!table.Has(MetadataApplicationName))
-                {
-                    table.UpgradeOpen();
-                    var record = new RegAppTableRecord
-                    {
-                        Name = MetadataApplicationName
-                    };
-                    table.Add(record);
-                    transaction.AddNewlyCreatedDBObject(record, true);
-                }
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static ResultBuffer BuildMetadata(DBObject entity,
-            string associatedLineHandle, bool completed)
-        {
-            var values = new List<TypedValue>();
-            try
-            {
-                using (ResultBuffer existing = entity.XData)
-                {
-                    if (existing != null)
-                    {
-                        bool skipOwn = false;
-                        foreach (TypedValue value in existing)
-                        {
-                            if (value.TypeCode
-                                == (int)DxfCode.ExtendedDataRegAppName)
-                            {
-                                string app = Convert.ToString(value.Value,
-                                    CultureInfo.InvariantCulture) ?? string.Empty;
-                                skipOwn = string.Equals(app,
-                                    MetadataApplicationName,
-                                    StringComparison.OrdinalIgnoreCase);
-                                if (skipOwn) continue;
-                            }
-                            if (!skipOwn) values.Add(value);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // If an old object exposes malformed XData, retaining the
-                // marker is more useful than failing the annotation update.
-                values.Clear();
-            }
-
-            values.Add(new TypedValue((int)DxfCode.ExtendedDataRegAppName,
-                MetadataApplicationName));
-            if (!string.IsNullOrWhiteSpace(associatedLineHandle))
-            {
-                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
-                    LineAssociationKey));
-                values.Add(new TypedValue((int)DxfCode.ExtendedDataHandle,
-                    associatedLineHandle));
-            }
-            if (completed)
-                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
-                    CompletedKey));
-            return new ResultBuffer(values.ToArray());
         }
 
         private static bool IsLikelyAdjacentLabel(LineSnapshot line,

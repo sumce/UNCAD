@@ -67,24 +67,24 @@ namespace UNCAD.Features.Submit
             IEnumerable<ObjectId[]> sourceGroups)
             // U1S is the explicit migration path for drawings whose table predates
             // socket-panel rows, so it may infer the missing 4.x panel material.
-            => WriteCore(ctx, null, filePath, sourceGroups, null, true);
+            => WriteCore(ctx, null, filePath, sourceGroups, null, true, false);
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
             string filePath, IEnumerable<ObjectId[]> sourceGroups)
             // U1F/U1U have just applied the user's editable table; preserve deletions.
-            => WriteCore(ctx, transaction, filePath, sourceGroups, null, false);
+            => WriteCore(ctx, transaction, filePath, sourceGroups, null, false, true, true);
 
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, Transaction transaction,
             string filePath, IEnumerable<ObjectId[]> sourceGroups, FileBatchRollback batch)
             // Batch U1U follows the same post-edit contract as single-frame U1U.
-            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false);
+            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false, true, true);
 
         public static AutomaticSubmissionWriteResult WriteBatchWithDefaults(
             CadContext ctx, Transaction transaction, string filePath,
             IEnumerable<ObjectId[]> sourceGroups, FileBatchRollback batch)
             // Batch U1U explicitly confirmed fallback rows. Keep CAD changes, submit only
             // fixed-catalog materials, and report rows that cannot be keyed in the BOQ.
-            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false, true);
+            => WriteCore(ctx, transaction, filePath, sourceGroups, batch, false, true, true);
 
         public static IReadOnlyList<string> TargetPaths(string outputRoot,
             IEnumerable<string> machineIds)
@@ -95,7 +95,7 @@ namespace UNCAD.Features.Submit
         private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
             Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
             FileBatchRollback externalBatch, bool inferLegacySocketPanels,
-            bool allowUnmatchedDefaults = false)
+            bool allowUnmatchedDefaults = false, bool allowEmptyMaterials = false)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (string.IsNullOrWhiteSpace(filePath))
@@ -161,26 +161,27 @@ namespace UNCAD.Features.Submit
                 RecordCount = records.Count,
                 MaterialCount = records.Sum(record => record.Materials.Count)
             };
-            // A batch may contain only fallback CAD rows with no fixed-catalog code. Those
-            // rows are valid for the drawing table after explicit confirmation, but there is
-            // no safe material key to submit to the BOQ workbook. Report success and leave
-            // the existing workbook untouched in that case.
-            List<SubmissionRecord> recordsWithMaterials = records
-                .Where(record => record.Materials != null && record.Materials.Count > 0)
-                .ToList();
-            if (recordsWithMaterials.Count == 0)
+            // U1F/U1U must also synchronize an intentionally empty CAD table. Filtering
+            // such records out leaves stale quantities in the per-machine BOQ column.
+            // U1S keeps its historical strict behavior and still refuses an empty submit.
+            List<SubmissionRecord> recordsToWrite = allowEmptyMaterials
+                ? records.ToList()
+                : records.Where(record => record.Materials != null
+                    && record.Materials.Count > 0).ToList();
+            if (recordsToWrite.Count == 0)
             {
                 result.FilePath = "";
                 return result;
             }
             Action writeRecords = () =>
             {
-                foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsWithMaterials
+                foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsToWrite
                     .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
                 {
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
                     bool existed = File.Exists(target);
-                    BoqWorkbookWriter.Write(target, template, machineGroup);
+                    BoqWorkbookWriter.Write(target, template, machineGroup,
+                        allowEmptyMaterials);
                     result.AddedCount += machineGroup.Count();
                     if (existed) result.ReplacedCount++;
                 }
@@ -232,7 +233,11 @@ namespace UNCAD.Features.Submit
             {
                 Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
                 // AutoCAD Table inherits BlockReference, so tables must be classified first.
-                if (entity is Table table) ReadTable(table, source);
+                if (entity is Table table)
+                {
+                    if (!CadTableLayoutClassifier.IsDrawingInfoTable(table))
+                        ReadTable(table, source);
+                }
                 else if (entity is BlockReference block) ReadBlock(transaction, block, source);
                 else if (entity is DBText || entity is MText) source.TextEntityCount++;
             }

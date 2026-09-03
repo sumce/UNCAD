@@ -9,9 +9,9 @@ namespace UNCAD.Cad.QuickLine
     /// annotation.  The object contains value data copied from AutoCAD so it
     /// can be used after the scan transaction has been disposed.
     /// </summary>
-    public sealed class QuickLineSegment
+    public sealed class QuickLineCadSegment
     {
-        public QuickLineSegment(ObjectId lineId, Point3d startPoint, Point3d endPoint,
+        public QuickLineCadSegment(ObjectId lineId, Point3d startPoint, Point3d endPoint,
             ObjectId labelId, string labelText, double? labelMillimetres,
             bool hasCompletionMarker = false, string labelKind = "")
         {

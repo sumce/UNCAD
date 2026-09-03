@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>13</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>UNCAD.CadIntegration</AssemblyName>
+    <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\UNCAD\UNCAD.csproj" />
+    <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>False</Private></Reference>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>False</Private></Reference>
+  </ItemGroup>
+</Project>

@@ -24,7 +24,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Alias1_Migrates32mmInputToTheDatabase38mmMaterial()
+        public void Alias1_DoesNotCrossMaterialCategories()
         {
             ListItem target = Item("3.3", "镀锌穿线管", "38mm", "线管");
             target.Alias1 = "32mm";
@@ -36,10 +36,7 @@ namespace UNCAD.Tests
 
             ListItem migrated = index.FindFlexibleConduit("32mm");
 
-            Assert.Same(target, migrated);
-            Assert.Equal("3.3", migrated.Code);
-            Assert.Equal("38mm", migrated.Alias);
-            Assert.Equal("32mm", migrated.Alias1);
+            Assert.Null(migrated);
         }
 
         [Fact]

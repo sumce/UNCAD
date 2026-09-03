@@ -26,7 +26,16 @@ namespace UNCAD.Core.Fill
 
         private static CableStatResult CloneStatistics(CableStatResult source)
         {
-            var clone = new CableStatResult { CableSum = source.CableSum };
+            var clone = new CableStatResult
+            {
+                CableSum = source.CableSum,
+                IncludeCable = source.IncludeCable,
+                IncludeBridge = source.IncludeBridge,
+                IncludeConduit = source.IncludeConduit,
+                CableState = source.CableState,
+                BridgeState = source.BridgeState,
+                ConduitState = source.ConduitState
+            };
             clone.CableFormatted.AddRange(source.CableFormatted);
             foreach (BridgeStat bridge in source.Bridges)
             {
@@ -61,7 +70,10 @@ namespace UNCAD.Core.Fill
                 Dia = source.Dia,
                 Next = source.Next,
                 DownstreamAxis = source.DownstreamAxis,
-                UpstreamAxis = source.UpstreamAxis
+                UpstreamAxis = source.UpstreamAxis,
+                DeviceFloor = source.DeviceFloor,
+                PanelFloor = source.PanelFloor,
+                FacilitySwitch = source.FacilitySwitch
             };
         }
     }

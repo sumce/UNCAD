@@ -20,9 +20,11 @@ namespace UNCAD.Tests
                 Assert.Contains("CadBlockColorWriter.Apply", source);
                 Assert.Contains("DeviceBlockIds", source);
                 Assert.Contains("DownstreamAxisBlockIds", source);
+                Assert.Contains("DeviceColorBlockIds", source);
                 Assert.Contains("UpstreamStateBlockIds", source);
                 Assert.Contains("UpstreamInfoBlockIds", source);
                 Assert.Contains("UpstreamAxisBlockIds", source);
+                Assert.Contains("UpstreamColorBlockIds", source);
                 Assert.DoesNotContain("UpstreamConnectionLineWriter", source);
             }
             Assert.Contains("block.RecordGraphicsModified(true)", writer);

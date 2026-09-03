@@ -10,7 +10,7 @@ namespace UNCAD.Core.Excel
     {
         private static readonly StableFileCache<List<MachineRow>> MachineCache =
             new StableFileCache<List<MachineRow>>("机台数据 Excel",
-                LoadMachineRows, CloneMachineRows);
+                path => LoadMachineRows(path), CloneMachineRows);
         private readonly List<MachineRow> _machineRows;
         private readonly Dictionary<string, List<MachineRow>> _machineIndex;
 
@@ -61,6 +61,11 @@ namespace UNCAD.Core.Excel
                 machineCacheHit);
         }
 
+        /// <summary>Compatibility overload; A1/A2 are no longer interpreted.</summary>
+        [Obsolete("机台表已统一使用 U_ 字段，A1/A2 不再支持。")]
+        public static FillWorkbookSnapshot Load(string machineFilePath,
+            MachineWorkbookLayout layout) => Load(machineFilePath);
+
         private static List<MachineRow> LoadMachineRows(string path)
         {
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
@@ -89,7 +94,10 @@ namespace UNCAD.Core.Excel
                     Dia = row.Dia,
                     Next = row.Next,
                     DownstreamAxis = row.DownstreamAxis,
-                    UpstreamAxis = row.UpstreamAxis
+                    UpstreamAxis = row.UpstreamAxis,
+                    DeviceFloor = row.DeviceFloor,
+                    PanelFloor = row.PanelFloor,
+                    FacilitySwitch = row.FacilitySwitch
                 });
             }
             return result;

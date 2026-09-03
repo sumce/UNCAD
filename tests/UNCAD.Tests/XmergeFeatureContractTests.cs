@@ -17,8 +17,11 @@ namespace UNCAD.Tests
             Assert.Contains("ShowModalDialog", feature);
             Assert.Contains("WblockCloneObjects", service);
             Assert.Contains("XLayoutLayout.Arrange", service);
-            Assert.Contains("SearchOption.AllDirectories", form);
+            Assert.Contains("Task.Run", form);
+            Assert.Contains("DwgPathDiscovery.Find", form);
             Assert.Contains("AllowDrop = true", form);
+            Assert.Contains("BlockTableRecord.ModelSpace", service);
+            Assert.Contains("DuplicateRecordCloning.MangleName", service);
         }
 
         private static string RepoFile(params string[] parts)

@@ -5,6 +5,13 @@ using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Stat
 {
+    public enum MeasurementState
+    {
+        Unknown = 0,
+        Measured = 1,
+        ConfirmedEmpty = 2
+    }
+
     /// <summary>桥架统计项。</summary>
     public sealed class BridgeStat
     {
@@ -36,6 +43,27 @@ namespace UNCAD.Core.Stat
         public bool IncludeCable { get; internal set; } = true;
         public bool IncludeBridge { get; internal set; } = true;
         public bool IncludeConduit { get; internal set; } = true;
+        public MeasurementState CableState { get; internal set; }
+        public MeasurementState BridgeState { get; internal set; }
+        public MeasurementState ConduitState { get; internal set; }
+
+        internal void ApplySourceCoverage(bool completeScope)
+        {
+            CableState = ResolveState(IncludeCable, CableFormatted.Count > 0,
+                completeScope);
+            BridgeState = ResolveState(IncludeBridge, Bridges.Count > 0,
+                completeScope);
+            ConduitState = ResolveState(IncludeConduit, Conduits.Count > 0,
+                completeScope);
+        }
+
+        private static MeasurementState ResolveState(bool enabled, bool measured,
+            bool completeScope)
+        {
+            if (!enabled) return MeasurementState.Unknown;
+            if (measured) return MeasurementState.Measured;
+            return completeScope ? MeasurementState.ConfirmedEmpty : MeasurementState.Unknown;
+        }
     }
 
     public sealed class StatCalculationOptions
@@ -69,7 +97,7 @@ namespace UNCAD.Core.Stat
             var bridgeMap = new Dictionary<string, BridgeStat>(StringComparer.Ordinal);
             var conduitMap = new Dictionary<string, ConduitStat>(StringComparer.Ordinal);
 
-            foreach (var source in lines)
+            foreach (var source in lines ?? Enumerable.Empty<string>())
             {
                 string s = (source ?? "").Trim();
                 // 条件 A：电缆长度
@@ -113,6 +141,7 @@ namespace UNCAD.Core.Stat
                     conduit.LengthsMm.Add(conduitLength.Value);
                 }
             }
+            result.ApplySourceCoverage(false);
             return result;
         }
 

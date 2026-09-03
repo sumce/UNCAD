@@ -1,4 +1,5 @@
 using UNCAD.Core.Fill;
+using UNCAD.Core.Excel;
 using Xunit;
 
 namespace UNCAD.Tests
@@ -28,12 +29,21 @@ namespace UNCAD.Tests
 
             // 用户唯一提供的文件就是机台/设备表；不再存在清单路径配置。
             Assert.Equal("source.xlsx", options.MachineWorkbookPath);
+            Assert.Equal(MachineWorkbookLayout.A1, options.MachineWorkbookLayout);
             Assert.Equal(1, options.StartRow);
             Assert.Equal(TableClearPolicy.DefaultRows, options.ClearRows);
             Assert.Equal(TableFillFormatter.DefaultTextHeight, options.TextHeight);
             Assert.Equal(250, options.MmPerGrid);
             Assert.Equal("bridge", options.BridgeInfo);
             Assert.Same(FillPlanningOptions.Default, options.Planning);
+        }
+
+        [Fact]
+        public void RuntimeOptions_PreservesSelectedMachineWorkbookLayout()
+        {
+            FillRuntimeOptions options = FillRuntimeOptions.Create("ledger.xlsx",
+                MachineWorkbookLayout.A2, 1, 11, 500, 250, "", null);
+            Assert.Equal(MachineWorkbookLayout.A2, options.MachineWorkbookLayout);
         }
     }
 }

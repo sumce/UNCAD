@@ -352,7 +352,10 @@ namespace UNCAD.Core.Fill
                 Dia = source.Dia,
                 Next = source.Next,
                 DownstreamAxis = source.DownstreamAxis,
-                UpstreamAxis = source.UpstreamAxis
+                UpstreamAxis = source.UpstreamAxis,
+                DeviceFloor = source.DeviceFloor,
+                PanelFloor = source.PanelFloor,
+                FacilitySwitch = source.FacilitySwitch
             };
         }
     }

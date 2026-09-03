@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
+using UNCAD.Core.IO;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -93,6 +93,14 @@ namespace UNCAD.Core.Submission
 
         public static void Write(string targetPath, string templatePath,
             IEnumerable<SubmissionRecord> records)
+            => Write(targetPath, templatePath, records, false);
+
+        /// <summary>
+        /// Writes one machine's quantities. U1F/U1U pass allowEmptyMaterials=true so
+        /// clearing a CAD table also clears the existing BOQ device column.
+        /// </summary>
+        public static void Write(string targetPath, string templatePath,
+            IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials)
         {
             if (string.IsNullOrWhiteSpace(targetPath))
                 throw new ArgumentException("BOQ 输出文件路径为空。", nameof(targetPath));
@@ -107,17 +115,31 @@ namespace UNCAD.Core.Submission
                 throw new InvalidDataException("BOQ machine ID is required for quantity attribution.");
             if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.DeviceName)))
                 throw new InvalidDataException("BOQ device name is required for quantity attribution.");
-            if (!sourceRecords.Any(record => record.Materials != null && record.Materials.Count > 0))
+            if (!allowEmptyMaterials
+                && !sourceRecords.Any(record => record.Materials != null
+                    && record.Materials.Count > 0))
                 throw new InvalidDataException("没有可写入 BOQ 的清单材料。");
             string fullPath = Path.GetFullPath(targetPath);
             string folder = Path.GetDirectoryName(fullPath);
             Directory.CreateDirectory(folder);
             string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            bool existedBeforeWrite = false;
+            string verificationBackup = null;
             IWorkbook workbook = null;
-            FileStream updateLock = null;
+            IDisposable updateLock = null;
+            bool replacementApplied = false;
             try
             {
-                updateLock = AcquireUpdateLock(fullPath);
+                updateLock = FileUpdateLock.Acquire(fullPath,
+                    "BOQ 正在被另一个 UNCAD 用户更新，请稍后重试。");
+                // Keep an independent rollback copy until the post-write readback has
+                // succeeded. Replace() removes its own transient backup immediately.
+                existedBeforeWrite = File.Exists(fullPath);
+                verificationBackup = existedBeforeWrite
+                    ? fullPath + ".uncad-verify-" + Guid.NewGuid().ToString("N") + ".bak"
+                    : null;
+                if (existedBeforeWrite)
+                    File.Copy(fullPath, verificationBackup, false);
                 workbook = Load(fullPath, templatePath);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
                 Dictionary<string, int> rows = FindItemRows(sheet);
@@ -133,7 +155,7 @@ namespace UNCAD.Core.Submission
                         throw new InvalidDataException("BOQ 设备名称不能为空，不能创建设备列。");
                     int deviceColumn = GetOrCreateDeviceColumn(sheet, deviceColumns, deviceGroup.Key);
                     Dictionary<string, decimal> deviceQuantities = ReadQuantities(
-                        deviceGroup, rows);
+                        deviceGroup, rows, allowEmptyMaterials);
                     expected[deviceGroup.Key] = deviceQuantities;
                     // 只清空当前设备列；同一机台其他设备列必须完整保留。
                     foreach (KeyValuePair<string, int> item in rows)
@@ -165,9 +187,29 @@ namespace UNCAD.Core.Submission
                 workbook = null;
                 Replace(fullPath, temporary);
                 temporary = null;
+                replacementApplied = true;
                 // 写后回读硬对账:逐设备列核对非零工程量与内存聚合一致,
                 // 不一致(写入失败/外部改动)立即报错并回滚整个批次。
                 VerifyWrittenWorkbook(fullPath, templatePath, expected);
+            }
+            catch (Exception error)
+            {
+                if (replacementApplied)
+                {
+                    try
+                    {
+                        if (existedBeforeWrite && File.Exists(verificationBackup))
+                            File.Copy(verificationBackup, fullPath, true);
+                        else if (!existedBeforeWrite && File.Exists(fullPath))
+                            File.Delete(fullPath);
+                    }
+                    catch (Exception restoreError)
+                    {
+                        throw new AggregateException(
+                            "BOQ 写入校验失败且原文件恢复失败。", error, restoreError);
+                    }
+                }
+                throw;
             }
             finally
             {
@@ -175,9 +217,9 @@ namespace UNCAD.Core.Submission
                 if (updateLock != null)
                 {
                     updateLock.Dispose();
-                    TryDelete(fullPath + ".boq.lock");
                 }
                 TryDelete(temporary);
+                TryDelete(verificationBackup);
             }
         }
 
@@ -286,7 +328,8 @@ namespace UNCAD.Core.Submission
         }
 
         private static Dictionary<string, decimal> ReadQuantities(
-            IEnumerable<SubmissionRecord> records, Dictionary<string, int> rows)
+            IEnumerable<SubmissionRecord> records, Dictionary<string, int> rows,
+            bool allowEmptyMaterials)
         {
             var quantities = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
             foreach (SubmissionRecord record in records)
@@ -313,7 +356,7 @@ namespace UNCAD.Core.Submission
                         ? old + quantity : quantity;
                 }
             }
-            if (quantities.Count == 0)
+            if (quantities.Count == 0 && !allowEmptyMaterials)
                 throw new InvalidDataException("设备没有可写入 BOQ 的清单材料。");
             return quantities;
         }
@@ -424,24 +467,6 @@ namespace UNCAD.Core.Submission
                     File.Move(backup, target);
                 throw;
             }
-        }
-
-        private static FileStream AcquireUpdateLock(string workbookPath)
-        {
-            string lockPath = workbookPath + ".boq.lock";
-            for (int attempt = 0; attempt < 20; attempt++)
-            {
-                try
-                {
-                    return new FileStream(lockPath, FileMode.OpenOrCreate,
-                        FileAccess.ReadWrite, FileShare.None);
-                }
-                catch (IOException)
-                {
-                    if (attempt < 19) Thread.Sleep(150);
-                }
-            }
-            throw new IOException("BOQ 正在被另一个 UNCAD 用户更新，请稍后重试。");
         }
 
         private static void TryDelete(string path)

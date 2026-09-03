@@ -93,7 +93,7 @@ function Get-PackageInfo {
     $requiredFiles = @(
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
-        "BOQ_Template.xlsx"
+        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }
@@ -101,14 +101,11 @@ function Get-PackageInfo {
     $version = [string]$package.AppVersion
     $licenseMode = [string]$package.LicenseMode
     $licenseExpiresUtc = [string]$package.LicenseExpiresUtc
-    if ([string]::IsNullOrWhiteSpace($licenseMode)) {
-        throw "Package license metadata is missing: LicenseMode"
+    if ($licenseMode -ne "Online") {
+        throw "Only the unified online UNCAD Pro package is supported."
     }
-    if ($licenseMode -ne "Perpetual" -and [string]::IsNullOrWhiteSpace($licenseExpiresUtc)) {
-        throw "Expiring package must declare LicenseExpiresUtc"
-    }
-    if ($licenseMode -eq "Perpetual" -and -not [string]::IsNullOrWhiteSpace($licenseExpiresUtc)) {
-        throw "Perpetual package must not declare LicenseExpiresUtc"
+    if (-not [string]::IsNullOrWhiteSpace($licenseExpiresUtc)) {
+        throw "Online package expiry must come from pro.key, not PackageContents.xml."
     }
     $fileVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($modulePath).FileVersion
     # Accept exact four-part patch versions such as 1.9.7.1; retain compatibility with three-part packages.

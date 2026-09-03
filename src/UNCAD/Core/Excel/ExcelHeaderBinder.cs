@@ -26,6 +26,42 @@ namespace UNCAD.Core.Excel
         public static int Optional(IRow header, string sheetName, params string[] aliases)
             => Find(header, sheetName, aliases);
 
+        public static int RequireFirst(IRow header, string sheetName, params string[] aliases)
+            => RequireOccurrence(header, sheetName, false, aliases);
+
+        public static int RequireLast(IRow header, string sheetName, params string[] aliases)
+            => RequireOccurrence(header, sheetName, true, aliases);
+
+        public static int OptionalFirst(IRow header, params string[] aliases)
+            => FindOccurrence(header, false, aliases);
+
+        private static int RequireOccurrence(IRow header, string sheetName, bool last,
+            string[] aliases)
+        {
+            int found = FindOccurrence(header, last, aliases);
+            if (found < 0)
+                throw new InvalidDataException("工作表“" + sheetName + "”缺少必需字段“"
+                    + aliases[0] + "”。");
+            return found;
+        }
+
+        private static int FindOccurrence(IRow header, bool last, string[] aliases)
+        {
+            if (header == null) return -1;
+            foreach (string alias in aliases ?? new string[0])
+            {
+                int found = -1;
+                for (int c = 0; c < header.LastCellNum; c++)
+                {
+                    if (!Equals(header.GetCell(c), alias)) continue;
+                    if (!last) return c;
+                    found = c;
+                }
+                if (found >= 0) return found;
+            }
+            return -1;
+        }
+
         private static int Find(IRow header, string sheetName, string[] aliases)
         {
             if (header == null) return -1;

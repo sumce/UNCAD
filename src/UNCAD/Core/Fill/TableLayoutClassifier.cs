@@ -1,5 +1,6 @@
 using System;
 using System.Text.RegularExpressions;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Fill
 {
@@ -25,9 +26,32 @@ namespace UNCAD.Core.Fill
             return NumberedRowRegex.IsMatch((value ?? "").Trim());
         }
 
+        public static bool IsDrawingInfoHeader(params string[] cells)
+        {
+            return IsCurrentDrawingInfoHeader(cells)
+                || MatchesDrawingInfoHeader(cells,
+                    "专业", "设备楼层", "上游楼层", "制图", "审核", "日期", "版本");
+        }
+
+        public static bool IsCurrentDrawingInfoHeader(params string[] cells)
+        {
+            return MatchesDrawingInfoHeader(cells,
+                "专业", "楼层", "制图", "审核", "日期", "版本");
+        }
+
+        private static bool MatchesDrawingInfoHeader(string[] cells,
+            params string[] expected)
+        {
+            if (cells == null || cells.Length < expected.Length) return false;
+            for (int i = 0; i < expected.Length; i++)
+                if (!Normalize(cells[i]).Equals(expected[i],
+                    StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
+        }
+
         private static string Normalize(string value)
         {
-            return (value ?? "").Trim();
+            return TextParser.CleanMText(value).Trim();
         }
 
         private static bool EqualsAny(string value, params string[] candidates)

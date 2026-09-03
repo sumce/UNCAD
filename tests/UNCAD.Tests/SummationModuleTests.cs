@@ -42,5 +42,37 @@ namespace UNCAD.Tests
             Assert.Equal(1, output.Statistics.CableSum);
             Assert.Equal(1, output.CableMatchCount);
         }
+
+        [Fact]
+        public void MeasurementState_DistinguishesIncompleteAndConfirmedEmptyScopes()
+        {
+            CableStatResult statistics = SummationModule.Execute(new SummationRequest(
+                new[] { "普通说明文字" }, new StatCalculationOptions
+                {
+                    IncludeCable = true,
+                    IncludeBridge = true,
+                    IncludeConduit = false
+                })).Statistics;
+
+            Assert.Equal(MeasurementState.Unknown, statistics.CableState);
+            Assert.Equal(MeasurementState.Unknown, statistics.BridgeState);
+            statistics.ApplySourceCoverage(true);
+            Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.CableState);
+            Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.BridgeState);
+            Assert.Equal(MeasurementState.Unknown, statistics.ConduitState);
+        }
+
+        [Fact]
+        public void MeasurementState_PreservesMeasuredCategoryInCompleteScope()
+        {
+            CableStatResult statistics = StatCalculator.Calculate(
+                new[] { "2500mm" }, new StatCalculationOptions());
+
+            statistics.ApplySourceCoverage(true);
+
+            Assert.Equal(MeasurementState.Measured, statistics.CableState);
+            Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.BridgeState);
+            Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.ConduitState);
+        }
     }
 }

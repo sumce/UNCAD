@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
+using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
 {
@@ -12,7 +13,23 @@ namespace UNCAD.Features.Fill
         public static bool ReadDeviceHasOutlet(CadContext ctx, ObjectId[] blockIds,
             out string stateText)
         {
+            return TryReadDeviceHasOutlet(ctx, blockIds, out bool hasOutlet,
+                out _, out stateText) && hasOutlet;
+        }
+
+        /// <summary>
+        /// Reads the Device_Build20260716 outlet state without treating a missing or
+        /// incompatible block as "equipment".  The latter is important for U1U:
+        /// an unknown state must preserve an existing outlet row rather than delete it.
+        /// </summary>
+        public static bool TryReadDeviceHasOutlet(CadContext ctx, ObjectId[] blockIds,
+            out bool hasOutlet, out bool stateKnown, out string stateText)
+        {
+            hasOutlet = false;
+            stateKnown = false;
+            stateText = "未找到 Device_Build20260716（状态未知）";
             var states = new List<KeyValuePair<string, bool>>();
+            bool unknown = false;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 foreach (ObjectId id in blockIds ?? new ObjectId[0])
@@ -22,34 +39,53 @@ namespace UNCAD.Features.Fill
                     if (block == null || !DynamicBlockStatePolicy.IsDeviceBlock(
                         EffectiveName(transaction, block))) continue;
                     if (!block.IsDynamicBlock)
-                        throw new InvalidOperationException("Device_Build20260716 不是动态块，无法读取插座状态。");
-                    bool found = false;
-                    foreach (DynamicBlockReferenceProperty property
-                        in block.DynamicBlockReferencePropertyCollection)
                     {
-                        string value = Convert.ToString(property.Value) ?? "";
-                        if (!DynamicBlockStatePolicy.TryClassifyDeviceState(value,
-                            out bool hasOutlet)) continue;
-                        states.Add(new KeyValuePair<string, bool>(value, hasOutlet));
-                        found = true;
-                        break;
+                        unknown = true;
+                        stateText = "Device_Build20260716 不是动态块（状态未知）";
+                        continue;
+                    }
+                    bool found = false;
+                    try
+                    {
+                        foreach (DynamicBlockReferenceProperty property
+                            in block.DynamicBlockReferencePropertyCollection)
+                        {
+                            string value = Convert.ToString(property.Value) ?? "";
+                            if (!DynamicBlockStatePolicy.TryClassifyDeviceState(value,
+                                out bool outlet)) continue;
+                            states.Add(new KeyValuePair<string, bool>(value, outlet));
+                            found = true;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        unknown = true;
+                        stateText = "Device_Build20260716 状态读取失败（状态未知）";
+                        Log.Warn("读取 Device_Build20260716 状态失败: " + ex.Message);
                     }
                     if (!found)
-                        throw new InvalidOperationException("Device_Build20260716 未找到“设备/插座”动态状态。");
+                    {
+                        unknown = true;
+                        stateText = "Device_Build20260716 未找到设备/插座状态（状态未知）";
+                    }
                 }
                 transaction.Commit();
             }
-            if (states.Count == 0)
-            {
-                stateText = "未找到 Device_Build20260716（不输出插座）";
-                return false;
-            }
-            bool decision = states[0].Value;
-            if (states.Any(state => state.Value != decision))
+            if (states.Count > 0 && states.Any(state => state.Value != states[0].Value))
                 throw new InvalidOperationException("同一图框内 Device_Build20260716 状态冲突："
                     + string.Join("、", states.Select(state => state.Key)) + "。图纸未修改。");
+            if (states.Count == 0 || unknown)
+            {
+                if (states.Count > 0)
+                    stateText = string.Join("、", states.Select(state => state.Key).Distinct())
+                        + "（部分状态未知）";
+                return false;
+            }
+            hasOutlet = states[0].Value;
+            stateKnown = true;
             stateText = string.Join("、", states.Select(state => state.Key).Distinct());
-            return decision;
+            return hasOutlet;
         }
 
         public static FillWriteResult FillUpstreamState(CadContext ctx,

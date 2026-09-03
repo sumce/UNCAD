@@ -62,10 +62,7 @@ namespace UNCAD.Features.Conduit
                     ruanguanSelection = FillSelectionCollector.Split(ctx,
                         regions.Groups[0].EntityIds.ToArray());
             }
-            FillWriteResult ruanguanResult = FillWriteResult.Empty;
-            if (ruanguanResult.Blocks > 0)
-                ctx.Write("\n[U1C] Ruanguan 更新 " + ruanguanResult.Blocks
-                    + " 个块共 " + ruanguanResult.Values + " 项。");
+            FillWriteResult ruanguanResult;
 
             ConfigPrinter.Print(ctx, "U1C",
                 ("管径", "⌀" + diameter),

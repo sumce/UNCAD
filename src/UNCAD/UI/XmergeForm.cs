@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using UNCAD.Core.Dwg;
 
 namespace UNCAD.UI
 {
@@ -12,6 +14,9 @@ namespace UNCAD.UI
     {
         private readonly ListBox _files;
         private readonly Label _hint;
+        private readonly Button _merge;
+        private readonly List<string> _pendingInputs = new List<string>();
+        private bool _scanning;
 
         public XmergeForm(IEnumerable<string> initial = null)
         {
@@ -51,10 +56,10 @@ namespace UNCAD.UI
             var remove = UiTheme.Button("移除选中");
             remove.Click += (sender, args) => RemoveSelected();
             Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
-            Button merge = UiTheme.PrimaryButton("开始合并", DialogResult.OK);
+            _merge = UiTheme.PrimaryButton("开始合并", DialogResult.OK);
             FlowLayoutPanel commands = UiTheme.CommandBar();
             commands.Controls.Add(cancel);
-            commands.Controls.Add(merge);
+            commands.Controls.Add(_merge);
             commands.Controls.Add(remove);
             commands.Controls.Add(folder);
             commands.Controls.Add(add);
@@ -62,9 +67,9 @@ namespace UNCAD.UI
             Controls.Add(_hint);
             Controls.Add(commands);
             Controls.Add(header);
-            AcceptButton = merge;
+            AcceptButton = _merge;
             CancelButton = cancel;
-            merge.Click += (sender, args) =>
+            _merge.Click += (sender, args) =>
             {
                 if (Files.Count == 0)
                 {
@@ -73,7 +78,8 @@ namespace UNCAD.UI
                     DialogResult = DialogResult.None;
                 }
             };
-            AddPaths(initial);
+            if (initial != null) Shown += async (sender, args) =>
+                await AddPathsAsync(initial);
         }
 
         public IReadOnlyList<string> Files => _files.Items.Cast<string>().ToList();
@@ -84,12 +90,13 @@ namespace UNCAD.UI
                 ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
-        private void OnDragDrop(object sender, DragEventArgs args)
+        private async void OnDragDrop(object sender, DragEventArgs args)
         {
-            if (args.Data?.GetData(DataFormats.FileDrop) is string[] paths) AddPaths(paths);
+            if (args.Data?.GetData(DataFormats.FileDrop) is string[] paths)
+                await AddPathsAsync(paths);
         }
 
-        private void AddFilesWithDialog()
+        private async void AddFilesWithDialog()
         {
             using (var dialog = new OpenFileDialog
             {
@@ -99,35 +106,85 @@ namespace UNCAD.UI
                 Title = "添加 DWG 文件"
             })
             {
-                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(dialog.FileNames);
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    await AddPathsAsync(dialog.FileNames);
             }
         }
 
-        private void AddFolderWithDialog()
+        private async void AddFolderWithDialog()
         {
             using (var dialog = new FolderBrowserDialog { Description = "选择包含 DWG 的文件夹" })
             {
-                if (dialog.ShowDialog(this) == DialogResult.OK) AddPaths(new[] { dialog.SelectedPath });
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    await AddPathsAsync(new[] { dialog.SelectedPath });
             }
         }
 
-        private void AddPaths(IEnumerable<string> paths)
+        private async Task AddPathsAsync(IEnumerable<string> paths)
+        {
+            string[] input = (paths ?? Enumerable.Empty<string>()).ToArray();
+            if (input.Length == 0) return;
+            if (_scanning)
+            {
+                _pendingInputs.AddRange(input);
+                _hint.Text = "已排队，等待完成当前扫描...";
+                return;
+            }
+
+            _scanning = true;
+            _merge.Enabled = false;
+            _files.Enabled = false;
+            try
+            {
+                var pending = new Queue<string>(input);
+                while (pending.Count > 0)
+                {
+                    string[] batch = pending.ToArray();
+                    pending.Clear();
+                    _hint.Text = "正在扫描 DWG...";
+                    DwgPathDiscoveryResult discovered = null;
+                    try
+                    {
+                        discovered = await Task.Run(() => DwgPathDiscovery.Find(batch));
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(this, "扫描 DWG 失败：" + ex.Message, "Xmerge",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    if (discovered != null)
+                    {
+                        AddDiscoveredFiles(discovered);
+                    }
+
+                    if (_pendingInputs.Count == 0) continue;
+                    foreach (string queued in _pendingInputs) pending.Enqueue(queued);
+                    _pendingInputs.Clear();
+                }
+            }
+            finally
+            {
+                _scanning = false;
+                _merge.Enabled = true;
+                _files.Enabled = true;
+                _hint.Text = _files.Items.Count == 0
+                    ? "将文件或文件夹拖到此处" : "已添加 " + _files.Items.Count + " 个 DWG 文件";
+            }
+
+        }
+
+        private void AddDiscoveredFiles(DwgPathDiscoveryResult discovered)
         {
             var files = new HashSet<string>(Files, StringComparer.OrdinalIgnoreCase);
-            foreach (string path in paths ?? Enumerable.Empty<string>())
-            {
-                if (Directory.Exists(path))
-                {
-                    foreach (string file in Directory.EnumerateFiles(path, "*.dwg",
-                        SearchOption.AllDirectories)) files.Add(Path.GetFullPath(file));
-                }
-                else if (File.Exists(path) && string.Equals(Path.GetExtension(path), ".dwg",
-                    StringComparison.OrdinalIgnoreCase)) files.Add(Path.GetFullPath(path));
-            }
+            foreach (string file in discovered.Files) files.Add(file);
             _files.Items.Clear();
             _files.Items.AddRange(files.OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray());
             _hint.Text = _files.Items.Count == 0
                 ? "将文件或文件夹拖到此处" : "已添加 " + _files.Items.Count + " 个 DWG 文件";
+            if (discovered.Errors.Count > 0)
+                MessageBox.Show(this, "部分目录无法读取：\n" + string.Join("\n",
+                    discovered.Errors.Take(8)), "Xmerge", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
         }
 
         private void RemoveSelected()

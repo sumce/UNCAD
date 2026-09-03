@@ -13,6 +13,9 @@ namespace UNCAD
     /// <summary>插件启动：预热 WinForms IME 表、扫描 Feature 注册表、构建 Ribbon、输出横幅。</summary>
     public class Bootstrap : IExtensionApplication
     {
+        private static bool _licenseIdleAttached;
+        private static bool _licenseDialogOpen;
+
         public void Initialize()
         {
             WarmUpWinFormsImeConversion();
@@ -21,6 +24,12 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
+            if (ProductMetadata.RequiresOnlineLicense)
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnLicenseIdle;
+                _licenseIdleAttached = true;
+                OnlineLicenseMonitor.Start();
+            }
             Log.Info("UNCAD initialized; Ribbon registration requested");
         }
 
@@ -49,6 +58,38 @@ namespace UNCAD
             }
         }
 
-        public void Terminate() { }
+        private static void OnLicenseIdle(object sender, EventArgs args)
+        {
+            if (_licenseDialogOpen) return;
+            if (OnlineLicenseMonitor.TryTakeActivationRequest(out string reason))
+            {
+                try
+                {
+                    _licenseDialogOpen = true;
+                    using (var form = new OnlineLicenseForm(reason))
+                        Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+                }
+                finally { _licenseDialogOpen = false; }
+                return;
+            }
+            if (!OnlineLicenseMonitor.TryTakeNotice(out OnlineLicenseNotice notice)) return;
+            MessageBoxIcon icon = notice.Level == "error" ? MessageBoxIcon.Error
+                : notice.Level == "info" ? MessageBoxIcon.Information
+                : MessageBoxIcon.Warning;
+            IntPtr handle = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow?.Handle
+                ?? IntPtr.Zero;
+            MessageBox.Show(new WindowWrapper(handle), notice.Message, notice.Title,
+                MessageBoxButtons.OK, icon);
+        }
+
+        public void Terminate()
+        {
+            if (_licenseIdleAttached)
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnLicenseIdle;
+                _licenseIdleAttached = false;
+            }
+            OnlineLicenseMonitor.Stop();
+        }
     }
 }

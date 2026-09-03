@@ -19,9 +19,12 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BuildValue_IsEmpty_WhenCircuitNameMissing()
+        public void BuildValue_FallsBackToMachineId_WhenCircuitNameMissing()
         {
-            Assert.Equal("", DeviceBlockFiller.BuildValue(new MachineRow()));
+            Assert.Equal("MEOXT15", DeviceBlockFiller.BuildValue(new MachineRow
+            {
+                MachineId = "MEOXT15"
+            }));
         }
     }
 }

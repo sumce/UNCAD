@@ -11,7 +11,7 @@ namespace UNCAD.Features.Fill
     internal static class FillStatisticsModule
     {
         public static SummationOutput Execute(CadContext ctx, ObjectId[] textIds,
-            double mmPerGrid)
+            double mmPerGrid, bool statisticsScopeComplete)
         {
             StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             List<string> lines = ModuleRunner.Run(SummationModule.Descriptor,
@@ -21,6 +21,7 @@ namespace UNCAD.Features.Fill
             SummationOutput output = ModuleRunner.Run(SummationModule.Descriptor,
                 "解析并求和", () => SummationModule.Execute(
                     new SummationRequest(lines, settings.Calculation)));
+            output.Statistics.ApplySourceCoverage(statisticsScopeComplete);
             Log.Info("MODULE " + SummationModule.Descriptor.Label + " result: sources="
                 + output.SourceLineCount + ", cable=" + output.CableMatchCount
                 + ", bridge=" + output.BridgeMatchCount + ", conduit="

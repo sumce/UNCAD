@@ -32,7 +32,7 @@ namespace UNCAD.Features.XLayout
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.XLayout);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请框选或点选需要排版的 frame_20260812 图框: ",
+                "\n请框选或点选需要排版的图框（frame_20260812/xframe）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
@@ -49,7 +49,7 @@ namespace UNCAD.Features.XLayout
             }
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[XLAYOUT] 未找到有效的 frame_20260812 图框。");
+                ctx.Write("\n[XLAYOUT] 未找到有效图框（frame_20260812/xframe）。");
                 return;
             }
 
