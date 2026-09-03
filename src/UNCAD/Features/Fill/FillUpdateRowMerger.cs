@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
@@ -14,6 +15,17 @@ namespace UNCAD.Features.Fill
         public static List<TableFillRow> Merge(CadContext ctx, FillSelection selection,
             List<TableFillRow> planned, CableStatResult statistics)
         {
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                List<TableFillRow> result = Merge(transaction, selection, planned, statistics);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static List<TableFillRow> Merge(Transaction transaction,
+            FillSelection selection, List<TableFillRow> planned, CableStatResult statistics)
+        {
             planned = planned ?? new List<TableFillRow>();
             statistics = statistics ?? new CableStatResult();
             if (selection?.TableIds == null || selection.TableIds.Length == 0) return planned;
@@ -21,7 +33,8 @@ namespace UNCAD.Features.Fill
                 && statistics.BridgeState != MeasurementState.Unknown
                 && statistics.ConduitState != MeasurementState.Unknown) return planned;
 
-            SubmissionSourceData source = CadSubmissionReader.Read(ctx, selection.TableIds);
+            SubmissionSourceData source = CadSubmissionReader.Read(transaction,
+                selection.TableIds);
             return MergeRows(planned, ReadRows(source), statistics);
         }
 

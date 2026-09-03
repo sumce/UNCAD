@@ -15,6 +15,12 @@ namespace UNCAD.UI
 
         public string MachineId { get; }
         public int CircuitCount { get; set; }
+        public int ExpectedCircuitCount { get; set; }
+        public int DuplicateCircuitCount { get; set; }
+        public bool StatusKnown { get; set; }
+        public bool IsComplete { get; set; }
+        public string StatusText => !StatusKnown ? "未判断"
+            : IsComplete ? "完整" : "缺少回路";
     }
 
     internal sealed class XLayoutSummaryForm : Form
@@ -59,6 +65,12 @@ namespace UNCAD.UI
                 {
                     Alignment = DataGridViewContentAlignment.MiddleRight
                 }
+            });
+            grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = "状态",
+                DataPropertyName = nameof(XLayoutMachineSummary.StatusText),
+                FillWeight = 28
             });
             grid.DataSource = (summaries ?? Array.Empty<XLayoutMachineSummary>()).ToList();
             UiTheme.StyleGrid(grid);

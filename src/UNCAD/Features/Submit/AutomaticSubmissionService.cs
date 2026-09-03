@@ -101,23 +101,8 @@ namespace UNCAD.Features.Submit
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("Excel 自动记录文件路径为空。", nameof(filePath));
 
-            var records = new List<SubmissionRecord>();
-            int index = 0;
-            foreach (ObjectId[] ids in sourceGroups ?? Enumerable.Empty<ObjectId[]>())
-            {
-                index++;
-                if (ids == null || ids.Length == 0) continue;
-                SubmissionSourceData source = transaction == null
-                    ? CadSubmissionReader.Read(ctx, ids)
-                    : CadSubmissionReader.Read(transaction, ids);
-                SubmissionRecord record = SubmissionRecordExtractor.Extract(source,
-                    inferLegacySocketPanels);
-                if (string.IsNullOrWhiteSpace(record.MachineId)
-                    || string.IsNullOrWhiteSpace(record.DeviceName))
-                    throw new InvalidDataException("第 " + index
-                        + " 个图框缺少机台编号或设备名称，Excel 未更新。");
-                records.Add(record);
-            }
+            List<SubmissionRecord> records = ReadRecords(ctx, transaction, sourceGroups,
+                inferLegacySocketPanels);
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
 
@@ -209,6 +194,42 @@ namespace UNCAD.Features.Submit
                 }
             }
             return result;
+        }
+
+        private static List<SubmissionRecord> ReadRecords(CadContext ctx,
+            Transaction transaction, IEnumerable<ObjectId[]> sourceGroups,
+            bool inferLegacySocketPanels)
+        {
+            var records = new List<SubmissionRecord>();
+            Action<Transaction> read = current =>
+            {
+                int index = 0;
+                foreach (ObjectId[] ids in sourceGroups ?? Enumerable.Empty<ObjectId[]>())
+                {
+                    index++;
+                    if (ids == null || ids.Length == 0) continue;
+                    SubmissionSourceData source = CadSubmissionReader.Read(current, ids);
+                    SubmissionRecord record = SubmissionRecordExtractor.Extract(source,
+                        inferLegacySocketPanels);
+                    if (string.IsNullOrWhiteSpace(record.MachineId)
+                        || string.IsNullOrWhiteSpace(record.DeviceName))
+                        throw new InvalidDataException("第 " + index
+                            + " 个图框缺少机台编号或设备名称，Excel 未更新。");
+                    records.Add(record);
+                }
+            };
+            if (transaction != null)
+            {
+                read(transaction);
+                return records;
+            }
+
+            using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                read(readTransaction);
+                readTransaction.Commit();
+            }
+            return records;
         }
     }
 

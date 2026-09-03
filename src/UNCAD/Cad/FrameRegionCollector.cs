@@ -47,6 +47,125 @@ namespace UNCAD.Cad
             public double MaxY;
         }
 
+        /// <summary>
+        /// Small uniform grid used while assigning model-space entities to frames.
+        /// The previous implementation compared every entity with every frame.  A frame
+        /// normally occupies only one or two cells, so the common path now checks a tiny
+        /// candidate set while preserving exact boundary checks below.
+        /// </summary>
+        private sealed class FrameBoundaryIndex
+        {
+            private const int MaxIndexedCells = 64;
+            private readonly double _cellWidth;
+            private readonly double _cellHeight;
+            private readonly Dictionary<GridKey, List<FrameRegionGroup>> _buckets =
+                new Dictionary<GridKey, List<FrameRegionGroup>>();
+            private readonly List<FrameRegionGroup> _overflow =
+                new List<FrameRegionGroup>();
+            private readonly FrameRegionGroup[] _all;
+
+            public FrameBoundaryIndex(IReadOnlyList<FrameRegionGroup> groups)
+            {
+                _all = (groups ?? Array.Empty<FrameRegionGroup>()).ToArray();
+                _cellWidth = CellSize(_all.Select(group => group.Boundary.Width));
+                _cellHeight = CellSize(_all.Select(group => group.Boundary.Height));
+                foreach (FrameRegionGroup group in _all)
+                {
+                    if (group.Boundary.Width > _cellWidth
+                        || group.Boundary.Height > _cellHeight)
+                    {
+                        _overflow.Add(group);
+                        continue;
+                    }
+                    var key = new GridKey(CellX((group.Boundary.MinX
+                            + group.Boundary.MaxX) / 2d),
+                        CellY((group.Boundary.MinY + group.Boundary.MaxY) / 2d));
+                    if (!_buckets.TryGetValue(key, out List<FrameRegionGroup> bucket))
+                    {
+                        bucket = new List<FrameRegionGroup>();
+                        _buckets.Add(key, bucket);
+                    }
+                    bucket.Add(group);
+                }
+            }
+
+            public List<FrameRegionGroup> QueryPoint(double x, double y)
+            {
+                var candidates = new List<FrameRegionGroup>();
+                long centerX = CellX(x);
+                long centerY = CellY(y);
+                for (long dx = -1; dx <= 1; dx++)
+                    for (long dy = -1; dy <= 1; dy++)
+                        if (_buckets.TryGetValue(new GridKey(centerX + dx, centerY + dy),
+                            out List<FrameRegionGroup> bucket))
+                            candidates.AddRange(bucket);
+                foreach (FrameRegionGroup group in _overflow)
+                    candidates.Add(group);
+                return candidates;
+            }
+
+            public List<FrameRegionGroup> QueryBounds(double minX, double minY,
+                double maxX, double maxY)
+            {
+                long firstX = CellX(minX);
+                long lastX = CellX(maxX);
+                long firstY = CellY(minY);
+                long lastY = CellY(maxY);
+                if (firstX > long.MinValue) firstX--;
+                if (lastX < long.MaxValue) lastX++;
+                if (firstY > long.MinValue) firstY--;
+                if (lastY < long.MaxValue) lastY++;
+                long cellCount = (lastX - firstX + 1L) * (lastY - firstY + 1L);
+                if (cellCount <= 0 || cellCount > MaxIndexedCells)
+                    return _all.ToList();
+
+                var candidates = new List<FrameRegionGroup>();
+                var seen = new HashSet<FrameRegionGroup>();
+                for (long x = firstX; x <= lastX; x++)
+                    for (long y = firstY; y <= lastY; y++)
+                        if (_buckets.TryGetValue(new GridKey(x, y),
+                            out List<FrameRegionGroup> bucket))
+                            foreach (FrameRegionGroup group in bucket)
+                                if (seen.Add(group)) candidates.Add(group);
+                foreach (FrameRegionGroup group in _overflow)
+                    if (seen.Add(group)) candidates.Add(group);
+                return candidates;
+            }
+
+            private long CellX(double value) => ToCell(value, _cellWidth);
+            private long CellY(double value) => ToCell(value, _cellHeight);
+
+            private static double CellSize(IEnumerable<double> values)
+            {
+                double[] valid = (values ?? Enumerable.Empty<double>())
+                    .Where(item => item > 0 && !double.IsNaN(item)
+                        && !double.IsInfinity(item))
+                    .OrderBy(item => item).ToArray();
+                return valid.Length == 0 ? 1d : valid[valid.Length / 2];
+            }
+
+            private static long ToCell(double value, double size)
+            {
+                double cell = Math.Floor(value / size);
+                if (cell <= long.MinValue) return long.MinValue;
+                if (cell >= long.MaxValue) return long.MaxValue;
+                return (long)cell;
+            }
+
+            private struct GridKey : IEquatable<GridKey>
+            {
+                private readonly long _x;
+                private readonly long _y;
+
+                public GridKey(long x, long y) { _x = x; _y = y; }
+                public bool Equals(GridKey other) => _x == other._x && _y == other._y;
+                public override bool Equals(object obj)
+                    => obj is GridKey other && Equals(other);
+                public override int GetHashCode()
+                    => (_x.GetHashCode() * 397) ^ _y.GetHashCode();
+            }
+        }
+
         public static FrameRegionCollection Collect(CadContext ctx, ObjectId[] selectedIds)
             => CollectCore(ctx, selectedIds, false, true);
 
@@ -91,6 +210,7 @@ namespace UNCAD.Cad
                 }
 
                 FrameRegionGroup[] groups = result.Groups.ToArray();
+                var boundaryIndex = new FrameBoundaryIndex(groups);
                 foreach (ObjectId id in space)
                 {
                     if (selectedFrames.Contains(id)) continue;
@@ -100,7 +220,8 @@ namespace UNCAD.Cad
                         if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
                         FrameRegionGroup owner = null;
                         List<FrameRegionGroup> owners = null;
-                        foreach (FrameRegionGroup group in groups)
+                        foreach (FrameRegionGroup group in boundaryIndex.QueryPoint(
+                            anchor.X, anchor.Y))
                         {
                             if (!group.Boundary.Contains(anchor.X, anchor.Y)) continue;
                             if (owner == null) owner = group;
@@ -119,22 +240,14 @@ namespace UNCAD.Cad
                     if (!TryBounds(entity, out double minX, out double minY,
                         out double maxX, out double maxY, includeAllEntities)) continue;
 
-                    FrameRegionGroup strictOwner = null;
-                    int strictOwnerCount = 0;
-                    foreach (FrameRegionGroup group in groups)
+                    List<FrameRegionGroup> strictOwners = boundaryIndex.QueryBounds(
+                        minX, minY, maxX, maxY).Where(group => group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
+                    if (strictOwners.Count == 1)
                     {
-                        if (!group.Boundary.Intersects(minX, minY, maxX, maxY)) continue;
-                        strictOwner = group;
-                        strictOwnerCount++;
+                        strictOwners[0].EntityIds.Add(id);
                     }
-                    if (strictOwnerCount == 1)
+                    else if (strictOwners.Count > 1)
                     {
-                        strictOwner.EntityIds.Add(id);
-                    }
-                    else if (strictOwnerCount > 1)
-                    {
-                        List<FrameRegionGroup> strictOwners = groups.Where(group =>
-                            group.Boundary.Intersects(minX, minY, maxX, maxY)).ToList();
                         // Unrelated inserts do not affect fill or submission and must not make
                         // otherwise valid adjacent frames fail. Tables, text and tagged blocks
                         // remain hard conflicts because assigning them by guess would corrupt data.

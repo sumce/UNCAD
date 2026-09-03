@@ -64,8 +64,15 @@ namespace UNCAD.Features.Fill
             var plans = new List<Plan>();
             var errors = new List<string>();
             var cableRequests = new List<BatchCableCatalogRequest>();
-            foreach (FrameRegionGroup region in regions)
-                Preflight(ctx, region, options, workbook, plans, errors, cableRequests);
+            ctx.Write("\n[U1U] 正在批量预检 " + regions.Count + " 个图框，请稍候...");
+            using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                foreach (FrameRegionGroup region in regions)
+                    Preflight(ctx, readTransaction, region, options, workbook, plans,
+                        errors, cableRequests);
+                readTransaction.Commit();
+            }
+            ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
 
             if (errors.Count > 0)
             {
@@ -314,13 +321,14 @@ namespace UNCAD.Features.Fill
 
         }
 
-        private static void Preflight(CadContext ctx, FrameRegionGroup region,
+        private static void Preflight(CadContext ctx, Transaction readTransaction,
+            FrameRegionGroup region,
             FillRuntimeOptions options, FillWorkbookSnapshot workbook,
             List<Plan> plans, List<string> errors,
             List<BatchCableCatalogRequest> cableRequests)
         {
             string prefix = "图框 " + region.Handle + "：";
-            FillSelection selection = FillSelectionCollector.Split(ctx,
+            FillSelection selection = FillSelectionCollector.Split(readTransaction,
                 region.EntityIds.ToArray(), true);
             if (selection.FrameBlockIds.Length != 1)
             {
@@ -331,7 +339,8 @@ namespace UNCAD.Features.Fill
             // Resolve identity before reporting table shape so each structural error carries the
             // machine and device when available. Any failed preflight still returns before planning.
             bool validTableShape = selection.TableIds.Length == 1;
-            bool validIdentity = FillSelectionCollector.TryReadExistingIdentity(ctx, selection,
+            bool validIdentity = FillSelectionCollector.TryReadExistingIdentity(readTransaction,
+                selection,
                 out ExistingFillIdentity identity, out string identityError);
             MachineRow machine = null;
             string matchError = "";
@@ -358,7 +367,7 @@ namespace UNCAD.Features.Fill
             if (!validIdentity || machine == null || !validTableShape)
                 return;
 
-            SummationOutput summation = FillStatisticsModule.Execute(ctx,
+            SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
                 selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
             CableStatResult statistics = summation.Statistics;
             if (statistics.CableState == MeasurementState.Unknown
@@ -382,13 +391,13 @@ namespace UNCAD.Features.Fill
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);
             List<TableFillRow> plannedRows = FillUpdateRowMerger.Merge(
-                ctx, selection, tablePlan.CopyDefaultRows(), statistics);
+                readTransaction, selection, tablePlan.CopyDefaultRows(), statistics);
             bool deviceHasOutlet;
             bool deviceOutletStateKnown;
             string deviceState;
             try
             {
-                CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
+                CadDynamicBlockStateService.TryReadDeviceHasOutlet(readTransaction,
                     selection.DeviceBlockIds, out deviceHasOutlet,
                     out deviceOutletStateKnown, out deviceState);
             }
@@ -403,7 +412,7 @@ namespace UNCAD.Features.Fill
             // preserve every existing outlet row (especially its quantity), add one
             // only when the device is a socket and the table has none, and remove
             // stale 8.x rows when the device is back to equipment.
-            List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(ctx,
+            List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(readTransaction,
                 selection.TableIds, options.StartRow, options.ClearRows);
             List<TableFillRow> socketRows = deviceOutletStateKnown
                 ? DeviceOutletPolicy.ApplyForUpdate(plannedRows, deviceHasOutlet,

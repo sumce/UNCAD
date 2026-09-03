@@ -13,10 +13,22 @@ namespace UNCAD.Features.Fill
         public static SummationOutput Execute(CadContext ctx, ObjectId[] textIds,
             double mmPerGrid, bool statisticsScopeComplete)
         {
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                SummationOutput output = Execute(ctx, transaction, textIds, mmPerGrid,
+                    statisticsScopeComplete);
+                transaction.Commit();
+                return output;
+            }
+        }
+
+        internal static SummationOutput Execute(CadContext ctx, Transaction transaction,
+            ObjectId[] textIds, double mmPerGrid, bool statisticsScopeComplete)
+        {
             StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             List<string> lines = ModuleRunner.Run(SummationModule.Descriptor,
                 "读取图中文字", () => FillSelectionCollector.ReadStatisticsLines(
-                    ctx, textIds, settings.IncludeText, settings.IncludeMText));
+                    transaction, textIds, settings.IncludeText, settings.IncludeMText));
             settings.Calculation.MmPerGrid = mmPerGrid;
             SummationOutput output = ModuleRunner.Run(SummationModule.Descriptor,
                 "解析并求和", () => SummationModule.Execute(

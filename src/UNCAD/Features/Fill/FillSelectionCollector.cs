@@ -64,19 +64,28 @@ namespace UNCAD.Features.Fill
         public static List<string> ReadStatisticsLines(CadContext ctx, ObjectId[] textIds,
             bool includeText, bool includeMText)
         {
-            var lines = new List<string>();
-            if (textIds == null || textIds.Length == 0) return lines;
             using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId id in textIds)
-                {
-                    var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    if (includeText && entity is DBText text)
-                        lines.Add(TextParser.CleanMText(text.TextString));
-                    else if (includeMText && entity is MText mtext)
-                        lines.AddRange(TextParser.SplitMTextLines(mtext.Contents)
-                            .ConvertAll(TextParser.CleanMText));
-                }
+                List<string> lines = ReadStatisticsLines(transaction, textIds,
+                    includeText, includeMText);
+                transaction.Commit();
+                return lines;
+            }
+        }
+
+        internal static List<string> ReadStatisticsLines(Transaction transaction,
+            ObjectId[] textIds, bool includeText, bool includeMText)
+        {
+            var lines = new List<string>();
+            if (textIds == null || textIds.Length == 0) return lines;
+            foreach (ObjectId id in textIds)
+            {
+                var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (includeText && entity is DBText text)
+                    lines.Add(TextParser.CleanMText(text.TextString));
+                else if (includeMText && entity is MText mtext)
+                    lines.AddRange(TextParser.SplitMTextLines(mtext.Contents)
+                        .ConvertAll(TextParser.CleanMText));
             }
             return lines;
         }
@@ -84,34 +93,42 @@ namespace UNCAD.Features.Fill
         public static string ReadRuanguanLengthMeters(CadContext ctx, ObjectId[] blockIds)
         {
             if (ctx == null || blockIds == null || blockIds.Length == 0) return "";
-            var values = new List<string>();
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId id in blockIds)
+                string result = ReadRuanguanLengthMeters(transaction, blockIds);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static string ReadRuanguanLengthMeters(Transaction transaction,
+            ObjectId[] blockIds)
+        {
+            if (blockIds == null || blockIds.Length == 0) return "";
+            var values = new List<string>();
+            foreach (ObjectId id in blockIds)
+            {
+                var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                if (block == null) continue;
+                foreach (ObjectId attributeId in block.AttributeCollection)
                 {
-                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
-                    if (block == null) continue;
-                    foreach (ObjectId attributeId in block.AttributeCollection)
-                    {
-                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
-                            as AttributeReference;
-                        string meters = ParseRuanguanMeters(attribute?.TextString ?? "",
-                            attribute?.Tag);
-                        if (meters.Length > 0) values.Add(meters);
-                    }
-                    if (!block.IsDynamicBlock) continue;
-                    foreach (DynamicBlockReferenceProperty property
-                        in block.DynamicBlockReferencePropertyCollection)
-                    {
-                        // Dynamic blocks expose many numeric coordinates. Only a
-                        // property explicitly named as a hose length may use a bare
-                        // number; all other values require an mm/m unit or prefix.
-                        string meters = ParseRuanguanMeters(Convert.ToString(property.Value),
-                            property.PropertyName);
-                        if (meters.Length > 0) values.Add(meters);
-                    }
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
+                        as AttributeReference;
+                    string meters = ParseRuanguanMeters(attribute?.TextString ?? "",
+                        attribute?.Tag);
+                    if (meters.Length > 0) values.Add(meters);
                 }
-                tr.Commit();
+                if (!block.IsDynamicBlock) continue;
+                foreach (DynamicBlockReferenceProperty property
+                    in block.DynamicBlockReferencePropertyCollection)
+                {
+                    // Dynamic blocks expose many numeric coordinates. Only a
+                    // property explicitly named as a hose length may use a bare
+                    // number; all other values require an mm/m unit or prefix.
+                    string meters = ParseRuanguanMeters(Convert.ToString(property.Value),
+                        property.PropertyName);
+                    if (meters.Length > 0) values.Add(meters);
+                }
             }
             if (values.Count == 0) return "";
             string first = values[0];
@@ -131,10 +148,19 @@ namespace UNCAD.Features.Fill
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,
             out ExistingFillIdentity identity, out string error)
         {
-            // frameinfo_json is the durable identity source written by U1F/U1U. Prefer it
-            // over editable legacy attributes so a stale or partially migrated block cannot
-            // redirect an update to another BOQ column.
-            FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(ctx,
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                bool result = TryReadExistingIdentity(transaction, selection,
+                    out identity, out error);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static bool TryReadExistingIdentity(Transaction transaction,
+            FillSelection selection, out ExistingFillIdentity identity, out string error)
+        {
+            FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(transaction,
                 selection?.FrameInfoJsonBlockIds);
             if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
                 && !string.IsNullOrWhiteSpace(json.DeviceName))
@@ -153,25 +179,36 @@ namespace UNCAD.Features.Fill
             var ids = new HashSet<ObjectId>();
             foreach (ObjectId id in selection.FrameBlockIds) ids.Add(id);
             foreach (ObjectId id in selection.DeviceBlockIds) ids.Add(id);
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
+            foreach (ObjectId id in ids)
             {
-                foreach (ObjectId id in ids)
-                {
-                    var block = tr.GetObject(id, OpenMode.ForRead, true) as BlockReference;
-                    if (block == null) continue;
-                    if (TryGetBlockValue(tr, block, FrameBlockFiller.TagPower, out string power))
-                        powers.Add(power);
-                    if (TryGetBlockValue(tr, block, FrameBlockFiller.TagDevice, out string composite))
-                        composites.Add(composite);
-                    if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out string device))
-                        devices.Add(device);
-                }
+                var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
+                if (block == null) continue;
+                if (TryGetBlockValue(transaction, block, FrameBlockFiller.TagPower,
+                    out string power))
+                    powers.Add(power);
+                if (TryGetBlockValue(transaction, block, FrameBlockFiller.TagDevice,
+                    out string composite))
+                    composites.Add(composite);
+                if (TryGetBlockValue(transaction, block, DeviceBlockFiller.TagDeviceName,
+                    out string device))
+                    devices.Add(device);
             }
             return ExistingFillIdentityResolver.TryResolve(
                 powers, composites, devices, out identity, out error);
         }
 
         internal static FillSelection Split(CadContext ctx, ObjectId[] ids,
+            bool statisticsScopeComplete = false)
+        {
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FillSelection result = Split(transaction, ids, statisticsScopeComplete);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static FillSelection Split(Transaction transaction, ObjectId[] ids,
             bool statisticsScopeComplete = false)
         {
             var tables = new List<ObjectId>();
@@ -187,9 +224,9 @@ namespace UNCAD.Features.Fill
             var upstreamAxis = new List<ObjectId>();
             var downstreamAxis = new List<ObjectId>();
             var upstreamColor = new List<ObjectId>();
-            using (var tr = ctx.Db.TransactionManager.StartTransaction())
-            {
-                foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
+            var definitionCache = new Dictionary<ObjectId, BlockDefinitionFlags>();
+            var tr = transaction;
+            foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
                 {
                     var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
                     if (entity is Table table)
@@ -201,28 +238,36 @@ namespace UNCAD.Features.Fill
                     else if (entity is DBText || entity is MText) texts.Add(id);
                     else if (entity is BlockReference block)
                     {
-                        if (IsFillTargetBlock(tr, block)) frames.Add(id);
-                        if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
+                        BlockDefinitionFlags flags = GetDefinitionFlags(tr, block,
+                            definitionCache);
+                        if (flags.IsFrame || IsFillTargetBlock(tr, block)) frames.Add(id);
+                        if (flags.IsDevice || HasAttributeTag(tr, block,
+                            DeviceBlockFiller.TagDeviceName)
+                            || TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
                             devices.Add(id);
-                        if (IsRuanguanBlock(tr, block))
+                        if (flags.IsRuanguan)
                             ruanguan.Add(id);
-                        if (FrameInfoJsonBlockWriter.IsJsonHostBlock(tr, block))
+                        if (flags.IsJson || HasAttributeTag(tr, block, "JSON"))
                             frameInfoJson.Add(id);
-                        if (IsUpstreamInfoBlock(tr, block))
+                        if (flags.IsUpstreamInfo || HasAttributeTag(tr, block,
+                            ConnectionBlockFiller.TagUpstreamInfo)
+                            || IsUpstreamInfoBlock(tr, block))
                             upstreamInfo.Add(id);
-                        if (CadDynamicBlockStateService.IsUpstreamBlock(tr, block))
+                        if (flags.IsUpstream)
                             upstreamState.Add(id);
-                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
+                        if (flags.HasUpstreamAxis || HasAttributeTag(tr, block,
+                            ConnectionBlockFiller.TagUpstreamAxis)
+                            || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
                             upstreamAxis.Add(id);
-                        if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
+                        if (flags.HasDownstreamAxis || HasAttributeTag(tr, block,
+                            ConnectionBlockFiller.TagDownstreamAxis)
+                            || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
                             downstreamAxis.Add(id);
-                        if (IsDeviceColorBlock(tr, block))
+                        if (IsDeviceColorBlock(tr, block, flags))
                             deviceColor.Add(id);
-                        if (IsUpstreamColorBlock(tr, block))
+                        if (IsUpstreamColorBlock(tr, block, flags))
                             upstreamColor.Add(id);
                     }
-                }
-                tr.Commit();
             }
 
             return new FillSelection
@@ -251,11 +296,99 @@ namespace UNCAD.Features.Fill
         /// a writable US/UPSTREAM_INFO attribute, so color discovery must also use the effective
         /// block name and attribute-definition tags.
         /// </summary>
-        private static bool IsUpstreamColorBlock(Transaction tr, BlockReference block)
+        private sealed class BlockDefinitionFlags
+        {
+            public bool IsFrame;
+            public bool IsRuanguan;
+            public bool IsJson;
+            public bool IsUpstream;
+            public bool IsUpstreamInfo;
+            public bool IsDevice;
+            public bool HasUpstreamAxis;
+            public bool HasDownstreamAxis;
+        }
+
+        private static BlockDefinitionFlags GetDefinitionFlags(Transaction tr,
+            BlockReference block, IDictionary<ObjectId, BlockDefinitionFlags> cache)
+        {
+            var result = new BlockDefinitionFlags();
+            foreach (ObjectId definitionId in DefinitionIds(block))
+            {
+                if (!cache.TryGetValue(definitionId, out BlockDefinitionFlags flags))
+                {
+                    flags = new BlockDefinitionFlags();
+                    BlockTableRecord definition = tr.GetObject(definitionId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                    if (definition != null)
+                    {
+                        string name = definition.Name ?? "";
+                        flags.IsFrame = FrameRegionCollector.IsSupportedFrameName(name);
+                        flags.IsRuanguan = string.Equals(name, "Ruanguan",
+                            StringComparison.OrdinalIgnoreCase);
+                        flags.IsJson = name.IndexOf("frameinfo_json",
+                            StringComparison.OrdinalIgnoreCase) >= 0;
+                        flags.IsUpstream = IsUpstreamName(name);
+                        flags.IsUpstreamInfo = name.StartsWith("upstream_info",
+                            StringComparison.OrdinalIgnoreCase);
+                        flags.IsDevice = IsDeviceName(name);
+                        foreach (ObjectId entityId in definition)
+                        {
+                            AttributeDefinition attribute = tr.GetObject(entityId,
+                                OpenMode.ForRead, true) as AttributeDefinition;
+                            if (attribute == null) continue;
+                            string tag = attribute.Tag ?? "";
+                            flags.IsFrame |= FrameBlockFiller.IsKnownTag(tag);
+                            flags.IsJson |= tag.IndexOf("JSON",
+                                StringComparison.OrdinalIgnoreCase) >= 0;
+                            flags.HasUpstreamAxis |= string.Equals(tag,
+                                ConnectionBlockFiller.TagUpstreamAxis,
+                                StringComparison.OrdinalIgnoreCase);
+                            flags.HasDownstreamAxis |= string.Equals(tag,
+                                ConnectionBlockFiller.TagDownstreamAxis,
+                                StringComparison.OrdinalIgnoreCase);
+                            flags.IsDevice |= string.Equals(tag,
+                                DeviceBlockFiller.TagDeviceName,
+                                StringComparison.OrdinalIgnoreCase);
+                            flags.IsUpstreamInfo |= string.Equals(tag,
+                                ConnectionBlockFiller.TagUpstreamInfo,
+                                StringComparison.OrdinalIgnoreCase);
+                        }
+                    }
+                    cache.Add(definitionId, flags);
+                }
+                result.IsFrame |= flags.IsFrame;
+                result.IsRuanguan |= flags.IsRuanguan;
+                result.IsJson |= flags.IsJson;
+                result.IsUpstream |= flags.IsUpstream;
+                result.IsUpstreamInfo |= flags.IsUpstreamInfo;
+                result.IsDevice |= flags.IsDevice;
+                result.HasUpstreamAxis |= flags.HasUpstreamAxis;
+                result.HasDownstreamAxis |= flags.HasDownstreamAxis;
+            }
+            return result;
+        }
+
+        private static bool HasAttributeTag(Transaction tr, BlockReference block, string tag)
+        {
+            if (block == null) return false;
+            foreach (ObjectId id in block.AttributeCollection)
+            {
+                AttributeReference attribute = tr.GetObject(id, OpenMode.ForRead, true)
+                    as AttributeReference;
+                if (attribute != null && string.Equals(attribute.Tag, tag,
+                    StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsUpstreamColorBlock(Transaction tr, BlockReference block,
+            BlockDefinitionFlags flags)
         {
             if (block == null) return false;
             try
             {
+                if (flags != null && (flags.IsUpstream || flags.IsUpstreamInfo
+                    || flags.HasUpstreamAxis)) return true;
                 if (IsUpstreamInfoBlock(tr, block)
                     || CadDynamicBlockStateService.IsUpstreamBlock(tr, block)) return true;
 
@@ -288,11 +421,13 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>Finds device/downstream inserts that may be purely graphical.</summary>
-        private static bool IsDeviceColorBlock(Transaction tr, BlockReference block)
+        private static bool IsDeviceColorBlock(Transaction tr, BlockReference block,
+            BlockDefinitionFlags flags)
         {
             if (block == null) return false;
             try
             {
+                if (flags != null && (flags.IsDevice || flags.HasDownstreamAxis)) return true;
                 if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _)
                     || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
                     return true;

@@ -38,12 +38,25 @@ namespace UNCAD.Features.DwgExport
         public static DwgExportResult Export(CadContext ctx, IEnumerable<FrameRegionGroup> groups)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                DwgExportResult result = Export(ctx, transaction, groups);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static DwgExportResult Export(CadContext ctx, Transaction transaction,
+            IEnumerable<FrameRegionGroup> groups)
+        {
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             var frames = new List<DwgExportFrame>();
             int index = 0;
             foreach (FrameRegionGroup group in groups ?? Enumerable.Empty<FrameRegionGroup>())
             {
                 index++;
-                SubmissionRecord record = FrameIdentityReader.Read(ctx, group);
+                SubmissionRecord record = FrameIdentityReader.Read(ctx, transaction, group);
                 string machineId = (record.MachineId ?? "").Trim();
                 string deviceName = (record.DeviceName ?? "").Trim();
                 ValidatePathPart(machineId, "机台ID");

@@ -45,18 +45,12 @@ namespace UNCAD.Features.Submit
             }
 
             var identities = new List<KeyValuePair<string, string>>();
-            foreach (FrameRegionGroup region in regions.Groups)
+            IReadOnlyList<SubmissionRecord> records = FrameIdentityReader.ReadAll(ctx,
+                regions.Groups);
+            for (int index = 0; index < regions.Groups.Count; index++)
             {
-                SubmissionRecord record;
-                try
-                {
-                    record = FrameIdentityReader.Read(ctx, region);
-                }
-                catch (System.Exception ex)
-                {
-                    throw new InvalidDataException("图框 " + region.Handle
-                        + " 无法读取提交信息：" + ex.Message, ex);
-                }
+                FrameRegionGroup region = regions.Groups[index];
+                SubmissionRecord record = records[index];
                 if (record.Materials.Count == 0)
                     throw new InvalidDataException("图框 " + region.Handle
                         + " 的当前清单没有可提交项目，Excel 未修改。");
@@ -67,7 +61,6 @@ namespace UNCAD.Features.Submit
                     + record.Materials.Count + " 项（含当前 M 数量）。");
             }
             AutomaticSubmissionService.ValidateIdentityKeys(identities);
-
             string outputRoot = AutomaticSubmissionService.PrepareTargetPath();
             AutomaticSubmissionWriteResult result = AutomaticSubmissionService.Write(ctx,
                 outputRoot, regions.Groups.Select(region => region.EntityIds.ToArray()));

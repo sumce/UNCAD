@@ -9,6 +9,8 @@ using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Dwg;
+using UNCAD.Core.Excel;
+using UNCAD.Core.Geometry;
 using UNCAD.Core.Submission;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
@@ -27,6 +29,9 @@ namespace UNCAD.Features.XLayout
         private const double MachineLabelTextHeight = 25000d;
         // Keep one fixed left column for every row; text grows right without alignment recalculation.
         private const double MachineLabelLeftDistance = 300000d;
+        private const short MachineCompleteColorIndex = 3;
+        private const short MachineIncompleteColorIndex = 1;
+        private const short DuplicateMarkerColorIndex = 2;
 
         protected override void Execute(CadContext ctx)
         {
@@ -58,13 +63,15 @@ namespace UNCAD.Features.XLayout
             var summaries = new Dictionary<string, XLayoutMachineSummary>(
                 StringComparer.OrdinalIgnoreCase);
             int index = 0;
+            using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+            {
             foreach (FrameRegionGroup group in regions.Groups)
             {
                 index++;
                 SubmissionRecord record;
                 try
                 {
-                    record = FrameIdentityReader.Read(ctx, group);
+                    record = FrameIdentityReader.Read(ctx, readTransaction, group);
                 }
                 catch (System.Exception ex)
                 {
@@ -89,6 +96,13 @@ namespace UNCAD.Features.XLayout
                 }
                 summary.CircuitCount++;
             }
+            readTransaction.Commit();
+            }
+
+            Dictionary<string, HashSet<string>> expectedCircuits =
+                ReadExpectedCircuits(ctx);
+            HashSet<string> duplicateHandles = FindDuplicateCircuits(items, summaries,
+                expectedCircuits);
 
             IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(items);
             if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
@@ -100,6 +114,7 @@ namespace UNCAD.Features.XLayout
 
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                RemoveDuplicateMarkers(ctx, transaction);
                 var moved = new HashSet<ObjectId>();
                 foreach (XLayoutPlacement placement in placements)
                 {
@@ -138,8 +153,16 @@ namespace UNCAD.Features.XLayout
                         firstFrameMin.Z);
                     DBText label = EntityFactory.DBText(ctx, first.Item.MachineId,
                         labelAnchor, MachineLabelTextHeight, 0d,
-                        AttachmentPoint.BaseLeft, textStyleId: textStyle);
+                        AttachmentPoint.BaseLeft,
+                        colorIndex: MachineLabelColor(summaries, first.Item.MachineId),
+                        textStyleId: textStyle);
                     ctx.AddToCurrentSpace(transaction, label);
+                }
+                XLayoutDuplicateMarker.EnsureApplication(ctx.Db, transaction);
+                foreach (XLayoutPlacement placement in placements)
+                {
+                    if (!duplicateHandles.Contains(placement.Item.Handle)) continue;
+                    DrawDuplicateMarker(ctx, transaction, placement, layoutOrigin);
                 }
                 transaction.Commit();
             }
@@ -149,6 +172,131 @@ namespace UNCAD.Features.XLayout
                 + " 个图框，" + summaries.Count + " 个机台；图框间距 10000。");
             using (var form = new XLayoutSummaryForm(summaries.Values.ToList(), regions.Groups.Count))
                 Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+        }
+
+        private static short MachineLabelColor(
+            IDictionary<string, XLayoutMachineSummary> summaries, string machineId)
+        {
+            if (summaries != null && summaries.TryGetValue(machineId ?? "",
+                out XLayoutMachineSummary summary))
+            {
+                if (summary.DuplicateCircuitCount > 0
+                    || (summary.StatusKnown && !summary.IsComplete))
+                    return MachineIncompleteColorIndex;
+            }
+            return MachineCompleteColorIndex;
+        }
+
+        private static HashSet<string> FindDuplicateCircuits(
+            IReadOnlyList<XLayoutFrameItem> items,
+            IDictionary<string, XLayoutMachineSummary> summaries,
+            IDictionary<string, HashSet<string>> expectedCircuits)
+        {
+            var duplicateHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (IGrouping<string, XLayoutFrameItem> duplicate in (items ??
+                Array.Empty<XLayoutFrameItem>()).Where(item => item != null)
+                .GroupBy(item => (item.MachineId ?? "").Trim() + "\u001f"
+                    + (item.DeviceName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1))
+            {
+                foreach (XLayoutFrameItem item in duplicate)
+                    duplicateHandles.Add(item.Handle ?? "");
+                string machineId = (duplicate.First().MachineId ?? "").Trim();
+                if (summaries != null && summaries.TryGetValue(machineId,
+                    out XLayoutMachineSummary summary)) summary.DuplicateCircuitCount++;
+            }
+
+            foreach (IGrouping<string, XLayoutFrameItem> machine in (items ??
+                Array.Empty<XLayoutFrameItem>()).Where(item => item != null)
+                .GroupBy(item => (item.MachineId ?? "").Trim(), StringComparer.OrdinalIgnoreCase))
+            {
+                if (summaries == null || !summaries.TryGetValue(machine.Key,
+                    out XLayoutMachineSummary summary)) continue;
+                var selected = new HashSet<string>(machine.Select(item =>
+                    (item.DeviceName ?? "").Trim()).Where(value => value.Length > 0),
+                    StringComparer.OrdinalIgnoreCase);
+                if (expectedCircuits != null && expectedCircuits.TryGetValue(machine.Key,
+                    out HashSet<string> expected))
+                {
+                    summary.ExpectedCircuitCount = expected.Count;
+                    summary.StatusKnown = true;
+                    summary.IsComplete = expected.SetEquals(selected)
+                        && summary.DuplicateCircuitCount == 0;
+                }
+            }
+            return duplicateHandles;
+        }
+
+        private static Dictionary<string, HashSet<string>> ReadExpectedCircuits(CadContext ctx)
+        {
+            string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+            if (configured.Length == 0) return null;
+            string path = configured;
+            if (MachineWorkbookSource.IsRemote(configured))
+            {
+                if (!MachineWorkbookSource.TryGetCachedPath(configured, out path)) return null;
+            }
+            if (!File.Exists(path)) return null;
+            try
+            {
+                var result = new Dictionary<string, HashSet<string>>(
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (MachineRow row in ExcelMachineReader.ReadRows(path))
+                {
+                    string machineId = (row.MachineId ?? "").Trim();
+                    string circuit = (row.CircuitName ?? "").Trim();
+                    if (machineId.Length == 0 || circuit.Length == 0) continue;
+                    if (!result.TryGetValue(machineId, out HashSet<string> values))
+                    {
+                        values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        result.Add(machineId, values);
+                    }
+                    values.Add(circuit);
+                }
+                return result;
+            }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[XLAYOUT] 机台 Excel 读取失败，机台状态暂不判断: " + ex.Message);
+                return null;
+            }
+        }
+
+        private static void RemoveDuplicateMarkers(CadContext ctx, Transaction transaction)
+        {
+            BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                OpenMode.ForRead) as BlockTableRecord;
+            if (space == null) return;
+            foreach (ObjectId id in space.Cast<ObjectId>().ToArray())
+            {
+                Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (entity == null || !XLayoutDuplicateMarker.IsMarker(entity)) continue;
+                entity.UpgradeOpen();
+                entity.Erase();
+            }
+        }
+
+        private static void DrawDuplicateMarker(CadContext ctx, Transaction transaction,
+            XLayoutPlacement placement, Point3d origin)
+        {
+            FrameRectangle boundary = placement.Item.Boundary;
+            double minX = boundary.MinX + placement.TranslationX + origin.X;
+            double minY = boundary.MinY + placement.TranslationY + origin.Y;
+            double maxX = boundary.MaxX + placement.TranslationX + origin.X;
+            double maxY = boundary.MaxY + placement.TranslationY + origin.Y;
+            double inset = Math.Max(1000d, Math.Min(boundary.Width, boundary.Height) * 0.01d);
+            Point3d lowerLeft = new Point3d(minX - inset, minY - inset, origin.Z);
+            Point3d lowerRight = new Point3d(maxX + inset, minY - inset, origin.Z);
+            Point3d upperRight = new Point3d(maxX + inset, maxY + inset, origin.Z);
+            Point3d upperLeft = new Point3d(minX - inset, maxY + inset, origin.Z);
+            Point3d[] points = { lowerLeft, lowerRight, upperRight, upperLeft };
+            for (int index = 0; index < points.Length; index++)
+            {
+                Line line = EntityFactory.Line(ctx, points[index],
+                    points[(index + 1) % points.Length], DuplicateMarkerColorIndex);
+                ctx.AddToCurrentSpace(transaction, line);
+                XLayoutDuplicateMarker.Set(line, placement.Item.Handle);
+            }
         }
 
         private static bool TryGetLayoutOrigin(CadContext ctx, out Point3d origin)

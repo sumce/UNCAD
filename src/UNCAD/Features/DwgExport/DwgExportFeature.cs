@@ -40,7 +40,12 @@ namespace UNCAD.Features.DwgExport
                 return;
             }
 
-            DwgExportResult result = DwgFrameExportService.Export(ctx, regions.Groups);
+            DwgExportResult result;
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                result = DwgFrameExportService.Export(ctx, transaction, regions.Groups);
+                transaction.Commit();
+            }
             ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框，"
                 + result.MachineCount + " 个机台文件：" + result.FilePath);
         }
