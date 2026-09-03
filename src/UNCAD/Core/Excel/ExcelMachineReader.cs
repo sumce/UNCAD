@@ -212,9 +212,10 @@ namespace UNCAD.Core.Excel
                 int cable = FindUnique(header, "U_电缆型号");
                 int next = FindUnique(header, "U_上游类型");
                 int facilitySwitch = FindUnique(header, "U_厂务开关");
-                // The ordinary circuit column is part of the unified contract too.
-                // Reject duplicate headers instead of silently choosing the first one.
-                int circuit = FindUnique(header, "回路名称");
+                // The ordinary circuit column may appear more than once in ledgers
+                // that carry a copied/derived section.  Keep the leftmost column,
+                // while U_ fields below remain strict and unique.
+                int circuit = FindFirst(header, "回路名称");
 
                 // Current ledgers derive these elsewhere. If present, read only
                 // exact U_ names; no old “序号”/“DIA” aliases are accepted.
@@ -264,6 +265,14 @@ namespace UNCAD.Core.Excel
                 found = column;
             }
             return found;
+        }
+
+        private static int FindFirst(IRow header, string expected)
+        {
+            if (header == null) return -1;
+            for (int column = 0; column < header.LastCellNum; column++)
+                if (ExcelHeaderBinder.Equals(header.GetCell(column), expected)) return column;
+            return -1;
         }
 
         private static MachineRow ToUnifiedRow(IRow row, MachineColumns columns,
