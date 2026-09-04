@@ -1,5 +1,9 @@
 # UNCAD 插件架构设计（v3）
 
+> This is a historical detailed architecture note. Start with
+> `AGENTS.md` and `docs/PROJECT_CONTEXT.md`; current product decisions live in
+> `docs/DECISIONS.md`.
+
 > 定位：面向后续大量功能扩展的 AutoCAD .NET 插件框架。
 > 业务域：电气设计出图（桥架 / 电缆 / 开洞 / 标注 / 统计）。
 > 目标环境：AutoCAD 2022（net48 / x64），Visual Studio 2026。
