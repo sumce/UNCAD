@@ -2,17 +2,17 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.2.1 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
+Current 2.2.2 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
 
-## v2.2.1 重点更新
+## v2.2.2 重点更新
 
-- 版本号升级为 2.2.1（程序集/Bundle 版本 2.2.1.0），保持当前 24 个公开命令和已验证的 U1/U1Q/XLAYOUT/XSTS/Xmerge 功能。
+- 版本号升级为 2.2.2（程序集/Bundle 版本 2.2.2.0），保持当前 24 个公开命令和已验证的 U1/U1Q/XLAYOUT/XSTS/Xmerge 功能。
 - 只发布统一的 `UNCAD Pro`，安装包不再内置客户、授权人、授权模式或到期时间，也不再生成客户专版和试用版。
-- 唯一发行包输出到 `artifacts\Pro\UNCAD-Pro-v2.2.1.0.zip`；服务器 Key 按授权码存放在 `artifacts\Pro\server-key`。
+- 唯一发行包输出到 `artifacts\Pro\UNCAD-Pro-v2.2.2.0.zip`；服务器 Key 按授权码存放在 `artifacts\Pro\server-key`。
 - 首次使用时由客户输入授权码，授权码只保存在客户机注册表而不嵌入程序；客户信息、授权模式、到期时间和通知全部从 Key 读取，并每 5 分钟后台刷新。密钥缺失、请求失败、状态停用或到期时可立即更换授权码；授权服务器地址不在界面、日志和发行说明中展示。
 - 移除不适用于多形态 `upstream` 动态块的自动连线功能；U1F/U1U 不再创建或修改连接线。
 - U1F/U1U 自动统一端点块颜色：设备块和设备轴位块（DS）默认使用绿色，`upstream`、上游信息/编号块和上游轴位块（US）默认使用洋红；两组 ACI 颜色可在 `U1SET → Excel 数据` 中通过色块下拉框配置。
@@ -41,7 +41,7 @@ Current 2.2.1 builds publish 24 commands and intentionally do not include the re
 - XLAYOUT 机台 ID 改用固定左侧定位距离 300000，所有行共用同一文字起点，不再依赖不同字符串长度的动态对齐。
 - 修复 U1U 多选图框时对象同时归属多个图框的问题，U1U/U1S/U1DWG/XLAYOUT 统一使用稳定的实体锚点归属。
 - 保留图框排版、鼠标指定位置、回车使用默认原点和 25000 文字高度功能。
-- 历史版本曾提供 `U1LX`/`U1X` 的 3D 编辑器；当前 2.2.1 使用 `U1LX`（兼容命令 `UNLX`）在命令行中选择已有 U1L 线段并逐段填写真实毫米距离，已移除的 `U1X` 仅保留在历史说明中。
+- 历史版本曾提供 `U1LX`/`U1X` 的 3D 编辑器；当前 2.2.2 使用 `U1LX`（兼容命令 `UNLX`）在命令行中选择已有 U1L 线段并逐段填写真实毫米距离，已移除的 `U1X` 仅保留在历史说明中。
 
 ## v2.1.5 重点更新
 

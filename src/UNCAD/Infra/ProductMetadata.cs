@@ -28,8 +28,8 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-09-02";
-        public const string VersionLabel = "2.2.1";
+        public const string ReleaseDateUtc = "2026-09-04";
+        public const string VersionLabel = "2.2.2";
 
         public static string Version
         {

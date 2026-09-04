@@ -231,7 +231,7 @@ namespace UNCAD.Infra
                 | DateTimeStyles.AdjustToUniversal, out marker)
                 && marker > new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        /// <summary>从程序集 InformationalVersion(2.2.1+build.yyyyMMddHHmmss)解析构建时间。</summary>
+        /// <summary>从程序集 InformationalVersion(2.2.2+build.yyyyMMddHHmmss)解析构建时间。</summary>
         internal static DateTime? BuildTimestampUtc()
         {
             try
