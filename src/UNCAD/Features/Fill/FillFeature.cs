@@ -212,6 +212,7 @@ namespace UNCAD.Features.Fill
             // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
             string updateMachineId = picked.MachineId;
             string updateDeviceName = picked.CircuitName;
+            Log.Info("U1F 审阅窗前清单: " + Describe(review));
             using (var form = new FillReviewForm(review, catalog, options.Planning,
                 updateMode))
             {
@@ -219,6 +220,7 @@ namespace UNCAD.Features.Fill
                     != DialogResult.OK) return;
                 review = form.Data;
             }
+            Log.Info("U1F 审阅窗后清单: " + Describe(review));
             if (updateMode && (!string.Equals(updateMachineId,
                     review.Machine?.MachineId, StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(updateDeviceName, review.Machine?.CircuitName,
@@ -503,6 +505,11 @@ namespace UNCAD.Features.Fill
         /// 哪一项、或未匹配(未匹配行会被严格模式丢弃,只看表格发现的
         /// "只剩线管/软管"问题在这里一眼见底)。
         /// </summary>
+        private static string Describe(FillReviewData review)
+            => review == null ? "null" : string.Join(" | ", review.Items.Select(item =>
+                item.Code + ":" + item.Name + "(含=" + item.Included
+                + ",匹配=" + item.CatalogMatched + ")"));
+
         internal static void WriteCablePlanNote(CadContext ctx, MachineRow machine,
             TableGenerationOutput tablePlan)
         {
