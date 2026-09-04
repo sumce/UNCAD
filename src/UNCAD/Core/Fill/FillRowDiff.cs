@@ -94,15 +94,7 @@ namespace UNCAD.Core.Fill
                     Code = old.Code
                 });
             }
-            // 变化优先,其余按 新增 → 保留 → 移除,组内保持计划/表格顺序。
-            int Rank(FillRowDiff diff)
-            {
-                if (diff.Status == FillRowDiff.StatusQuantity) return 0;
-                if (diff.Status == FillRowDiff.StatusAdded) return 1;
-                if (diff.Status == FillRowDiff.StatusKept) return 2;
-                return 3;
-            }
-            diffs.StableSort((left, right) => Rank(left).CompareTo(Rank(right)));
+            // 顺序与本次写入的清单完全一致,只有移除的旧行追加在最后。
             return diffs;
         }
 
@@ -148,20 +140,5 @@ namespace UNCAD.Core.Fill
 
         private static string Cell(List<string> row, int index)
             => index >= 0 && index < row.Count ? (row[index] ?? "").Trim() : "";
-    }
-
-    internal static class ListExtensions
-    {
-        /// <summary>Order-preserving sort (List.Sort is unstable).</summary>
-        public static void StableSort<T>(this List<T> list, Comparison<T> comparison)
-        {
-            var indexed = list.Select((item, index) => (item, index)).ToList();
-            indexed.Sort((left, right) =>
-            {
-                int result = comparison(left.item, right.item);
-                return result != 0 ? result : left.index.CompareTo(right.index);
-            });
-            for (int i = 0; i < list.Count; i++) list[i] = indexed[i].item;
-        }
     }
 }
