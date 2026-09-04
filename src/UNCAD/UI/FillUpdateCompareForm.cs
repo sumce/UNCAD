@@ -29,7 +29,7 @@ namespace UNCAD.UI
     /// <summary>
     /// U1U 更新对比窗体:左右两个清单并排——左边是上次清单(表格现有
     /// 内容),右边是本次将写入的清单;列与清单表格一致(序号/项目名称/
-    /// 特征描述/单位/数量/项次编码),变化行着色。仅展示有上次更新
+    /// 单位/数量/项次编码),变化行着色。仅展示有上次更新
     /// 信息的图框;多框时左侧列表选择。
     /// </summary>
     public sealed class FillUpdateCompareForm : Form
@@ -175,12 +175,11 @@ namespace UNCAD.UI
                 ForeColor = UiTheme.TextPrimary,
                 Font = UiTheme.FontCaption
             };
-            list.Columns.Add("序号", 40);
-            list.Columns.Add("项目名称", 130);
-            list.Columns.Add("特征描述", 190);
-            list.Columns.Add("单位", 40);
-            list.Columns.Add("数量", 70);
-            list.Columns.Add("项次编码", 64);
+            list.Columns.Add("序号", 44);
+            list.Columns.Add("项目名称", 170);
+            list.Columns.Add("单位", 44);
+            list.Columns.Add("数量", 76);
+            list.Columns.Add("项次编码", 70);
             return list;
         }
 
@@ -203,8 +202,14 @@ namespace UNCAD.UI
                 + (string.IsNullOrWhiteSpace(item.LastUpdatedText) ? "未知" : item.LastUpdatedText)
                 + "    上次更新用户: "
                 + (string.IsNullOrWhiteSpace(item.LastUpdatedUser) ? "未知" : item.LastUpdatedUser);
-            _summary.Text = "新增 " + item.AddedCount + " / 移除 " + item.RemovedCount
-                + " / 改量 " + item.QuantityChangedCount;
+            _summary.ForeColor = item.AddedCount + item.RemovedCount
+                + item.QuantityChangedCount == 0
+                ? UiTheme.SuccessFg : UiTheme.TextPrimary;
+            _summary.Text = item.AddedCount + item.RemovedCount
+                + item.QuantityChangedCount == 0
+                ? "✓ 本次更新与上次完全一致，清单无变化"
+                : "新增 " + item.AddedCount + " / 移除 " + item.RemovedCount
+                    + " / 改量 " + item.QuantityChangedCount;
 
             foreach (FillRowDiff row in item.PreviousRows)
                 _previousList.Items.Add(BomRow(row, row.OldQuantity,
@@ -231,8 +236,6 @@ namespace UNCAD.UI
                 ForeColor = color
             };
             item.SubItems.Add(string.IsNullOrWhiteSpace(row.Name) ? "—" : row.Name);
-            item.SubItems.Add(string.IsNullOrWhiteSpace(row.Description)
-                ? "—" : row.Description);
             item.SubItems.Add(string.IsNullOrWhiteSpace(row.Unit) ? "—" : row.Unit);
             item.SubItems.Add(string.IsNullOrWhiteSpace(quantity) ? "—" : quantity);
             item.SubItems.Add(string.IsNullOrWhiteSpace(row.Code) ? "—" : row.Code);
@@ -251,15 +254,13 @@ namespace UNCAD.UI
         {
             foreach (ListView list in new[] { _previousList, _plannedList })
             {
-                int width = Math.Max(400, list.ClientSize.Width - 8);
-                int[] fixedWidths = { 40, 0, 0, 40, 70, 64 };
+                int width = Math.Max(360, list.ClientSize.Width - 8);
+                int[] fixedWidths = { 44, 0, 44, 76, 70 };
                 int fixedTotal = fixedWidths.Sum();
-                int nameWidth = Math.Max(100, (int)((width - fixedTotal) * 0.4));
-                int descWidth = Math.Max(120, width - fixedTotal - nameWidth);
+                int nameWidth = Math.Max(120, width - fixedTotal);
                 list.Columns[0].Width = fixedWidths[0];
                 list.Columns[1].Width = nameWidth;
-                list.Columns[2].Width = descWidth;
-                for (int i = 3; i < fixedWidths.Length; i++)
+                for (int i = 2; i < fixedWidths.Length; i++)
                     list.Columns[i].Width = fixedWidths[i];
             }
         }

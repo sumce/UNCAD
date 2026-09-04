@@ -83,5 +83,30 @@ namespace UNCAD.Tests
                 "zhangsan");
             Assert.Equal("zhangsan", updated.LastModifiedUser);
         }
+
+        [Theory]
+        [InlineData("1*16", true)]
+        [InlineData("1x16", true)]
+        [InlineData("1*16mm2", true)]
+        [InlineData("1*16mm²", true)]
+        [InlineData(" 1 × 16 ", true)]
+        [InlineData("3*120+1*70", false)]
+        [InlineData("1*16+1*16", false)]
+        [InlineData("4*35", false)]
+        [InlineData("", false)]
+        public void IsGroundingCableModel_MatchesOnlyBare1x16(string model, bool expected)
+        {
+            Assert.Equal(expected, TableFillPlanner.IsGroundingCableModel(model));
+        }
+
+        [Fact]
+        public void Catalog_ExposesGroundingRow85()
+        {
+            var catalog = new BoqCatalogIndex(UNCAD.Core.Excel.ListItemReader.ReadEmbedded());
+            var grounding = catalog.FindByCode("8.5");
+            Assert.NotNull(grounding);
+            Assert.Equal("设备接地独立连接", grounding.Name);
+            Assert.NotEqual("电缆", grounding.Category);
+        }
     }
 }

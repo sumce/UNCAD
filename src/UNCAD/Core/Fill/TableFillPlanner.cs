@@ -78,11 +78,35 @@ namespace UNCAD.Core.Fill
         {
             string model = (machine.Cable ?? "").Trim();
             if (model.Length == 0 && stat.CableSum <= 0) return;
+            // 特殊清单 8.5「设备接地独立连接」:电缆型号为 1*16(单芯 16mm²
+            // 接地线)时不走电缆类,固定映射到 8.5。
+            if (IsGroundingCableModel(model))
+            {
+                ListItem grounding = catalog.FindByCode("8.5");
+                rows.Add(FromItem(TableFillCategory.Manual, 100, grounding,
+                    "设备接地独立连接",
+                    grounding?.Feature ?? "1.名称:设备独立接地连接",
+                    string.IsNullOrWhiteSpace(grounding?.Unit) ? "m" : grounding.Unit,
+                    TableFillFormatter.CableQuantity(stat)));
+                return;
+            }
             ListItem item = catalog.FindCable(model);
             rows.Add(FromItem(TableFillCategory.Cable, 100, item,
                 "电缆",
                 model.Length > 0 ? string.Format(FillTemplates.CableDesc, model) : "1.名称:电缆",
                 "M", TableFillFormatter.CableQuantity(stat)));
+        }
+
+        /// <summary>
+        /// 1*16(含 1x16 / 1*16mm2 等写法)= 设备接地独立连接专用接地线,
+        /// 不属于电缆类清单。
+        /// </summary>
+        internal static bool IsGroundingCableModel(string model)
+        {
+            string text = (model ?? "").Trim().ToLowerInvariant()
+                .Replace(" ", "").Replace("×", "*").Replace("x", "*")
+                .Replace("mm2", "").Replace("mm²", "");
+            return text == "1*16";
         }
 
         private static void AddBridges(List<TableFillRow> rows, BoqCatalogIndex catalog,

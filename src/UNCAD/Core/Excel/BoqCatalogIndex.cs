@@ -62,6 +62,11 @@ namespace UNCAD.Core.Excel
         public ListItem FindCable(string cableModel)
             => FindWithMigration(_cables, NormalizeCable(cableModel));
 
+        /// <summary>Exact code lookup (e.g. "8.5" 设备接地独立连接)。</summary>
+        public ListItem FindByCode(string code)
+            => Items.FirstOrDefault(item => string.Equals(item.Code, (code ?? "").Trim(),
+                StringComparison.OrdinalIgnoreCase));
+
         /// <summary>Matches a cable row by its complete project feature, not by its display model.</summary>
         public ListItem FindCableByFeature(string projectFeature)
         {
