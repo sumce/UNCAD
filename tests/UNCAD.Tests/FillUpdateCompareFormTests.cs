@@ -51,6 +51,32 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Fact]
+        public void ContinueButton_ReturnsOk_WhenThereAreNoChanges()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new FillUpdateCompareForm(new List<FillUpdateCompareItem>
+                    {
+                        Item("M1")
+                    }))
+                    {
+                        form.Shown += (sender, args) =>
+                            FindButton(form, "继续更新").PerformClick();
+                        Assert.Equal(DialogResult.OK, form.ShowDialog());
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
         private static FillUpdateCompareItem Item(string machineId)
         {
             return new FillUpdateCompareItem
@@ -68,6 +94,9 @@ namespace UNCAD.Tests
 
         private static T Find<T>(Control root) where T : Control
             => FindAll<T>(root).FirstOrDefault();
+
+        private static Button FindButton(Control root, string text)
+            => FindAll<Button>(root).FirstOrDefault(button => button.Text == text);
 
         private static List<T> FindAll<T>(Control root) where T : Control
         {

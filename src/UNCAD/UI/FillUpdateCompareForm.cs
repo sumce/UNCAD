@@ -122,7 +122,7 @@ namespace UNCAD.UI
             detail.Controls.Add(_history);
             detail.Controls.Add(_title);
 
-            _ok = UiTheme.PrimaryButton("继续更新");
+            _ok = UiTheme.PrimaryButton("继续更新", DialogResult.OK);
             Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             FlowLayoutPanel btnRow = UiTheme.CommandBar();
             btnRow.Controls.Add(cancel);
