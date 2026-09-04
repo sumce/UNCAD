@@ -510,20 +510,24 @@ namespace UNCAD.Features.Fill
             if (model.Length == 0)
             {
                 ctx.Write("\n[U1F/U1U] 机台电缆型号为空(Excel U_电缆型号未读到值)。");
+                Log.Info("U1F 电缆型号为空: 机台 " + (machine?.MachineId ?? "")
+                    + ",Excel 未读到 U_电缆型号。");
                 return;
             }
             if (TableFillPlanner.IsGroundingCableModel(model))
             {
                 ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model
                     + "\" → 8.5 设备接地独立连接。");
+                Log.Info("U1F 电缆型号 \"" + model + "\" 映射到 8.5 设备接地独立连接。");
                 return;
             }
             TableFillRow cableRow = tablePlan?.CopyDefaultRows().FirstOrDefault(row =>
                 row.Category == TableFillCategory.Cable);
-            ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model + "\" "
-                + (cableRow != null && cableRow.CatalogMatched
-                    ? "已匹配固定清单 " + cableRow.Code
-                    : "未匹配固定清单——该电缆行不会写入清单,请检查 U_电缆型号写法。"));
+            string note = cableRow != null && cableRow.CatalogMatched
+                ? "已匹配固定清单 " + cableRow.Code
+                : "未匹配固定清单——该电缆行不会写入清单,请检查 U_电缆型号写法。";
+            ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model + "\" " + note);
+            Log.Info("U1F 电缆型号 \"" + model + "\": " + note);
         }
 
         /// <summary>
