@@ -128,8 +128,11 @@ namespace UNCAD.UI
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(_ok);
 
-            if (multiple) Controls.Add(listPanel);
+            // Dock order matters: the bottom bar and left list must reserve
+            // space before the fill panel is laid out, otherwise the list
+            // renders on top of the comparison tables.
             Controls.Add(detail);
+            if (multiple) Controls.Add(listPanel);
             Controls.Add(btnRow);
             AcceptButton = _ok;
             CancelButton = cancel;
