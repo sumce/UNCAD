@@ -57,7 +57,7 @@ namespace UNCAD.Core.Submission
                 {
                     using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None)) { }
                 }
-                finally { TryDelete(probe); }
+                finally { FileCleanup.TryDelete(probe); }
             }
         }
 
@@ -219,7 +219,7 @@ namespace UNCAD.Core.Submission
             {
                 workbook?.Close();
                 updateLock.Dispose();
-                TryDelete(temporary);
+                FileCleanup.TryDelete(temporary);
             }
         }
 
@@ -247,7 +247,7 @@ namespace UNCAD.Core.Submission
             try
             {
                 File.Replace(temporary, target, backup, true);
-                TryDelete(backup);
+                FileCleanup.TryDelete(backup);
                 return;
             }
             catch (PlatformNotSupportedException)
@@ -272,7 +272,7 @@ namespace UNCAD.Core.Submission
                 File.Move(target, backup);
                 movedOriginal = true;
                 File.Move(temporary, target);
-                TryDelete(backup);
+                FileCleanup.TryDelete(backup);
             }
             catch
             {
@@ -634,10 +634,5 @@ namespace UNCAD.Core.Submission
             }
         }
 
-        private static void TryDelete(string path)
-        {
-            try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); }
-            catch { }
-        }
     }
 }

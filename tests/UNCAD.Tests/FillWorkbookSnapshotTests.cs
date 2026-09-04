@@ -17,8 +17,7 @@ namespace UNCAD.Tests
             {
                 WriteMachine(machinePath, "设备A");
 
-                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
                 Assert.False(first.MachineCacheHit);
                 Assert.Equal("设备A", Assert.Single(first.FindRows("CACHE01")).CircuitName);
                 Assert.True(first.CatalogItemCount > 0);
@@ -27,15 +26,13 @@ namespace UNCAD.Tests
 
                 // 内嵌清单只随插件版本变化，不随机台文件缓存失效。
                 first.FindRows("CACHE01")[0].CircuitName = "缓存副本被修改";
-                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
                 Assert.True(second.MachineCacheHit);
                 Assert.Equal("设备A", Assert.Single(second.FindRows("CACHE01")).CircuitName);
 
                 WriteMachine(machinePath, "设备B");
                 File.SetLastWriteTimeUtc(machinePath, DateTime.UtcNow.AddSeconds(5));
-                FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath);
                 Assert.False(refreshedMachine.MachineCacheHit);
                 Assert.Equal("设备B",
                     Assert.Single(refreshedMachine.FindRows("CACHE01")).CircuitName);
@@ -54,13 +51,11 @@ namespace UNCAD.Tests
             try
             {
                 WriteMachine(machinePath, "设备A");
-                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
                 string original = first.ListItems[0].Code;
                 first.ListItems[0].Code = "被篡改";
 
-                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
                 Assert.Equal(original, second.ListItems[0].Code);
             }
             finally
@@ -81,12 +76,11 @@ namespace UNCAD.Tests
                     FileAccess.ReadWrite, FileShare.None))
                 {
                     IOException error = Assert.Throws<IOException>(() =>
-                    FillWorkbookSnapshot.Load(machinePath, MachineWorkbookLayout.A1));
+                    FillWorkbookSnapshot.Load(machinePath));
                     // 文件被占用时应提示用户，而不是笼统说“正在更新”。
                     Assert.Contains("占用", error.Message);
                 }
-                FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath,
-                    MachineWorkbookLayout.A1);
+                FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath);
                 Assert.Equal("设备A", Assert.Single(after.FindRows("CACHE01")).CircuitName);
             }
             finally

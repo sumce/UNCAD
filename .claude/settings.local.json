@@ -55,7 +55,23 @@
       "Bash(sed -i 's/ReleaseDateUtc = \"2026-09-02\"/ReleaseDateUtc = \"2026-09-04\"/; s/VersionLabel = \"2.2.1\"/VersionLabel = \"2.2.2\"/' src/UNCAD/Infra/ProductMetadata.cs)",
       "Bash(sed -i 's/Assert.Equal\\(\"2.2.1\", info.Version\\);/Assert.Equal\\(\"2.2.2\", info.Version\\);/; s/Assert.Equal\\(\"2026-09-02\", info.UpdatedOn\\);/Assert.Equal\\(\"2026-09-04\", info.UpdatedOn\\);/' tests/UNCAD.Tests/ConfigKeysTests.cs)",
       "Bash(sed -i 's/v2\\\\.2\\\\.1 解析构建时间/v2.2.2 解析构建时间/; s/\\(2\\\\.2\\\\.1+build\\\\./\\(2.2.2+build./' src/UNCAD/Infra/TrustedClock.cs)",
-      "Bash(powershell -File release.ps1)"
+      "Bash(powershell -File release.ps1)",
+      "Bash(\"/d/Program Files/Autodesk/AutoCAD 2022/accoreconsole.exe\" /i \"src/UNCAD/Resources/XFrameTemplate.dwg\" /s \"D:/Workspace/UNCAD/tpl_dump.scr\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(\"/d/Program Files/Autodesk/AutoCAD 2022/acad.exe\" /i \"D:\\\\\\\\Workspace\\\\\\\\UNCAD\\\\\\\\src\\\\\\\\UNCAD\\\\\\\\Resources\\\\\\\\XFrameTemplate.dwg\" /b \"D:\\\\\\\\Workspace\\\\\\\\UNCAD\\\\\\\\tpl_dump.scr\")",
+      "Bash(break)",
+      "Bash(tasklist //FI \"IMAGENAME eq acad.exe\")",
+      "Bash(taskkill //PID 28360 //F)",
+      "Bash(ls -la \"D:\\\\\\\\Workspace\\\\\\\\UNCAD\\\\\\\\tpl_old.dwg\")",
+      "Bash(tasklist //FI \"IMAGENAME eq accoreconsole.exe\")",
+      "Bash(unzip -p artifacts/Pro/UNCAD-Pro-v2.2.2.0.zip \"*/XFrameTemplate.dwg\")",
+      "Bash(awk '/\\(private|public|internal|protected\\).*\\\\\\(/ && !/^\\\\s*\\\\/\\\\// {name=$0; start=NR; depth=0; inbody=0} *)",
+      "Bash(sed -i 's/\\\\bTryDelete\\(/FileCleanup.TryDelete\\(/g' src/UNCAD/Core/Submission/BoqWorkbookWriter.cs src/UNCAD/Core/Submission/SubmissionWorkbookWriter.cs)",
+      "Bash(sed -i '/private static void FileCleanup.TryDelete\\(string path\\)/,+4d' src/UNCAD/Core/Submission/BoqWorkbookWriter.cs src/UNCAD/Core/Submission/SubmissionWorkbookWriter.cs)",
+      "Bash(sed -i 's/2\\\\.2\\\\.2\\\\.0/2.2.3.0/g; s/<Version>2\\\\.2\\\\.2<\\\\/Version>/<Version>2.2.3<\\\\/Version>/; s/2\\\\.2\\\\.2+build\\\\./2.2.3+build./' src/UNCAD/UNCAD.csproj)",
+      "Bash(sed -i 's/VersionLabel = \"2.2.2\"/VersionLabel = \"2.2.3\"/' src/UNCAD/Infra/ProductMetadata.cs)",
+      "Bash(sed -i 's/Assert.Equal\\(\"2.2.2\", info.Version\\);/Assert.Equal\\(\"2.2.3\", info.Version\\);/' tests/UNCAD.Tests/ConfigKeysTests.cs)",
+      "Bash(sed -i 's/v2\\\\.2\\\\.2 解析构建时间/v2.2.3 解析构建时间/; s/\\(2\\\\.2\\\\.2+build\\\\./\\(2.2.3+build./' src/UNCAD/Infra/TrustedClock.cs)"
     ]
   }
 }

@@ -97,11 +97,6 @@ namespace UNCAD.Core.Excel
             }
         }
 
-        /// <summary>Compatibility overload; the reader always uses U_ columns.</summary>
-        [Obsolete("机台表已统一使用 U_ 字段，A1/A2 不再支持。")]
-        internal static MachineWorkbookSourceResult Refresh(string source,
-            MachineWorkbookLayout layout) => Refresh(source);
-
         private static void Download(Uri uri, string destination)
         {
             HttpWebRequest request = WebRequest.CreateHttp(uri);

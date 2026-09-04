@@ -8,13 +8,6 @@ using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Excel
 {
-    /// <summary>
-    /// Legacy source-compatibility type. The reader no longer has A1/A2 modes:
-    /// every workbook must contain the unified U_ columns.
-    /// </summary>
-    [Obsolete("机台表已统一使用 U_ 字段，A1/A2 不再支持。")]
-    public enum MachineWorkbookLayout { A1, A2 }
-
     public sealed class MachineRow
     {
         public string Region { get; set; }
@@ -66,25 +59,18 @@ namespace UNCAD.Core.Excel
             public int HeaderRow;
         }
 
-        /// <summary>Retained only so older callers compile; the value is ignored.</summary>
-        [Obsolete("机台表已统一使用 U_ 字段，A1/A2 不再支持。")]
-        public static MachineWorkbookLayout ParseLayout(string value)
-            => MachineWorkbookLayout.A1;
-
-        public static List<MachineRow> FindRows(string filePath, string keyword,
-            MachineWorkbookLayout layout = MachineWorkbookLayout.A1)
+        public static List<MachineRow> FindRows(string filePath, string keyword)
         {
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete))
             {
                 var workbook = new XSSFWorkbook(fs);
-                try { return FindRows(ReadAll(workbook, layout), keyword); }
+                try { return FindRows(ReadAll(workbook), keyword); }
                 finally { workbook.Close(); }
             }
         }
 
-        public static List<MachineRow> ReadRows(string filePath,
-            MachineWorkbookLayout layout = MachineWorkbookLayout.A1)
+        public static List<MachineRow> ReadRows(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("机台数据 Excel 路径不能为空。", nameof(filePath));
@@ -92,30 +78,26 @@ namespace UNCAD.Core.Excel
                 FileShare.ReadWrite | FileShare.Delete))
             {
                 var workbook = new XSSFWorkbook(fs);
-                try { return ReadAll(workbook, layout); }
+                try { return ReadAll(workbook); }
                 finally { workbook.Close(); }
             }
         }
 
-        public static List<string> DistinctMachineIds(string filePath,
-            MachineWorkbookLayout layout = MachineWorkbookLayout.A1)
+        public static List<string> DistinctMachineIds(string filePath)
         {
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete))
             {
                 var workbook = new XSSFWorkbook(fs);
-                try { return DistinctMachineIds(ReadAll(workbook, layout)); }
+                try { return DistinctMachineIds(ReadAll(workbook)); }
                 finally { workbook.Close(); }
             }
         }
 
-        internal static List<MachineRow> ReadAll(IWorkbook workbook,
-            MachineWorkbookLayout layout = MachineWorkbookLayout.A1)
+        internal static List<MachineRow> ReadAll(IWorkbook workbook)
         {
             if (workbook == null) throw new ArgumentNullException(nameof(workbook));
 
-            // The layout argument is deliberately ignored. Keeping it avoids a
-            // breaking change for old callers while making A1/A2 inert.
             MachineColumns columns;
             ISheet sheet = FindUnifiedSheet(workbook, out columns);
             if (sheet == null)

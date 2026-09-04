@@ -32,9 +32,6 @@ namespace UNCAD.Core.Excel
         public static int RequireLast(IRow header, string sheetName, params string[] aliases)
             => RequireOccurrence(header, sheetName, true, aliases);
 
-        public static int OptionalFirst(IRow header, params string[] aliases)
-            => FindOccurrence(header, false, aliases);
-
         private static int RequireOccurrence(IRow header, string sheetName, bool last,
             string[] aliases)
         {

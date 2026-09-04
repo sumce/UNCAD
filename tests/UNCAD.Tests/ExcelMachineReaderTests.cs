@@ -214,8 +214,7 @@ namespace UNCAD.Tests
 
             try
             {
-                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook,
-                    MachineWorkbookLayout.A2));
+                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook));
             }
             finally { workbook.Close(); }
         }
@@ -267,7 +266,7 @@ namespace UNCAD.Tests
             try
             {
                 Assert.Throws<InvalidDataException>(() =>
-                    ExcelMachineReader.ReadAll(workbook, MachineWorkbookLayout.A1));
+                    ExcelMachineReader.ReadAll(workbook));
             }
             finally { workbook.Close(); }
         }
@@ -291,8 +290,7 @@ namespace UNCAD.Tests
             }
             try
             {
-                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook,
-                    MachineWorkbookLayout.A2));
+                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook));
             }
             finally { workbook.Close(); }
         }
@@ -376,8 +374,7 @@ namespace UNCAD.Tests
 
             try
             {
-                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook,
-                    MachineWorkbookLayout.A1));
+                Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook));
             }
             finally { workbook.Close(); }
         }

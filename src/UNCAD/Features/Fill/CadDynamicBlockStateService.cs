@@ -151,7 +151,12 @@ namespace UNCAD.Features.Fill
                     if (string.Equals(Convert.ToString(value), target,
                         StringComparison.OrdinalIgnoreCase)) return value;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 允许值读取失败时该动态块状态将按"无此状态"处理，直接影响
+                // 填充结果，必须留痕。
+                Log.Warn("动态块允许值读取失败: " + ex.Message);
+            }
             return null;
         }
 

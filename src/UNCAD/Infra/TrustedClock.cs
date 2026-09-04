@@ -207,13 +207,16 @@ namespace UNCAD.Infra
         {
             string text = watermark.ToUniversalTime().ToString(MarkerFormat,
                 CultureInfo.InvariantCulture);
-            try { Settings.Set(ConfigKeys.ClockWatermarkUtc, text); } catch { }
+            // 水位线是防回拨的根基：任一来源写失败必须留痕，否则时钟校验
+            // 会无痕降级成"只有内存值"。
+            try { Settings.Set(ConfigKeys.ClockWatermarkUtc, text); }
+            catch (Exception ex) { Log.Warn("时钟水位线写入设置失败: " + ex.Message); }
             try
             {
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RegistryPath))
                     key?.SetValue(RegistryValueName, text);
             }
-            catch { }
+            catch (Exception ex) { Log.Warn("时钟水位线写入注册表失败: " + ex.Message); }
             try
             {
                 string file = Path.Combine(
@@ -222,7 +225,7 @@ namespace UNCAD.Infra
                 Directory.CreateDirectory(Path.GetDirectoryName(file));
                 File.WriteAllText(file, text);
             }
-            catch { }
+            catch (Exception ex) { Log.Warn("时钟水位线写入标记文件失败: " + ex.Message); }
         }
 
         private static bool TryParseMarker(string value, out DateTime marker)
@@ -231,7 +234,7 @@ namespace UNCAD.Infra
                 | DateTimeStyles.AdjustToUniversal, out marker)
                 && marker > new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        /// <summary>从程序集 InformationalVersion(2.2.2+build.yyyyMMddHHmmss)解析构建时间。</summary>
+        /// <summary>从程序集 InformationalVersion(2.2.3+build.yyyyMMddHHmmss)解析构建时间。</summary>
         internal static DateTime? BuildTimestampUtc()
         {
             try
@@ -249,7 +252,10 @@ namespace UNCAD.Infra
                     | DateTimeStyles.AdjustToUniversal, out DateTime build))
                     return build;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log.Warn("解析程序集构建时间失败: " + ex.Message);
+            }
             return null;
         }
     }

@@ -61,11 +61,6 @@ namespace UNCAD.Core.Excel
                 machineCacheHit);
         }
 
-        /// <summary>Compatibility overload; A1/A2 are no longer interpreted.</summary>
-        [Obsolete("机台表已统一使用 U_ 字段，A1/A2 不再支持。")]
-        public static FillWorkbookSnapshot Load(string machineFilePath,
-            MachineWorkbookLayout layout) => Load(machineFilePath);
-
         private static List<MachineRow> LoadMachineRows(string path)
         {
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,

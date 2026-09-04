@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.2.2.</summary>
+    /// <summary>Public AutoCAD command contract for v2.2.3.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
