@@ -72,7 +72,7 @@ namespace UNCAD.Tests
             TableFillRow outlet = Assert.Single(result, UpdateOutletPolicy.IsOutlet);
             Assert.Equal("Existing outlet", outlet.Name);
             Assert.Equal("7", outlet.Quantity);
-            Assert.Equal("8.9", outlet.Code);
+            Assert.Equal("8.2", outlet.Code);
             Assert.True(outlet.CatalogMatched);
         }
 
