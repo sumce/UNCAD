@@ -60,3 +60,4 @@ src/UNCAD/
 - 安装/卸载脚本会清理 AutoCAD 每配置文件的 `Applications\UNCAD` 注册表命令缓存(历次升级累积陈旧条目会造成"未知命令");`BundleLoadingTests` 锁定了这一行为。
 - `install-user.bat` 的命令行参数被忽略,固定安装仓库 `bundle/UNCAD.bundle`。
 - `release-temp.ps1` 和 `release-jswy.ps1` 已停用,只能用 `release.ps1` 生成统一 Pro 包。
+- **版本号硬性规则**:每新增一个功能,必须把 `ProductMetadata.VersionSuffix` 递增(SP1→SP2→…),`ConfigKeysTests` 的版本断言同步更新;纯 bug 修复可不递增但构建时间自动更新。
