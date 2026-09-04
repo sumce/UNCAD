@@ -26,7 +26,11 @@ namespace UNCAD.Features.XLayout
                 if (form.Files.Count == 0) return;
                 XmergeResult result = XmergeService.Merge(ctx, form.Files);
                 ctx.Write("\n[Xmerge] 已合并 " + result.FileCount + " 个 DWG，导入 "
-                    + result.EntityCount + " 个实体。当前图纸已按 XLAYOUT 间距排布。");
+                    + result.EntityCount + " 个实体。当前图纸已按 XLAYOUT 间距排布。"
+                    + (result.UnplacedCount > 0
+                        ? "\n[Xmerge] 注意: " + result.UnplacedCount
+                            + " 个无外包框实体无法定位归属，已按原坐标导入。"
+                        : ""));
             }
         }
     }

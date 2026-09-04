@@ -136,6 +136,12 @@ namespace UNCAD.Features.DwgExport
             {
                 var sourceIds = new ObjectIdCollection();
                 var seen = new HashSet<ObjectId>();
+                // Wblock preserves handles for cloned entities, so the exported
+                // database is rearranged by source-handle ownership instead of
+                // recomputing anchors there.  Recomputing can disagree with the
+                // source region collector (extents differ after clone) and
+                // misplace or silently drop entities.
+                var ownerByHandle = new Dictionary<long, DwgFramePlacement>();
                 foreach (DwgFramePlacement placement in layout)
                 {
                     DwgExportFrame frame = placement.Item as DwgExportFrame;
@@ -146,7 +152,11 @@ namespace UNCAD.Features.DwgExport
                             throw new InvalidDataException("图框包含无效实体ID。");
                         if (id.Database != sourceDatabase)
                             throw new InvalidOperationException("图框实体不属于当前源图数据库。");
-                        if (seen.Add(id)) sourceIds.Add(id);
+                        if (seen.Add(id))
+                        {
+                            sourceIds.Add(id);
+                            ownerByHandle[id.Handle.Value] = placement;
+                        }
                     }
                 }
                 if (sourceIds.Count == 0)
@@ -167,7 +177,7 @@ namespace UNCAD.Features.DwgExport
                 {
                     try
                     {
-                        TransformExportedFrames(output, layout);
+                        TransformExportedFrames(output, ownerByHandle);
                     }
                     catch (Exception ex)
                     {
@@ -277,7 +287,7 @@ namespace UNCAD.Features.DwgExport
         }
 
         private static void TransformExportedFrames(Database database,
-            IReadOnlyList<DwgFramePlacement> layout)
+            Dictionary<long, DwgFramePlacement> ownerByHandle)
         {
             using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
@@ -285,59 +295,19 @@ namespace UNCAD.Features.DwgExport
                     OpenMode.ForRead) as BlockTableRecord;
                 foreach (ObjectId id in space)
                 {
-                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, false) as Entity;
-                    if (!TryExportAnchor(entity, out Point3d anchor)) continue;
-                    DwgFramePlacement owner = null;
-                    foreach (DwgFramePlacement candidate in layout)
-                    {
-                        if (candidate.Item.Boundary.Contains(anchor.X, anchor.Y))
-                        {
-                            owner = candidate;
-                            break;
-                        }
-                    }
-                    if (owner == null) continue;
+                    // Wblock keeps source handles, so ownership travels with the
+                    // clone.  Entities the collector never claimed (dependent
+                    // records AutoCAD appended) keep their position untouched.
+                    if (!ownerByHandle.TryGetValue(id.Handle.Value,
+                            out DwgFramePlacement owner))
+                        continue;
+                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, false)
+                        as Entity;
+                    if (entity == null) continue;
                     entity.TransformBy(Matrix3d.Displacement(new Vector3d(
                         owner.TranslationX, owner.TranslationY, 0d)));
                 }
                 transaction.Commit();
-            }
-        }
-
-        private static bool TryExportAnchor(Entity entity, out Point3d anchor)
-        {
-            if (entity is BlockReference block)
-            {
-                // 与 FrameRegionCollector 一致:块按外包框中心归属,
-                // 基点偏离可见几何时不漏检;取不到外包框时回退插入点。
-                try
-                {
-                    Extents3d extents = block.GeometricExtents;
-                    anchor = new Point3d(
-                        (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
-                        (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
-                        (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
-                    return true;
-                }
-                catch
-                {
-                    anchor = block.Position;
-                    return true;
-                }
-            }
-            try
-            {
-                Extents3d extents = entity.GeometricExtents;
-                anchor = new Point3d(
-                    (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
-                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
-                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
-                return true;
-            }
-            catch
-            {
-                anchor = Point3d.Origin;
-                return false;
             }
         }
 

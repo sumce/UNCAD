@@ -16,6 +16,7 @@ namespace UNCAD.Features.XLayout
         public int FileCount { get; set; }
         public int FrameCount { get; set; }
         public int EntityCount { get; set; }
+        public int UnplacedCount { get; set; }
         public string[] Files { get; set; } = Array.Empty<string>();
     }
 
@@ -64,6 +65,7 @@ namespace UNCAD.Features.XLayout
                         OpenMode.ForWrite) as BlockTableRecord;
                     if (target == null) throw new InvalidOperationException("无法打开当前图纸空间。");
                     int entities = 0;
+                    int unplaced = 0;
                     foreach (ImportedDrawing drawing in imported)
                     {
                         var mapping = new IdMapping();
@@ -87,8 +89,15 @@ namespace UNCAD.Features.XLayout
                         }
                     }
                     transaction.Commit();
+                    foreach (ImportedDrawing drawing in imported) unplaced += drawing.UnplacedCount;
+                    if (unplaced > 0)
+                        Log.Warn("Xmerge 有 " + unplaced + " 个无外包框实体无法定位归属，"
+                            + "已按原坐标导入: " + string.Join("、",
+                                imported.Where(item => item.UnplacedCount > 0)
+                                    .Select(item => item.Path)));
                     return new XmergeResult { FileCount = files.Length,
-                        FrameCount = frameInputs.Count, EntityCount = entities, Files = files };
+                        FrameCount = frameInputs.Count, EntityCount = entities,
+                        UnplacedCount = unplaced, Files = files };
                 }
             }
             finally
@@ -163,7 +172,12 @@ namespace UNCAD.Features.XLayout
                         owner.EntityIds.Add(entity.Id);
                     }
                     transaction.Commit();
-                    return new ImportedDrawing(path, database, ids, frames);
+                    // Entities without GeometricExtents are cloned but cannot be
+                    // located, so they stay at their source coordinates.  Count
+                    // them instead of silently dropping them from the report.
+                    var placed = new HashSet<ObjectId>(frames.SelectMany(frame => frame.EntityIds));
+                    int unplaced = ids.Cast<ObjectId>().Count(id => !placed.Contains(id));
+                    return new ImportedDrawing(path, database, ids, frames, unplaced);
                 }
             }
             catch { database.Dispose(); throw; }
@@ -262,14 +276,16 @@ namespace UNCAD.Features.XLayout
         private sealed class ImportedDrawing
         {
             public ImportedDrawing(string path, Database database, ObjectIdCollection entityIds,
-                List<ImportedFrame> frames)
+                List<ImportedFrame> frames, int unplacedCount)
             {
                 Path = path; Database = database; EntityIds = entityIds; Frames = frames;
+                UnplacedCount = unplacedCount;
             }
             public string Path { get; }
             public Database Database { get; }
             public ObjectIdCollection EntityIds { get; }
             public List<ImportedFrame> Frames { get; }
+            public int UnplacedCount { get; }
         }
     }
 }

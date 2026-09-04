@@ -35,9 +35,20 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
         public const string XFrameName = "xframe";
 
+        // WblockCloneObjects with DuplicateRecordCloning.MangleName renames a
+        // collided definition to e.g. "xframe$0$" (nested collisions repeat the
+        // suffix).  Stripping the suffixes keeps merged drawings recognizable.
+        private static readonly System.Text.RegularExpressions.Regex MangledSuffix
+            = new System.Text.RegularExpressions.Regex(@"(\$\d+\$)+$",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+
         internal static bool IsSupportedFrameName(string name)
-            => string.Equals(name, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, XFrameName, StringComparison.OrdinalIgnoreCase);
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string normalized = MangledSuffix.Replace(name, "");
+            return string.Equals(normalized, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, XFrameName, StringComparison.OrdinalIgnoreCase);
+        }
 
         private sealed class FrameBorderBounds
         {
