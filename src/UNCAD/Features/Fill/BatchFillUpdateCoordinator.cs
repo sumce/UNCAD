@@ -419,6 +419,7 @@ namespace UNCAD.Features.Fill
             FlexibleConduitCableMap.ApplyTo(machine);
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
                 workbook.Catalog, statistics, options.Planning);
+            FillFeature.WriteCablePlanNote(ctx, machine, tablePlan);
             List<TableFillRow> plannedRows = FillUpdateRowMerger.Merge(
                 readTransaction, selection, tablePlan.CopyDefaultRows(), statistics);
             bool deviceHasOutlet;

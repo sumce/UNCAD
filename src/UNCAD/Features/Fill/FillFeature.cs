@@ -164,6 +164,7 @@ namespace UNCAD.Features.Fill
             FlexibleConduitCableMap.ApplyTo(picked);
             TableGenerationOutput tablePlan = FillTableModule.Plan(
                 picked, catalog, statistics, options.Planning);
+            WriteCablePlanNote(ctx, picked, tablePlan);
             List<TableFillRow> plannedRows = tablePlan.CopyDefaultRows();
             if (updateMode)
                 plannedRows = FillUpdateRowMerger.Merge(ctx, selection, plannedRows, statistics);
@@ -495,6 +496,34 @@ namespace UNCAD.Features.Fill
             }
             flexible.Quantity = meters;
             ctx.Write("\n[U1F/U1U] Ruanguan 软管长度: " + meters + "M。");
+        }
+
+        /// <summary>
+        /// 把电缆型号的解析结果直接打到命令行:1*16 → 8.5 接地、匹配到
+        /// 哪一项、或未匹配(未匹配行会被严格模式丢弃,只看表格发现的
+        /// "只剩线管/软管"问题在这里一眼见底)。
+        /// </summary>
+        internal static void WriteCablePlanNote(CadContext ctx, MachineRow machine,
+            TableGenerationOutput tablePlan)
+        {
+            string model = (machine?.Cable ?? "").Trim();
+            if (model.Length == 0)
+            {
+                ctx.Write("\n[U1F/U1U] 机台电缆型号为空(Excel U_电缆型号未读到值)。");
+                return;
+            }
+            if (TableFillPlanner.IsGroundingCableModel(model))
+            {
+                ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model
+                    + "\" → 8.5 设备接地独立连接。");
+                return;
+            }
+            TableFillRow cableRow = tablePlan?.CopyDefaultRows().FirstOrDefault(row =>
+                row.Category == TableFillCategory.Cable);
+            ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model + "\" "
+                + (cableRow != null && cableRow.CatalogMatched
+                    ? "已匹配固定清单 " + cableRow.Code
+                    : "未匹配固定清单——该电缆行不会写入清单,请检查 U_电缆型号写法。"));
         }
 
         /// <summary>

@@ -58,8 +58,38 @@ namespace UNCAD
             }
         }
 
+        private static int _warmedUp;
+
+        /// <summary>
+        /// 启动空闲时预热:第一次 U1F/U1U 等命令的"卡"主要来自一次性成本
+        /// (内嵌固定清单解析、规划/Excel 模块 JIT)。挪到 Idle 执行,
+        /// 不阻塞加载,第一条命令即受益。
+        /// </summary>
+        private static void WarmUp()
+        {
+            if (System.Threading.Interlocked.Exchange(ref _warmedUp, 1) != 0) return;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var machine = new UNCAD.Core.Excel.MachineRow();
+                UNCAD.Core.Fill.TableGenerationModule.Plan(
+                    new UNCAD.Core.Fill.TableGenerationRequest(machine,
+                        new UNCAD.Core.Excel.BoqCatalogIndex(null),
+                        new UNCAD.Core.Stat.CableStatResult(),
+                        UNCAD.Core.Fill.FillPlanningOptions.Default));
+                clock.Stop();
+                Log.Info("启动预热完成: " + clock.ElapsedMilliseconds + " ms");
+            }
+            catch (System.Exception ex)
+            {
+                clock.Stop();
+                Log.Warn("启动预热失败(" + clock.ElapsedMilliseconds + " ms): " + ex.Message);
+            }
+        }
+
         private static void OnLicenseIdle(object sender, EventArgs args)
         {
+            WarmUp();
             if (_licenseDialogOpen) return;
             if (OnlineLicenseMonitor.TryTakeActivationRequest(out string reason))
             {
