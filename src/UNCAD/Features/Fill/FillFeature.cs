@@ -498,8 +498,9 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// U1U 更新前的变化对比窗。返回 false 表示用户取消本次更新。
-        /// 历史记录来自 frameinfo_json;旧图没有记录时按"首次更新"展示。
+        /// U1U 更新前的清单对比窗。返回 false 表示用户取消本次更新。
+        /// 上次清单直接读 CAD 表格现有行(老图框同样有效);上次更新
+        /// 时间/用户来自 frameinfo_json,旧图回退到制图信息表日期。
         /// </summary>
         private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
             MachineRow picked, FillReviewData review)
@@ -508,8 +509,11 @@ namespace UNCAD.Features.Fill
             {
                 FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.Read(ctx,
                     selection?.FrameInfoJsonBlockIds);
-                var item = BuildCompareItem(picked, review, previous,
-                    selectedHandle: "");
+                List<TableFillRow> existing = FillRowDiffBuilder.ReadRows(
+                    CadSubmissionReader.Read(ctx, selection?.TableIds));
+                FillUpdateCompareItem item = BuildCompareItem(picked,
+                    review.SelectedRows(), existing, previous, "",
+                    FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection));
                 using (var form = new FillUpdateCompareForm(
                     new List<FillUpdateCompareItem> { item }))
                 {
@@ -526,10 +530,14 @@ namespace UNCAD.Features.Fill
         }
 
         internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
-            FillReviewData review, FrameInfoJsonRecord previous, string selectedHandle)
+            List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
+            FrameInfoJsonRecord previous, string selectedHandle,
+            string legacyLastUpdated = "")
         {
             bool hasHistory = previous != null
-                && !string.IsNullOrWhiteSpace(previous.LastModifiedUtc);
+                && (!string.IsNullOrWhiteSpace(previous.LastModifiedUtc)
+                    || !string.IsNullOrWhiteSpace(previous.LastModifiedUser)
+                    || !string.IsNullOrWhiteSpace(previous.MachineId));
             string lastUpdated = "";
             if (hasHistory
                 && DateTime.TryParse(previous.LastModifiedUtc,
@@ -537,7 +545,8 @@ namespace UNCAD.Features.Fill
                     System.Globalization.DateTimeStyles.RoundtripKind,
                     out DateTime parsed))
                 lastUpdated = parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
-            var diffs = FrameInfoUpdateDiff.Build(previous, machine, review);
+            if (lastUpdated.Length == 0) lastUpdated = legacyLastUpdated ?? "";
+            var rowDiffs = FillRowDiffBuilder.Build(existingRows, plannedRows);
             return new FillUpdateCompareItem
             {
                 MachineId = machine.MachineId ?? "",
@@ -545,9 +554,14 @@ namespace UNCAD.Features.Fill
                 FrameHandle = selectedHandle ?? "",
                 LastUpdatedText = lastUpdated,
                 LastUpdatedUser = hasHistory ? previous.LastModifiedUser ?? "" : "",
-                HasHistory = hasHistory,
-                ChangedCount = diffs.Count(diff => diff.Changed),
-                Diffs = diffs
+                HasHistory = hasHistory || !string.IsNullOrWhiteSpace(lastUpdated),
+                AddedCount = rowDiffs.Count(diff =>
+                    diff.Status == FillRowDiff.StatusAdded),
+                RemovedCount = rowDiffs.Count(diff =>
+                    diff.Status == FillRowDiff.StatusRemoved),
+                QuantityChangedCount = rowDiffs.Count(diff =>
+                    diff.Status == FillRowDiff.StatusQuantity),
+                RowDiffs = rowDiffs
             };
         }
 

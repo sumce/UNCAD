@@ -31,6 +31,8 @@ namespace UNCAD.Features.Fill
             public List<TableFillRow> Rows { get; set; }
             public FillReviewData Review { get; set; }
             public Core.Fill.FrameInfoJsonRecord PreviousRecord { get; set; }
+            public List<TableFillRow> ExistingRows { get; set; }
+            public string LegacyLastUpdated { get; set; } = "";
             public string DeviceState { get; set; }
             public bool DeviceOutletStateKnown { get; set; }
             public string CableRequestKey { get; set; }
@@ -185,10 +187,10 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            // U1U 强化:批量确认前展示每框的上次更新时间/用户与字段级变化。
+            // U1U 强化:批量确认前展示每框的上次更新时间/用户与清单逐行对比。
             var compareItems = plans.Select(plan => FillFeature.BuildCompareItem(
-                plan.Machine, plan.Review, plan.PreviousRecord,
-                plan.Region.Handle)).ToList();
+                plan.Machine, plan.Rows, plan.ExistingRows, plan.PreviousRecord,
+                plan.Region.Handle, plan.LegacyLastUpdated)).ToList();
             using (var compareForm = new FillUpdateCompareForm(compareItems))
             {
                 if (AcApplication.ShowModalDialog(compareForm) != DialogResult.OK)
@@ -473,7 +475,11 @@ namespace UNCAD.Features.Fill
                     DeviceState = deviceState,
                     DeviceOutletStateKnown = deviceOutletStateKnown,
                     PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                        selection.FrameInfoJsonBlockIds)
+                        selection.FrameInfoJsonBlockIds),
+                    ExistingRows = FillRowDiffBuilder.ReadRows(
+                        CadSubmissionReader.Read(readTransaction, selection.TableIds)),
+                    LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
+                        readTransaction, selection)
                 });
                 return;
             }
@@ -491,7 +497,11 @@ namespace UNCAD.Features.Fill
                 DeviceState = deviceState,
                 DeviceOutletStateKnown = deviceOutletStateKnown,
                 PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                    selection.FrameInfoJsonBlockIds)
+                    selection.FrameInfoJsonBlockIds),
+                ExistingRows = FillRowDiffBuilder.ReadRows(
+                    CadSubmissionReader.Read(readTransaction, selection.TableIds)),
+                LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
+                    readTransaction, selection)
             });
         }
 
