@@ -2,11 +2,17 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.2.3 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
+Current 2.3.0 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.3.0
+
+- Fixed QuickLine text helpers so they can be tested and used without eagerly loading AutoCAD runtime classes.
+- Fixed batch `U1U` so the comparison dialog is shown at most once per update.
+- Unified assembly, package, and product metadata versions at `2.3.0`.
 
 ## v2.2.2 重点更新
 

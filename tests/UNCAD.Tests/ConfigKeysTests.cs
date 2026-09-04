@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.2.3 SP2", info.Version);
+            Assert.Equal("2.3.0", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);

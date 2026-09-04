@@ -112,7 +112,7 @@ function Get-PackageInfo {
     if ($fileVersion -ne $version -and $fileVersion -ne ($version + ".0")) {
         throw "Version mismatch: Package=$version, DLL=$fileVersion"
     }
-    # Surface the service-pack suffix (2.2.3 SP2) carried in the assembly's
+    # Surface the service-pack suffix carried in the assembly's
     # informational version; AppVersion in PackageContents.xml stays numeric.
     $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($modulePath).ProductVersion
     $spSuffix = ""

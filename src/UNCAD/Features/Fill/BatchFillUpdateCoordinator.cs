@@ -212,15 +212,6 @@ namespace UNCAD.Features.Fill
                     return;
                 }
             }
-            using (var compareForm = new FillUpdateCompareForm(compareItems))
-            {
-                if (AcApplication.ShowModalDialog(compareForm) != DialogResult.OK)
-                {
-                    ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
-                    return;
-                }
-            }
-
             var confirmationRows = plans.Select(plan => new BatchFillConfirmationRow(
                 plan.Region.Handle, plan.Machine.MachineId, plan.Machine.CircuitName,
                 plan.DeviceState, plan.Rows.Count)).ToList();

@@ -60,16 +60,19 @@ namespace UNCAD.Cad.QuickLine
         // ObjectClass lookups avoid opening entities that can never be scan
         // candidates.  IsDerivedFrom covers proxy-safe subclasses the same way
         // the "as" casts below would.
-        private static readonly Autodesk.AutoCAD.Runtime.RXClass LineClass
-            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Line));
-        private static readonly Autodesk.AutoCAD.Runtime.RXClass DbTextClass
-            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBText));
-        private static readonly Autodesk.AutoCAD.Runtime.RXClass MTextClass
-            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(MText));
-        private static readonly Autodesk.AutoCAD.Runtime.RXClass DimensionClass
-            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Dimension));
-        private static readonly Autodesk.AutoCAD.Runtime.RXClass BlockClass
-            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
+        // Resolve AutoCAD runtime classes only when a drawing scan actually runs.
+        // Keeping these lookups lazy lets text-only helpers remain usable in tests
+        // and non-AutoCAD tooling where AcDbMgd is not loaded.
+        private static Autodesk.AutoCAD.Runtime.RXClass LineClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Line));
+        private static Autodesk.AutoCAD.Runtime.RXClass DbTextClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBText));
+        private static Autodesk.AutoCAD.Runtime.RXClass MTextClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(MText));
+        private static Autodesk.AutoCAD.Runtime.RXClass DimensionClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Dimension));
+        private static Autodesk.AutoCAD.Runtime.RXClass BlockClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
         /// <summary>
         /// Registered application used for U1L/U1LX metadata.  Keeping the
         /// association in the drawing makes the scanner reliable after a

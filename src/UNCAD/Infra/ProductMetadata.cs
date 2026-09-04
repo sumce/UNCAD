@@ -29,9 +29,9 @@ namespace UNCAD.Infra
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
         public const string ReleaseDateUtc = "2026-09-04";
-        public const string VersionLabel = "2.2.3";
+        public const string VersionLabel = "2.3.0";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
-        public const string VersionSuffix = "SP2";
+        public const string VersionSuffix = "";
 
         public static string VersionText
             => VersionLabel + (VersionSuffix.Length == 0 ? "" : " " + VersionSuffix);
