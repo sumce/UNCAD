@@ -101,7 +101,8 @@ namespace UNCAD.Features.Unl
                         QuickLineCadService.TryCenterView(ctx, byId[plan.Steps[i + 1].SegmentId]);
                 }
             }
-            ctx.Ed.Regen();
+            // Entity edits already refresh their own graphics; a full Regen()
+            // only costs seconds on dense drawings for nothing.
             ctx.Write("\n[U1LX] 完成:已填写 " + done + " / " + plan.Steps.Count + " 段。");
         }
 
@@ -127,7 +128,11 @@ namespace UNCAD.Features.Unl
             return QuickLineTraversal.CreatePlan(graph, startId, anchor);
         }
 
-        /// <summary>提示输入距离;回车 = null 表示保留原值,Esc 取消遍历。</summary>
+        /// <summary>
+        /// 提示输入距离;回车 = null 表示保留原值,Esc 取消遍历。
+        /// 格式输错(Error)只重试本段,不再退出整个遍历——否则用户一次
+        /// 手滑就要重新扫描整张图。
+        /// </summary>
         private static double? PromptMillimetres(CadContext ctx,
             QuickLineCadSegment segment, int index, int total)
         {
@@ -143,9 +148,11 @@ namespace UNCAD.Features.Unl
                 UseDefaultValue = true
             };
             PromptDoubleResult result = ctx.Ed.GetDouble(options);
-            if (result.Status == PromptStatus.Cancel
-                || result.Status == PromptStatus.Error
-                || result.Status == PromptStatus.None) return null;
+            while (result.Status == PromptStatus.Error)
+            {
+                ctx.Write("\n[U1LX] 请输入非负数字距离(mm),Esc 结束本命令。");
+                result = ctx.Ed.GetDouble(options);
+            }
             if (result.Status != PromptStatus.OK) return null;
             return result.Value;
         }

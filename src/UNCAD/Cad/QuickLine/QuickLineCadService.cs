@@ -57,6 +57,19 @@ namespace UNCAD.Cad.QuickLine
     public static class QuickLineCadService
     {
         private const double Epsilon = 1e-9;
+        // ObjectClass lookups avoid opening entities that can never be scan
+        // candidates.  IsDerivedFrom covers proxy-safe subclasses the same way
+        // the "as" casts below would.
+        private static readonly Autodesk.AutoCAD.Runtime.RXClass LineClass
+            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Line));
+        private static readonly Autodesk.AutoCAD.Runtime.RXClass DbTextClass
+            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBText));
+        private static readonly Autodesk.AutoCAD.Runtime.RXClass MTextClass
+            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(MText));
+        private static readonly Autodesk.AutoCAD.Runtime.RXClass DimensionClass
+            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Dimension));
+        private static readonly Autodesk.AutoCAD.Runtime.RXClass BlockClass
+            = Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference));
         /// <summary>
         /// Registered application used for U1L/U1LX metadata.  Keeping the
         /// association in the drawing makes the scanner reliable after a
@@ -96,6 +109,10 @@ namespace UNCAD.Cad.QuickLine
                 {
                     int entityOrder = order++;
                     if (id.IsNull || !id.IsValid) continue;
+                    // Type-filter on the ObjectClass first: opening every entity
+                    // ForRead dominates scan time on dense drawings, and only
+                    // lines, labels and blocks can ever become scan candidates.
+                    if (!IsCandidateClass(id)) continue;
                     Entity entity;
                     try
                     {
@@ -312,6 +329,30 @@ namespace UNCAD.Cad.QuickLine
                     label?.SourceKind ?? string.Empty));
             }
             return result;
+        }
+
+        /// <summary>
+        /// Cheap pre-filter: true when the entity class can be a scan candidate
+        /// (a Line, one of the label kinds, or a block with attribute labels).
+        /// Avoids opening obviously unrelated entities (polylines, hatches,
+        /// xrefs' local geometry, proxy objects) on dense drawings.
+        /// </summary>
+        private static bool IsCandidateClass(ObjectId id)
+        {
+            try
+            {
+                Autodesk.AutoCAD.Runtime.RXClass cls = id.ObjectClass;
+                return cls == LineClass
+                    || cls == DbTextClass
+                    || cls.IsDerivedFrom(DbTextClass)   // includes AttributeReference
+                    || cls == MTextClass
+                    || cls.IsDerivedFrom(DimensionClass)
+                    || cls.IsDerivedFrom(BlockClass);
+            }
+            catch
+            {
+                return true; // cannot classify: keep the old open-and-check path
+            }
         }
 
         private static List<LineSnapshot> ConnectedComponent(
