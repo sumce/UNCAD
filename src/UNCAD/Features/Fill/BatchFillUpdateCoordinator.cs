@@ -30,6 +30,7 @@ namespace UNCAD.Features.Fill
             public CableStatResult Statistics { get; set; }
             public List<TableFillRow> Rows { get; set; }
             public FillReviewData Review { get; set; }
+            public Core.Fill.FrameInfoJsonRecord PreviousRecord { get; set; }
             public string DeviceState { get; set; }
             public bool DeviceOutletStateKnown { get; set; }
             public string CableRequestKey { get; set; }
@@ -182,6 +183,19 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[U1U] BOQ 输出路径不可用，图纸未修改: "
                     + ex.Message);
                 return;
+            }
+
+            // U1U 强化:批量确认前展示每框的上次更新时间/用户与字段级变化。
+            var compareItems = plans.Select(plan => FillFeature.BuildCompareItem(
+                plan.Machine, plan.Review, plan.PreviousRecord,
+                plan.Region.Handle)).ToList();
+            using (var compareForm = new FillUpdateCompareForm(compareItems))
+            {
+                if (AcApplication.ShowModalDialog(compareForm) != DialogResult.OK)
+                {
+                    ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
+                    return;
+                }
             }
 
             var confirmationRows = plans.Select(plan => new BatchFillConfirmationRow(
@@ -457,7 +471,9 @@ namespace UNCAD.Features.Fill
                     CableRequestKey = requestKey,
                     HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
                     DeviceState = deviceState,
-                    DeviceOutletStateKnown = deviceOutletStateKnown
+                    DeviceOutletStateKnown = deviceOutletStateKnown,
+                    PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
+                        selection.FrameInfoJsonBlockIds)
                 });
                 return;
             }
@@ -473,7 +489,9 @@ namespace UNCAD.Features.Fill
                 Rows = review.SelectedRows(),
                 HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
                 DeviceState = deviceState,
-                DeviceOutletStateKnown = deviceOutletStateKnown
+                DeviceOutletStateKnown = deviceOutletStateKnown,
+                PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
+                    selection.FrameInfoJsonBlockIds)
             });
         }
 

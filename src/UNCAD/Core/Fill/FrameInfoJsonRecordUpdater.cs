@@ -16,6 +16,11 @@ namespace UNCAD.Core.Fill
 
         public static FrameInfoJsonRecord Update(FrameInfoJsonRecord previous,
             MachineRow machine, FillReviewData review, string commandName, DateTime utcNow)
+            => Update(previous, machine, review, commandName, utcNow, null);
+
+        public static FrameInfoJsonRecord Update(FrameInfoJsonRecord previous,
+            MachineRow machine, FillReviewData review, string commandName, DateTime utcNow,
+            string updateUser)
         {
             if (machine == null) throw new ArgumentNullException(nameof(machine));
             previous = previous ?? new FrameInfoJsonRecord();
@@ -42,6 +47,8 @@ namespace UNCAD.Core.Fill
                 PanelFloor = machine.PanelFloor ?? "",
                 FacilitySwitch = machine.FacilitySwitch ?? "",
                 LastModifiedUtc = utcNow.ToUniversalTime().ToString("o"),
+                LastModifiedUser = FirstNonEmpty(updateUser, Environment.UserName,
+                    Environment.MachineName),
                 Changes = (previous.Changes ?? new List<FrameInfoJsonChange>())
                     .Select(CloneChange).ToList()
             };
@@ -81,6 +88,10 @@ namespace UNCAD.Core.Fill
         }
 
         private static string Value(FrameInfoJsonRecord record, string field)
+            => GetFieldValue(record, field);
+
+        /// <summary>Reads one tracked field by name; shared with the diff builder.</summary>
+        public static string GetFieldValue(FrameInfoJsonRecord record, string field)
         {
             if (record == null) return "";
             switch (field)
@@ -100,6 +111,7 @@ namespace UNCAD.Core.Fill
                 case "DeviceFloor": return record.DeviceFloor ?? "";
                 case "PanelFloor": return record.PanelFloor ?? "";
                 case "FacilitySwitch": return record.FacilitySwitch ?? "";
+                case "LastModifiedUser": return record.LastModifiedUser ?? "";
                 default: return "";
             }
         }

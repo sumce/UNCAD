@@ -23,6 +23,7 @@ namespace UNCAD.Core.Fill
         public string PanelFloor { get; set; } = "";
         public string FacilitySwitch { get; set; } = "";
         public string LastModifiedUtc { get; set; } = "";
+        public string LastModifiedUser { get; set; } = "";
         public List<FrameInfoJsonChange> Changes { get; set; }
             = new List<FrameInfoJsonChange>();
     }

@@ -206,6 +206,8 @@ namespace UNCAD.Features.Fill
             // cable can still create the correctly mapped hose row.
             ApplyRuanguanLength(ctx, selection, review, catalog, options.Planning);
             bool hoseWasMissingBeforeReview = review.FlexibleConduitItem() == null;
+            // U1U 强化:写表之前先展示上次更新时间/用户与字段级变化对比。
+            if (updateMode && !ShowUpdateCompare(ctx, selection, picked, review)) return;
             // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
             string updateMachineId = picked.MachineId;
             string updateDeviceName = picked.CircuitName;
@@ -493,6 +495,60 @@ namespace UNCAD.Features.Fill
             }
             flexible.Quantity = meters;
             ctx.Write("\n[U1F/U1U] Ruanguan 软管长度: " + meters + "M。");
+        }
+
+        /// <summary>
+        /// U1U 更新前的变化对比窗。返回 false 表示用户取消本次更新。
+        /// 历史记录来自 frameinfo_json;旧图没有记录时按"首次更新"展示。
+        /// </summary>
+        private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
+            MachineRow picked, FillReviewData review)
+        {
+            try
+            {
+                FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.Read(ctx,
+                    selection?.FrameInfoJsonBlockIds);
+                var item = BuildCompareItem(picked, review, previous,
+                    selectedHandle: "");
+                using (var form = new FillUpdateCompareForm(
+                    new List<FillUpdateCompareItem> { item }))
+                {
+                    return Autodesk.AutoCAD.ApplicationServices.Application
+                        .ShowModalDialog(form) == DialogResult.OK;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // 对比只是辅助信息,读取失败不应阻断更新流程。
+                Log.Warn("U1U 更新对比读取失败，已跳过: " + ex.Message);
+                return true;
+            }
+        }
+
+        internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
+            FillReviewData review, FrameInfoJsonRecord previous, string selectedHandle)
+        {
+            bool hasHistory = previous != null
+                && !string.IsNullOrWhiteSpace(previous.LastModifiedUtc);
+            string lastUpdated = "";
+            if (hasHistory
+                && DateTime.TryParse(previous.LastModifiedUtc,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind,
+                    out DateTime parsed))
+                lastUpdated = parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+            var diffs = FrameInfoUpdateDiff.Build(previous, machine, review);
+            return new FillUpdateCompareItem
+            {
+                MachineId = machine.MachineId ?? "",
+                DeviceName = machine.CircuitName ?? "",
+                FrameHandle = selectedHandle ?? "",
+                LastUpdatedText = lastUpdated,
+                LastUpdatedUser = hasHistory ? previous.LastModifiedUser ?? "" : "",
+                HasHistory = hasHistory,
+                ChangedCount = diffs.Count(diff => diff.Changed),
+                Diffs = diffs
+            };
         }
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
