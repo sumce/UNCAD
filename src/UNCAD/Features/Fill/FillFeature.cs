@@ -305,8 +305,10 @@ namespace UNCAD.Features.Fill
             }
             string reviewedCableMeters = review.CableMeters ?? "";
             if (!string.Equals(defaultCableMeters, reviewedCableMeters,
-                StringComparison.OrdinalIgnoreCase))
-                ApplyCableLengthOverride(statistics, reviewedCableMeters);
+                StringComparison.OrdinalIgnoreCase)
+                && !ApplyCableLengthOverride(statistics, reviewedCableMeters))
+                ctx.Write("\n[U1F/U1U] 电缆米数 \"" + reviewedCableMeters
+                    + "\" 无法识别，已保留图上实测值。");
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
@@ -603,17 +605,25 @@ namespace UNCAD.Features.Fill
             }
         }
 
-        private static void ApplyCableLengthOverride(CableStatResult statistics, string value)
+        /// <summary>
+        /// 应用用户在审阅窗中修改的电缆米数。输入为空或无法解析时**保留图上
+        /// 实测值**并返回 false——此前无效输入会被静默清零并把图框电缆字段
+        /// 抹空，只有日志痕迹。输入显式为 0 才视为"确认清空"。
+        /// </summary>
+        private static bool ApplyCableLengthOverride(CableStatResult statistics, string value)
         {
             string text = (value ?? "").Trim();
             double meters;
-            bool parsed = double.TryParse(text, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out meters)
-                || double.TryParse(text, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.CurrentCulture, out meters);
+            if (text.Length == 0
+                || !(double.TryParse(text, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out meters)
+                    || double.TryParse(text, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.CurrentCulture, out meters))
+                || meters < 0d)
+                return false;
             statistics.CableFormatted.Clear();
-            statistics.CableSum = parsed && meters > 0 ? meters : 0;
-            if (statistics.CableSum > 0)
+            statistics.CableSum = meters;
+            if (meters > 0d)
             {
                 statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
                 statistics.CableState = MeasurementState.Measured;
@@ -622,6 +632,7 @@ namespace UNCAD.Features.Fill
             {
                 statistics.CableState = MeasurementState.ConfirmedEmpty;
             }
+            return true;
         }
 
         private static void WriteMeasurementState(CadContext ctx, CableStatResult statistics)
@@ -635,7 +646,7 @@ namespace UNCAD.Features.Fill
                     default: return "未完整选择，保留旧值";
                 }
             }
-            ctx.Write("\n[SUM-STAT/求和统计] 电缆 " + StateText(statistics.CableState)
+            ctx.Write("\n[U1F/U1U] 电缆 " + StateText(statistics.CableState)
                 + "；桥架 " + StateText(statistics.BridgeState)
                 + "；线管 " + StateText(statistics.ConduitState) + "。");
         }
