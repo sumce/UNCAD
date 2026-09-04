@@ -245,22 +245,30 @@ function Recover-InterruptedInstall {
 function Clear-CommandRegistrationCache {
     $removed = 0
     foreach ($hive in @("HKCU:", "HKLM:")) {
-        $releases = Get-ChildItem (Join-Path $hive "SOFTWARE\Autodesk\AutoCAD") `
-            -ErrorAction SilentlyContinue
-        foreach ($release in $releases) {
-            $versions = Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue
-            foreach ($version in $versions) {
-                $cacheKey = Join-Path $version.PSPath "Applications\UNCAD"
-                if (-not (Test-Path $cacheKey)) { continue }
-                try {
-                    Remove-Item -LiteralPath $cacheKey -Recurse -Force `
-                        -ErrorAction Stop
-                    $removed++
-                    Write-SetupLog "Cleared stale command registration cache: $cacheKey" DarkGray
-                }
-                catch {
-                    Write-SetupLog ("Could not clear command cache " + $cacheKey `
-                        + " ( HKLM needs administrator): $($_.Exception.Message)") DarkYellow
+        # Cover both the native and the WOW6432Node (32-bit) registry views so a
+        # stale cache written under either view cannot survive the upgrade.
+        $rootPaths = @(
+            (Join-Path $hive "SOFTWARE\Autodesk\AutoCAD"),
+            (Join-Path $hive "SOFTWARE\WOW6432Node\Autodesk\AutoCAD")
+        )
+        foreach ($rootPath in $rootPaths) {
+            $releases = Get-ChildItem $rootPath `
+                -ErrorAction SilentlyContinue
+            foreach ($release in $releases) {
+                $versions = Get-ChildItem $release.PSPath -ErrorAction SilentlyContinue
+                foreach ($version in $versions) {
+                    $cacheKey = Join-Path $version.PSPath "Applications\UNCAD"
+                    if (-not (Test-Path $cacheKey)) { continue }
+                    try {
+                        Remove-Item -LiteralPath $cacheKey -Recurse -Force `
+                            -ErrorAction Stop
+                        $removed++
+                        Write-SetupLog "Cleared stale command registration cache: $cacheKey" DarkGray
+                    }
+                    catch {
+                        Write-SetupLog ("Could not clear command cache " + $cacheKey `
+                            + " ( HKLM needs administrator): $($_.Exception.Message)") DarkYellow
+                    }
                 }
             }
         }

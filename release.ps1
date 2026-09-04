@@ -55,6 +55,12 @@ if ($NoBuild) {
         Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".dwg", ".html", ".css", ".js", ".txt") })
     $sourceInputs += @(Get-ChildItem $root -File |
         Where-Object { $_.Extension -in @(".xlsx") })
+    # Scripts and manifests affect the package without touching UNCAD.dll;
+    # their staleness must also reject a -NoBuild shortcut.
+    $sourceInputs += @(Get-ChildItem $root -File |
+        Where-Object { $_.Extension -in @(".ps1", ".xml") })
+    $sourceInputs += @(Get-ChildItem (Join-Path $root "bundle") -Recurse -File |
+        Where-Object { $_.Extension -in @(".xml", ".ps1") })
     $newerInput = $sourceInputs |
         Where-Object { $_.LastWriteTimeUtc -gt (Get-Item $buildOutput).LastWriteTimeUtc } |
         Select-Object -First 1
