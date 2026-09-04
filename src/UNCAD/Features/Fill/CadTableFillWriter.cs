@@ -61,6 +61,11 @@ namespace UNCAD.Features.Fill
                 table.SuppressRegenerateTable(true);
                 try
                 {
+                    // The shipped template ships with cell format locks to protect
+                    // hand edits; the plugin must still write values and heights,
+                    // so unlock every cell it touches (idempotent, cheap).
+                    UnlockWriteRange(table, row, rowsToClear, plannedRows.Count);
+
                     for (int clearRow = row; clearRow < row + rowsToClear; clearRow++)
                         for (int column = 0; column <= 5; column++)
                             SetCellTextPreservingFormat(table, clearRow, column, "");
@@ -91,6 +96,38 @@ namespace UNCAD.Features.Fill
                 filled += plannedRows.Count;
             }
             return filled;
+        }
+
+        /// <summary>
+        /// Clears cell lock flags over the clear range plus every planned data row
+        /// so a template locked against hand edits stays writable by the plugin.
+        /// Header rows above the write start are left as authored.
+        /// </summary>
+        private static void UnlockWriteRange(Table table, int startRow, int rowsToClear,
+            int plannedRowCount)
+        {
+            int lastRow = Math.Min(startRow + Math.Max(rowsToClear, plannedRowCount) - 1,
+                table.Rows.Count - 1);
+            for (int row = startRow; row <= lastRow; row++)
+            {
+                for (int column = 0; column < Math.Min(6, table.Columns.Count); column++)
+                {
+                    try
+                    {
+                        Cell cell = table.Cells[row, column];
+                        CellStates state = cell.State ?? CellStates.None;
+                        CellStates unlocked = state & ~(CellStates.ContentLocked
+                            | CellStates.FormatLocked | CellStates.ContentReadOnly
+                            | CellStates.FormatReadOnly);
+                        if (unlocked != state) cell.State = unlocked;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Log.Warn("U1F 清单表单元格解锁失败: 行 " + row + " 列 " + column
+                            + "，" + ex.Message);
+                    }
+                }
+            }
         }
 
         private static void SetCellTextPreservingFormat(Table table, int row, int column,
