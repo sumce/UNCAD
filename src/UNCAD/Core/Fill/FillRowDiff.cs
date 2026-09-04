@@ -14,6 +14,8 @@ namespace UNCAD.Core.Fill
         public const string StatusQuantity = "改量";
 
         public string Status { get; set; } = StatusKept;
+        /// <summary>行号与本次写入清单的顺序一致;移除的旧行为 0。</summary>
+        public int Order { get; set; }
         public string Name { get; set; } = "";
         public string Description { get; set; } = "";
         public string Unit { get; set; } = "";
@@ -44,8 +46,10 @@ namespace UNCAD.Core.Fill
             var usedOld = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var diffs = new List<FillRowDiff>();
+            int order = 0;
             foreach (TableFillRow row in planned)
             {
+                order++;
                 string key = MatchKey(row);
                 if (key.Length > 0 && oldByKey.TryGetValue(key, out TableFillRow old))
                 {
@@ -57,6 +61,7 @@ namespace UNCAD.Core.Fill
                     {
                         Status = changed ? FillRowDiff.StatusQuantity : FillRowDiff.StatusKept,
                         Changed = changed,
+                        Order = order,
                         Name = row.Name,
                         Description = row.Description,
                         Unit = row.Unit,
@@ -70,6 +75,7 @@ namespace UNCAD.Core.Fill
                 {
                     Status = FillRowDiff.StatusAdded,
                     Changed = true,
+                    Order = order,
                     Name = row.Name,
                     Description = row.Description,
                     Unit = row.Unit,

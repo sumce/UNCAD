@@ -106,13 +106,15 @@ namespace UNCAD.UI
                 ForeColor = UiTheme.TextPrimary,
                 Font = UiTheme.FontBody
             };
-            _diffs.Columns.Add("状态", 60);
-            _diffs.Columns.Add("名称", 200);
-            _diffs.Columns.Add("规格/描述", 220);
-            _diffs.Columns.Add("单位", 50);
-            _diffs.Columns.Add("上次数量", 90);
-            _diffs.Columns.Add("本次数量", 90);
-            _diffs.Columns.Add("编码", 70);
+            // 列与清单表格一致:序号/项目名称/特征描述/单位/数量/项次编码,
+            // 另加"上次数量"列做对比;状态用行颜色表达。
+            _diffs.Columns.Add("序号", 44);
+            _diffs.Columns.Add("项目名称", 150);
+            _diffs.Columns.Add("特征描述", 260);
+            _diffs.Columns.Add("单位", 44);
+            _diffs.Columns.Add("上次数量", 86);
+            _diffs.Columns.Add("本次数量", 86);
+            _diffs.Columns.Add("项次编码", 70);
 
             var detail = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4) };
             detail.Controls.Add(_diffs);
@@ -172,7 +174,10 @@ namespace UNCAD.UI
                         - item.QuantityChangedCount);
             foreach (FillRowDiff diff in item.RowDiffs)
             {
-                var row = new ListViewItem(diff.Status)
+                string ordinal = diff.Order > 0
+                    ? diff.Order.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : "—";
+                var row = new ListViewItem(ordinal)
                 {
                     UseItemStyleForSubItems = false,
                     ForeColor = RowColor(diff)
@@ -202,10 +207,10 @@ namespace UNCAD.UI
 
         private void ResizeColumns()
         {
-            int width = Math.Max(560, _diffs.ClientSize.Width - 8);
-            int[] fixedWidths = { 60, 0, 0, 50, 90, 90, 70 };
+            int width = Math.Max(620, _diffs.ClientSize.Width - 8);
+            int[] fixedWidths = { 44, 0, 0, 44, 86, 86, 70 };
             int fixedTotal = fixedWidths.Sum();
-            int flexible = Math.Max(160, (width - fixedTotal) / 2);
+            int flexible = Math.Max(140, (width - fixedTotal) / 2);
             _diffs.Columns[0].Width = fixedWidths[0];
             _diffs.Columns[1].Width = flexible;
             _diffs.Columns[2].Width = flexible;
