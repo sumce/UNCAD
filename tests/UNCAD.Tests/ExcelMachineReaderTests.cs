@@ -9,7 +9,7 @@ using Xunit;
 
 namespace UNCAD.Tests
 {
-    /// <summary>机台表读取测试：只读取“会勘总表”，不依赖活动表。</summary>
+    /// <summary>机台表读取测试：按统一 U_ 列和回路名称列绑定，不依赖活动表。</summary>
     public class ExcelMachineReaderTests
     {
         private static string CreateTempWorkbook()
@@ -339,7 +339,39 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ReadAll_ExpandsOnlyCellsInsideMergedRegions()
+        public void ReadAll_ReadsOnlyTheBoundColumnsWithoutExpandingMergedCells()
+        {
+            var workbook = new XSSFWorkbook();
+            var sheet = workbook.CreateSheet("机台数据");
+            string[] headers = { "U_区域", "U_机台ID", "U_设备楼层", "U_设备轴位",
+                "U_上游编号", "U_上游楼层", "U_上游轴位", "U_配电信息",
+                "U_电缆型号", "U_上游类型", "U_厂务开关", "回路名称" };
+            string[] shared = { "ETCH", "M01", "2F", "54/W", "UP-01", "1F", "54/X",
+                "N208V 3P4W 3P400A", "3*2.5", "母线插接口", "3P400A" };
+            IRow header = sheet.CreateRow(0);
+            IRow first = sheet.CreateRow(1);
+            IRow second = sheet.CreateRow(2);
+            for (int column = 0; column < headers.Length; column++)
+                header.CreateCell(column).SetCellValue(headers[column]);
+            for (int column = 0; column < shared.Length; column++)
+            {
+                first.CreateCell(column).SetCellValue(shared[column]);
+                sheet.AddMergedRegion(new CellRangeAddress(1, 2, column, column));
+            }
+            first.CreateCell(11).SetCellValue("回路一");
+            second.CreateCell(11).SetCellValue("回路二");
+
+            try
+            {
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                    ExcelMachineReader.ReadAll(workbook));
+                Assert.Contains("U_机台ID", error.Message);
+            }
+            finally { workbook.Close(); }
+        }
+
+        [Fact]
+        public void ReadAll_RejectsLegacyHeadersWithoutFallback()
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("会勘总表");
@@ -370,10 +402,6 @@ namespace UNCAD.Tests
             second.CreateCell(8).SetCellValue("插座盘");
             second.CreateCell(9).SetCellValue("2/T");
             second.CreateCell(10).SetCellValue("US01");
-            sheet.AddMergedRegion(new CellRangeAddress(1, 2, 0, 0));
-            sheet.AddMergedRegion(new CellRangeAddress(1, 2, 1, 1));
-            sheet.AddMergedRegion(new CellRangeAddress(1, 2, 4, 4));
-
             try
             {
                 Assert.Throws<InvalidDataException>(() => ExcelMachineReader.ReadAll(workbook));

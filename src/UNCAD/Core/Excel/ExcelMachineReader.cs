@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using NPOI.SS.UserModel;
-using NPOI.SS.Util;
 using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Excel
@@ -114,19 +114,22 @@ namespace UNCAD.Core.Excel
         private static List<MachineRow> ReadBoundRows(IWorkbook workbook, ISheet sheet,
             MachineColumns columns)
         {
-            var merged = new MergedCellResolver(sheet);
             var result = new List<MachineRow>();
+            var strikeoutByFontIndex = new Dictionary<short, bool>();
             for (int rowIndex = columns.HeaderRow + 1; rowIndex <= sheet.LastRowNum; rowIndex++)
             {
                 IRow row = sheet.GetRow(rowIndex);
                 if (row == null) continue;
 
-                ICell circuitCell = merged.GetCell(row, columns.CircuitName);
-                if (HasStrikeout(workbook, circuitCell)
+                // The unified workbook contract is column-based: after the header is
+                // bound, read only these exact columns from the same physical row.
+                // Do not inspect or expand merged regions; a blank cell stays blank.
+                ICell circuitCell = row.GetCell(columns.CircuitName);
+                if (HasStrikeout(workbook, circuitCell, strikeoutByFontIndex)
                     || string.IsNullOrWhiteSpace(Text(circuitCell)))
                     continue;
 
-                MachineRow machine = ToUnifiedRow(row, columns, merged);
+                MachineRow machine = ToUnifiedRow(row, columns);
                 if (string.IsNullOrWhiteSpace(machine.MachineId))
                     throw new InvalidDataException("机台数据表第 " + (rowIndex + 1)
                         + " 行存在回路名称，但 U_机台ID 为空或公式结果未保存。");
@@ -260,27 +263,29 @@ namespace UNCAD.Core.Excel
             return -1;
         }
 
-        private static MachineRow ToUnifiedRow(IRow row, MachineColumns columns,
-            MergedCellResolver merged)
+        private static MachineRow ToUnifiedRow(IRow row, MachineColumns columns)
         {
             return new MachineRow
             {
-                Region = Text(merged.GetCell(row, columns.Region)),
-                MachineId = Text(merged.GetCell(row, columns.MachineId)),
-                CircuitName = Text(merged.GetCell(row, columns.CircuitName)),
-                Cable = Text(merged.GetCell(row, columns.Cable)),
-                Fr = Text(merged.GetCell(row, columns.Fr)),
-                Detail = Text(merged.GetCell(row, columns.Detail)),
-                Seq = Text(merged.GetCell(row, columns.Seq)),
-                Dia = Text(merged.GetCell(row, columns.Dia)),
-                Next = Text(merged.GetCell(row, columns.Next)),
-                DownstreamAxis = Text(merged.GetCell(row, columns.DownstreamAxis)),
-                UpstreamAxis = Text(merged.GetCell(row, columns.UpstreamAxis)),
-                DeviceFloor = Text(merged.GetCell(row, columns.DeviceFloor)),
-                PanelFloor = Text(merged.GetCell(row, columns.PanelFloor)),
-                FacilitySwitch = Text(merged.GetCell(row, columns.FacilitySwitch))
+                Region = Text(GetCell(row, columns.Region)),
+                MachineId = Text(GetCell(row, columns.MachineId)),
+                CircuitName = Text(GetCell(row, columns.CircuitName)),
+                Cable = Text(GetCell(row, columns.Cable)),
+                Fr = Text(GetCell(row, columns.Fr)),
+                Detail = Text(GetCell(row, columns.Detail)),
+                Seq = Text(GetCell(row, columns.Seq)),
+                Dia = Text(GetCell(row, columns.Dia)),
+                Next = Text(GetCell(row, columns.Next)),
+                DownstreamAxis = Text(GetCell(row, columns.DownstreamAxis)),
+                UpstreamAxis = Text(GetCell(row, columns.UpstreamAxis)),
+                DeviceFloor = Text(GetCell(row, columns.DeviceFloor)),
+                PanelFloor = Text(GetCell(row, columns.PanelFloor)),
+                FacilitySwitch = Text(GetCell(row, columns.FacilitySwitch))
             };
         }
+
+        private static ICell GetCell(IRow row, int column)
+            => row == null || column < 0 ? null : row.GetCell(column);
 
         private static string Text(ICell cell)
         {
@@ -292,17 +297,50 @@ namespace UNCAD.Core.Excel
                 && cell.CachedFormulaResultType == CellType.Numeric
                 && Math.Abs(cell.NumericCellValue) < 1e-12)
                 return "";
-            return ExcelColumnReader.CellToString(cell)?.Trim() ?? "";
+
+            // Machine rows only contain U_ fields and 回路名称.  Avoid the generic
+            // reader's date/style inspection here; it is needlessly expensive for
+            // thousands of text/formula cells and these columns are not dates.
+            switch (cell.CellType)
+            {
+                case CellType.String:
+                    return (cell.StringCellValue ?? "").Trim();
+                case CellType.Numeric:
+                    return cell.NumericCellValue.ToString("0.##", CultureInfo.InvariantCulture);
+                case CellType.Boolean:
+                    return cell.BooleanCellValue ? "TRUE" : "FALSE";
+                case CellType.Formula:
+                    switch (cell.CachedFormulaResultType)
+                    {
+                        case CellType.String:
+                            return (cell.StringCellValue ?? "").Trim();
+                        case CellType.Numeric:
+                            return cell.NumericCellValue.ToString("0.##", CultureInfo.InvariantCulture);
+                        case CellType.Boolean:
+                            return cell.BooleanCellValue ? "TRUE" : "FALSE";
+                        default:
+                            return "";
+                    }
+                default:
+                    return "";
+            }
         }
 
-        private static bool HasStrikeout(IWorkbook workbook, ICell cell)
+        private static bool HasStrikeout(IWorkbook workbook, ICell cell,
+            IDictionary<short, bool> strikeoutByFontIndex)
         {
             if (cell == null) return false;
             ICellStyle style = cell.CellStyle;
             if (style != null)
             {
-                IFont font = workbook.GetFontAt(style.FontIndex);
-                if (font != null && font.IsStrikeout) return true;
+                short fontIndex = style.FontIndex;
+                if (!strikeoutByFontIndex.TryGetValue(fontIndex, out bool isStrikeout))
+                {
+                    IFont font = workbook.GetFontAt(fontIndex);
+                    isStrikeout = font != null && font.IsStrikeout;
+                    strikeoutByFontIndex[fontIndex] = isStrikeout;
+                }
+                if (isStrikeout) return true;
             }
             if (cell.CellType != CellType.String) return false;
             var xssf = cell.RichStringCellValue as XSSFRichTextString;
@@ -315,29 +353,5 @@ namespace UNCAD.Core.Excel
             return false;
         }
 
-        private sealed class MergedCellResolver
-        {
-            private readonly ISheet _sheet;
-            private readonly List<CellRangeAddress> _ranges;
-
-            public MergedCellResolver(ISheet sheet)
-            {
-                _sheet = sheet;
-                _ranges = new List<CellRangeAddress>();
-                for (int index = 0; index < sheet.NumMergedRegions; index++)
-                    _ranges.Add(sheet.GetMergedRegion(index));
-            }
-
-            public ICell GetCell(IRow row, int column)
-            {
-                if (row == null || column < 0) return null;
-                foreach (CellRangeAddress range in _ranges)
-                {
-                    if (!range.IsInRange(row.RowNum, column)) continue;
-                    return _sheet.GetRow(range.FirstRow)?.GetCell(range.FirstColumn);
-                }
-                return row.GetCell(column);
-            }
-        }
     }
 }

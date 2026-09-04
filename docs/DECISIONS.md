@@ -76,3 +76,12 @@ rewrite an existing entry.
   package must report the same numeric release version.
 - Consequence: use `release.ps1` verification instead of hand-copying package
   files or embedding customer authorization data.
+
+## D-011: Physical-Row Workbook Extraction (2026-09-05)
+
+- Status: accepted
+- Decision: after the header is bound, machine data is read only from the
+  corresponding `U_` columns and ordinary `回路名称` column on the same
+  physical row. Merged regions are ignored.
+- Consequence: blank cells remain blank and values are never inherited from a
+  merged region, another row, or an unrelated column.
