@@ -211,6 +211,12 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         plans.Select(plan => plan.Selection));
+                    // Shared once-per-batch state: scanning frameinfo_json inserts and
+                    // normalizing shared block definitions per frame used to repeat
+                    // whole-space/whole-definition walks inside the write transaction.
+                    FrameInfoJsonBlockWriter.MetadataBlockIndex metadataIndex =
+                        FrameInfoJsonBlockWriter.MetadataBlockIndex.Scan(ctx, transaction);
+                    var normalizedDefinitions = new HashSet<ObjectId>();
                     foreach (Plan plan in plans)
                     {
                         migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
@@ -243,7 +249,7 @@ namespace UNCAD.Features.Fill
                         FillWriteResult frameInfo = FrameInfoJsonBlockWriter.FillOrMigrate(ctx,
                             transaction, plan.Selection.FrameBlockIds,
                             plan.Selection.FrameInfoJsonBlockIds, plan.Machine,
-                            plan.Review, CommandIds.FillUpdate);
+                            plan.Review, CommandIds.FillUpdate, metadataIndex);
                         FillWriteResult upstreamInfo = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamInfoBlockIds,
                             ConnectionBlockFiller.TagUpstreamInfo,
@@ -262,13 +268,14 @@ namespace UNCAD.Features.Fill
                         deviceColorBlocks += CadBlockColorWriter.Apply(transaction,
                             plan.Selection.DeviceBlockIds.Concat(
                                 plan.Selection.DownstreamAxisBlockIds)
-                                .Concat(plan.Selection.DeviceColorBlockIds), deviceColorIndex);
+                                .Concat(plan.Selection.DeviceColorBlockIds),
+                            deviceColorIndex, normalizedDefinitions);
                         upstreamColorBlocks += CadBlockColorWriter.Apply(transaction,
                             plan.Selection.UpstreamStateBlockIds
                                 .Concat(plan.Selection.UpstreamInfoBlockIds)
                                 .Concat(plan.Selection.UpstreamAxisBlockIds)
                                 .Concat(plan.Selection.UpstreamColorBlockIds),
-                            upstreamColorIndex);
+                            upstreamColorIndex, normalizedDefinitions);
                         frameBlocks += frame.Blocks + device.Blocks + ruanguan.Blocks
                             + frameInfo.Blocks
                             + upstreamInfo.Blocks

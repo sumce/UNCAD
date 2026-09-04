@@ -9,10 +9,22 @@ namespace UNCAD.Features.Fill
     {
         internal static int Apply(Transaction transaction,
             IEnumerable<ObjectId> blockIds, short colorIndex)
+            => Apply(transaction, blockIds, colorIndex, null);
+
+        /// <summary>
+        /// <paramref name="sharedNormalizedDefinitions"/> lets one batch share the
+        /// "already normalized" set across frames: the same shared device/upstream
+        /// block definition would otherwise be re-walked recursively for every
+        /// frame in the batch.
+        /// </summary>
+        internal static int Apply(Transaction transaction,
+            IEnumerable<ObjectId> blockIds, short colorIndex,
+            ISet<ObjectId> sharedNormalizedDefinitions)
         {
             if (transaction == null || blockIds == null) return 0;
             var seen = new HashSet<ObjectId>();
-            var normalizedDefinitions = new HashSet<ObjectId>();
+            ISet<ObjectId> normalizedDefinitions = sharedNormalizedDefinitions
+                ?? new HashSet<ObjectId>();
             int changedBlocks = 0;
 
             foreach (ObjectId id in blockIds)

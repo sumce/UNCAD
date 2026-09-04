@@ -37,13 +37,19 @@ namespace UNCAD.Features.Fill
                 .ToArray();
             if (targets.Length == 0) return new XFrameMigrationResult(0, 0, 0);
 
+            // IsLegacyFrame opens the frame reference and its definition each call;
+            // the same frames were being re-tested up to three times below.
+            var legacyCache = targets.SelectMany(selection => selection.FrameBlockIds)
+                .Distinct().ToDictionary(id => id,
+                    id => IsLegacyFrame(transaction, id));
+            bool Legacy(ObjectId id) => legacyCache.TryGetValue(id, out bool legacy) && legacy;
+
             int repairedInfoTables = targets.Where(selection =>
-                    !selection.FrameBlockIds.Any(id => IsLegacyFrame(transaction, id)))
+                    !selection.FrameBlockIds.Any(Legacy))
                 .Sum(selection => RepairSplitDrawingInfoTables(transaction, selection));
             bool needsTemplate = targets.Any(selection =>
                 !HasCurrentDrawingInfoTable(transaction, selection));
-            bool hasLegacyFrame = targets.SelectMany(selection => selection.FrameBlockIds)
-                .Distinct().Any(id => IsLegacyFrame(transaction, id));
+            bool hasLegacyFrame = legacyCache.Values.Any(legacy => legacy);
             if (!needsTemplate && !hasLegacyFrame)
             {
                 EnsureProjectNameDefaults(ctx.Db, transaction, targets);
@@ -81,7 +87,7 @@ namespace UNCAD.Features.Fill
                     foreach (FillSelection selection in targets)
                     {
                         ObjectId[] legacyFrames = selection.FrameBlockIds.Distinct()
-                            .Where(id => IsLegacyFrame(transaction, id)).ToArray();
+                            .Where(Legacy).ToArray();
                         foreach (ObjectId frameId in legacyFrames)
                         {
                             ReplaceDefinition(ctx.Db, transaction, frameId,
@@ -230,14 +236,18 @@ namespace UNCAD.Features.Fill
         private static void EnsureProjectNameDefaults(Database database,
             Transaction transaction, IEnumerable<FillSelection> selections)
         {
+            // Definitions are shared across frames; check the PROJECT_NAME tag
+            // once per definition before ever write-opening a reference.
+            var definitionsWithoutTag = new HashSet<ObjectId>();
             foreach (ObjectId id in selections.SelectMany(selection =>
                 selection.FrameBlockIds ?? Array.Empty<ObjectId>()).Distinct())
             {
-                BlockReference frame = transaction.GetObject(id, OpenMode.ForWrite, true)
+                BlockReference frame = transaction.GetObject(id, OpenMode.ForRead, true)
                     as BlockReference;
                 if (frame == null) continue;
                 ObjectId definitionId = frame.IsDynamicBlock
                     ? frame.DynamicBlockTableRecord : frame.BlockTableRecord;
+                if (definitionsWithoutTag.Contains(definitionId)) continue;
                 BlockTableRecord definition = transaction.GetObject(definitionId,
                     OpenMode.ForRead, true) as BlockTableRecord;
                 AttributeDefinition projectDefinition = definition?.Cast<ObjectId>()
@@ -246,7 +256,12 @@ namespace UNCAD.Features.Fill
                     .FirstOrDefault(attribute => attribute != null
                         && !attribute.Constant && string.Equals(attribute.Tag,
                             ProjectNameTag, StringComparison.OrdinalIgnoreCase));
-                if (projectDefinition == null) continue;
+                if (projectDefinition == null)
+                {
+                    definitionsWithoutTag.Add(definitionId);
+                    continue;
+                }
+                frame.UpgradeOpen();
                 if (!string.Equals(projectDefinition.TextString, DefaultProjectName,
                     StringComparison.Ordinal))
                 {

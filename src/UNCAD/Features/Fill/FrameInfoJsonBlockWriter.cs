@@ -153,9 +153,62 @@ namespace UNCAD.Features.Fill
         /// contain a frameinfo_json insert. The legacy frame geometry and attributes remain
         /// untouched; only a dedicated invisible metadata block is added at the frame center.
         /// </summary>
+        /// <summary>
+        /// One sweep over the current space listing every standalone
+        /// frameinfo_json insert and its position. Scanning once per batch and
+        /// sharing the result replaces the previous per-frame O(entities) scan
+        /// inside the write transaction.
+        /// </summary>
+        internal sealed class MetadataBlockIndex
+        {
+            private readonly List<KeyValuePair<ObjectId, Point3d>> _blocks;
+
+            private MetadataBlockIndex(List<KeyValuePair<ObjectId, Point3d>> blocks)
+            {
+                _blocks = blocks;
+            }
+
+            internal static MetadataBlockIndex Scan(CadContext ctx,
+                Transaction transaction)
+            {
+                var blocks = new List<KeyValuePair<ObjectId, Point3d>>();
+                BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                    OpenMode.ForRead, false) as BlockTableRecord;
+                if (space == null) return new MetadataBlockIndex(blocks);
+                foreach (ObjectId id in space)
+                {
+                    BlockReference candidate = transaction.GetObject(id,
+                        OpenMode.ForRead, true) as BlockReference;
+                    if (!IsFrameInfoJsonBlock(transaction, candidate)) continue;
+                    blocks.Add(new KeyValuePair<ObjectId, Point3d>(id,
+                        candidate.Position));
+                }
+                return new MetadataBlockIndex(blocks);
+            }
+
+            internal ObjectId FindNear(Extents3d extents)
+            {
+                foreach (KeyValuePair<ObjectId, Point3d> block in _blocks)
+                {
+                    Point3d p = block.Value;
+                    if (p.X >= extents.MinPoint.X && p.X <= extents.MaxPoint.X
+                        && p.Y >= extents.MinPoint.Y && p.Y <= extents.MaxPoint.Y)
+                        return block.Key;
+                }
+                return ObjectId.Null;
+            }
+        }
+
         internal static FillWriteResult FillOrMigrate(CadContext ctx, Transaction transaction,
             ObjectId[] frameBlockIds, ObjectId[] blockIds, MachineRow machine,
             FillReviewData review, string commandName)
+            => FillOrMigrate(ctx, transaction, frameBlockIds, blockIds, machine,
+                review, commandName, null);
+
+        internal static FillWriteResult FillOrMigrate(CadContext ctx, Transaction transaction,
+            ObjectId[] frameBlockIds, ObjectId[] blockIds, MachineRow machine,
+            FillReviewData review, string commandName,
+            MetadataBlockIndex sharedIndex)
         {
             var targets = new List<ObjectId>(blockIds ?? Array.Empty<ObjectId>());
             var seen = new HashSet<ObjectId>(targets);
@@ -168,7 +221,8 @@ namespace UNCAD.Features.Fill
 
                 // Prefer an existing standalone metadata insert so legacy drawings that
                 // already carry one do not gain a second JSON source of truth.
-                ObjectId existing = FindExistingNearFrame(ctx, transaction, frame);
+                ObjectId existing = FindExistingNearFrame(ctx, transaction, frame,
+                    sharedIndex ?? MetadataBlockIndex.Scan(ctx, transaction));
                 if (!existing.IsNull)
                 {
                     targets.Add(existing);
@@ -283,24 +337,12 @@ namespace UNCAD.Features.Fill
         }
 
         private static ObjectId FindExistingNearFrame(CadContext ctx,
-            Transaction transaction, BlockReference frame)
+            Transaction transaction, BlockReference frame, MetadataBlockIndex index)
         {
             try
             {
                 Extents3d extents = frame.GeometricExtents;
-                BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
-                    OpenMode.ForRead) as BlockTableRecord;
-                if (space == null) return ObjectId.Null;
-                foreach (ObjectId id in space)
-                {
-                    BlockReference candidate = transaction.GetObject(id,
-                        OpenMode.ForRead, true) as BlockReference;
-                    if (!IsFrameInfoJsonBlock(transaction, candidate)) continue;
-                    Point3d p = candidate.Position;
-                    if (p.X >= extents.MinPoint.X && p.X <= extents.MaxPoint.X
-                        && p.Y >= extents.MinPoint.Y && p.Y <= extents.MaxPoint.Y)
-                        return id;
-                }
+                return index.FindNear(extents);
             }
             catch
             {
