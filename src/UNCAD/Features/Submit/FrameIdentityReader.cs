@@ -30,7 +30,11 @@ namespace UNCAD.Features.Submit
                 region.EntityIds.ToArray()));
         }
 
-        /// <summary>Reads several frame identities with one read-only CAD transaction.</summary>
+        /// <summary>
+        /// Reads several frame identities with one read-only CAD transaction.
+        /// The result is index-aligned with <paramref name="regions"/>: a null
+        /// region yields a null entry instead of shifting later records.
+        /// </summary>
         internal static IReadOnlyList<SubmissionRecord> ReadAll(CadContext ctx,
             IEnumerable<FrameRegionGroup> regions)
         {
@@ -40,7 +44,11 @@ namespace UNCAD.Features.Submit
             {
                 foreach (FrameRegionGroup region in regions ?? Enumerable.Empty<FrameRegionGroup>())
                 {
-                    if (region == null) continue;
+                    if (region == null)
+                    {
+                        result.Add(null);
+                        continue;
+                    }
                     try
                     {
                         result.Add(Read(ctx, transaction, region));

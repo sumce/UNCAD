@@ -264,12 +264,22 @@ namespace UNCAD.Features.XLayout
 
         private static void RemoveDuplicateMarkers(CadContext ctx, Transaction transaction)
         {
-            BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
-                OpenMode.ForRead) as BlockTableRecord;
-            if (space == null) return;
-            foreach (ObjectId id in space.Cast<ObjectId>().ToArray())
+            // XData filter selects only entities carrying the marker RegApp;
+            // a plain space sweep would open and inspect every entity.
+            var filter = new SelectionFilter(new TypedValue[]
             {
-                Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                new TypedValue((int)DxfCode.Start, "LINE"),
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName,
+                    XLayoutDuplicateMarker.ApplicationName)
+            });
+            Editor editor = ctx.Ed;
+            PromptSelectionResult matches = editor.SelectAll(filter);
+            if (matches.Status != PromptStatus.OK) return;
+            foreach (SelectedObject selected in matches.Value)
+            {
+                if (selected == null || selected.ObjectId.IsNull) continue;
+                Entity entity = transaction.GetObject(selected.ObjectId,
+                    OpenMode.ForRead, true) as Entity;
                 if (entity == null || !XLayoutDuplicateMarker.IsMarker(entity)) continue;
                 entity.UpgradeOpen();
                 entity.Erase();

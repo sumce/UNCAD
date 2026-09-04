@@ -53,6 +53,11 @@ namespace UNCAD.Cad
             Dictionary<string, List<ObjectId>> previous = metadataReady
                 ? CollectPrevious(ctx, transaction, options.AnnotationKind, sourceHandles)
                 : new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
+            // Legacy (pre-metadata) duplicates are matched against the whole
+            // space. Collect a snapshot once instead of re-scanning the space
+            // for every source curve (O(sources × entities) before).
+            List<LegacyCandidate> legacy = CollectLegacyCandidates(ctx, transaction,
+                options.ColorIndex);
 
             ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
             foreach (ObjectId id in sourceIds)
@@ -144,8 +149,7 @@ namespace UNCAD.Cad
                     // Remove output produced by pre-metadata versions as well. The
                     // generated ObjectIds are excluded so a metadata registration
                     // failure cannot erase the result we just added.
-                    RemoveLegacyDuplicates(ctx, transaction, id, text, selected.Entities,
-                        options.ColorIndex);
+                    RemoveLegacyDuplicates(transaction, legacy, text, selected.Entities);
                     ErasePrevious(transaction, previous, id.Handle.ToString());
                     selected.Detach();
                     count++;
@@ -201,69 +205,115 @@ namespace UNCAD.Cad
             previous.Remove(sourceHandle);
         }
 
-        /// <summary>
-        /// Older versions did not write metadata, so their exact-overlap output cannot be
-        /// associated by source handle. Remove only untagged, same-colour entities whose
-        /// geometry/text is identical to the newly generated result.
-        /// </summary>
-        private static void RemoveLegacyDuplicates(CadContext ctx, Transaction transaction,
-            ObjectId sourceId, DBText currentText, IEnumerable<Entity> currentCurves,
-            short colorIndex)
+        /// <summary>Snapshot of one untagged entity that may be a legacy duplicate.</summary>
+        private sealed class LegacyCandidate
         {
+            public ObjectId Id;
+            public bool IsText;
+            public string Text;
+            public Point3d Position;
+            public Type CurveType;
+            public double Length;
+            public Point3d ExtentsMin;
+            public Point3d ExtentsMax;
+        }
+
+        /// <summary>
+        /// One pass over the space collecting untagged, same-colour DBText and
+        /// Curve snapshots. Older versions did not write metadata, so their
+        /// exact-overlap output cannot be associated by source handle.
+        /// </summary>
+        private static List<LegacyCandidate> CollectLegacyCandidates(CadContext ctx,
+            Transaction transaction, short colorIndex)
+        {
+            var result = new List<LegacyCandidate>();
             BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
                 OpenMode.ForRead, false) as BlockTableRecord;
-            if (space == null) return;
-            Entity[] generated = (currentCurves ?? Enumerable.Empty<Entity>()).ToArray();
-            HashSet<ObjectId> generatedIds = new HashSet<ObjectId>(
-                generated.Select(entity => entity.ObjectId));
+            if (space == null) return result;
             foreach (ObjectId id in space)
             {
                 Entity candidate = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                if (candidate == null || candidate.ObjectId == sourceId
-                    || candidate.ObjectId == currentText.ObjectId
-                    || generatedIds.Contains(candidate.ObjectId)
-                    || (ParallelAnnotationMetadata.TryRead(candidate,
-                        out _, out _))) continue;
-                if (candidate is DBText oldText && oldText.ColorIndex == colorIndex
-                    && string.Equals(oldText.TextString, currentText.TextString,
-                        StringComparison.Ordinal)
-                    && SamePoint(oldText.Position, currentText.Position))
+                if (candidate == null
+                    || ParallelAnnotationMetadata.TryRead(candidate, out _, out _))
+                    continue;
+                if (candidate is DBText text)
                 {
-                    candidate.UpgradeOpen();
-                    candidate.Erase();
+                    if (text.ColorIndex != colorIndex) continue;
+                    result.Add(new LegacyCandidate
+                    {
+                        Id = id, IsText = true, Text = text.TextString,
+                        Position = text.Position
+                    });
                     continue;
                 }
-                if (!(candidate is Curve oldCurve) || oldCurve.ColorIndex != colorIndex)
+                if (!(candidate is Curve curve) || curve.ColorIndex != colorIndex)
                     continue;
+                try
+                {
+                    Extents3d extents = curve.GeometricExtents;
+                    result.Add(new LegacyCandidate
+                    {
+                        Id = id, IsText = false, CurveType = curve.GetType(),
+                        Length = GetLength(curve),
+                        ExtentsMin = extents.MinPoint, ExtentsMax = extents.MaxPoint
+                    });
+                }
+                catch { }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Erases snapshot candidates whose geometry/text is identical to the
+        /// newly generated result. The snapshot was taken before this run, so
+        /// freshly generated ObjectIds can never be erased.
+        /// </summary>
+        private static void RemoveLegacyDuplicates(Transaction transaction,
+            List<LegacyCandidate> legacy, DBText currentText,
+            IEnumerable<Entity> currentCurves)
+        {
+            if (legacy == null || legacy.Count == 0) return;
+            Entity[] generated = (currentCurves ?? Enumerable.Empty<Entity>()).ToArray();
+            foreach (LegacyCandidate candidate in legacy)
+            {
+                if (candidate.IsText)
+                {
+                    if (string.Equals(candidate.Text, currentText.TextString,
+                            StringComparison.Ordinal)
+                        && SamePoint(candidate.Position, currentText.Position))
+                        EraseLegacy(transaction, candidate.Id);
+                    continue;
+                }
                 foreach (Entity created in generated)
                 {
-                    if (created is Curve newCurve && SameCurve(oldCurve, newCurve))
+                    if (created is Curve newCurve
+                        && candidate.CurveType == newCurve.GetType())
                     {
-                        candidate.UpgradeOpen();
-                        candidate.Erase();
-                        break;
+                        try
+                        {
+                            Extents3d b = newCurve.GeometricExtents;
+                            if (SamePoint(candidate.ExtentsMin, b.MinPoint)
+                                && SamePoint(candidate.ExtentsMax, b.MaxPoint)
+                                && Math.Abs(candidate.Length - GetLength(newCurve)) <= 1e-6)
+                            {
+                                EraseLegacy(transaction, candidate.Id);
+                                break;
+                            }
+                        }
+                        catch { }
                     }
                 }
             }
         }
 
+        private static void EraseLegacy(Transaction transaction, ObjectId id)
+        {
+            Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true) as Entity;
+            if (entity != null && !entity.IsErased) entity.Erase();
+        }
+
         private static bool SamePoint(Point3d first, Point3d second)
             => first.DistanceTo(second) <= 1e-6;
-
-        private static bool SameCurve(Curve first, Curve second)
-        {
-            if (first == null || second == null
-                || first.GetType() != second.GetType()) return false;
-            try
-            {
-                Extents3d a = first.GeometricExtents;
-                Extents3d b = second.GeometricExtents;
-                return SamePoint(a.MinPoint, b.MinPoint)
-                    && SamePoint(a.MaxPoint, b.MaxPoint)
-                    && Math.Abs(GetLength(first) - GetLength(second)) <= 1e-6;
-            }
-            catch { return false; }
-        }
 
         private static bool IsSupported(Curve curve)
             => curve is Line || curve is Polyline || curve is Polyline2d;

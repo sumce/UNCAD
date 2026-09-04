@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Autodesk.AutoCAD.DatabaseServices;
+using UNCAD.Infra;
 
 namespace UNCAD.Features.XLayout
 {
@@ -41,7 +42,12 @@ namespace UNCAD.Features.XLayout
                     new TypedValue((int)DxfCode.ExtendedDataAsciiString,
                         sourceHandle.Trim()));
             }
-            catch { /* Marker metadata is optional; the yellow geometry remains valid. */ }
+            catch (Exception ex)
+            {
+                // Marker metadata is optional; the yellow geometry remains valid.
+                // But a silent swallow here makes stale markers unremovable, so log it.
+                Log.Warn("XLAYOUT 重复回路标记元数据写入失败: " + ex.Message);
+            }
         }
 
         internal static bool IsMarker(Entity entity)

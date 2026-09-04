@@ -101,11 +101,38 @@ namespace UNCAD.Core.Report
             ICell cell = row.CreateCell(index);
             cell.SetCellValue(value ?? "");
             if (!bold || workbook == null) return;
-            IFont font = workbook.CreateFont();
-            font.IsBold = true;
-            ICellStyle style = workbook.CreateCellStyle();
-            style.SetFont(font);
+            // NPOI caps a workbook at 64k cell styles; reuse one shared bold
+            // style per workbook instead of creating one for every cell.
+            ICellStyle style = BoldStyle(workbook);
             cell.CellStyle = style;
+        }
+
+        private static ICellStyle BoldStyle(IWorkbook workbook)
+        {
+            foreach (ICellStyle existing in GetStyles(workbook))
+            {
+                if (existing != null && existing.GetFont(workbook) is IFont font
+                    && font.IsBold)
+                    return existing;
+            }
+            IFont boldFont = workbook.CreateFont();
+            boldFont.IsBold = true;
+            ICellStyle style = workbook.CreateCellStyle();
+            style.SetFont(boldFont);
+            return style;
+        }
+
+        private static System.Collections.Generic.List<ICellStyle> GetStyles(
+            IWorkbook workbook)
+        {
+            var styles = new System.Collections.Generic.List<ICellStyle>();
+            short count = (short)workbook.NumCellStyles;
+            for (short i = 0; i < count; i++)
+            {
+                try { styles.Add(workbook.GetCellStyleAt(i)); }
+                catch { }
+            }
+            return styles;
         }
     }
 }
