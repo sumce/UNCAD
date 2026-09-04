@@ -53,7 +53,7 @@ namespace UNCAD.Tests
                 Description = "User description",
                 Unit = "pcs",
                 Quantity = "7",
-                Code = "8.9",
+                Code = "8.2",
                 CatalogMatched = false
             };
             var generated = new TableFillRow
