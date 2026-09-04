@@ -72,7 +72,8 @@
       "Bash(sed -i 's/VersionLabel = \"2.2.2\"/VersionLabel = \"2.2.3\"/' src/UNCAD/Infra/ProductMetadata.cs)",
       "Bash(sed -i 's/Assert.Equal\\(\"2.2.2\", info.Version\\);/Assert.Equal\\(\"2.2.3\", info.Version\\);/' tests/UNCAD.Tests/ConfigKeysTests.cs)",
       "Bash(sed -i 's/v2\\\\.2\\\\.2 解析构建时间/v2.2.3 解析构建时间/; s/\\(2\\\\.2\\\\.2+build\\\\./\\(2.2.3+build./' src/UNCAD/Infra/TrustedClock.cs)",
-      "Bash(grep -v \"//\")"
+      "Bash(grep -v \"//\")",
+      "Bash(powershell -NoProfile -Command \"[Diagnostics.FileVersionInfo]::GetVersionInfo\\('D:\\\\Workspace\\\\UNCAD\\\\src\\\\UNCAD\\\\bin\\\\Release\\\\net48\\\\UNCAD.dll'\\).ProductVersion\")"
     ]
   }
 }

@@ -19,7 +19,7 @@
     <FileVersion>2.2.3.1</FileVersion>
     <Version>2.2.3.1</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
-    <InformationalVersion>2.2.3+build.$(BuildTimestampCompact)</InformationalVersion>
+    <InformationalVersion>2.2.3 SP2+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->
