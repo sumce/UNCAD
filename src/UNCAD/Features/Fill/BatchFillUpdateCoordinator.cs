@@ -71,8 +71,14 @@ namespace UNCAD.Features.Fill
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 foreach (FrameRegionGroup region in regions)
+                {
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
                     Preflight(ctx, readTransaction, region, options, workbook, plans,
                         errors, cableRequests);
+                    clock.Stop();
+                    Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
+                        + clock.ElapsedMilliseconds + " ms");
+                }
                 readTransaction.Commit();
             }
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
@@ -188,7 +194,7 @@ namespace UNCAD.Features.Fill
             }
 
             // U1U 强化:批量确认前展示每框的上次更新时间/用户与清单并排对比。
-            // 没有任何更新信息的图框不进入对比窗。
+            // 没有任何更新信息的图框不进入对比窗;全部无记录时直接跳过弹窗。
             var compareItems = plans
                 .Select(plan => FillFeature.BuildCompareItem(
                     plan.Machine, plan.Rows, plan.ExistingRows, plan.PreviousRecord,
@@ -197,6 +203,15 @@ namespace UNCAD.Features.Fill
                 .ToList();
             if (compareItems.Count == 0)
                 ctx.Write("\n[U1U] 所选图框均无上次更新记录，跳过对比。");
+            else
+            using (var compareForm = new FillUpdateCompareForm(compareItems))
+            {
+                if (AcApplication.ShowModalDialog(compareForm) != DialogResult.OK)
+                {
+                    ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
+                    return;
+                }
+            }
             using (var compareForm = new FillUpdateCompareForm(compareItems))
             {
                 if (AcApplication.ShowModalDialog(compareForm) != DialogResult.OK)
