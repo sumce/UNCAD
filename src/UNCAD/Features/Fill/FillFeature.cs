@@ -39,8 +39,12 @@ namespace UNCAD.Features.Fill
         private static void ExecuteCore(CadContext ctx, bool updateMode)
         {
             ProductMetadata.EnsureCommandAllowed(updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
+            var stageClock = System.Diagnostics.Stopwatch.StartNew();
             // 阶段1：检测写入目标和统计文字。此阶段只读图纸，不产生任何修改。
             FillSelection selection = FillSelectionCollector.Collect(ctx);
+            stageClock.Stop();
+            Log.Info((updateMode ? "U1U" : "U1F") + " 选集收集: "
+                + stageClock.ElapsedMilliseconds + " ms");
             if (selection.IsEmpty)
             {
                 ctx.Write("\n[U1F] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
@@ -48,7 +52,10 @@ namespace UNCAD.Features.Fill
             }
             if (updateMode)
             {
+                stageClock.Restart();
                 FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selection.SourceIds);
+                stageClock.Stop();
+                Log.Info("U1U 图框分区: " + stageClock.ElapsedMilliseconds + " ms");
                 if (regions.SelectedFrameCount > 1)
                 {
                     if (regions.Errors.Count > 0)
@@ -89,7 +96,12 @@ namespace UNCAD.Features.Fill
             FillWorkbookSnapshot workbook;
             try
             {
+                stageClock.Restart();
                 workbook = FillWorkbookSnapshot.Load(path);
+                stageClock.Stop();
+                Log.Info((updateMode ? "U1U" : "U1F") + " 机台Excel加载"
+                    + (workbook.MachineCacheHit ? "(缓存)" : "(重新解析)") + ": "
+                    + stageClock.ElapsedMilliseconds + " ms");
             }
             catch (System.Exception ex)
             {
