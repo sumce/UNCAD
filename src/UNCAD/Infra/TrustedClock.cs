@@ -153,10 +153,13 @@ namespace UNCAD.Infra
                 socket.ReceiveTimeout = (int)timeout.TotalMilliseconds;
                 socket.SendTimeout = (int)timeout.TotalMilliseconds;
                 var addresses = System.Net.Dns.GetHostAddresses(host);
-                var endpoint = new System.Net.IPEndPoint(
-                    addresses.FirstOrDefault(address =>
-                        address.AddressFamily == AddressFamily.InterNetwork)
-                    ?? addresses[0], 123);
+                // Socket is IPv4-only; an IPv6-only answer must fail this host
+                // explicitly instead of throwing on addresses[0] and silently
+                // dropping the whole network sync.
+                var ipv4 = addresses.FirstOrDefault(address =>
+                    address.AddressFamily == AddressFamily.InterNetwork);
+                if (ipv4 == null) return null;
+                var endpoint = new System.Net.IPEndPoint(ipv4, 123);
                 socket.SendTo(packet, endpoint);
                 var buffer = new byte[48];
                 System.Net.EndPoint remote = endpoint;

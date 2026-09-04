@@ -53,6 +53,13 @@ namespace UNCAD.Infra
     internal static class OnlineLicenseMonitor
     {
         internal static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+        /// <summary>
+        /// 上一次在线验证成功后的宽限期：期间轮询失败（抖动/断网/服务器维护）
+        /// 不禁用命令，超过宽限期才按不可用处理。水位线由 TrustedClock 背书，
+        /// 回拨系统时间无法延长。仅适用于"没拿到服务器结论"的场景
+        /// （pending/unavailable）；服务器明确返回过期/吊销仍立即停用。
+        /// </summary>
+        internal static readonly TimeSpan GracePeriod = TimeSpan.FromMinutes(30);
         private const int TimeoutMilliseconds = 8000;
         private const int MaximumBytes = 64 * 1024;
         private static readonly string LicenseHost = DecodeHost();
@@ -129,6 +136,34 @@ namespace UNCAD.Infra
             }
         }
 
+        /// <summary>
+        /// 上次在线验证成功距今是否仍在宽限期内。时间基准取
+        /// TrustedClock（水位线钳制），回拨系统时间无法借此延长授权。
+        /// </summary>
+        internal static bool IsWithinGraceWindow()
+        {
+            if (StoredAuthorizationCode.Length == 0) return false;
+            string stamp = Settings.Get(ConfigKeys.LicenseLastValidatedUtc, "");
+            if (!DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out DateTimeOffset last)) return false;
+            DateTime now = TrustedClock.NowUtc(out bool clockTampered);
+            if (clockTampered) return false;
+            return now - last.UtcDateTime <= GracePeriod;
+        }
+
+        private static void WriteLastValidatedStamp()
+        {
+            try
+            {
+                Settings.Set(ConfigKeys.LicenseLastValidatedUtc,
+                    TrustedClock.NowUtc(out _).ToString("o", CultureInfo.InvariantCulture));
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("记录授权验证水位线失败: " + ex.Message);
+            }
+        }
+
         internal static OnlineLicenseState ValidateAndSave(string authorizationCode)
         {
             if (Interlocked.Exchange(ref _refreshing, 1) != 0)
@@ -194,6 +229,7 @@ namespace UNCAD.Infra
         {
             _current = state;
             QueueNotice(state);
+            if (state.IsActive) WriteLastValidatedStamp();
             if (state.IsActive)
             {
                 _pendingActivationReason = null;
@@ -380,10 +416,14 @@ namespace UNCAD.Infra
 
         private static DateTimeOffset ReadServerTime(HttpWebResponse response)
         {
+            // 到期判定只信服务器时间。Date 头缺失/不可解析时必须失败——
+            // 退回本地时钟会让回拨的机器拿到"未到期"的假结论。
             string value = response.Headers[HttpResponseHeader.Date];
-            return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
+            if (!DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out DateTimeOffset parsed) ? parsed : DateTimeOffset.UtcNow;
+                out DateTimeOffset parsed))
+                throw new InvalidDataException("授权服务器响应缺少有效时间戳。");
+            return parsed;
         }
 
         private static string ReadBody(Stream input)

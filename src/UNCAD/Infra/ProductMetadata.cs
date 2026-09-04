@@ -102,10 +102,16 @@ namespace UNCAD.Infra
             LicenseSnapshot license = EvaluateLicense(mode, expiresAt, now);
             string edition = mode == LicenseMode.Perpetual
                 ? "正式版" : "项目授权版";
+            // 宽限期：仅在"没拿到服务器结论"（pending/unavailable）时生效。
+            // 服务器明确返回过期/吊销仍立即停用；时钟回拨同样不享受宽限。
+            bool grace = !clockTampered && !online.IsActive
+                && (online.Status == "pending" || online.Status == "unavailable")
+                && OnlineLicenseMonitor.IsWithinGraceWindow();
             license.StatusText = online.IsActive && !license.IsExpired
-                ? edition + " · 在线有效" : online.Status == "pending"
-                    ? "UNCAD Pro · 在线验证中" : edition + " · 在线不可用";
-            if (!online.HasResponse || !online.IsActive)
+                ? edition + " · 在线有效" : grace
+                    ? edition + " · 离线宽限中（等待服务器验证）" : online.Status == "pending"
+                        ? "UNCAD Pro · 在线验证中" : edition + " · 在线不可用";
+            if (!online.HasResponse || (!online.IsActive && !grace))
             {
                 license.IsExpired = true;
                 license.BlockReason = online.FailureReason;

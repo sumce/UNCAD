@@ -62,6 +62,8 @@ namespace UNCAD.Infra
         public const string ClockWatermarkUtc = "UNC_CLOCK_WATERMARK";
         // 专业版在线授权码：由用户首次使用时输入，升级后继续沿用。
         public const string OnlineAuthorizationCode = "UNC_ONLINE_AUTHORIZATION_CODE";
+        // 上次在线授权验证成功的 UTC 时间戳（宽限期判定，防回拨由 TrustedClock 背书）。
+        public const string LicenseLastValidatedUtc = "UNC_LICENSE_LAST_OK";
         // （旧单列模式遗留键，暂保留兼容）
         public const string FillCol = "UNC_FILL_COL";
         public const string FillStartRow = "UNC_FILL_START_ROW";
