@@ -42,7 +42,7 @@ namespace UNCAD.Core.Fill
         }
 
         private static string NormalizeName(string value)
-            => new string((value ?? "").Where(character =>
+            => new string(BlockNameNormalizer.RemoveMangledSuffix(value).Where(character =>
                 !char.IsWhiteSpace(character) && character != '_' && character != '-').ToArray())
                 .ToLowerInvariant();
     }

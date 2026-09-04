@@ -220,7 +220,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ReadAll_FallsBackToHouYunColumnsWhenUnifiedFormulaCacheIsMissing()
+        public void ReadAll_RejectsRowsWhenUnifiedMachineIdFormulaCacheIsMissing()
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("机台需求+进度表1");
@@ -243,7 +243,9 @@ namespace UNCAD.Tests
 
             try
             {
-                Assert.Empty(ExcelMachineReader.ReadAll(workbook));
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                    ExcelMachineReader.ReadAll(workbook));
+                Assert.Contains("U_机台ID", error.Message);
             }
             finally { workbook.Close(); }
         }

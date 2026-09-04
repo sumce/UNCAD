@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -46,9 +45,11 @@ namespace UNCAD.Tests
             Assert.NotNull(entry);
             Assert.Equal("True", (string)entry.Attribute("LoadOnAutoCADStartup"));
             Assert.Equal("True", (string)entry.Attribute("LoadOnCommandInvocation"));
-            var declared = new HashSet<string>(entry.Element("Commands")
+            string[] declared = (entry.Element("Commands")
                 ?.Elements("Command").Select(item => (string)item.Attribute("Global"))
-                ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+                ?? Enumerable.Empty<string>()).ToArray();
+            Assert.Equal(declared.Length,
+                declared.Distinct(StringComparer.OrdinalIgnoreCase).Count());
             Assert.Equal(CommandIds.Registered.OrderBy(command => command),
                 declared.OrderBy(command => command), StringComparer.OrdinalIgnoreCase);
         }
@@ -63,6 +64,8 @@ namespace UNCAD.Tests
             Assert.Contains("current Windows user only", script);
             Assert.Contains("use AutoCAD RIBBON if hidden", script);
             Assert.Contains("$unexpectedCommands", script);
+            Assert.Contains("$duplicateCommands", script);
+            Assert.Contains("Assert-BundleChecksums $BundlePath", script);
             Assert.Contains("\"U1DWG\"", script);
         }
 
@@ -91,6 +94,7 @@ namespace UNCAD.Tests
             Assert.Contains("Recover-InterruptedInstall $parent $destination", script);
             Assert.Contains("Previous installation was restored and verified.", script);
             Assert.Contains("安装失败且回滚未完成", script);
+            Assert.Contains("-AllowMissingChecksums", script);
             Assert.DoesNotContain("Move-Item -LiteralPath $backup -Destination $destination -ErrorAction SilentlyContinue", script);
         }
 
@@ -125,7 +129,33 @@ namespace UNCAD.Tests
             Assert.Contains("-NoBuild rejected: source is newer than UNCAD.dll", script);
             Assert.Contains("Bundle UNCAD.dll does not match the verified build output", script);
             Assert.Contains("Get-FileHash $buildOutput -Algorithm SHA256", script);
+            Assert.Contains("Assert-TreeMatches (Split-Path -Parent $buildOutput) $bundle \"DLL payload\" \"*.dll\"", script);
             Assert.DoesNotContain("Web\\QuickLine3D", script);
+        }
+
+        [Fact]
+        public void PackagePipeline_UsesExplicitPayloadAllowList()
+        {
+            string[] expected =
+            {
+                "PackageContents.xml", "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll",
+                "NPOI.OpenXml4Net.dll", "NPOI.OpenXmlFormats.dll",
+                "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+                "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
+            };
+            string build = File.ReadAllText(RepoFile("build.ps1"));
+            string installer = File.ReadAllText(RepoFile("installer.ps1"));
+
+            Assert.Equal(expected.OrderBy(item => item),
+                PowerShellArray(build, "bundlePayloadFiles").OrderBy(item => item),
+                StringComparer.OrdinalIgnoreCase);
+            Assert.Equal(expected.OrderBy(item => item),
+                PowerShellArray(installer, "payloadFiles").OrderBy(item => item),
+                StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Unexpected bundle payload file", build);
+            Assert.Contains("Unexpected bundle payload file", installer);
+            Assert.Contains("bundle/UNCAD.bundle/checksums.sha256",
+                File.ReadAllText(RepoFile(".gitignore")));
         }
 
         [Fact]
@@ -178,6 +208,16 @@ namespace UNCAD.Tests
         private static XElement LoadManifest()
             => XDocument.Load(RepoFile("bundle", "UNCAD.bundle",
                 "PackageContents.xml")).Root;
+
+        private static string[] PowerShellArray(string script, string variable)
+        {
+            Match block = Regex.Match(script, @"\$" + Regex.Escape(variable)
+                + @"\s*=\s*@\((?<body>[\s\S]*?)\)", RegexOptions.CultureInvariant);
+            Assert.True(block.Success, "$" + variable + " array was not found.");
+            return Regex.Matches(block.Groups["body"].Value,
+                    "\"(?<value>[^\"]+)\"", RegexOptions.CultureInvariant)
+                .Cast<Match>().Select(match => match.Groups["value"].Value).ToArray();
+        }
 
         private static string RepoFile(params string[] parts)
         {

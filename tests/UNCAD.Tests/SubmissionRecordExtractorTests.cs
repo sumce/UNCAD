@@ -217,6 +217,39 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Extract_DoesNotCountCableDescriptionAsBridge()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddTableRow("1", "多芯电缆 XLPE",
+                "1.名称:电缆\\n2.配线形式:穿管或桥架敷设", "M", "12.5", "1.1");
+            source.AddTableRow("2", "桥架200*100",
+                "1.名称:桥架200*100", "M", "3.2", "2.1");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("12.5", record.CableMeters);
+            Assert.Equal("3.2", record.BridgeMeters);
+            Assert.Equal("桥架200*100 3.2M", record.BridgeInfo);
+        }
+
+        [Fact]
+        public void Extract_ClassifiesUncodedCableTrayAsBridgeOnly()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddTableRow("1", "电缆桥架200*100", "", "M", "4", "");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("", record.CableMeters);
+            Assert.Equal("4", record.BridgeMeters);
+            Assert.Equal("电缆桥架200*100 4M", record.BridgeInfo);
+        }
+
+        [Fact]
         public void Extract_CountsTableRowsEvenWhenNoMaterialsAreRecognized()
         {
             var source = new SubmissionSourceData();

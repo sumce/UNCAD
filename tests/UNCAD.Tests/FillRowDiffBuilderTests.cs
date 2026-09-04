@@ -59,6 +59,92 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_DuplicateCodeReportsUnpairedExistingRowAsRemoved()
+        {
+            var existing = new List<TableFillRow>
+            {
+                Row("Cable A", "10", "1.1"),
+                Row("Cable B", "20", "1.1")
+            };
+            var planned = new List<TableFillRow> { Row("Cable A", "10", "1.1") };
+
+            List<FillRowDiff> diffs = FillRowDiffBuilder.Build(existing, planned);
+
+            Assert.Equal(2, diffs.Count);
+            Assert.Equal(FillRowDiff.StatusKept, diffs[0].Status);
+            Assert.Equal(FillRowDiff.StatusRemoved, diffs[1].Status);
+            Assert.Equal("20", diffs[1].OldQuantity);
+
+            Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
+                FillRowDiffBuilder.BuildSides(existing, planned);
+            Assert.Equal(FillRowDiff.StatusKept, sides.Item1[0].Status);
+            Assert.Equal(FillRowDiff.StatusRemoved, sides.Item1[1].Status);
+            Assert.Equal(FillRowDiff.StatusKept, Assert.Single(sides.Item2).Status);
+        }
+
+        [Fact]
+        public void Build_DuplicateCodeReportsUnpairedPlannedRowAsAdded()
+        {
+            var existing = new List<TableFillRow> { Row("Cable A", "10", "1.1") };
+            var planned = new List<TableFillRow>
+            {
+                Row("Cable A", "10", "1.1"),
+                Row("Cable B", "20", "1.1")
+            };
+
+            List<FillRowDiff> diffs = FillRowDiffBuilder.Build(existing, planned);
+
+            Assert.Equal(2, diffs.Count);
+            Assert.Equal(FillRowDiff.StatusKept, diffs[0].Status);
+            Assert.Equal(FillRowDiff.StatusAdded, diffs[1].Status);
+            Assert.Equal("20", diffs[1].NewQuantity);
+
+            Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
+                FillRowDiffBuilder.BuildSides(existing, planned);
+            Assert.Equal(FillRowDiff.StatusKept, Assert.Single(sides.Item1).Status);
+            Assert.Equal(FillRowDiff.StatusKept, sides.Item2[0].Status);
+            Assert.Equal(FillRowDiff.StatusAdded, sides.Item2[1].Status);
+        }
+
+        [Fact]
+        public void Build_CodeLessDuplicateNamesMatchByOccurrence()
+        {
+            var existing = new List<TableFillRow>
+            {
+                Row("Custom", "10"),
+                Row("Custom", "20")
+            };
+            var planned = new List<TableFillRow>
+            {
+                Row("custom", "10"),
+                Row("CUSTOM", "25")
+            };
+
+            List<FillRowDiff> diffs = FillRowDiffBuilder.Build(existing, planned);
+
+            Assert.Equal(FillRowDiff.StatusKept, diffs[0].Status);
+            Assert.Equal(FillRowDiff.StatusQuantity, diffs[1].Status);
+            Assert.Equal("20", diffs[1].OldQuantity);
+            Assert.Equal("25", diffs[1].NewQuantity);
+        }
+
+        [Fact]
+        public void BuildSides_RightSideMarksMatchedQuantityChange()
+        {
+            var existing = new List<TableFillRow> { Row("Cable", "10", "1.1") };
+            var planned = new List<TableFillRow> { Row("Cable", "12", "1.1") };
+
+            Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
+                FillRowDiffBuilder.BuildSides(existing, planned);
+
+            FillRowDiff right = Assert.Single(sides.Item2);
+            Assert.Equal(FillRowDiff.StatusQuantity, right.Status);
+            Assert.True(right.Changed);
+            Assert.Equal("10", right.OldQuantity);
+            Assert.Equal("12", right.NewQuantity);
+        }
+
+        [Fact]
         public void ReadRows_SkipsHeaderAndOrdinalRowsKeepContent()
         {
             var source = new SubmissionSourceData();

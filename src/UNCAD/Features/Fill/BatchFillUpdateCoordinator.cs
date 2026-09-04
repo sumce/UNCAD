@@ -8,6 +8,7 @@ using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
+using UNCAD.Core.Submission;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 using UNCAD.UI;
@@ -110,8 +111,9 @@ namespace UNCAD.Features.Fill
                                 workbook.Catalog);
                         if (plan.HoseWasMissingBeforeCableChoice
                             && plan.Review?.FlexibleConduitItem() != null)
-                            FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
-                                plan.Review, workbook.Catalog, options.Planning);
+                            if (!FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
+                                    plan.Review, workbook.Catalog, options.Planning, true))
+                                return;
                     }
                 }
             }
@@ -178,6 +180,7 @@ namespace UNCAD.Features.Fill
             }
 
             string automaticExcelPath;
+            IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions;
             try
             {
                 AutomaticSubmissionService.ValidateIdentityKeys(plans.Select(plan =>
@@ -185,6 +188,8 @@ namespace UNCAD.Features.Fill
                         plan.Machine.CircuitName)));
                 automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
                     plans.Select(plan => plan.Machine.MachineId));
+                automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
+                    automaticExcelPath, plans.Select(plan => plan.Machine.MachineId));
             }
             catch (System.Exception ex)
             {
@@ -220,6 +225,18 @@ namespace UNCAD.Features.Fill
                 if (AcApplication.ShowModalDialog(confirmation) != DialogResult.OK) return;
             }
 
+            try
+            {
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
+            }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[U1U] BOQ 文件在确认期间发生变化，图纸未修改: "
+                    + ex.Message);
+                return;
+            }
+
             AutomaticSubmissionWriteResult automaticExcel;
             int tableRows = 0;
             int frameBlocks = 0;
@@ -235,6 +252,10 @@ namespace UNCAD.Features.Fill
                     plans.Select(plan => plan.Machine.MachineId))))
             try
             {
+                // Close the gap between the post-confirmation check and batch snapshot.
+                // BeginWrite performs the final check after the CAD work is prepared.
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
@@ -328,9 +349,22 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Error("U1U batch write failed", ex);
-                ctx.Write("\n[U1U] 批量写入失败，整批已回滚: " + ex.Message);
-                MessageBox.Show(Owner(), "批量写入失败，所有图框修改均已回滚。\r\n\r\n" + ex.Message,
+                System.Exception reported = ex;
+                string rollbackStatus = "所有图框和 BOQ 修改均已回滚。";
+                try { outputBatch.Rollback(); }
+                catch (System.Exception rollbackError)
+                {
+                    reported = new AggregateException(
+                        "CAD 图框已回滚，但部分 BOQ 文件无法安全恢复。",
+                        ex, rollbackError);
+                    rollbackStatus = "CAD 图框已回滚，但部分 BOQ 文件无法安全恢复；"
+                        + "已保留当前文件，请先检查错误再继续更新。";
+                }
+                Log.Error("U1U batch write failed", reported);
+                ctx.Write("\n[U1U] 批量写入失败；" + rollbackStatus + " "
+                    + reported.Message);
+                MessageBox.Show(Owner(), "批量写入失败；" + rollbackStatus
+                    + "\r\n\r\n" + reported.Message,
                     "U1U", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -457,8 +491,20 @@ namespace UNCAD.Features.Fill
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
-            FillFeature.ApplyRuanguanLength(ctx, selection, review, workbook.Catalog,
-                options.Planning);
+            try
+            {
+                if (!FillFeature.ApplyRuanguanLength(ctx, selection, review,
+                        workbook.Catalog, options.Planning, true))
+                {
+                    errors.Add(prefix + "Ruanguan 软管长度无法确认。");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add(prefix + ex.Message);
+                return;
+            }
             bool hoseWasMissingBeforeCableChoice = review.FlexibleConduitItem() == null;
             List<FillReviewItem> unresolved = review.Items.Where(item =>
                 item.RequiresCatalogConfirmation).ToList();

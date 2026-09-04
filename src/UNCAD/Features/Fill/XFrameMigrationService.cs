@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Core.Fill;
 
 namespace UNCAD.Features.Fill
 {
@@ -141,7 +142,8 @@ namespace UNCAD.Features.Fill
                 ? frame.DynamicBlockTableRecord : frame.BlockTableRecord;
             BlockTableRecord definition = transaction.GetObject(definitionId,
                 OpenMode.ForRead, true) as BlockTableRecord;
-            return definition != null && string.Equals(definition.Name,
+            return definition != null && string.Equals(
+                BlockNameNormalizer.RemoveMangledSuffix(definition.Name),
                 FrameRegionCollector.SupportedFrameName,
                 StringComparison.OrdinalIgnoreCase);
         }

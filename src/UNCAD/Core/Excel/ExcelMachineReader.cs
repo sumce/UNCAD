@@ -127,7 +127,10 @@ namespace UNCAD.Core.Excel
                     continue;
 
                 MachineRow machine = ToUnifiedRow(row, columns, merged);
-                if (!string.IsNullOrWhiteSpace(machine.MachineId)) result.Add(machine);
+                if (string.IsNullOrWhiteSpace(machine.MachineId))
+                    throw new InvalidDataException("机台数据表第 " + (rowIndex + 1)
+                        + " 行存在回路名称，但 U_机台ID 为空或公式结果未保存。");
+                result.Add(machine);
             }
             return result;
         }

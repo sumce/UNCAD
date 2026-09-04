@@ -73,7 +73,43 @@ namespace UNCAD.Tests
             }
         }
 
-        private static byte[] WorkbookBytes()
+        [Fact]
+        public void CacheKey_IncludesQueryParameters()
+        {
+            string first = MachineWorkbookSource.CacheKey(
+                new Uri("https://example.test/data.xlsx?tenant=A"));
+            string second = MachineWorkbookSource.CacheKey(
+                new Uri("https://example.test/data.xlsx?tenant=B"));
+
+            Assert.NotEqual(first, second);
+        }
+
+        [Fact]
+        public void ValidateWorkbook_AcceptsValidSchemaWithoutDataRows()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uncad_empty_"
+                + Guid.NewGuid().ToString("N") + ".xlsx");
+            File.WriteAllBytes(path, WorkbookBytes(false));
+            try { MachineWorkbookSource.ValidateWorkbook(path); }
+            finally { if (File.Exists(path)) File.Delete(path); }
+        }
+
+        [Fact]
+        public void ValidateWorkbook_ReportsDownloadedHtmlAsInvalidData()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uncad_html_"
+                + Guid.NewGuid().ToString("N") + ".xlsx");
+            File.WriteAllText(path, "<html>login required</html>");
+            try
+            {
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                    MachineWorkbookSource.ValidateWorkbook(path));
+                Assert.Contains("无法解析", error.Message);
+            }
+            finally { if (File.Exists(path)) File.Delete(path); }
+        }
+
+        private static byte[] WorkbookBytes(bool includeData = true)
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("机台数据");
@@ -84,11 +120,15 @@ namespace UNCAD.Tests
                 "U220 1P3W 1P20A", "236", "20", "插座盘", "2F", "2/T", "化学实验室",
                 "1F", "1P20A" };
             var header = sheet.CreateRow(0);
-            var row = sheet.CreateRow(1);
             for (int index = 0; index < headers.Length; index++)
             {
                 header.CreateCell(index).SetCellValue(headers[index]);
-                row.CreateCell(index).SetCellValue(values[index]);
+            }
+            if (includeData)
+            {
+                var row = sheet.CreateRow(1);
+                for (int index = 0; index < headers.Length; index++)
+                    row.CreateCell(index).SetCellValue(values[index]);
             }
             using (var stream = new MemoryStream())
             {

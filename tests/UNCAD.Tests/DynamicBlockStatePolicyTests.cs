@@ -11,8 +11,24 @@ namespace UNCAD.Tests
         [InlineData("Device_Build20260716")]
         [InlineData("Device Build20260716")]
         [InlineData("device-build20260716")]
+        [InlineData("Device_Build20260716$0$")]
+        [InlineData("Device_Build20260716$0$$12$")]
         public void DeviceBlockName_AcceptsObservedNameVariants(string name)
             => Assert.True(DynamicBlockStatePolicy.IsDeviceBlock(name));
+
+        [Theory]
+        [InlineData("upstream$0$")]
+        [InlineData("upstream$0$$2$")]
+        public void UpstreamBlockName_AcceptsXmergeSuffixes(string name)
+            => Assert.True(DynamicBlockStatePolicy.IsUpstreamBlock(name));
+
+        [Theory]
+        [InlineData("Ruanguan", "Ruanguan")]
+        [InlineData("Ruanguan$0$", "Ruanguan")]
+        [InlineData("Ruanguan$0$$12$", "Ruanguan")]
+        public void BlockNameNormalizer_RemovesOnlyXmergeSuffixes(string name,
+            string expected)
+            => Assert.Equal(expected, BlockNameNormalizer.RemoveMangledSuffix(name));
 
         [Theory]
         [InlineData("插座5孔")]

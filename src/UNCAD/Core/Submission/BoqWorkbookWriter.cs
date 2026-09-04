@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using UNCAD.Core.IO;
 using NPOI.SS.UserModel;
@@ -10,6 +11,53 @@ using NPOI.XSSF.UserModel;
 
 namespace UNCAD.Core.Submission
 {
+    internal sealed class BoqExternalModificationException : IOException
+    {
+        public BoqExternalModificationException(string message) : base(message) { }
+        public BoqExternalModificationException(string message, Exception innerException)
+            : base(message, innerException) { }
+    }
+
+    internal sealed class BoqWorkbookRevision
+    {
+        public BoqWorkbookRevision(string fullPath, bool exists, byte[] fingerprint)
+        {
+            FullPath = fullPath;
+            Exists = exists;
+            Fingerprint = fingerprint;
+        }
+
+        public string FullPath { get; }
+        public bool Exists { get; }
+        public byte[] Fingerprint { get; }
+    }
+
+    internal enum BoqWorkbookWriteState
+    {
+        Untouched,
+        Replaced,
+        Restored
+    }
+
+    /// <summary>Reports whether a failed BOQ write still needs batch-level recovery.</summary>
+    internal sealed class BoqWorkbookWriteProgress
+    {
+        public BoqWorkbookWriteState State { get; private set; }
+        public byte[] WrittenFingerprint { get; private set; }
+
+        internal void MarkReplaced(byte[] fingerprint)
+        {
+            State = BoqWorkbookWriteState.Replaced;
+            WrittenFingerprint = fingerprint;
+        }
+
+        internal void MarkRestored()
+        {
+            State = BoqWorkbookWriteState.Restored;
+            WrittenFingerprint = null;
+        }
+    }
+
     /// <summary>将已绘制清单写入固定 BOQ 模板，每个项目编码只更新工程量列。</summary>
     public static class BoqWorkbookWriter
     {
@@ -91,6 +139,32 @@ namespace UNCAD.Core.Submission
             workbook.Close();
         }
 
+        internal static BoqWorkbookRevision CaptureRevision(string targetPath)
+        {
+            string fullPath = Path.GetFullPath(targetPath);
+            bool exists = File.Exists(fullPath);
+            return new BoqWorkbookRevision(fullPath, exists,
+                exists ? ComputeFingerprint(fullPath) : null);
+        }
+
+        internal static void ValidateRevision(BoqWorkbookRevision revision,
+            string phase = "确认期间")
+        {
+            if (revision == null) throw new ArgumentNullException(nameof(revision));
+            bool exists = File.Exists(revision.FullPath);
+            if (revision.Exists && !exists)
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在" + phase + "被删除，图纸和清单均未修改。");
+            if (!revision.Exists && exists)
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在" + phase + "被其他程序创建，未覆盖该文件。");
+            if (revision.Exists
+                && !SameFingerprint(revision.Fingerprint,
+                    ComputeFingerprint(revision.FullPath)))
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在" + phase + "发生外部修改，未覆盖最新内容。");
+        }
+
         public static void Write(string targetPath, string templatePath,
             IEnumerable<SubmissionRecord> records)
             => Write(targetPath, templatePath, records, false);
@@ -101,6 +175,35 @@ namespace UNCAD.Core.Submission
         /// </summary>
         public static void Write(string targetPath, string templatePath,
             IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials)
+            => WriteCore(targetPath, templatePath, records, allowEmptyMaterials,
+                null, null, null);
+
+        // Keeps the read/replace race deterministic in unit tests without changing public callers.
+        internal static void Write(string targetPath, string templatePath,
+            IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
+            Action beforeReplace)
+            => WriteCore(targetPath, templatePath, records, allowEmptyMaterials,
+                beforeReplace, null, null);
+
+        internal static void Write(string targetPath, string templatePath,
+            IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
+            Action beforeReplace, Action afterReplace)
+            => WriteCore(targetPath, templatePath, records, allowEmptyMaterials,
+                beforeReplace, afterReplace, null);
+
+        internal static void WriteTracked(string targetPath, string templatePath,
+            IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
+            BoqWorkbookWriteProgress progress, Action beforeReplace = null,
+            Action afterReplace = null)
+        {
+            if (progress == null) throw new ArgumentNullException(nameof(progress));
+            WriteCore(targetPath, templatePath, records, allowEmptyMaterials,
+                beforeReplace, afterReplace, progress);
+        }
+
+        private static void WriteCore(string targetPath, string templatePath,
+            IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
+            Action beforeReplace, Action afterReplace, BoqWorkbookWriteProgress progress)
         {
             if (string.IsNullOrWhiteSpace(targetPath))
                 throw new ArgumentException("BOQ 输出文件路径为空。", nameof(targetPath));
@@ -124,10 +227,12 @@ namespace UNCAD.Core.Submission
             Directory.CreateDirectory(folder);
             string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
             bool existedBeforeWrite = false;
+            byte[] originalFingerprint = null;
             string verificationBackup = null;
             IWorkbook workbook = null;
             IDisposable updateLock = null;
             bool replacementApplied = false;
+            byte[] writtenFingerprint = null;
             try
             {
                 updateLock = FileUpdateLock.Acquire(fullPath,
@@ -135,6 +240,7 @@ namespace UNCAD.Core.Submission
                 // Keep an independent rollback copy until the post-write readback has
                 // succeeded. Replace() removes its own transient backup immediately.
                 existedBeforeWrite = File.Exists(fullPath);
+                originalFingerprint = existedBeforeWrite ? ComputeFingerprint(fullPath) : null;
                 verificationBackup = existedBeforeWrite
                     ? fullPath + ".uncad-verify-" + Guid.NewGuid().ToString("N") + ".bak"
                     : null;
@@ -185,12 +291,34 @@ namespace UNCAD.Core.Submission
                     workbook.Write(stream);
                 workbook.Close();
                 workbook = null;
-                Replace(fullPath, temporary);
+                beforeReplace?.Invoke();
+                if (existedBeforeWrite)
+                {
+                    if (!File.Exists(fullPath))
+                        throw new BoqExternalModificationException(
+                            "BOQ 文件在读取期间被删除，未覆盖原文件。");
+                    if (!SameFingerprint(originalFingerprint, ComputeFingerprint(fullPath)))
+                        throw new BoqExternalModificationException(
+                            "BOQ 文件在读取期间发生外部修改，未覆盖最新内容。");
+                }
+                else if (File.Exists(fullPath))
+                {
+                    throw new BoqExternalModificationException(
+                        "BOQ 文件在写入期间被其他程序创建，未覆盖该文件。");
+                }
+                Replace(fullPath, temporary, originalFingerprint);
                 temporary = null;
                 replacementApplied = true;
+                writtenFingerprint = ComputeFingerprint(fullPath);
+                progress?.MarkReplaced(writtenFingerprint);
+                afterReplace?.Invoke();
                 // 写后回读硬对账:逐设备列核对非零工程量与内存聚合一致,
                 // 不一致(写入失败/外部改动)立即报错并回滚整个批次。
                 VerifyWrittenWorkbook(fullPath, templatePath, expected);
+                if (!File.Exists(fullPath)
+                    || !SameFingerprint(writtenFingerprint, ComputeFingerprint(fullPath)))
+                    throw new BoqExternalModificationException(
+                        "BOQ 文件在写后校验期间发生外部修改，未覆盖最新内容。");
             }
             catch (Exception error)
             {
@@ -198,10 +326,27 @@ namespace UNCAD.Core.Submission
                 {
                     try
                     {
-                        if (existedBeforeWrite && File.Exists(verificationBackup))
+                        if (!File.Exists(fullPath)
+                            || !SameFingerprint(writtenFingerprint,
+                                ComputeFingerprint(fullPath)))
+                            throw new BoqExternalModificationException(
+                                "BOQ 文件在写后校验期间发生外部修改，未使用旧备份覆盖最新版。");
+                        if (existedBeforeWrite)
+                        {
+                            if (!File.Exists(verificationBackup))
+                                throw new FileNotFoundException(
+                                    "BOQ 写后校验失败且恢复备份已丢失。", verificationBackup);
                             File.Copy(verificationBackup, fullPath, true);
+                        }
                         else if (!existedBeforeWrite && File.Exists(fullPath))
                             File.Delete(fullPath);
+                        progress?.MarkRestored();
+                    }
+                    catch (BoqExternalModificationException conflict)
+                    {
+                        throw new BoqExternalModificationException(
+                            "BOQ 写后校验失败，且文件已被外部修改；已保留外部最新版。",
+                            new AggregateException(error, conflict));
                     }
                     catch (Exception restoreError)
                     {
@@ -434,13 +579,39 @@ namespace UNCAD.Core.Submission
         private static string CellText(ICell cell)
             => cell == null ? "" : (cell.ToString() ?? "").Trim();
 
-        private static void Replace(string target, string temporary)
+        private static byte[] ComputeFingerprint(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
+            using (SHA256 sha256 = SHA256.Create())
+                return sha256.ComputeHash(stream);
+        }
+
+        private static bool SameFingerprint(byte[] left, byte[] right)
+        {
+            if (left == null || right == null || left.Length != right.Length) return false;
+            for (int index = 0; index < left.Length; index++)
+                if (left[index] != right[index]) return false;
+            return true;
+        }
+
+        private static void Replace(string target, string temporary,
+            byte[] expectedFingerprint)
         {
             if (!File.Exists(target))
             {
+                if (expectedFingerprint != null)
+                    throw new BoqExternalModificationException(
+                        "BOQ 文件在替换期间被删除，未覆盖原文件。");
                 File.Move(temporary, target);
                 return;
             }
+            if (expectedFingerprint == null)
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在替换期间被其他程序创建，未覆盖该文件。");
+            if (!SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
 
             string backup = target + ".bak";
             try
@@ -452,6 +623,11 @@ namespace UNCAD.Core.Submission
             catch (PlatformNotSupportedException) { }
             catch (NotSupportedException) { }
             catch (IOException) { }
+
+            if (!File.Exists(target)
+                || !SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
+                throw new BoqExternalModificationException(
+                    "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
 
             bool movedOriginal = false;
             try

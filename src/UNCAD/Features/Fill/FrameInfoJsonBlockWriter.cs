@@ -252,7 +252,8 @@ namespace UNCAD.Features.Fill
                 ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             BlockTableRecord definition = transaction.GetObject(definitionId,
                 OpenMode.ForRead, true) as BlockTableRecord;
-            return definition != null && string.Equals(definition.Name, DefinitionName,
+            return definition != null && string.Equals(
+                BlockNameNormalizer.RemoveMangledSuffix(definition.Name), DefinitionName,
                 StringComparison.OrdinalIgnoreCase);
         }
 

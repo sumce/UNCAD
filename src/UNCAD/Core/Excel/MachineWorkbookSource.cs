@@ -59,8 +59,7 @@ namespace UNCAD.Core.Excel
             try
             {
                 Download(uri, downloadPath);
-                if (ExcelMachineReader.ReadRows(downloadPath).Count == 0)
-                    throw new InvalidDataException("下载的机台 Excel 没有有效数据行。");
+                ValidateWorkbook(downloadPath);
                 if (File.Exists(cachePath) && SameContent(downloadPath, cachePath))
                     return new MachineWorkbookSourceResult { LocalPath = cachePath };
 
@@ -135,12 +134,30 @@ namespace UNCAD.Core.Excel
             }
         }
 
-        private static string CacheKey(Uri uri)
+        internal static void ValidateWorkbook(string path)
         {
+            try
+            {
+                ExcelMachineReader.ReadRows(path);
+            }
+            catch (InvalidDataException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("下载的机台 Excel 无法解析。", ex);
+            }
+        }
+
+        internal static string CacheKey(Uri uri)
+        {
+            if (uri == null) throw new ArgumentNullException(nameof(uri));
+            var normalized = new UriBuilder(uri) { Fragment = "" }.Uri.AbsoluteUri;
             using (SHA256 sha = SHA256.Create())
             {
                 byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(
-                    uri.GetLeftPart(UriPartial.Path)));
+                    normalized));
                 return BitConverter.ToString(hash, 0, 12).Replace("-", "").ToLowerInvariant();
             }
         }

@@ -374,11 +374,44 @@ namespace UNCAD.Core.Submission
                 .Select(TextParser.CleanMText).Where(line => !string.IsNullOrWhiteSpace(line)));
         }
 
+        private enum CableBridgeCategory
+        {
+            Unknown,
+            Cable,
+            Bridge
+        }
+
         private static bool IsCableRow(List<string> row)
-            => CodeStarts(row, "1.") || RowContains(row, "电缆");
+            => CableOrBridgeCategory(row) == CableBridgeCategory.Cable;
 
         private static bool IsBridgeRow(List<string> row)
-            => CodeStarts(row, "2.") || RowContains(row, "桥架");
+            => CableOrBridgeCategory(row) == CableBridgeCategory.Bridge;
+
+        private static CableBridgeCategory CableOrBridgeCategory(List<string> row)
+        {
+            string code = CatalogCodeFromRow(row);
+            if (code.Length > 0)
+            {
+                if (code.StartsWith("1.", StringComparison.OrdinalIgnoreCase))
+                    return CableBridgeCategory.Cable;
+                if (code.StartsWith("2.", StringComparison.OrdinalIgnoreCase))
+                    return CableBridgeCategory.Bridge;
+                return CableBridgeCategory.Unknown;
+            }
+
+            string name = Cell(row, 1);
+            if (Contains(name, "桥架")) return CableBridgeCategory.Bridge;
+            return Contains(name, "电缆")
+                ? CableBridgeCategory.Cable : CableBridgeCategory.Unknown;
+        }
+
+        private static string CatalogCodeFromRow(List<string> row)
+        {
+            string code = Cell(row, 5);
+            if (IsCatalogCode(code)) return code;
+            string legacyCode = Cell(row, 0);
+            return IsCatalogCode(legacyCode) ? legacyCode : "";
+        }
 
         private static bool IsFlexibleConduitRow(List<string> row)
             => CodeStarts(row, "3.8") || ((CodeStarts(row, "3.") || RowContains(row, "管"))

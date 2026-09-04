@@ -23,11 +23,12 @@ function Assert-FileMatches {
 }
 
 function Assert-TreeMatches {
-    param([string]$ExpectedRoot, [string]$ActualRoot, [string]$Label)
+    param([string]$ExpectedRoot, [string]$ActualRoot, [string]$Label,
+        [string]$Filter = "*")
     if (-not (Test-Path $ExpectedRoot -PathType Container)) { throw "Build output folder is missing: $Label" }
     if (-not (Test-Path $ActualRoot -PathType Container)) { throw "Bundle folder is missing: $Label" }
-    $expectedFiles = @(Get-ChildItem -LiteralPath $ExpectedRoot -File -Recurse)
-    $actualFiles = @(Get-ChildItem -LiteralPath $ActualRoot -File -Recurse)
+    $expectedFiles = @(Get-ChildItem -LiteralPath $ExpectedRoot -File -Recurse -Filter $Filter)
+    $actualFiles = @(Get-ChildItem -LiteralPath $ActualRoot -File -Recurse -Filter $Filter)
     if ($expectedFiles.Count -ne $actualFiles.Count) {
         throw "Bundle folder file count mismatch: $Label"
     }
@@ -53,8 +54,7 @@ if (-not (Test-Path $buildOutput -PathType Leaf)) { throw "Build output is missi
 if ($NoBuild) {
     $sourceInputs = @(Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
         Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".dwg", ".html", ".css", ".js", ".txt") })
-    $sourceInputs += @(Get-ChildItem $root -File |
-        Where-Object { $_.Extension -in @(".xlsx") })
+    $sourceInputs += @(Get-Item (Join-Path $root "BOQ_Template.xlsx"))
     # Scripts and manifests affect the package without touching UNCAD.dll;
     # their staleness must also reject a -NoBuild shortcut.
     $sourceInputs += @(Get-ChildItem $root -File |
@@ -72,6 +72,7 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
     throw "Bundle UNCAD.dll does not match the verified build output. Run release.ps1 without -NoBuild."
 }
 Assert-FileMatches $buildFrameTemplate $bundleFrameTemplate "Resources\XFrameTemplate.dwg"
+Assert-TreeMatches (Split-Path -Parent $buildOutput) $bundle "DLL payload" "*.dll"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.

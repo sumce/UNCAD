@@ -68,6 +68,32 @@ namespace UNCAD.Tests
             Assert.False(row.CatalogMatched);
         }
 
+        [Fact]
+        public void MergeRows_UnknownMeasurementPreservesDuplicateExistingRows()
+        {
+            var statistics = new CableStatResult
+            {
+                CableState = MeasurementState.Unknown,
+                BridgeState = MeasurementState.ConfirmedEmpty,
+                ConduitState = MeasurementState.ConfirmedEmpty
+            };
+
+            List<TableFillRow> result = FillUpdateRowMerger.MergeRows(
+                new List<TableFillRow> { Cable("") },
+                new[] { Cable("10"), Cable("20") }, statistics);
+
+            Assert.Equal(2, result.Count);
+            Assert.Equal("10", result[0].Quantity);
+            Assert.Equal("20", result[1].Quantity);
+        }
+
+        [Theory]
+        [InlineData("电缆桥架200*100", "")]
+        [InlineData("电缆桥架200*100", "2.1")]
+        public void ExistingCategory_ClassifiesCableTrayAsBridge(string name, string code)
+            => Assert.Equal(TableFillCategory.Bridge,
+                FillUpdateRowMerger.ExistingCategory(name, code));
+
         private static TableFillRow Cable(string quantity) => new TableFillRow
         {
             Category = TableFillCategory.Cable,

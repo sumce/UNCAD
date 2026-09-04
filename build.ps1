@@ -17,6 +17,10 @@ $buildArgs = @(
     "-p:AutoCADDir=$AutoCADDir"
 )
 if ($NoRestore) { $buildArgs += "--no-restore" }
+$cleanArgs = @("clean", $buildTarget, "-c", $Configuration,
+    "-p:AutoCADDir=$AutoCADDir")
+& dotnet $cleanArgs
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & dotnet $buildArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -44,6 +48,39 @@ if (-not $SkipBundle) {
     $bundleResources = Join-Path $bundleDir "Resources"
     if (-not (Test-Path $bundleResources)) { New-Item -ItemType Directory -Path $bundleResources -Force | Out-Null }
     Copy-Item -LiteralPath $frameTemplate -Destination (Join-Path $bundleResources "XFrameTemplate.dwg") -Force
+    $bundlePayloadFiles = @(
+        "PackageContents.xml", "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll",
+        "NPOI.OpenXml4Net.dll", "NPOI.OpenXmlFormats.dll",
+        "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
+    )
+    $checksumPath = Join-Path $bundleDir "checksums.sha256"
+    $actualPayloadFiles = @(Get-ChildItem -LiteralPath $bundleDir -File -Recurse |
+        Where-Object { $_.FullName -ne $checksumPath } |
+        ForEach-Object {
+            $_.FullName.Substring($bundleDir.Length).TrimStart(
+                [IO.Path]::DirectorySeparatorChar)
+        })
+    $missingPayloadFiles = @($bundlePayloadFiles | Where-Object {
+        $actualPayloadFiles -notcontains $_
+    })
+    $unexpectedPayloadFiles = @($actualPayloadFiles | Where-Object {
+        $bundlePayloadFiles -notcontains $_
+    })
+    if ($missingPayloadFiles.Count -gt 0) {
+        throw "Bundle payload is missing: $($missingPayloadFiles -join ', ')"
+    }
+    if ($unexpectedPayloadFiles.Count -gt 0) {
+        throw "Unexpected bundle payload file: $($unexpectedPayloadFiles -join ', ')"
+    }
+    $checksumLines = @($bundlePayloadFiles | Sort-Object | ForEach-Object {
+        $relative = $_
+        $fullPath = Join-Path $bundleDir $relative
+        "{0}  {1}" -f (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash,
+            $relative.Replace('\', '/')
+    })
+    [IO.File]::WriteAllLines($checksumPath, $checksumLines,
+        (New-Object Text.UTF8Encoding($false)))
     Write-Host "Bundle updated: $bundleDir" -ForegroundColor Green
     Write-Host "Run release.ps1 to create the complete installer ZIP; users start with setup.bat." -ForegroundColor Yellow
 }

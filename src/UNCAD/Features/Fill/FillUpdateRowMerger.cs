@@ -43,6 +43,7 @@ namespace UNCAD.Features.Fill
         {
             planned = planned ?? new List<TableFillRow>();
             statistics = statistics ?? new CableStatResult();
+            var matchedPlanned = new HashSet<TableFillRow>();
             foreach (TableFillRow old in existingRows ?? Enumerable.Empty<TableFillRow>())
             {
                 bool preserve = old.Category == TableFillCategory.Cable
@@ -54,9 +55,11 @@ namespace UNCAD.Features.Fill
                 if (!preserve) continue;
 
                 TableFillRow current = planned.FirstOrDefault(row =>
-                    row.Category == old.Category && SameMaterial(row, old));
+                    !matchedPlanned.Contains(row) && row.Category == old.Category
+                    && SameMaterial(row, old));
                 if (current != null)
                 {
+                    matchedPlanned.Add(current);
                     if (string.IsNullOrWhiteSpace(current.Quantity))
                         current.Quantity = old.Quantity;
                     if (string.IsNullOrWhiteSpace(current.Code)) current.Code = old.Code;
@@ -65,6 +68,7 @@ namespace UNCAD.Features.Fill
                     continue;
                 }
                 planned.Add(old);
+                matchedPlanned.Add(old);
             }
             return planned.OrderBy(row => row.SortOrder)
                 .ThenBy(row => row.Code ?? "", StringComparer.Ordinal).ToList();
@@ -89,7 +93,7 @@ namespace UNCAD.Features.Fill
                 // matched and BOQ export would later fail on code "1"/"2".
                 string catalogCode = CatalogCode(code) ? code
                     : CatalogCode(number) ? number : "";
-                TableFillCategory? category = ExistingCategory(number, name, catalogCode);
+                TableFillCategory? category = ExistingCategory(name, catalogCode);
                 if (!category.HasValue || category.Value == TableFillCategory.FlexibleConduit
                     || category.Value == TableFillCategory.Outlet
                     || category.Value == TableFillCategory.OutletPanel
@@ -111,21 +115,30 @@ namespace UNCAD.Features.Fill
             return existing;
         }
 
-        private static TableFillCategory? ExistingCategory(string number, string name,
-            string code)
+        internal static TableFillCategory? ExistingCategory(string name, string code)
         {
-            string key = code.Length > 0 ? code : number;
-            if (key.StartsWith("1.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("电缆", StringComparison.OrdinalIgnoreCase) >= 0)
-                return TableFillCategory.Cable;
-            if (key.StartsWith("2.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("桥架", StringComparison.OrdinalIgnoreCase) >= 0)
+            code = (code ?? "").Trim();
+            name = (name ?? "").Trim();
+            if (code.Length > 0)
+            {
+                if (code.StartsWith("1.", StringComparison.OrdinalIgnoreCase))
+                    return TableFillCategory.Cable;
+                if (code.StartsWith("2.", StringComparison.OrdinalIgnoreCase))
+                    return TableFillCategory.Bridge;
+                if (code.StartsWith("3.8", StringComparison.OrdinalIgnoreCase))
+                    return TableFillCategory.FlexibleConduit;
+                if (code.StartsWith("3.", StringComparison.OrdinalIgnoreCase))
+                    return TableFillCategory.RigidConduit;
+                return null;
+            }
+
+            if (name.IndexOf("桥架", StringComparison.OrdinalIgnoreCase) >= 0)
                 return TableFillCategory.Bridge;
-            if (key.StartsWith("3.8", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("软管", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (name.IndexOf("电缆", StringComparison.OrdinalIgnoreCase) >= 0)
+                return TableFillCategory.Cable;
+            if (name.IndexOf("软管", StringComparison.OrdinalIgnoreCase) >= 0)
                 return TableFillCategory.FlexibleConduit;
-            if (key.StartsWith("3.", StringComparison.OrdinalIgnoreCase)
-                || name.IndexOf("线管", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (name.IndexOf("线管", StringComparison.OrdinalIgnoreCase) >= 0)
                 return TableFillCategory.RigidConduit;
             return null;
         }

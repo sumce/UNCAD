@@ -25,6 +25,49 @@ function Test-IsAdministrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Assert-BundleChecksums {
+    param([string]$BundlePath, [string[]]$AllowedPayloadFiles)
+    $checksumPath = Join-Path $BundlePath "checksums.sha256"
+    if (-not (Test-Path $checksumPath -PathType Leaf)) {
+        throw "Bundle checksum manifest is missing: checksums.sha256"
+    }
+
+    $root = [IO.Path]::GetFullPath($BundlePath).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    $expected = @{}
+    $lineNumber = 0
+    foreach ($line in [IO.File]::ReadAllLines($checksumPath)) {
+        $lineNumber++
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ($line -notmatch '^(?<hash>[0-9A-Fa-f]{64})  (?<path>.+)$') {
+            throw "Invalid checksum entry at line $lineNumber."
+        }
+        $relative = $Matches.path.Replace('/', [IO.Path]::DirectorySeparatorChar)
+        if ([IO.Path]::IsPathRooted($relative) -or @($relative.Split([IO.Path]::DirectorySeparatorChar)) -contains '..') {
+            throw "Unsafe checksum path at line $lineNumber."
+        }
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $BundlePath $relative))
+        if (-not $fullPath.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Checksum path escapes the bundle at line $lineNumber."
+        }
+        if ($expected.ContainsKey($relative)) { throw "Duplicate checksum entry: $relative" }
+        if (-not (Test-Path $fullPath -PathType Leaf)) { throw "Checksummed file is missing: $relative" }
+        $actualHash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash
+        if ($actualHash -ne $Matches.hash) { throw "SHA-256 mismatch: $relative" }
+        $expected[$relative] = $true
+    }
+
+    $actualFiles = @(Get-ChildItem -LiteralPath $BundlePath -File -Recurse |
+        Where-Object { $_.FullName -ne $checksumPath })
+    foreach ($file in $actualFiles) {
+        $relative = $file.FullName.Substring($root.Length)
+        if ($AllowedPayloadFiles -notcontains $relative) {
+            throw "Unexpected bundle payload file: $relative"
+        }
+        if (-not $expected.ContainsKey($relative)) { throw "File is missing from checksums.sha256: $relative" }
+    }
+    if ($expected.Count -ne $actualFiles.Count) { throw "Bundle checksum file count mismatch." }
+}
+
 function Get-AutoCAD2022Path {
     $candidates = New-Object System.Collections.Generic.List[string]
     $roots = @(
@@ -48,7 +91,7 @@ function Get-AutoCAD2022Path {
 }
 
 function Get-PackageInfo {
-    param([string]$BundlePath)
+    param([string]$BundlePath, [switch]$AllowMissingChecksums)
     if (-not (Test-Path $BundlePath -PathType Container)) { throw "Bundle folder not found: $BundlePath" }
     $manifestPath = Join-Path $BundlePath "PackageContents.xml"
     if (-not (Test-Path $manifestPath -PathType Leaf)) { throw "PackageContents.xml is missing." }
@@ -71,6 +114,11 @@ function Get-PackageInfo {
         throw "Package must support both startup and command-triggered loading."
     }
     $declaredCommands = @($entry.Commands.Command | ForEach-Object { [string]$_.Global })
+    $duplicateCommands = @($declaredCommands | Group-Object |
+        Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name })
+    if ($duplicateCommands.Count -gt 0) {
+        throw "Package declares duplicate public commands: $($duplicateCommands -join ', ')"
+    }
     # The manifest is an explicit public API: only the current U1 family and seven retained
     # keyboard compatibility commands may trigger package loading. Keep this list in exact
     # sync with CommandIds.Registered; BundleLoadingTests enforces that contract.
@@ -90,13 +138,21 @@ function Get-PackageInfo {
     $moduleRelative = ([string]$entry.ModuleName).Replace("/", "\").TrimStart([char[]]".\")
     $modulePath = Join-Path $BundlePath $moduleRelative
     if (-not (Test-Path $modulePath -PathType Leaf)) { throw "Plugin module is missing: $moduleRelative" }
-    $requiredFiles = @(
+    $payloadFiles = @(
+        "PackageContents.xml",
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
-    foreach ($file in $requiredFiles) {
+    foreach ($file in $payloadFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }
+    }
+    $checksumPath = Join-Path $BundlePath "checksums.sha256"
+    if (Test-Path $checksumPath -PathType Leaf) {
+        Assert-BundleChecksums $BundlePath $payloadFiles
+    }
+    elseif (-not $AllowMissingChecksums) {
+        throw "Bundle checksum manifest is missing: checksums.sha256"
     }
     $version = [string]$package.AppVersion
     $licenseMode = [string]$package.LicenseMode
@@ -211,18 +267,25 @@ function Recover-InterruptedInstall {
 
     $destinationValid = $false
     if (Test-Path $Destination) {
-        try { Get-PackageInfo $Destination | Out-Null; $destinationValid = $true } catch { }
+        try {
+            Get-PackageInfo $Destination -AllowMissingChecksums | Out-Null
+            $destinationValid = $true
+        }
+        catch { }
     }
     if (-not $destinationValid) {
         foreach ($candidate in $candidates) {
             try {
-                Get-PackageInfo $candidate.FullName | Out-Null
+                $allowMissing = $candidate.Name -like "UNCAD.bundle.backup.*"
+                Get-PackageInfo $candidate.FullName `
+                    -AllowMissingChecksums:$allowMissing | Out-Null
                 if (Test-Path $Destination) {
                     Assert-TargetUnlocked $Destination 60
                     Remove-Item -LiteralPath $Destination -Recurse -Force
                 }
                 Move-Item -LiteralPath $candidate.FullName -Destination $Destination
-                Get-PackageInfo $Destination | Out-Null
+                Get-PackageInfo $Destination `
+                    -AllowMissingChecksums:$allowMissing | Out-Null
                 Write-SetupLog "Recovered interrupted installation from $($candidate.Name)." Yellow
                 $destinationValid = $true
                 break
@@ -349,7 +412,7 @@ function Install-Bundle {
                     Remove-Item -LiteralPath $destination -Recurse -Force -ErrorAction Stop
                 }
                 Move-Item -LiteralPath $backup -Destination $destination -ErrorAction Stop
-                Get-PackageInfo $destination | Out-Null
+                Get-PackageInfo $destination -AllowMissingChecksums | Out-Null
                 Write-SetupLog "Previous installation was restored and verified." Yellow
             }
             catch { $rollbackErrors.Add("回滚失败：$($_.Exception.Message)") }
@@ -382,12 +445,14 @@ function Uninstall-Bundle {
     $destination = if ($Scope -eq "User") { $UserBundle } else { $MachineBundle }
     if (-not (Test-Path $destination)) {
         Write-SetupLog "UNCAD is not installed at: $destination" Yellow
-        return
     }
-    Remove-Item -LiteralPath $destination -Recurse -Force
-    if (Test-Path $destination) { throw "Uninstall verification failed: folder still exists." }
+    else {
+        Assert-TargetUnlocked $destination
+        Remove-Item -LiteralPath $destination -Recurse -Force
+        if (Test-Path $destination) { throw "Uninstall verification failed: folder still exists." }
+    }
     Clear-CommandRegistrationCache
-    Write-SetupLog "UNINSTALLATION SUCCESSFUL: $destination" Green
+    Write-SetupLog "UNINSTALLATION CLEANUP COMPLETE: $destination" Green
 }
 
 function Invoke-ElevatedMode {
@@ -402,7 +467,9 @@ function Invoke-ElevatedMode {
 function Get-InstalledLabel {
     param([string]$Path)
     if (-not (Test-Path $Path)) { return "Not installed" }
-    try { return "Installed " + (Get-PackageInfo $Path).Version }
+    try {
+        return "Installed " + (Get-PackageInfo $Path -AllowMissingChecksums).Version
+    }
     catch { return "Invalid installation" }
 }
 

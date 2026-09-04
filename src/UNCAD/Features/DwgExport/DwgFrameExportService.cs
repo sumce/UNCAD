@@ -87,7 +87,9 @@ namespace UNCAD.Features.DwgExport
                         IGrouping<string, DwgExportFrame> machine = machineGroups[exportIndex];
                         string target = paths[exportIndex];
                         IReadOnlyList<DwgFramePlacement> layout = DwgExportLayout.Arrange(machine);
+                        batch.BeginWrite(target);
                         WriteMachine(ctx.Db, target, layout, machine.Key);
+                        batch.MarkWritten(target);
                     }
                     batch.Complete();
                 }

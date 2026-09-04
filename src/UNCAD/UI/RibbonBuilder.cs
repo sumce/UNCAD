@@ -15,11 +15,27 @@ namespace UNCAD.UI
         private static bool _idleAttached;
         private static bool _building;
         private static DateTime _retryAfterUtc;
+        private static RibbonTab _ownedTab;
 
         public static void Build()
         {
             AttachEvents();
             TryBuildSafely();
+        }
+
+        public static void Terminate()
+        {
+            if (_eventsAttached)
+            {
+                ComponentManager.ItemInitialized -= OnRibbonItemInitialized;
+                _eventsAttached = false;
+            }
+            if (_idleAttached)
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnApplicationIdle;
+                _idleAttached = false;
+            }
+            _ownedTab = null;
         }
 
         private static void AttachEvents()
@@ -70,19 +86,32 @@ namespace UNCAD.UI
             RibbonControl ribbon = ComponentManager.Ribbon;
             if (ribbon == null) return false;
             RibbonTab existing = ribbon.Tabs.Cast<RibbonTab>()
-                .FirstOrDefault(t => t.Id == TabId || t.Title == TabTitle);
-            if (existing != null)
+                .FirstOrDefault(t => string.Equals(t.Id, TabId,
+                    StringComparison.Ordinal));
+            if (existing != null && ReferenceEquals(existing, _ownedTab))
             {
                 existing.IsVisible = true;
                 return true;
             }
 
-            var tab = new RibbonTab { Id = TabId, Title = TabTitle, IsVisible = true };
-            foreach (RibbonPanelDefinition definition in RibbonCatalog.Panels)
-                tab.Panels.Add(BuildPanel(definition));
-            ribbon.Tabs.Add(tab);
-            Log.Info("Ribbon registered: " + TabTitle);
+            RibbonTab tab = existing ?? new RibbonTab();
+            SynchronizeTab(tab);
+            _ownedTab = tab;
+            if (existing == null) ribbon.Tabs.Add(tab);
+            Log.Info((existing == null ? "Ribbon registered: " : "Ribbon upgraded: ")
+                + TabTitle);
             return true;
+        }
+
+        internal static void SynchronizeTab(RibbonTab tab)
+        {
+            if (tab == null) throw new ArgumentNullException(nameof(tab));
+            RibbonPanel[] panels = RibbonCatalog.Panels.Select(BuildPanel).ToArray();
+            tab.Id = TabId;
+            tab.Title = TabTitle;
+            tab.IsVisible = true;
+            tab.Panels.Clear();
+            foreach (RibbonPanel panel in panels) tab.Panels.Add(panel);
         }
 
         private static RibbonPanel BuildPanel(RibbonPanelDefinition definition)

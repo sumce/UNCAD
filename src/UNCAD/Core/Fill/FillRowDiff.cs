@@ -37,23 +37,19 @@ namespace UNCAD.Core.Fill
             existing = existing ?? new List<TableFillRow>();
             planned = planned ?? new List<TableFillRow>();
 
-            var oldByKey = new Dictionary<string, TableFillRow>(StringComparer.OrdinalIgnoreCase);
-            foreach (TableFillRow row in existing)
-            {
-                string key = MatchKey(row);
-                if (key.Length > 0 && !oldByKey.ContainsKey(key)) oldByKey[key] = row;
-            }
-            var usedOld = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            MatchRows(existing, planned, out int[] existingToPlanned,
+                out int[] plannedToExisting);
 
             var diffs = new List<FillRowDiff>();
             int order = 0;
-            foreach (TableFillRow row in planned)
+            for (int plannedIndex = 0; plannedIndex < planned.Count; plannedIndex++)
             {
+                TableFillRow row = planned[plannedIndex];
                 order++;
-                string key = MatchKey(row);
-                if (key.Length > 0 && oldByKey.TryGetValue(key, out TableFillRow old))
+                int existingIndex = plannedToExisting[plannedIndex];
+                if (existingIndex >= 0)
                 {
-                    usedOld.Add(key);
+                    TableFillRow old = existing[existingIndex];
                     string oldQty = Normalize(old.Quantity);
                     string newQty = Normalize(row.Quantity);
                     bool changed = !string.Equals(oldQty, newQty, StringComparison.Ordinal);
@@ -83,12 +79,10 @@ namespace UNCAD.Core.Fill
                     Code = row.Code
                 });
             }
-            foreach (TableFillRow old in existing)
+            for (int existingIndex = 0; existingIndex < existing.Count; existingIndex++)
             {
-                string key = MatchKey(old);
-                if (key.Length > 0 && usedOld.Contains(key)) continue;
-                if (key.Length == 0 && planned.Any(row =>
-                        SameName(row, old) && usedOld.Add(MatchKey(old)))) continue;
+                if (existingToPlanned[existingIndex] >= 0) continue;
+                TableFillRow old = existing[existingIndex];
                 diffs.Add(new FillRowDiff
                 {
                     Status = FillRowDiff.StatusRemoved,
@@ -114,23 +108,15 @@ namespace UNCAD.Core.Fill
             existing = existing ?? new List<TableFillRow>();
             planned = planned ?? new List<TableFillRow>();
 
-            var plannedByKey = new Dictionary<string, TableFillRow>(
-                StringComparer.OrdinalIgnoreCase);
-            foreach (TableFillRow row in planned)
-            {
-                string key = MatchKey(row);
-                if (key.Length > 0 && !plannedByKey.ContainsKey(key))
-                    plannedByKey[key] = row;
-            }
-            var usedPlanned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            MatchRows(existing, planned, out int[] existingToPlanned,
+                out int[] plannedToExisting);
 
             var left = new List<FillRowDiff>();
-            foreach (TableFillRow old in existing)
+            for (int existingIndex = 0; existingIndex < existing.Count; existingIndex++)
             {
-                string key = MatchKey(old);
-                TableFillRow current = key.Length > 0
-                    && plannedByKey.TryGetValue(key, out TableFillRow found)
-                    ? found : null;
+                TableFillRow old = existing[existingIndex];
+                int plannedIndex = existingToPlanned[existingIndex];
+                TableFillRow current = plannedIndex >= 0 ? planned[plannedIndex] : null;
                 string oldQty = Normalize(old.Quantity);
                 if (current == null)
                 {
@@ -146,7 +132,6 @@ namespace UNCAD.Core.Fill
                     });
                     continue;
                 }
-                usedPlanned.Add(key);
                 string newQty = Normalize(current.Quantity);
                 left.Add(new FillRowDiff
                 {
@@ -164,20 +149,28 @@ namespace UNCAD.Core.Fill
 
             var right = new List<FillRowDiff>();
             int order = 0;
-            foreach (TableFillRow row in planned)
+            for (int plannedIndex = 0; plannedIndex < planned.Count; plannedIndex++)
             {
+                TableFillRow row = planned[plannedIndex];
                 order++;
-                string key = MatchKey(row);
-                bool matched = key.Length > 0 && usedPlanned.Contains(key);
+                int existingIndex = plannedToExisting[plannedIndex];
+                bool matched = existingIndex >= 0;
+                string oldQty = matched ? Normalize(existing[existingIndex].Quantity) : "";
+                string newQty = Normalize(row.Quantity);
+                bool quantityChanged = matched
+                    && !string.Equals(oldQty, newQty, StringComparison.Ordinal);
                 right.Add(new FillRowDiff
                 {
-                    Status = matched ? FillRowDiff.StatusKept : FillRowDiff.StatusAdded,
-                    Changed = !matched,
+                    Status = !matched ? FillRowDiff.StatusAdded
+                        : quantityChanged ? FillRowDiff.StatusQuantity
+                        : FillRowDiff.StatusKept,
+                    Changed = !matched || quantityChanged,
                     Order = order,
                     Name = row.Name,
                     Description = row.Description,
                     Unit = row.Unit,
-                    NewQuantity = Normalize(row.Quantity),
+                    OldQuantity = oldQty,
+                    NewQuantity = newQty,
                     Code = row.Code
                 });
             }
@@ -218,9 +211,36 @@ namespace UNCAD.Core.Fill
             return string.IsNullOrWhiteSpace(row.Name) ? "" : "N:" + row.Name.Trim();
         }
 
-        private static bool SameName(TableFillRow left, TableFillRow right)
-            => string.Equals((left.Name ?? "").Trim(), (right.Name ?? "").Trim(),
-                StringComparison.OrdinalIgnoreCase);
+        private static void MatchRows(IReadOnlyList<TableFillRow> existing,
+            IReadOnlyList<TableFillRow> planned, out int[] existingToPlanned,
+            out int[] plannedToExisting)
+        {
+            existingToPlanned = Enumerable.Repeat(-1, existing.Count).ToArray();
+            plannedToExisting = Enumerable.Repeat(-1, planned.Count).ToArray();
+            var available = new Dictionary<string, Queue<int>>(
+                StringComparer.OrdinalIgnoreCase);
+            for (int index = 0; index < existing.Count; index++)
+            {
+                string key = MatchKey(existing[index]);
+                if (key.Length == 0) continue;
+                if (!available.TryGetValue(key, out Queue<int> matches))
+                {
+                    matches = new Queue<int>();
+                    available.Add(key, matches);
+                }
+                matches.Enqueue(index);
+            }
+
+            for (int plannedIndex = 0; plannedIndex < planned.Count; plannedIndex++)
+            {
+                string key = MatchKey(planned[plannedIndex]);
+                if (key.Length == 0 || !available.TryGetValue(key,
+                    out Queue<int> matches) || matches.Count == 0) continue;
+                int existingIndex = matches.Dequeue();
+                existingToPlanned[existingIndex] = plannedIndex;
+                plannedToExisting[plannedIndex] = existingIndex;
+            }
+        }
 
         private static string Normalize(string value) => (value ?? "").Trim();
 

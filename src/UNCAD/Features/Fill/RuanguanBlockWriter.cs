@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 
 namespace UNCAD.Features.Fill
@@ -223,7 +224,8 @@ namespace UNCAD.Features.Fill
                 ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             var definition = transaction.GetObject(definitionId, OpenMode.ForRead, true)
                 as BlockTableRecord;
-            return definition != null && string.Equals(definition.Name, "Ruanguan",
+            return definition != null && string.Equals(
+                BlockNameNormalizer.RemoveMangledSuffix(definition.Name), "Ruanguan",
                 StringComparison.OrdinalIgnoreCase);
         }
 

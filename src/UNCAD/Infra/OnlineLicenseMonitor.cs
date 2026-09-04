@@ -16,6 +16,7 @@ namespace UNCAD.Infra
         public string Status { get; set; }
         public LicenseMode LicenseMode { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
+        public DateTimeOffset? ServerTime { get; set; }
         public string CustomerCode { get; set; }
         public string Company { get; set; }
         public string Licensee { get; set; }
@@ -370,6 +371,7 @@ namespace UNCAD.Infra
                 Status = status.Length == 0 ? "unknown" : status,
                 LicenseMode = licenseMode,
                 ExpiresAt = expiresAt,
+                ServerTime = serverNow,
                 CustomerCode = document.CustomerCode.Trim(),
                 Company = document.Company ?? "",
                 Licensee = document.Licensee ?? "",

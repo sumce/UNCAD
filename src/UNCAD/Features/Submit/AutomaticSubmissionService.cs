@@ -92,6 +92,19 @@ namespace UNCAD.Features.Submit
                 .Select(machineId => BoqWorkbookWriter.BuildTargetPath(outputRoot, machineId))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+        public static IReadOnlyList<BoqWorkbookRevision> CaptureTargetRevisions(
+            string outputRoot, IEnumerable<string> machineIds)
+            => TargetPaths(outputRoot, machineIds)
+                .Select(BoqWorkbookWriter.CaptureRevision).ToList();
+
+        public static void ValidateTargetRevisions(
+            IEnumerable<BoqWorkbookRevision> revisions)
+        {
+            foreach (BoqWorkbookRevision revision in revisions
+                ?? Enumerable.Empty<BoqWorkbookRevision>())
+                BoqWorkbookWriter.ValidateRevision(revision);
+        }
+
         private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
             Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
             FileBatchRollback externalBatch, bool inferLegacySocketPanels,
@@ -158,22 +171,41 @@ namespace UNCAD.Features.Submit
                 result.FilePath = "";
                 return result;
             }
-            Action writeRecords = () =>
+            Action<FileBatchRollback> writeRecords = batch =>
             {
                 foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsToWrite
                     .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
                 {
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
                     bool existed = File.Exists(target);
-                    BoqWorkbookWriter.Write(target, template, machineGroup,
-                        allowEmptyMaterials);
+                    var progress = new BoqWorkbookWriteProgress();
+                    batch?.BeginWrite(target);
+                    try
+                    {
+                        BoqWorkbookWriter.WriteTracked(target, template, machineGroup,
+                            allowEmptyMaterials, progress);
+                        batch?.MarkWritten(target, progress.WrittenFingerprint);
+                    }
+                    catch (BoqExternalModificationException)
+                    {
+                        batch?.CancelWrite(target);
+                        throw;
+                    }
+                    catch
+                    {
+                        if (progress.State == BoqWorkbookWriteState.Replaced)
+                            batch?.MarkWritten(target, progress.WrittenFingerprint);
+                        else
+                            batch?.CancelWrite(target);
+                        throw;
+                    }
                     result.AddedCount += machineGroup.Count();
                     if (existed) result.ReplacedCount++;
                 }
             };
             if (externalBatch != null)
             {
-                writeRecords();
+                writeRecords(externalBatch);
             }
             else
             {
@@ -183,7 +215,7 @@ namespace UNCAD.Features.Submit
                 {
                     try
                     {
-                        writeRecords();
+                        writeRecords(batch);
                         batch.Complete();
                     }
                     catch

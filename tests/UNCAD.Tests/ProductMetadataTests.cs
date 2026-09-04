@@ -51,5 +51,45 @@ namespace UNCAD.Tests
             Assert.False(license.IsExpired);
             Assert.Equal("无期限", license.ExpiryText);
         }
+
+        [Fact]
+        public void OnlineLicense_AllowsCommandsDuringOfflineGraceWindow()
+        {
+            var online = new OnlineLicenseState
+            {
+                HasResponse = false,
+                IsActive = false,
+                Status = "unavailable",
+                FailureReason = "暂时无法连接授权服务器。"
+            };
+
+            LicenseSnapshot license = ProductMetadata.EvaluateOnlineLicense(online,
+                DateTime.UtcNow, false, true);
+
+            Assert.False(license.IsExpired);
+            Assert.Contains("离线宽限中", license.StatusText);
+        }
+
+        [Fact]
+        public void OnlineLicense_UsesActiveServerVerdictInsteadOfFutureLocalClock()
+        {
+            var online = new OnlineLicenseState
+            {
+                HasResponse = true,
+                IsActive = true,
+                Status = "active",
+                LicenseMode = LicenseMode.Project,
+                ExpiresAt = new DateTimeOffset(2026, 10, 1, 0, 0, 0,
+                    TimeSpan.FromHours(8)),
+                ServerTime = new DateTimeOffset(2026, 9, 5, 0, 0, 0,
+                    TimeSpan.FromHours(8))
+            };
+
+            LicenseSnapshot license = ProductMetadata.EvaluateOnlineLicense(online,
+                new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc), true, false);
+
+            Assert.False(license.IsExpired);
+            Assert.Contains("在线有效", license.StatusText);
+        }
     }
 }

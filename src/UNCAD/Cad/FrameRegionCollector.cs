@@ -35,17 +35,10 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
         public const string XFrameName = "xframe";
 
-        // WblockCloneObjects with DuplicateRecordCloning.MangleName renames a
-        // collided definition to e.g. "xframe$0$" (nested collisions repeat the
-        // suffix).  Stripping the suffixes keeps merged drawings recognizable.
-        private static readonly System.Text.RegularExpressions.Regex MangledSuffix
-            = new System.Text.RegularExpressions.Regex(@"(\$\d+\$)+$",
-                System.Text.RegularExpressions.RegexOptions.Compiled);
-
         internal static bool IsSupportedFrameName(string name)
         {
             if (string.IsNullOrEmpty(name)) return false;
-            string normalized = MangledSuffix.Replace(name, "");
+            string normalized = BlockNameNormalizer.RemoveMangledSuffix(name);
             return string.Equals(normalized, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalized, XFrameName, StringComparison.OrdinalIgnoreCase);
         }
@@ -396,11 +389,12 @@ namespace UNCAD.Cad
                 ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             BlockTableRecord record = transaction.GetObject(recordId, OpenMode.ForRead, true)
                 as BlockTableRecord;
-            if (record != null && string.Equals(record.Name, "frameinfo_json",
+            string name = BlockNameNormalizer.RemoveMangledSuffix(record?.Name);
+            if (string.Equals(name, "frameinfo_json",
                 StringComparison.OrdinalIgnoreCase)) return true;
             return record != null
-                && (DynamicBlockStatePolicy.IsUpstreamBlock(record.Name)
-                    || record.Name.StartsWith("upstream_info",
+                && (DynamicBlockStatePolicy.IsUpstreamBlock(name)
+                    || name.StartsWith("upstream_info",
                         StringComparison.OrdinalIgnoreCase));
         }
 

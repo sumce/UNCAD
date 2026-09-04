@@ -22,6 +22,7 @@ _ReSharper*/
 bundle/UNCAD.bundle/*.dll
 bundle/UNCAD.bundle/**/*.dll
 bundle/UNCAD.bundle/Web/
+bundle/UNCAD.bundle/checksums.sha256
 
 # Local diagnostics and sensitive input data
 tmp/

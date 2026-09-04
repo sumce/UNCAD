@@ -96,36 +96,52 @@ namespace UNCAD.Infra
 
         public static LicenseSnapshot CurrentLicense()
         {
-            // 防回拨时钟:有效时间取水位线最大值,检测到回拨立即视为过期。
+            // 本地可信时间只保护离线宽限；在线有效期以服务器响应为准。
             DateTime now = TrustedClock.NowUtc(out bool clockTampered);
             OnlineLicenseState online = OnlineLicenseMonitor.Current;
+            // 宽限期：仅在"没拿到服务器结论"（pending/unavailable）时生效。
+            // 服务器明确返回过期/吊销仍立即停用；时钟回拨同样不享受宽限。
+            bool withinGrace = (online.Status == "pending" || online.Status == "unavailable")
+                && OnlineLicenseMonitor.IsWithinGraceWindow();
+            return EvaluateOnlineLicense(online, now, clockTampered, withinGrace);
+        }
+
+        internal static LicenseSnapshot EvaluateOnlineLicense(OnlineLicenseState online,
+            DateTime trustedNow, bool clockTampered, bool withinGrace)
+        {
+            if (online == null) throw new ArgumentNullException(nameof(online));
             LicenseMode mode = online.HasResponse
                 ? online.LicenseMode : LicenseMode.Project;
             string expiresAt = online.ExpiresAt.HasValue
                 ? online.ExpiresAt.Value.ToString("o", CultureInfo.InvariantCulture)
                 : "";
-            LicenseSnapshot license = EvaluateLicense(mode, expiresAt, now);
+            DateTime evaluationTime = online.HasResponse && online.ServerTime.HasValue
+                ? online.ServerTime.Value.UtcDateTime : trustedNow;
+            LicenseSnapshot license = EvaluateLicense(mode, expiresAt, evaluationTime);
             string edition = mode == LicenseMode.Perpetual
                 ? "正式版" : "项目授权版";
-            // 宽限期：仅在"没拿到服务器结论"（pending/unavailable）时生效。
-            // 服务器明确返回过期/吊销仍立即停用；时钟回拨同样不享受宽限。
-            bool grace = !clockTampered && !online.IsActive
+            bool serverActive = online.HasResponse && online.IsActive;
+            bool grace = !clockTampered && !serverActive
                 && (online.Status == "pending" || online.Status == "unavailable")
-                && OnlineLicenseMonitor.IsWithinGraceWindow();
-            license.StatusText = online.IsActive && !license.IsExpired
+                && withinGrace;
+            license.StatusText = serverActive
                 ? edition + " · 在线有效" : grace
                     ? edition + " · 离线宽限中（等待服务器验证）" : online.Status == "pending"
                         ? "UNCAD Pro · 在线验证中" : edition + " · 在线不可用";
-            if (!online.HasResponse || (!online.IsActive && !grace))
+            if (serverActive || grace)
             {
-                license.IsExpired = true;
-                license.BlockReason = online.FailureReason;
+                license.IsExpired = false;
+                license.BlockReason = "";
             }
-            if (clockTampered && !license.IsExpired)
+            else
             {
                 license.IsExpired = true;
-                license.StatusText = "已过期 · 检测到系统时间被回拨";
-                license.BlockReason = "检测到系统时间被回拨，授权验证失败。";
+                if (clockTampered)
+                {
+                    license.StatusText = "已过期 · 检测到系统时间被回拨";
+                    license.BlockReason = "检测到系统时间被回拨，授权验证失败。";
+                }
+                else license.BlockReason = online.FailureReason;
             }
             return license;
         }

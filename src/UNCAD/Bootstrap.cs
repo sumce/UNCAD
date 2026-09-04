@@ -114,6 +114,7 @@ namespace UNCAD
 
         public void Terminate()
         {
+            RibbonBuilder.Terminate();
             if (_licenseIdleAttached)
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnLicenseIdle;

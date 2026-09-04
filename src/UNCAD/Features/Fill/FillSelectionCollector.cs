@@ -321,7 +321,7 @@ namespace UNCAD.Features.Fill
                         OpenMode.ForRead, true) as BlockTableRecord;
                     if (definition != null)
                     {
-                        string name = definition.Name ?? "";
+                        string name = BlockNameNormalizer.RemoveMangledSuffix(definition.Name);
                         flags.IsFrame = FrameRegionCollector.IsSupportedFrameName(name);
                         flags.IsRuanguan = string.Equals(name, "Ruanguan",
                             StringComparison.OrdinalIgnoreCase);
@@ -527,26 +527,9 @@ namespace UNCAD.Features.Fill
         }
 
         private static string NormalizeMarker(string value)
-            => new string((value ?? "").Where(character =>
+            => new string(BlockNameNormalizer.RemoveMangledSuffix(value).Where(character =>
                 !char.IsWhiteSpace(character) && character != '_' && character != '-')
                 .ToArray()).ToLowerInvariant();
-
-        private static bool IsRuanguanBlock(Transaction tr, BlockReference block)
-        {
-            try
-            {
-                ObjectId definitionId = block.IsDynamicBlock
-                    ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-                var definition = tr.GetObject(definitionId, OpenMode.ForRead, true)
-                    as BlockTableRecord;
-                return definition != null && string.Equals(definition.Name, "Ruanguan",
-                    StringComparison.OrdinalIgnoreCase);
-            }
-            catch (System.Exception ex)
-            {
-                throw new InvalidOperationException("无法识别 Ruanguan 块。", ex);
-            }
-        }
 
         private static bool IsUpstreamInfoBlock(Transaction tr, BlockReference block)
         {
@@ -559,7 +542,7 @@ namespace UNCAD.Features.Fill
                     ? block.DynamicBlockTableRecord : block.BlockTableRecord;
                 BlockTableRecord definition = tr.GetObject(definitionId, OpenMode.ForRead, true)
                     as BlockTableRecord;
-                string name = definition?.Name ?? "";
+                string name = BlockNameNormalizer.RemoveMangledSuffix(definition?.Name);
                 return name.StartsWith("upstream_info", StringComparison.OrdinalIgnoreCase);
             }
             catch

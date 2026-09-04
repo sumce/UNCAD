@@ -19,6 +19,13 @@ using UNCAD.UI;
 
 namespace UNCAD.Features.Fill
 {
+    internal enum RuanguanLengthState
+    {
+        Valid,
+        ConfirmedAbsent,
+        InvalidOrUnknown
+    }
+
     /// <summary>Coordinates selection, Excel lookup, preview, and specialized CAD writers.</summary>
     [Feature("fill", "Excel 填充清单表",
         Commands = CommandIds.FillFeatureCommands,
@@ -172,6 +179,25 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
+            string automaticExcelPath = null;
+            IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
+            if (updateMode)
+            {
+                try
+                {
+                    automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
+                        new[] { picked.MachineId });
+                    automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
+                        automaticExcelPath, new[] { picked.MachineId });
+                }
+                catch (System.Exception ex)
+                {
+                    ctx.Write("\n[" + CommandIds.FillUpdate
+                        + "] BOQ 输出路径不可用，图纸未修改: " + ex.Message);
+                    return;
+                }
+            }
+
             // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
             FlexibleConduitCableMap.ApplyTo(picked);
             TableGenerationOutput tablePlan = FillTableModule.Plan(
@@ -217,7 +243,8 @@ namespace UNCAD.Features.Fill
             ResolveMissingCableCatalog(review, catalog);
             // Resolve a replacement before reading Ruanguan so an initially unknown
             // cable can still create the correctly mapped hose row.
-            ApplyRuanguanLength(ctx, selection, review, catalog, options.Planning);
+            if (!ApplyRuanguanLength(ctx, selection, review, catalog,
+                    options.Planning, updateMode)) return;
             bool hoseWasMissingBeforeReview = review.FlexibleConduitItem() == null;
             // U1U 强化:写表之前先展示上次更新时间/用户与字段级变化对比。
             if (updateMode && !ShowUpdateCompare(ctx, selection, picked, review)) return;
@@ -262,8 +289,9 @@ namespace UNCAD.Features.Fill
             // did not exist when the first Ruanguan read ran. Apply the block length once
             // after that replacement, while still honoring an explicit user deletion made
             // in the review itself.
-            if (hoseWasMissingBeforeReview && review.FlexibleConduitItem() != null)
-                ApplyRuanguanLength(ctx, selection, review, catalog, options.Planning);
+            if (hoseWasMissingBeforeReview && review.FlexibleConduitItem() != null
+                && !ApplyRuanguanLength(ctx, selection, review, catalog,
+                    options.Planning, updateMode)) return;
             // Machine.Cable remains the source-device value. A BOQ replacement updates only
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
@@ -332,16 +360,22 @@ namespace UNCAD.Features.Fill
                 ("表格容量", tableCapacity.ToString()),
                 ("顺序", string.Join(" → ", tableRows.ConvertAll(row => row.Name))));
 
-            string automaticExcelPath;
             try
             {
-                automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                    new[] { picked.MachineId });
+                if (!updateMode)
+                {
+                    automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
+                        new[] { picked.MachineId });
+                    automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
+                        automaticExcelPath, new[] { picked.MachineId });
+                }
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
             }
             catch (System.Exception ex)
             {
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] BOQ 输出路径不可用，图纸未修改: " + ex.Message);
+                    + "] BOQ 文件已变化，图纸未修改: " + ex.Message);
                 return;
             }
 
@@ -360,57 +394,83 @@ namespace UNCAD.Features.Fill
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     new[] { picked.MachineId })))
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            try
             {
-                xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
-                    new[] { selection });
-                migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
-                    selection.TextIds, options.MmPerGrid);
-                filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
-                    startRow, clearRowCount, tableRows, textHeight);
-                if (filled < 0) return;
-                CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
-                    picked, DateTime.Now);
-                frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
-                    selection.FrameBlockIds, picked,
-                    updateMode && statistics.BridgeState == MeasurementState.ConfirmedEmpty
-                        ? "" : bridgeInfo,
-                    statistics,
-                    updateMode && statistics.CableState == MeasurementState.Unknown,
-                    updateMode && statistics.BridgeState == MeasurementState.Unknown,
-                    updateMode && statistics.ConduitState == MeasurementState.Unknown);
-                deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
-                    selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
-                ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
-                    selection.RuanguanBlockIds, picked.Dia);
-                frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
-                    selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
-                    updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
-                upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
-                    selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
-                    ConnectionBlockFiller.UpstreamInfo(picked), true);
-                upstreamStateResult = CadDynamicBlockStateService.FillUpstreamState(ctx,
-                    transaction, selection.UpstreamStateBlockIds, picked.Next);
-                upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
-                    selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
-                    ConnectionBlockFiller.UpstreamAxis(picked), false);
-                downstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
-                    selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
-                    ConnectionBlockFiller.DownstreamAxis(picked), false);
-                deviceColorBlocks = CadBlockColorWriter.Apply(transaction,
-                    selection.DeviceBlockIds.Concat(selection.DownstreamAxisBlockIds)
-                        .Concat(selection.DeviceColorBlockIds), deviceColorIndex);
-                upstreamColorBlocks = CadBlockColorWriter.Apply(transaction,
-                    selection.UpstreamStateBlockIds
-                        .Concat(selection.UpstreamInfoBlockIds)
-                        .Concat(selection.UpstreamAxisBlockIds)
-                        .Concat(selection.UpstreamColorBlockIds),
-                    upstreamColorIndex);
-                // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
-                automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
-                    automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
-                transaction.Commit();
-                outputBatch.Complete();
+                // Recheck while the batch snapshot is held. BeginWrite then guards the
+                // remaining CAD-processing window against another external save.
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
+                using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
+                        new[] { selection });
+                    migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
+                        selection.TextIds, options.MmPerGrid);
+                    filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
+                        startRow, clearRowCount, tableRows, textHeight);
+                    if (filled < 0) return;
+                    CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
+                        picked, DateTime.Now);
+                    frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
+                        selection.FrameBlockIds, picked,
+                        updateMode && statistics.BridgeState == MeasurementState.ConfirmedEmpty
+                            ? "" : bridgeInfo,
+                        statistics,
+                        updateMode && statistics.CableState == MeasurementState.Unknown,
+                        updateMode && statistics.BridgeState == MeasurementState.Unknown,
+                        updateMode && statistics.ConduitState == MeasurementState.Unknown);
+                    deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
+                        selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
+                    ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
+                        selection.RuanguanBlockIds, picked.Dia);
+                    frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
+                        selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
+                        updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
+                    upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                        selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
+                        ConnectionBlockFiller.UpstreamInfo(picked), true);
+                    upstreamStateResult = CadDynamicBlockStateService.FillUpstreamState(ctx,
+                        transaction, selection.UpstreamStateBlockIds, picked.Next);
+                    upstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                        selection.UpstreamAxisBlockIds, ConnectionBlockFiller.TagUpstreamAxis,
+                        ConnectionBlockFiller.UpstreamAxis(picked), false);
+                    downstreamAxisResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
+                        selection.DownstreamAxisBlockIds, ConnectionBlockFiller.TagDownstreamAxis,
+                        ConnectionBlockFiller.DownstreamAxis(picked), false);
+                    deviceColorBlocks = CadBlockColorWriter.Apply(transaction,
+                        selection.DeviceBlockIds.Concat(selection.DownstreamAxisBlockIds)
+                            .Concat(selection.DeviceColorBlockIds), deviceColorIndex);
+                    upstreamColorBlocks = CadBlockColorWriter.Apply(transaction,
+                        selection.UpstreamStateBlockIds
+                            .Concat(selection.UpstreamInfoBlockIds)
+                            .Concat(selection.UpstreamAxisBlockIds)
+                            .Concat(selection.UpstreamColorBlockIds),
+                        upstreamColorIndex);
+                    // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
+                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
+                        automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
+                    transaction.Commit();
+                    outputBatch.Complete();
+                }
+            }
+            catch (System.Exception writeError)
+            {
+                System.Exception reported = writeError;
+                string rollbackStatus = "图纸和 BOQ 修改均已回滚。";
+                try { outputBatch.Rollback(); }
+                catch (System.Exception rollbackError)
+                {
+                    reported = new AggregateException(
+                        "写入失败；CAD 修改已回滚，但 BOQ 文件回滚不完整。",
+                        writeError, rollbackError);
+                    rollbackStatus = "CAD 修改已回滚，但 BOQ 文件回滚不完整；"
+                        + "已保留当前文件，请先检查错误再继续更新。";
+                }
+                string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
+                Log.Error(command + " write failed", reported);
+                ctx.Write("\n[" + command + "] 写入失败；" + rollbackStatus + " "
+                    + reported.Message);
+                return;
             }
 
             SelectionService.ClearPickFirst(ctx);
@@ -471,27 +531,36 @@ namespace UNCAD.Features.Fill
             return capacity == int.MaxValue ? 0 : capacity;
         }
 
-        internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
             FillReviewData review)
             => ApplyRuanguanLength(ctx, selection, review, null,
-                FillPlanningOptions.Default);
+                FillPlanningOptions.Default, false);
 
-        internal static void ApplyRuanguanLength(CadContext ctx, FillSelection selection,
-            FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options)
+        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+            FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options,
+            bool updateMode = false)
         {
-            if (review == null) return;
+            if (review == null) return true;
             options = options ?? FillPlanningOptions.Default;
-            string meters = FillSelectionCollector.ReadRuanguanLengthMeters(ctx,
-                selection?.RuanguanBlockIds);
-            if (meters.Length == 0)
+            ObjectId[] blockIds = selection?.RuanguanBlockIds ?? Array.Empty<ObjectId>();
+            string meters = blockIds.Length == 0 ? ""
+                : FillSelectionCollector.ReadRuanguanLengthMeters(ctx, blockIds);
+            RuanguanLengthState state = ClassifyRuanguanLength(blockIds.Length,
+                selection?.StatisticsScopeComplete == true, updateMode, meters);
+            if (state == RuanguanLengthState.InvalidOrUnknown)
             {
-                // Ruanguan is the only source of hose length; absent/invalid values mean no hose row.
+                string message = blockIds.Length > 0
+                    ? "已找到 Ruanguan 块，但没有可识别的软管长度"
+                    : "当前选择范围不是完整图框，无法确认 Ruanguan 块是否已删除";
+                ctx.Write("\n[U1F/U1U] " + message
+                    + "；为避免误删现有软管清单，本次操作已停止。");
+                return false;
+            }
+            if (state == RuanguanLengthState.ConfirmedAbsent)
+            {
                 FillReviewItem existing = review.FlexibleConduitItem();
                 if (existing != null) review.RemoveItem(existing);
-                if (selection?.RuanguanBlockIds?.Length > 0)
-                    ctx.Write("\n[U1F/U1U] 已找到 Ruanguan 块，但没有有效软管长度，"
-                        + "已不加入软管清单。");
-                return;
+                return true;
             }
             FillReviewItem flexible = review.FlexibleConduitItem();
             if (flexible == null && !string.IsNullOrWhiteSpace(review.Machine.Dia))
@@ -500,16 +569,26 @@ namespace UNCAD.Features.Fill
             if (flexible == null)
             {
                 ctx.Write("\n[U1F/U1U] 已读取 Ruanguan 长度，但电缆没有可映射的软管直径，未加入软管清单。");
-                return;
+                return true;
             }
             if (!flexible.CatalogMatched)
             {
                 ctx.Write("\n[U1F/U1U] 软管直径未匹配固定清单，未加入软管清单。");
                 review.RemoveItem(flexible);
-                return;
+                return true;
             }
             flexible.Quantity = meters;
             ctx.Write("\n[U1F/U1U] Ruanguan 软管长度: " + meters + "M。");
+            return true;
+        }
+
+        internal static RuanguanLengthState ClassifyRuanguanLength(int blockCount,
+            bool completeFrameScope, bool updateMode, string meters)
+        {
+            if (!string.IsNullOrWhiteSpace(meters)) return RuanguanLengthState.Valid;
+            if (blockCount > 0 || (updateMode && !completeFrameScope))
+                return RuanguanLengthState.InvalidOrUnknown;
+            return RuanguanLengthState.ConfirmedAbsent;
         }
 
         /// <summary>
@@ -577,9 +656,9 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                // 对比只是辅助信息,读取失败不应阻断更新流程。
-                Log.Warn("U1U 更新对比读取失败，已跳过: " + ex.Message);
-                return true;
+                Log.Error("U1U 更新对比读取失败，已停止更新", ex);
+                ctx.Write("\n[U1U] 更新对比读取失败，图纸未修改: " + ex.Message);
+                return false;
             }
         }
 
