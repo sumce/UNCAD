@@ -104,6 +104,86 @@ namespace UNCAD.Core.Fill
             return diffs;
         }
 
+        /// <summary>
+        /// 并排对比视图:左侧为上次清单(表格现有行,被移除的标红),
+        /// 右侧为本次将写入的清单(新增/改量着色,Order 即行号)。
+        /// </summary>
+        public static Tuple<List<FillRowDiff>, List<FillRowDiff>> BuildSides(
+            List<TableFillRow> existing, List<TableFillRow> planned)
+        {
+            existing = existing ?? new List<TableFillRow>();
+            planned = planned ?? new List<TableFillRow>();
+
+            var plannedByKey = new Dictionary<string, TableFillRow>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (TableFillRow row in planned)
+            {
+                string key = MatchKey(row);
+                if (key.Length > 0 && !plannedByKey.ContainsKey(key))
+                    plannedByKey[key] = row;
+            }
+            var usedPlanned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var left = new List<FillRowDiff>();
+            foreach (TableFillRow old in existing)
+            {
+                string key = MatchKey(old);
+                TableFillRow current = key.Length > 0
+                    && plannedByKey.TryGetValue(key, out TableFillRow found)
+                    ? found : null;
+                string oldQty = Normalize(old.Quantity);
+                if (current == null)
+                {
+                    left.Add(new FillRowDiff
+                    {
+                        Status = FillRowDiff.StatusRemoved,
+                        Changed = true,
+                        Name = old.Name,
+                        Description = old.Description,
+                        Unit = old.Unit,
+                        OldQuantity = oldQty,
+                        Code = old.Code
+                    });
+                    continue;
+                }
+                usedPlanned.Add(key);
+                string newQty = Normalize(current.Quantity);
+                left.Add(new FillRowDiff
+                {
+                    Status = !string.Equals(oldQty, newQty, StringComparison.Ordinal)
+                        ? FillRowDiff.StatusQuantity : FillRowDiff.StatusKept,
+                    Changed = !string.Equals(oldQty, newQty, StringComparison.Ordinal),
+                    Name = old.Name,
+                    Description = old.Description,
+                    Unit = old.Unit,
+                    OldQuantity = oldQty,
+                    NewQuantity = newQty,
+                    Code = old.Code
+                });
+            }
+
+            var right = new List<FillRowDiff>();
+            int order = 0;
+            foreach (TableFillRow row in planned)
+            {
+                order++;
+                string key = MatchKey(row);
+                bool matched = key.Length > 0 && usedPlanned.Contains(key);
+                right.Add(new FillRowDiff
+                {
+                    Status = matched ? FillRowDiff.StatusKept : FillRowDiff.StatusAdded,
+                    Changed = !matched,
+                    Order = order,
+                    Name = row.Name,
+                    Description = row.Description,
+                    Unit = row.Unit,
+                    NewQuantity = Normalize(row.Quantity),
+                    Code = row.Code
+                });
+            }
+            return Tuple.Create(left, right);
+        }
+
         /// <summary>Reads every non-header table row (no category filtering) for display.</summary>
         public static List<TableFillRow> ReadRows(SubmissionSourceData source)
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using UNCAD.Core.Fill;
@@ -19,13 +20,17 @@ namespace UNCAD.UI
         public int AddedCount { get; set; }
         public int RemovedCount { get; set; }
         public int QuantityChangedCount { get; set; }
-        public List<FillRowDiff> RowDiffs { get; set; } = new List<FillRowDiff>();
+        /// <summary>左侧:上次清单(表格现有行,移除行标红)。</summary>
+        public List<FillRowDiff> PreviousRows { get; set; } = new List<FillRowDiff>();
+        /// <summary>右侧:本次将写入的清单(新增/改量着色)。</summary>
+        public List<FillRowDiff> PlannedRows { get; set; } = new List<FillRowDiff>();
     }
 
     /// <summary>
-    /// U1U 更新对比窗体:展示每个待更新图框的上次更新时间/用户,以及
-    /// 现有清单与本次将写入清单的逐行对比(新增/移除/改量/保留)。
-    /// 多框时左侧列表选择、右侧详情,单框时直接显示详情。
+    /// U1U 更新对比窗体:左右两个清单并排——左边是上次清单(表格现有
+    /// 内容),右边是本次将写入的清单;列与清单表格一致(序号/项目名称/
+    /// 特征描述/单位/数量/项次编码),变化行着色。仅展示有上次更新
+    /// 信息的图框;多框时左侧列表选择。
     /// </summary>
     public sealed class FillUpdateCompareForm : Form
     {
@@ -33,24 +38,26 @@ namespace UNCAD.UI
         private readonly Label _title;
         private readonly Label _history;
         private readonly Label _summary;
-        private readonly ListView _diffs;
+        private readonly ListView _previousList;
+        private readonly ListView _plannedList;
         private readonly Button _ok;
         private readonly List<FillUpdateCompareItem> _items;
 
         public FillUpdateCompareForm(List<FillUpdateCompareItem> items)
         {
-            _items = items ?? new List<FillUpdateCompareItem>();
+            _items = (items ?? new List<FillUpdateCompareItem>())
+                .Where(item => item.HasHistory).ToList();
             bool multiple = _items.Count > 1;
             DialogLayout.Apply(this, "U1U · 清单更新对比",
-                new Size(multiple ? 1040 : 820, 640), new Size(760, 480));
+                new Size(multiple ? 1180 : 920, 640), new Size(860, 480));
 
             // 左侧:图框列表(仅多框)
-            var listPanel = new Panel { Dock = DockStyle.Left, Width = 260 };
+            var listPanel = new Panel { Dock = DockStyle.Left, Width = 240 };
             var listHeader = new Label
             {
                 Dock = DockStyle.Top,
                 Height = 30,
-                Text = "待更新图框(" + _items.Count + " 个)",
+                Text = "有更新记录的图框(" + _items.Count + " 个)",
                 Font = UiTheme.FontBodyBold,
                 ForeColor = UiTheme.TextPrimary,
                 Padding = new Padding(8, 6, 4, 0)
@@ -67,57 +74,50 @@ namespace UNCAD.UI
             listPanel.Controls.Add(_itemList);
             listPanel.Controls.Add(listHeader);
 
-            // 右侧:详情
+            // 右侧:标题 + 更新信息 + 两个并排清单
             _title = new Label
             {
                 Dock = DockStyle.Top,
-                Height = 32,
+                Height = 30,
                 Font = UiTheme.FontBodyBold,
                 ForeColor = UiTheme.Accent,
-                Padding = new Padding(8, 6, 4, 0)
+                Padding = new Padding(8, 4, 4, 0)
             };
             _history = new Label
             {
                 Dock = DockStyle.Top,
-                Height = 24,
+                Height = 22,
                 Font = UiTheme.FontCaption,
                 ForeColor = UiTheme.TextSecondary,
-                Padding = new Padding(8, 2, 4, 0)
+                Padding = new Padding(8, 0, 4, 0)
             };
             _summary = new Label
             {
                 Dock = DockStyle.Top,
-                Height = 26,
+                Height = 22,
                 Font = UiTheme.FontCaption,
                 ForeColor = UiTheme.TextPrimary,
-                Padding = new Padding(8, 2, 4, 0)
+                Padding = new Padding(8, 0, 4, 0)
             };
 
-            _diffs = new ListView
-            {
-                Dock = DockStyle.Fill,
-                View = View.Details,
-                FullRowSelect = true,
-                HideSelection = false,
-                HeaderStyle = ColumnHeaderStyle.Nonclickable,
-                BorderStyle = BorderStyle.FixedSingle,
-                MultiSelect = false,
-                BackColor = UiTheme.Surface,
-                ForeColor = UiTheme.TextPrimary,
-                Font = UiTheme.FontBody
-            };
-            // 列与清单表格一致:序号/项目名称/特征描述/单位/数量/项次编码,
-            // 另加"上次数量"列做对比;状态用行颜色表达。
-            _diffs.Columns.Add("序号", 44);
-            _diffs.Columns.Add("项目名称", 150);
-            _diffs.Columns.Add("特征描述", 260);
-            _diffs.Columns.Add("单位", 44);
-            _diffs.Columns.Add("上次数量", 86);
-            _diffs.Columns.Add("本次数量", 86);
-            _diffs.Columns.Add("项次编码", 70);
+            _previousList = CreateBomList();
+            _plannedList = CreateBomList();
+
+            var previousPane = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0, 2, 2, 0) };
+            previousPane.Controls.Add(_previousList);
+            previousPane.Controls.Add(PaneHeader("上次清单(表格现有内容)"));
+            var plannedPane = new Panel { Dock = DockStyle.Fill, Padding = new Padding(2, 2, 0, 0) };
+            plannedPane.Controls.Add(_plannedList);
+            plannedPane.Controls.Add(PaneHeader("本次清单(将写入)"));
+
+            var sides = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+            sides.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            sides.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            sides.Controls.Add(previousPane, 0, 0);
+            sides.Controls.Add(plannedPane, 1, 0);
 
             var detail = new Panel { Dock = DockStyle.Fill, Padding = new Padding(4) };
-            detail.Controls.Add(_diffs);
+            detail.Controls.Add(sides);
             detail.Controls.Add(_summary);
             detail.Controls.Add(_history);
             detail.Controls.Add(_title);
@@ -147,54 +147,96 @@ namespace UNCAD.UI
             ShowSelected();
         }
 
+        private static Label PaneHeader(string text)
+        {
+            return new Label
+            {
+                Dock = DockStyle.Top,
+                Height = 24,
+                Text = text,
+                Font = UiTheme.FontCaption,
+                ForeColor = UiTheme.TextSecondary,
+                Padding = new Padding(2, 4, 2, 2)
+            };
+        }
+
+        private ListView CreateBomList()
+        {
+            // 列与清单表格一致:序号/项目名称/特征描述/单位/数量/项次编码。
+            var list = new ListView
+            {
+                Dock = DockStyle.Fill,
+                View = View.Details,
+                FullRowSelect = true,
+                HeaderStyle = ColumnHeaderStyle.Nonclickable,
+                BorderStyle = BorderStyle.FixedSingle,
+                MultiSelect = false,
+                BackColor = UiTheme.Surface,
+                ForeColor = UiTheme.TextPrimary,
+                Font = UiTheme.FontCaption
+            };
+            list.Columns.Add("序号", 40);
+            list.Columns.Add("项目名称", 130);
+            list.Columns.Add("特征描述", 190);
+            list.Columns.Add("单位", 40);
+            list.Columns.Add("数量", 70);
+            list.Columns.Add("项次编码", 64);
+            return list;
+        }
+
         private void ShowSelected()
         {
-            _diffs.BeginUpdate();
-            _diffs.Items.Clear();
+            _previousList.BeginUpdate();
+            _previousList.Items.Clear();
+            _plannedList.BeginUpdate();
+            _plannedList.Items.Clear();
             FillUpdateCompareItem item = Selected;
             if (item == null)
             {
-                _diffs.EndUpdate();
+                _previousList.EndUpdate();
+                _plannedList.EndUpdate();
                 return;
             }
             _title.Text = item.MachineId + " · " + item.DeviceName
                 + (item.FrameHandle.Length > 0 ? "  （图框 " + item.FrameHandle + "）" : "");
-            _history.Text = item.HasHistory
-                ? "上次更新时间: " + (string.IsNullOrWhiteSpace(item.LastUpdatedText)
-                        ? "未知" : item.LastUpdatedText)
-                    + "    上次更新用户: " + (string.IsNullOrWhiteSpace(item.LastUpdatedUser)
-                        ? "未知" : item.LastUpdatedUser)
-                : "首次更新 · 无历史记录";
-            _summary.Text = item.RowDiffs.Count == 0
-                ? "现有表格没有可读的清单行。"
-                : "共 " + item.RowDiffs.Count + " 行:新增 " + item.AddedCount
-                    + " / 移除 " + item.RemovedCount + " / 改量 "
-                    + item.QuantityChangedCount + " / 保留 "
-                    + (item.RowDiffs.Count - item.AddedCount - item.RemovedCount
-                        - item.QuantityChangedCount);
-            foreach (FillRowDiff diff in item.RowDiffs)
-            {
-                string ordinal = diff.Order > 0
-                    ? diff.Order.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                    : "—";
-                var row = new ListViewItem(ordinal)
-                {
-                    UseItemStyleForSubItems = false,
-                    ForeColor = RowColor(diff)
-                };
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.Name) ? "—" : diff.Name);
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.Description)
-                    ? "—" : diff.Description);
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.Unit) ? "—" : diff.Unit);
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.OldQuantity)
-                    ? "—" : diff.OldQuantity);
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.NewQuantity)
-                    ? "—" : diff.NewQuantity);
-                row.SubItems.Add(string.IsNullOrWhiteSpace(diff.Code) ? "—" : diff.Code);
-                _diffs.Items.Add(row);
-            }
-            _diffs.EndUpdate();
+            _history.Text = "上次更新时间: "
+                + (string.IsNullOrWhiteSpace(item.LastUpdatedText) ? "未知" : item.LastUpdatedText)
+                + "    上次更新用户: "
+                + (string.IsNullOrWhiteSpace(item.LastUpdatedUser) ? "未知" : item.LastUpdatedUser);
+            _summary.Text = "新增 " + item.AddedCount + " / 移除 " + item.RemovedCount
+                + " / 改量 " + item.QuantityChangedCount;
+
+            foreach (FillRowDiff row in item.PreviousRows)
+                _previousList.Items.Add(BomRow(row, row.OldQuantity,
+                    row.Status == FillRowDiff.StatusRemoved
+                        ? UiTheme.DangerFg : UiTheme.TextPrimary));
+            _previousList.EndUpdate();
+
+            foreach (FillRowDiff row in item.PlannedRows)
+                _plannedList.Items.Add(BomRow(row, row.NewQuantity,
+                    row.Status == FillRowDiff.StatusAdded ? UiTheme.SuccessFg
+                        : row.Status == FillRowDiff.StatusQuantity
+                            ? UiTheme.WarningFg : UiTheme.TextPrimary));
+            _plannedList.EndUpdate();
             ResizeColumns();
+        }
+
+        private static ListViewItem BomRow(FillRowDiff row, string quantity, Color color)
+        {
+            string ordinal = row.Order > 0
+                ? row.Order.ToString(CultureInfo.InvariantCulture) : "—";
+            var item = new ListViewItem(ordinal)
+            {
+                UseItemStyleForSubItems = false,
+                ForeColor = color
+            };
+            item.SubItems.Add(string.IsNullOrWhiteSpace(row.Name) ? "—" : row.Name);
+            item.SubItems.Add(string.IsNullOrWhiteSpace(row.Description)
+                ? "—" : row.Description);
+            item.SubItems.Add(string.IsNullOrWhiteSpace(row.Unit) ? "—" : row.Unit);
+            item.SubItems.Add(string.IsNullOrWhiteSpace(quantity) ? "—" : quantity);
+            item.SubItems.Add(string.IsNullOrWhiteSpace(row.Code) ? "—" : row.Code);
+            return item;
         }
 
         private static Color RowColor(FillRowDiff diff)
@@ -207,15 +249,19 @@ namespace UNCAD.UI
 
         private void ResizeColumns()
         {
-            int width = Math.Max(620, _diffs.ClientSize.Width - 8);
-            int[] fixedWidths = { 44, 0, 0, 44, 86, 86, 70 };
-            int fixedTotal = fixedWidths.Sum();
-            int flexible = Math.Max(140, (width - fixedTotal) / 2);
-            _diffs.Columns[0].Width = fixedWidths[0];
-            _diffs.Columns[1].Width = flexible;
-            _diffs.Columns[2].Width = flexible;
-            for (int i = 3; i < fixedWidths.Length; i++)
-                _diffs.Columns[i].Width = fixedWidths[i];
+            foreach (ListView list in new[] { _previousList, _plannedList })
+            {
+                int width = Math.Max(400, list.ClientSize.Width - 8);
+                int[] fixedWidths = { 40, 0, 0, 40, 70, 64 };
+                int fixedTotal = fixedWidths.Sum();
+                int nameWidth = Math.Max(100, (int)((width - fixedTotal) * 0.4));
+                int descWidth = Math.Max(120, width - fixedTotal - nameWidth);
+                list.Columns[0].Width = fixedWidths[0];
+                list.Columns[1].Width = nameWidth;
+                list.Columns[2].Width = descWidth;
+                for (int i = 3; i < fixedWidths.Length; i++)
+                    list.Columns[i].Width = fixedWidths[i];
+            }
         }
 
         private FillUpdateCompareItem Selected

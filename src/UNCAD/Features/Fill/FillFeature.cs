@@ -514,6 +514,8 @@ namespace UNCAD.Features.Fill
                 FillUpdateCompareItem item = BuildCompareItem(picked,
                     review.SelectedRows(), existing, previous, "",
                     FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection));
+                // 没有任何更新信息的图框不弹对比,直接进入审阅。
+                if (!item.HasHistory) return true;
                 using (var form = new FillUpdateCompareForm(
                     new List<FillUpdateCompareItem> { item }))
                 {
@@ -547,6 +549,8 @@ namespace UNCAD.Features.Fill
                 lastUpdated = parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
             if (lastUpdated.Length == 0) lastUpdated = legacyLastUpdated ?? "";
             var rowDiffs = FillRowDiffBuilder.Build(existingRows, plannedRows);
+            Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
+                FillRowDiffBuilder.BuildSides(existingRows, plannedRows);
             return new FillUpdateCompareItem
             {
                 MachineId = machine.MachineId ?? "",
@@ -561,7 +565,8 @@ namespace UNCAD.Features.Fill
                     diff.Status == FillRowDiff.StatusRemoved),
                 QuantityChangedCount = rowDiffs.Count(diff =>
                     diff.Status == FillRowDiff.StatusQuantity),
-                RowDiffs = rowDiffs
+                PreviousRows = sides.Item1,
+                PlannedRows = sides.Item2
             };
         }
 
