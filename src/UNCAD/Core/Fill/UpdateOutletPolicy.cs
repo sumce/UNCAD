@@ -80,6 +80,11 @@ namespace UNCAD.Core.Fill
             return NormalizeOrder(planned);
         }
 
+        /// <summary>8.x 段里真正属于插座的固定编码(8.1 封堵、8.4 变压器、
+        /// 8.5 接地、8.6 停复电等都不是插座,绝不能按前缀误删)。</summary>
+        private static readonly HashSet<string> OutletCodes =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "8.2", "8.3" };
+
         public static bool IsOutlet(TableFillRow row)
         {
             if (row == null) return false;
@@ -91,7 +96,7 @@ namespace UNCAD.Core.Fill
             string name = (row.Name ?? "").Trim();
             string code = (row.Code ?? "").Trim();
             return name.IndexOf("插座", StringComparison.OrdinalIgnoreCase) >= 0
-                || code.StartsWith("8.", StringComparison.OrdinalIgnoreCase);
+                || OutletCodes.Contains(code);
         }
 
         public static bool IsOutletPanel(TableFillRow row)
