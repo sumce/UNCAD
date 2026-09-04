@@ -36,9 +36,9 @@ namespace UNCAD.Infra
                 Website = ProductMetadata.Website,
                 WebsiteUrl = ProductMetadata.WebsiteUrl,
                 Copyright = ProductMetadata.Copyright,
-                Version = ProductMetadata.VersionLabel,
+                Version = ProductMetadata.VersionText,
                 BuildTime = ParseBuildTime(file.ProductVersion),
-                UpdatedOn = ProductMetadata.ReleaseDateUtc,
+                UpdatedOn = BuildDateOrFallback(file.ProductVersion),
                 Authorization = license.StatusText,
                 CustomerCode = ProductMetadata.CurrentCustomerCode,
                 LicenseeCompany = ProductMetadata.CurrentLicenseeCompany,
@@ -46,6 +46,21 @@ namespace UNCAD.Infra
                 ExpectedAuthorizationYears = ProductMetadata.CurrentExpectedAuthorizationYears,
                 License = license
             };
+        }
+
+        /// <summary>更新日期跟随实际构建时间(UTC 日期),不再依赖手工常量。</summary>
+        internal static string BuildDateOrFallback(string productVersion)
+        {
+            const string marker = "+build.";
+            int markerIndex = (productVersion ?? "").IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0
+                && DateTime.TryParseExact(
+                    productVersion.Substring(markerIndex + marker.Length),
+                    "yyyyMMddHHmmss", CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out DateTime utc))
+                return utc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            return ProductMetadata.ReleaseDateUtc;
         }
 
         internal static string ParseBuildTime(string productVersion)

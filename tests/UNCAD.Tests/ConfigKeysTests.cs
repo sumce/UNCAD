@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using UNCAD.Infra;
 using Xunit;
 
@@ -5,6 +6,24 @@ namespace UNCAD.Tests
 {
     public class ConfigKeysTests
     {
+        /// <summary>更新日期跟随程序集构建时间戳,与 AboutInfo 同源。</summary>
+        private static string AboutInfoTestBuildDate()
+        {
+            string productVersion = FileVersionInfo.GetVersionInfo(
+                typeof(AboutInfo).Assembly.Location).ProductVersion ?? "";
+            const string marker = "+build.";
+            int index = productVersion.IndexOf(marker, System.StringComparison.Ordinal);
+            if (index >= 0
+                && System.DateTime.TryParseExact(
+                    productVersion.Substring(index + marker.Length), "yyyyMMddHHmmss",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal
+                    | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out System.DateTime utc))
+                return utc.ToString("yyyy-MM-dd");
+            return ProductMetadata.ReleaseDateUtc;
+        }
+
         [Fact]
         public void Nameplate_UsesApprovedBrandText()
         {
@@ -16,9 +35,9 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.2.3", info.Version);
+            Assert.Equal("2.2.3 SP1", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
-            Assert.Equal("2026-09-04", info.UpdatedOn);
+            Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);
             Assert.Equal("—", info.CustomerCode);
             Assert.Contains("在线", info.Authorization);

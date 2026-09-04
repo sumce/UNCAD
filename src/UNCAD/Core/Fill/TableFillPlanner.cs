@@ -98,15 +98,17 @@ namespace UNCAD.Core.Fill
         }
 
         /// <summary>
-        /// 1*16(含 1x16 / 1*16mm2 等写法)= 设备接地独立连接专用接地线,
-        /// 不属于电缆类清单。
+        /// 1*16(含 1x16 / 1*16mm2 及 "ZB-YJVR-1*16" 等完整型号写法)=
+        /// 设备接地独立连接专用接地线,不属于电缆类清单。
         /// </summary>
         internal static bool IsGroundingCableModel(string model)
         {
             string text = (model ?? "").Trim().ToLowerInvariant()
                 .Replace(" ", "").Replace("×", "*").Replace("x", "*")
                 .Replace("mm2", "").Replace("mm²", "");
-            return text == "1*16";
+            if (text == "1*16") return true;
+            // 完整型号前缀(ZB-YJVR-1*16 等)按固定清单同款规则剥前缀。
+            return BoqCatalogIndex.NormalizeCable(text) == "1*16";
         }
 
         private static void AddBridges(List<TableFillRow> rows, BoqCatalogIndex catalog,

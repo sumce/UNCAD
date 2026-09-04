@@ -30,10 +30,15 @@ namespace UNCAD.Infra
         public const string Copyright = "© 2026 UNSIAO.Ltd";
         public const string ReleaseDateUtc = "2026-09-04";
         public const string VersionLabel = "2.2.3";
+        /// <summary>同版本内的功能修补标记(SP1/SP2/...),发修补包时递增;空=无。</summary>
+        public const string VersionSuffix = "SP1";
+
+        public static string VersionText
+            => VersionLabel + (VersionSuffix.Length == 0 ? "" : " " + VersionSuffix);
 
         public static string Version
         {
-            get { return VersionLabel; }
+            get { return VersionText; }
         }
 
         public static string DisplayName
