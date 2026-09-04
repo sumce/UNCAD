@@ -68,9 +68,6 @@ namespace UNCAD.Features.XLayout
             foreach (FrameRegionGroup group in regions.Groups)
             {
                 index++;
-                // 流式进度:身份读取逐框扫块属性,大图上不便宜。
-                ctx.Write("\n[XLAYOUT] (" + index + "/" + regions.Groups.Count
-                    + ") 读取图框 " + group.Handle + " …");
                 SubmissionRecord record;
                 try
                 {
@@ -119,13 +116,8 @@ namespace UNCAD.Features.XLayout
             {
                 RemoveDuplicateMarkers(ctx, transaction);
                 var moved = new HashSet<ObjectId>();
-                int placementIndex = 0;
                 foreach (XLayoutPlacement placement in placements)
                 {
-                    placementIndex++;
-                    ctx.Write("\n[XLAYOUT] 平移 (" + placementIndex + "/"
-                        + placements.Count + ") 机台 " + placement.Item.MachineId
-                        + " · " + placement.Item.DeviceName + " …");
                     FrameRegionGroup group = groupsByItem[placement.Item];
                     Vector3d displacement = new Vector3d(
                         placement.TranslationX + layoutOrigin.X,
