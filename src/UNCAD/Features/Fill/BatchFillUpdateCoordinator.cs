@@ -217,8 +217,17 @@ namespace UNCAD.Features.Fill
                     FrameInfoJsonBlockWriter.MetadataBlockIndex metadataIndex =
                         FrameInfoJsonBlockWriter.MetadataBlockIndex.Scan(ctx, transaction);
                     var normalizedDefinitions = new HashSet<ObjectId>();
+                    int planIndex = 0;
                     foreach (Plan plan in plans)
                     {
+                        // 逐帧流式进度：写事务很长，中途不发消息命令行会一直
+                        // 静默到结束。文本输出是微秒级，不影响写入性能。
+                        planIndex++;
+                        ctx.Write("\n[U1U] (" + planIndex + "/" + plans.Count
+                            + ") 正在写入 机台 " + plan.Machine.MachineId
+                            + " · " + plan.Machine.CircuitName + " …");
+                        int planFrameBlocksBefore = frameBlocks;
+                        int planAttributeValuesBefore = attributeValues;
                         migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
                             transaction, plan.Selection.TextIds, options.MmPerGrid);
                         int filled = FillTableModule.Write(ctx, transaction,
@@ -284,6 +293,9 @@ namespace UNCAD.Features.Fill
                             + frameInfo.Values
                             + upstreamInfo.Values
                             + upstreamState.Values + upstreamAxis.Values + downstreamAxis.Values;
+                        ctx.Write("  表格 " + filled + " 行，块 "
+                            + (frameBlocks - planFrameBlocksBefore) + " 个，属性 "
+                            + (attributeValues - planAttributeValuesBefore) + " 项。");
                     }
                     // Read the modified entities through the same transaction. If BOQ output
                     // fails, disposing this transaction rolls back the whole CAD batch.
