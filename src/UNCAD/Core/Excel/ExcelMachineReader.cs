@@ -135,8 +135,10 @@ namespace UNCAD.Core.Excel
 
                 MachineRow machine = ToUnifiedRow(row, columns);
                 if (string.IsNullOrWhiteSpace(machine.MachineId))
-                    throw new InvalidDataException("机台数据表第 " + (rowIndex + 1)
-                        + " 行存在回路名称，但 U_机台ID 为空或公式结果未保存。");
+                    // A circuit without an identity cannot be associated with a
+                    // frame. Ignore that physical row and keep refreshing the
+                    // remaining valid machine rows.
+                    continue;
                 result.Add(machine);
             }
             return result;

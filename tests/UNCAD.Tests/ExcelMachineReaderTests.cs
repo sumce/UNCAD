@@ -220,7 +220,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ReadAll_RejectsRowsWhenUnifiedMachineIdFormulaCacheIsMissing()
+        public void ReadAll_FiltersRowsWhenUnifiedMachineIdFormulaCacheIsMissing()
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("机台需求+进度表1");
@@ -243,9 +243,7 @@ namespace UNCAD.Tests
 
             try
             {
-                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-                    ExcelMachineReader.ReadAll(workbook));
-                Assert.Contains("U_机台ID", error.Message);
+                Assert.Empty(ExcelMachineReader.ReadAll(workbook));
             }
             finally { workbook.Close(); }
         }
@@ -339,7 +337,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ReadAll_ReadsOnlyTheBoundColumnsWithoutExpandingMergedCells()
+        public void ReadAll_ReadsOnlyTheBoundColumnsAndFiltersBlankMachineIds()
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("机台数据");
@@ -363,9 +361,9 @@ namespace UNCAD.Tests
 
             try
             {
-                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-                    ExcelMachineReader.ReadAll(workbook));
-                Assert.Contains("U_机台ID", error.Message);
+                MachineRow result = Assert.Single(ExcelMachineReader.ReadAll(workbook));
+                Assert.Equal("M01", result.MachineId);
+                Assert.Equal("回路一", result.CircuitName);
             }
             finally { workbook.Close(); }
         }

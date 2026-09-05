@@ -96,3 +96,12 @@ rewrite an existing entry.
   snapshot and never inspect the source workbook or access the network during
   command execution. Changes in the source workbook take effect only after a
   later explicit refresh; a failed refresh leaves the previous snapshot intact.
+
+## D-013: Ignore Rows Without Machine Identity (2026-09-05)
+
+- Status: accepted
+- Decision: during workbook refresh, a physical row with a non-empty
+  `回路名称` but a blank `U_机台ID` is ignored.
+- Consequence: an empty or uncached formula result in `U_机台ID` cannot abort
+  the workbook refresh; other valid machine rows continue into the SQLite
+  snapshot.
