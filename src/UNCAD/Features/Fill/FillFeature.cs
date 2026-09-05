@@ -106,18 +106,18 @@ namespace UNCAD.Features.Fill
                 stageClock.Restart();
                 workbook = FillWorkbookSnapshot.Load(path);
                 stageClock.Stop();
-                Log.Info((updateMode ? "U1U" : "U1F") + " 机台Excel加载"
-                    + (workbook.MachineCacheHit ? "(缓存)" : "(重新解析)") + ": "
+                Log.Info((updateMode ? "U1U" : "U1F") + " 机台SQLite快照加载"
+                    + (workbook.MachineCacheHit ? "(已刷新快照)" : "(未知状态)") + ": "
                     + stageClock.ElapsedMilliseconds + " ms");
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[U1F] 读取机台 Excel 失败: " + ex.Message);
-                Log.Error("U1F read machine excel failed", ex);
+                ctx.Write("\n[U1F] 读取机台 SQLite 快照失败: " + ex.Message);
+                Log.Error("U1F read machine SQLite snapshot failed", ex);
                 return;
             }
             ctx.Write("\n[U1F] 机台数据 "
-                + (workbook.MachineCacheHit ? "已使用缓存" : "已重新加载")
+                + (workbook.MachineCacheHit ? "已使用SQLite快照" : "状态未知")
                 + "：" + workbook.MachineSourcePath
                 + "；内嵌固定清单 " + workbook.CatalogItemCount + " 项。");
 
@@ -861,22 +861,21 @@ namespace UNCAD.Features.Fill
             CadContext ctx, string configuredPath)
         {
             string path = (configuredPath ?? "").Trim();
-            if (MachineWorkbookSource.IsRemote(path))
+            if (!string.IsNullOrEmpty(path)
+                && MachineWorkbookSource.TryGetSnapshot(path,
+                    out MachineWorkbookSnapshotInfo snapshot))
             {
-                if (MachineWorkbookSource.TryGetCachedPath(path, out string cachedPath))
-                {
-                    ctx.Write("\n[U1F/U1U] 使用 U1SET 手动刷新后的网络 Excel 缓存: " + cachedPath);
-                    return cachedPath;
-                }
-                ctx.Write("\n[U1F/U1U] 网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”。");
-                Log.Warn("网络机台 Excel 尚未缓存，U1F/U1U 未访问网络。源: " + path);
-                return null;
-            }
-            if (!string.IsNullOrEmpty(path) && File.Exists(path))
-            {
-                ctx.Write("\n[U1F] 使用上次 Excel: " + path
-                    + "（U1SET → Excel 填充 可修改）");
+                ctx.Write("\n[U1F/U1U] 使用上次手动刷新后的 SQLite 机台快照: "
+                    + (snapshot?.SourceDisplay ?? path)
+                    + "（不会自动读取源 Excel）");
                 return path;
+            }
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                ctx.Write("\n[U1F/U1U] 机台数据尚未导入 SQLite，请在 U1SET 点击“刷新”后再执行命令。");
+                Log.Warn("机台数据 SQLite 快照不存在，U1F/U1U 未读取源 Excel。源: " + path);
+                return null;
             }
 
             using (var dialog = new OpenFileDialog
@@ -891,8 +890,9 @@ namespace UNCAD.Features.Fill
                 path = dialog.FileName;
             }
             Settings.Set(ConfigKeys.FillExcelPath, path);
-            ctx.Write("\n[U1F] 已记住 Excel: " + path);
-            return path;
+            ctx.Write("\n[U1F/U1U] 已记住 Excel: " + path
+                + "；请先在 U1SET 点击“刷新”导入 SQLite，再执行命令。");
+            return null;
         }
 
         private static string BuildPreview(CadContext ctx, MachineRow row, BoqCatalogIndex catalog,

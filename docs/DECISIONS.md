@@ -85,3 +85,14 @@ rewrite an existing entry.
   physical row. Merged regions are ignored.
 - Consequence: blank cells remain blank and values are never inherited from a
   merged region, another row, or an unrelated column.
+
+## D-012: SQLite Workbook Snapshot (2026-09-05)
+
+- Status: accepted
+- Decision: parse the selected machine workbook only when the user presses
+  “刷新” in `U1SET`, and persist the parsed rows and refresh metadata in the
+  per-user SQLite snapshot.
+- Consequence: `U1F`, `U1U`, `XSTS`, and `XLAYOUT` query the last successful
+  snapshot and never inspect the source workbook or access the network during
+  command execution. Changes in the source workbook take effect only after a
+  later explicit refresh; a failed refresh leaves the previous snapshot intact.

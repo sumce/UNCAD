@@ -77,6 +77,7 @@ namespace UNCAD.UI
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
         private readonly ComboBox _fillDeviceColor = ColorBox();
         private readonly ComboBox _fillUpstreamColor = ColorBox();
+        private bool _machineRefreshInProgress;
 
         public UnifiedSettingsForm(int tabIndex)
         {
@@ -120,6 +121,7 @@ namespace UNCAD.UI
 
         private void Confirm(object sender, EventArgs e)
         {
+            if (_machineRefreshInProgress) return;
             if (!ConduitDiameter.TryNormalize(_conduitDia.Text, out string diameter))
             {
                 _tabs.SelectedIndex = 2;
@@ -137,7 +139,8 @@ namespace UNCAD.UI
             // Do not treat a valid remote source as a missing local path.
             if (machinePath.Length > 0
                 && !MachineWorkbookSource.IsRemote(machinePath)
-                && !File.Exists(machinePath))
+                && !File.Exists(machinePath)
+                && !MachineWorkbookSource.HasSnapshot(machinePath))
             {
                 ShowPathError(_fillExcel, "机台数据 Excel 不存在。");
                 return;
@@ -576,32 +579,55 @@ namespace UNCAD.UI
         private async void RefreshMachineWorkbook(TextBox target, Button button)
         {
             string source = target.Text.Trim();
-            if (!MachineWorkbookSource.IsRemote(source))
+            if (source.Length == 0)
             {
-                MessageBox.Show(this, "刷新仅支持 HTTP/HTTPS Excel 地址。", "U1SET",
+                MessageBox.Show(this, "请先选择或输入机台数据 Excel。", "U1SET",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
+            if (!MachineWorkbookSource.IsRemote(source) && !File.Exists(source))
+            {
+                MessageBox.Show(this, "本地机台数据 Excel 不存在。", "U1SET",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            // Refresh is an explicit user action, so remember the source before
+            // the asynchronous import even if the settings dialog is later closed.
+            Settings.Set(ConfigKeys.FillExcelPath, source);
+            _machineRefreshInProgress = true;
             button.Enabled = false;
             string oldText = button.Text;
             button.Text = "刷新中...";
             try
             {
                 MachineWorkbookSourceResult result = await Task.Run(() => MachineWorkbookSource.Refresh(source));
-                string message = result.Updated ? "网络 Excel 已刷新并通过校验。" : "网络 Excel 未变化，继续使用现有缓存。";
-                if (result.UsedCachedFallback) message += "\n网络暂时不可用，已使用缓存。";
+                string message = result.UsedCachedFallback
+                    ? "网络暂时不可用，继续使用上次 SQLite 快照。"
+                    : "机台 Excel 已解析并写入 SQLite 快照。";
+                if (!result.UsedCachedFallback && result.Snapshot != null)
+                    message += "\n有效回路: " + result.Snapshot.RowCount + " 行。";
+                if (!string.IsNullOrWhiteSpace(result.Warning))
+                    message += "\n" + result.Warning;
+                if (IsDisposed || Disposing) return;
                 MessageBox.Show(this, message, "U1SET", MessageBoxButtons.OK,
-                    result.UsedCachedFallback ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+                    result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
+                        ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
+                Log.Error("U1SET refresh machine workbook failed", ex);
+                if (IsDisposed || Disposing) return;
                 MessageBox.Show(this, "刷新失败：" + ex.Message, "U1SET",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
-                button.Text = oldText;
-                button.Enabled = true;
+                if (!IsDisposed && !Disposing)
+                {
+                    button.Text = oldText;
+                    button.Enabled = true;
+                }
+                _machineRefreshInProgress = false;
             }
         }
 

@@ -100,7 +100,7 @@ namespace UNCAD.Features.XLayout
             }
 
             Dictionary<string, HashSet<string>> expectedCircuits =
-                ReadExpectedCircuits(ctx);
+                ReadExpectedCircuits(ctx, items.Select(item => item.MachineId));
             HashSet<string> duplicateHandles = FindDuplicateCircuits(items, summaries,
                 expectedCircuits);
 
@@ -227,21 +227,19 @@ namespace UNCAD.Features.XLayout
             return duplicateHandles;
         }
 
-        private static Dictionary<string, HashSet<string>> ReadExpectedCircuits(CadContext ctx)
+        private static Dictionary<string, HashSet<string>> ReadExpectedCircuits(
+            CadContext ctx, IEnumerable<string> selectedMachineIds)
         {
             string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
             if (configured.Length == 0) return null;
-            string path = configured;
-            if (MachineWorkbookSource.IsRemote(configured))
-            {
-                if (!MachineWorkbookSource.TryGetCachedPath(configured, out path)) return null;
-            }
-            if (!File.Exists(path)) return null;
+            if (!MachineWorkbookSource.TryGetSnapshot(configured,
+                out MachineWorkbookSnapshotInfo snapshot)) return null;
             try
             {
                 var result = new Dictionary<string, HashSet<string>>(
                     StringComparer.OrdinalIgnoreCase);
-                foreach (MachineRow row in ExcelMachineReader.ReadRows(path))
+                foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
+                    .ReadRowsForMachines(configured, selectedMachineIds))
                 {
                     string machineId = (row.MachineId ?? "").Trim();
                     string circuit = (row.CircuitName ?? "").Trim();
@@ -257,7 +255,7 @@ namespace UNCAD.Features.XLayout
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[XLAYOUT] 机台 Excel 读取失败，机台状态暂不判断: " + ex.Message);
+                ctx.Write("\n[XLAYOUT] SQLite 机台快照读取失败，机台状态暂不判断: " + ex.Message);
                 return null;
             }
         }

@@ -10,6 +10,10 @@ namespace UNCAD.Core.Excel
 {
     public sealed class MachineRow
     {
+        // Only the SQLite snapshot uses this value to restore workbook order
+        // after a large machine-ID query is split into parameter-safe batches.
+        // It is not an input field and is intentionally not shown in ToString().
+        internal int SourceRow { get; set; }
         public string Region { get; set; }
         public string MachineId { get; set; }
         public string CircuitName { get; set; }

@@ -55,8 +55,8 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[U1U] 读取机台 Excel 失败: " + ex.Message);
-                Log.Error("U1U batch read machine excel failed", ex);
+                ctx.Write("\n[U1U] 读取机台 SQLite 快照失败: " + ex.Message);
+                Log.Error("U1U batch read machine SQLite snapshot failed", ex);
                 return;
             }
             if (workbook.MachineIds.Count == 0 || workbook.ListItems.Count == 0)

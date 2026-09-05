@@ -16,6 +16,9 @@ namespace UNCAD.Tests
         public async Task Refresh_DownloadsValidatedWorkbookAndFallsBackToCache()
         {
             byte[] workbook = WorkbookBytes();
+            string root = TempDirectory("source_remote");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
+            string cacheDirectory = Path.Combine(root, "download-cache");
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             int port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -47,30 +50,48 @@ namespace UNCAD.Tests
             MachineWorkbookSourceResult downloaded = null;
             try
             {
-                Assert.False(MachineWorkbookSource.TryGetCachedPath(url, out _));
-                downloaded = MachineWorkbookSource.Refresh(url);
+                Assert.False(MachineWorkbookSource.TryGetCachedPath(url, cacheDirectory, out _));
+                downloaded = MachineWorkbookSource.Refresh(url, store, cacheDirectory);
                 Assert.True(downloaded.Updated);
                 Assert.False(downloaded.UsedCachedFallback);
-                Assert.True(MachineWorkbookSource.TryGetCachedPath(url, out string cachedPath));
+                Assert.True(MachineWorkbookSource.TryGetCachedPath(url, cacheDirectory,
+                    out string cachedPath));
                 Assert.Equal(downloaded.LocalPath, cachedPath);
                 Assert.Equal("设备A", Assert.Single(
                     ExcelMachineReader.FindRows(downloaded.LocalPath, "NET01")).CircuitName);
 
-                MachineWorkbookSourceResult unchanged = MachineWorkbookSource.Refresh(url);
-                Assert.False(unchanged.Updated);
+                MachineWorkbookSourceResult unchanged = MachineWorkbookSource.Refresh(url,
+                    store, cacheDirectory);
+                Assert.True(unchanged.Updated);
                 Assert.False(unchanged.UsedCachedFallback);
                 await server;
                 listener.Stop();
-                MachineWorkbookSourceResult fallback = MachineWorkbookSource.Refresh(url);
+                MachineWorkbookSourceResult fallback = MachineWorkbookSource.Refresh(url,
+                    store, cacheDirectory);
                 Assert.True(fallback.UsedCachedFallback);
                 Assert.Equal(downloaded.LocalPath, fallback.LocalPath);
             }
             finally
             {
                 listener.Stop();
-                if (downloaded != null && File.Exists(downloaded.LocalPath))
-                    File.Delete(downloaded.LocalPath);
+                try { await server; }
+                catch { }
+                DeleteDirectory(root);
             }
+        }
+
+        private static string TempDirectory(string name)
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uncad_" + name + "_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        private static void DeleteDirectory(string path)
+        {
+            try { if (Directory.Exists(path)) Directory.Delete(path, true); }
+            catch { }
         }
 
         [Fact]

@@ -1,108 +1,108 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using NPOI.XSSF.UserModel;
+using System.Linq;
 
 namespace UNCAD.Core.Excel
 {
-    /// <summary>U1F / U1U 单次命令使用的只读 Excel 快照和机台索引。</summary>
+    /// <summary>
+    /// U1F / U1U 单次命令使用的 SQLite 快照和按需查询入口。
+    /// 这里不持有整个工作簿或全部机台行；刷新时才解析 XLSX，命令只读取
+    /// 当前需要的机台数据。
+    /// </summary>
     public sealed class FillWorkbookSnapshot
     {
-        private static readonly StableFileCache<List<MachineRow>> MachineCache =
-            new StableFileCache<List<MachineRow>>("机台数据 Excel",
-                path => LoadMachineRows(path), CloneMachineRows);
-        private readonly List<MachineRow> _machineRows;
-        private readonly Dictionary<string, List<MachineRow>> _machineIndex;
+        private readonly MachineWorkbookSnapshotStore _store;
+        private readonly string _source;
+        private readonly List<string> _machineIds;
+        private readonly HashSet<string> _machineIdSet;
+        private readonly Dictionary<string, List<MachineRow>> _machineRows =
+            new Dictionary<string, List<MachineRow>>(StringComparer.OrdinalIgnoreCase);
+        private readonly object _queryGate = new object();
 
-        private FillWorkbookSnapshot(List<MachineRow> machineRows, List<ListItem> listItems,
-            string machineSourcePath, bool machineCacheHit)
+        private FillWorkbookSnapshot(MachineWorkbookSnapshotStore store, string source,
+            MachineWorkbookSnapshotInfo snapshot, List<ListItem> listItems)
         {
-            _machineRows = machineRows;
+            _store = store ?? throw new ArgumentNullException(nameof(store));
+            _source = source ?? throw new ArgumentNullException(nameof(source));
             Catalog = new BoqCatalogIndex(listItems);
             ListItems = Catalog.Items;
-            MachineSourcePath = machineSourcePath;
-            MachineCacheHit = machineCacheHit;
-            MachineIds = ExcelMachineReader.DistinctMachineIds(machineRows);
-            _machineIndex = new Dictionary<string, List<MachineRow>>(StringComparer.OrdinalIgnoreCase);
-            foreach (MachineRow row in machineRows)
-            {
-                string id = (row.MachineId ?? "").Trim();
-                if (id.Length == 0) continue;
-                if (!_machineIndex.TryGetValue(id, out var group))
-                {
-                    group = new List<MachineRow>();
-                    _machineIndex[id] = group;
-                }
-                group.Add(row);
-            }
+            MachineSourcePath = snapshot.SourceDisplay;
+            LastRefreshUtc = snapshot.RefreshedUtc;
+            SnapshotRowCount = snapshot.RowCount;
+            // Machine IDs are a small picker list; circuit rows remain query-on-demand.
+            _machineIds = _store.ReadMachineIds(_source);
+            _machineIdSet = new HashSet<string>(_machineIds,
+                StringComparer.OrdinalIgnoreCase);
         }
 
-        public List<string> MachineIds { get; }
+        public List<string> MachineIds => new List<string>(_machineIds);
         public List<ListItem> ListItems { get; }
         public BoqCatalogIndex Catalog { get; }
         public string MachineSourcePath { get; }
-        public bool MachineCacheHit { get; }
+        /// <summary>保留旧调用方的语义名称；现在表示已从 SQLite 快照读取。</summary>
+        public bool MachineCacheHit => true;
+        public string LastRefreshUtc { get; }
+        public int SnapshotRowCount { get; }
 
         /// <summary>内嵌固定清单的项目数（数据随插件版本固化，不再有外部清单文件）。</summary>
         public int CatalogItemCount => ListItems.Count;
 
         /// <summary>
-        /// 加载唯一的外部 Excel（机台/设备表）并合并内嵌固定清单。
-        /// 固定清单来自程序集资源，用户不需要也无法提供清单文件。
+        /// 加载上次由 U1SET“刷新”写入的 SQLite 快照并合并内嵌固定清单。
+        /// 不检查源 Excel 当前内容，因此源文件的修改不会绕过手动刷新策略。
         /// </summary>
-        public static FillWorkbookSnapshot Load(string machineFilePath)
-        {
-            string machinePath = Path.GetFullPath(machineFilePath ?? "");
+        public static FillWorkbookSnapshot Load(string machineSource)
+            => Load(machineSource, MachineWorkbookSnapshotStore.Default);
 
-            List<MachineRow> machineRows = MachineCache.Load(
-                machinePath, out bool machineCacheHit);
+        internal static FillWorkbookSnapshot Load(string machineSource,
+            MachineWorkbookSnapshotStore store)
+        {
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            if (!store.TryGetSnapshot(machineSource,
+                out MachineWorkbookSnapshotInfo snapshot))
+                throw new InvalidDataException("机台数据尚未刷新到 SQLite。请在 U1SET 中选择数据源并点击“刷新”。");
             List<ListItem> listItems = ListItemReader.ReadEmbedded();
-            return new FillWorkbookSnapshot(machineRows, listItems, machinePath,
-                machineCacheHit);
-        }
-
-        private static List<MachineRow> LoadMachineRows(string path)
-        {
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete))
-            {
-                var workbook = new XSSFWorkbook(stream);
-                try { return ExcelMachineReader.ReadAll(workbook); }
-                finally { workbook.Close(); }
-            }
-        }
-
-        private static List<MachineRow> CloneMachineRows(List<MachineRow> source)
-        {
-            var result = new List<MachineRow>();
-            foreach (MachineRow row in source ?? new List<MachineRow>())
-            {
-                result.Add(new MachineRow
-                {
-                    Region = row.Region,
-                    MachineId = row.MachineId,
-                    CircuitName = row.CircuitName,
-                    Cable = row.Cable,
-                    Fr = row.Fr,
-                    Detail = row.Detail,
-                    Seq = row.Seq,
-                    Dia = row.Dia,
-                    Next = row.Next,
-                    DownstreamAxis = row.DownstreamAxis,
-                    UpstreamAxis = row.UpstreamAxis,
-                    DeviceFloor = row.DeviceFloor,
-                    PanelFloor = row.PanelFloor,
-                    FacilitySwitch = row.FacilitySwitch
-                });
-            }
-            return result;
+            return new FillWorkbookSnapshot(store,
+                MachineWorkbookSnapshotStore.NormalizeSource(machineSource), snapshot,
+                listItems);
         }
 
         public List<MachineRow> FindRows(string keyword)
         {
             string key = (keyword ?? "").Trim();
-            if (_machineIndex.TryGetValue(key, out var exact)) return new List<MachineRow>(exact);
-            return ExcelMachineReader.FindRows(_machineRows, key);
+            if (key.Length == 0 || !_machineIdSet.Contains(key))
+                return _store.FindRows(_source, key);
+
+            lock (_queryGate)
+            {
+                if (!_machineRows.TryGetValue(key, out List<MachineRow> rows))
+                {
+                    rows = _store.FindRows(_source, key)
+                        .Select(Clone).ToList();
+                    _machineRows[key] = rows;
+                }
+                return rows.Select(Clone).ToList();
+            }
         }
+
+        private static MachineRow Clone(MachineRow source)
+            => new MachineRow
+            {
+                Region = source?.Region ?? "",
+                MachineId = source?.MachineId ?? "",
+                CircuitName = source?.CircuitName ?? "",
+                Cable = source?.Cable ?? "",
+                Fr = source?.Fr ?? "",
+                Detail = source?.Detail ?? "",
+                Seq = source?.Seq ?? "",
+                Dia = source?.Dia ?? "",
+                Next = source?.Next ?? "",
+                DownstreamAxis = source?.DownstreamAxis ?? "",
+                UpstreamAxis = source?.UpstreamAxis ?? "",
+                DeviceFloor = source?.DeviceFloor ?? "",
+                PanelFloor = source?.PanelFloor ?? "",
+                FacilitySwitch = source?.FacilitySwitch ?? ""
+            };
     }
 }

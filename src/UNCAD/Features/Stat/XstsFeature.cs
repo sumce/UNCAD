@@ -76,47 +76,16 @@ namespace UNCAD.Features.Stat
             XstsExpectedDataStatus expectedStatus;
             string expectedDetail;
             string configuredPath = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
-            string workbookPath = configuredPath;
-            if (workbookPath.Length == 0)
-            {
-                using (var dialog = new OpenFileDialog
-                {
-                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                    Title = "选择机台数据 Excel",
-                    CheckFileExists = true
-                })
-                {
-                    if (dialog.ShowDialog(new WindowWrapper(
-                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
-                        == DialogResult.OK)
-                    {
-                        workbookPath = dialog.FileName;
-                        Settings.Set(ConfigKeys.FillExcelPath, workbookPath);
-                    }
-                }
-            }
-            bool remote = MachineWorkbookSource.IsRemote(configuredPath);
-            bool remoteCacheMissing = false;
-            if (remote)
-            {
-                if (MachineWorkbookSource.TryGetCachedPath(configuredPath,
-                    out string cachedPath)) workbookPath = cachedPath;
-                else remoteCacheMissing = true;
-            }
-            if (workbookPath.Length == 0)
+            if (configuredPath.Length == 0)
             {
                 expectedStatus = XstsExpectedDataStatus.NotConfigured;
                 expectedDetail = "未配置机台 Excel";
             }
-            else if (remoteCacheMissing)
+            else if (!MachineWorkbookSource.TryGetSnapshot(configuredPath,
+                out MachineWorkbookSnapshotInfo snapshot))
             {
                 expectedStatus = XstsExpectedDataStatus.FileNotFound;
-                expectedDetail = "网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”";
-            }
-            else if (!File.Exists(workbookPath))
-            {
-                expectedStatus = XstsExpectedDataStatus.FileNotFound;
-                expectedDetail = "机台 Excel 不存在: " + workbookPath;
+                expectedDetail = "机台数据尚未刷新到 SQLite，请在 U1SET 中点击“刷新”";
             }
             else
             {
@@ -126,18 +95,20 @@ namespace UNCAD.Features.Stat
                         .Select(item => item.MachineId.Trim())
                         .Where(value => value.Length > 0),
                         StringComparer.OrdinalIgnoreCase);
-                    foreach (MachineRow row in ExcelMachineReader.ReadRows(workbookPath))
+                    foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
+                        .ReadRowsForMachines(configuredPath, selectedMachines))
                     {
                         if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
                         expectedRows.Add(new XstsCircuitRecord(row.MachineId, row.CircuitName));
                     }
                     expectedStatus = XstsExpectedDataStatus.Available;
-                    expectedDetail = remote ? "网络 Excel 手动刷新缓存" : workbookPath;
+                    expectedDetail = "SQLite 快照（手动刷新时间 "
+                        + (snapshot?.RefreshedUtc ?? "未知") + "）";
                 }
                 catch (System.Exception ex)
                 {
                     expectedStatus = XstsExpectedDataStatus.ReadFailed;
-                    expectedDetail = "机台 Excel 读取失败: " + ex.Message;
+                    expectedDetail = "SQLite 机台快照读取失败: " + ex.Message;
                 }
             }
             XstsReport report = XstsReportBuilder.Build(selectedRows, expectedRows,

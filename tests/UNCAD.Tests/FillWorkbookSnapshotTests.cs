@@ -9,84 +9,140 @@ namespace UNCAD.Tests
     public class FillWorkbookSnapshotTests
     {
         [Fact]
-        public void Load_CachesMachineRowsAndMergesEmbeddedCatalog()
+        public void Load_UsesExplicitRefreshAndIgnoresLaterSourceChanges()
         {
-            string machinePath = Path.Combine(Path.GetTempPath(),
-                "uncad_machine_source_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            string root = TempDirectory("snapshot_manual");
+            string machinePath = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
             try
             {
                 WriteMachine(machinePath, "设备A");
+                store.RefreshFromFile(machinePath, machinePath);
 
-                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
-                Assert.False(first.MachineCacheHit);
-                Assert.Equal("设备A", Assert.Single(first.FindRows("CACHE01")).CircuitName);
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath, store);
+                Assert.True(first.MachineCacheHit);
+                Assert.Equal("设备A", Assert.Single(first.FindRows("cache01")).CircuitName);
                 Assert.True(first.CatalogItemCount > 0);
                 Assert.Contains(first.ListItems,
                     item => item.Code == "3.3" && item.Alias1 == "32mm");
 
-                // 内嵌清单只随插件版本变化，不随机台文件缓存失效。
-                first.FindRows("CACHE01")[0].CircuitName = "缓存副本被修改";
-                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
-                Assert.True(second.MachineCacheHit);
-                Assert.Equal("设备A", Assert.Single(second.FindRows("CACHE01")).CircuitName);
-
+                // 修改源文件不会绕过“仅手动刷新”策略。
                 WriteMachine(machinePath, "设备B");
-                File.SetLastWriteTimeUtc(machinePath, DateTime.UtcNow.AddSeconds(5));
-                FillWorkbookSnapshot refreshedMachine = FillWorkbookSnapshot.Load(machinePath);
-                Assert.False(refreshedMachine.MachineCacheHit);
-                Assert.Equal("设备B",
-                    Assert.Single(refreshedMachine.FindRows("CACHE01")).CircuitName);
+                FillWorkbookSnapshot unchanged = FillWorkbookSnapshot.Load(machinePath, store);
+                Assert.Equal("设备A", Assert.Single(unchanged.FindRows("CACHE01")).CircuitName);
+
+                // 再次显式刷新后才切换到新内容。
+                store.RefreshFromFile(machinePath, machinePath);
+                FillWorkbookSnapshot refreshed = FillWorkbookSnapshot.Load(machinePath, store);
+                Assert.Equal("设备B", Assert.Single(refreshed.FindRows("CACHE01")).CircuitName);
             }
             finally
             {
-                if (File.Exists(machinePath)) File.Delete(machinePath);
+                DeleteDirectory(root);
+            }
+        }
+
+        [Fact]
+        public void Load_DoesNotNeedTheSourceFileAfterRefresh()
+        {
+            string root = TempDirectory("snapshot_source_removed");
+            string machinePath = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
+            try
+            {
+                WriteMachine(machinePath, "设备A");
+                store.RefreshFromFile(machinePath, machinePath);
+                File.Delete(machinePath);
+
+                FillWorkbookSnapshot snapshot = FillWorkbookSnapshot.Load(machinePath, store);
+                Assert.Equal("设备A", Assert.Single(snapshot.FindRows("CACHE01")).CircuitName);
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        [Fact]
+        public void Load_RequiresAnExplicitRefresh()
+        {
+            string root = TempDirectory("snapshot_requires_refresh");
+            string machinePath = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
+            try
+            {
+                WriteMachine(machinePath, "设备A");
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                    FillWorkbookSnapshot.Load(machinePath, store));
+                Assert.Contains("刷新", error.Message);
+            }
+            finally
+            {
+                DeleteDirectory(root);
             }
         }
 
         [Fact]
         public void Load_EmbeddedCatalogIsDefensivelyClonedPerSnapshot()
         {
-            string machinePath = Path.Combine(Path.GetTempPath(),
-                "uncad_machine_clone_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            string root = TempDirectory("snapshot_catalog_clone");
+            string machinePath = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
             try
             {
                 WriteMachine(machinePath, "设备A");
-                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath);
+                store.RefreshFromFile(machinePath, machinePath);
+                FillWorkbookSnapshot first = FillWorkbookSnapshot.Load(machinePath, store);
                 string original = first.ListItems[0].Code;
                 first.ListItems[0].Code = "被篡改";
 
-                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath);
+                FillWorkbookSnapshot second = FillWorkbookSnapshot.Load(machinePath, store);
                 Assert.Equal(original, second.ListItems[0].Code);
             }
             finally
             {
-                if (File.Exists(machinePath)) File.Delete(machinePath);
+                DeleteDirectory(root);
             }
         }
 
         [Fact]
-        public void Load_ReportsClearMessageWhenMachineWorkbookIsLocked()
+        public void RefreshLockedSourceKeepsTheLastValidSnapshot()
         {
-            string machinePath = Path.Combine(Path.GetTempPath(),
-                "uncad_machine_locked_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            string root = TempDirectory("snapshot_locked");
+            string machinePath = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
             try
             {
                 WriteMachine(machinePath, "设备A");
+                store.RefreshFromFile(machinePath, machinePath);
                 using (var hold = new FileStream(machinePath, FileMode.Open,
                     FileAccess.ReadWrite, FileShare.None))
                 {
-                    IOException error = Assert.Throws<IOException>(() =>
-                    FillWorkbookSnapshot.Load(machinePath));
-                    // 文件被占用时应提示用户，而不是笼统说“正在更新”。
-                    Assert.Contains("占用", error.Message);
+                    Assert.Throws<IOException>(() =>
+                        store.RefreshFromFile(machinePath, machinePath));
                 }
-                FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath);
+
+                FillWorkbookSnapshot after = FillWorkbookSnapshot.Load(machinePath, store);
                 Assert.Equal("设备A", Assert.Single(after.FindRows("CACHE01")).CircuitName);
             }
             finally
             {
-                if (File.Exists(machinePath)) File.Delete(machinePath);
+                DeleteDirectory(root);
             }
+        }
+
+        private static string TempDirectory(string name)
+        {
+            string path = Path.Combine(Path.GetTempPath(), "uncad_" + name + "_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        private static void DeleteDirectory(string path)
+        {
+            try { if (Directory.Exists(path)) Directory.Delete(path, true); }
+            catch { }
         }
 
         private static void WriteMachine(string path, string circuitName)
@@ -101,10 +157,10 @@ namespace UNCAD.Tests
                 "插座盘", "2F", "2/T", "化学实验室", "1F", "1P20A" };
             var header = sheet.CreateRow(0);
             var row = sheet.CreateRow(1);
-            for (int c = 0; c < headers.Length; c++)
+            for (int column = 0; column < headers.Length; column++)
             {
-                header.CreateCell(c).SetCellValue(headers[c]);
-                row.CreateCell(c).SetCellValue(values[c]);
+                header.CreateCell(column).SetCellValue(headers[column]);
+                row.CreateCell(column).SetCellValue(values[column]);
             }
             using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
                 wb.Write(stream);

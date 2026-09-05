@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.0`.
+- Current release: `2.4.1`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -40,8 +40,12 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 
 ```text
 U1F/U1U
-  select frames -> read CAD facts -> read manually selected workbook
+  select frames -> read CAD facts -> query manually refreshed SQLite snapshot
   -> plan BOQ rows -> user review/compare -> one transaction -> verify output
+
+U1SET refresh
+  selected local/remote workbook -> parse unified U_ rows -> SQLite snapshot
+  (commands query this snapshot; they do not re-read the source workbook)
 
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels
@@ -56,6 +60,8 @@ XLAYOUT/XSTS
   circuit row with strikethrough on `回路名称` is excluded.
 - Workbook refresh is explicit in `U1SET`; commands do not silently download a
   network workbook.
+- Parsed machine rows and refresh metadata live in the per-user SQLite snapshot;
+  source-file changes are ignored until the next explicit refresh.
 - `frameinfo_json` stores machine ID, device/upstream identity, last update,
   and replacement/change history. It is preferred over guessing from labels.
 - Old frame layouts and `xframe` are supported. Migration adds the new frame

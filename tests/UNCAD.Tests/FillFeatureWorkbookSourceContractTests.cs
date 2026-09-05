@@ -13,8 +13,9 @@ namespace UNCAD.Tests
             string source = File.ReadAllText(PathOf("src", "UNCAD", "Features",
                 "Fill", "FillFeature.cs"));
 
-            Assert.Contains("TryGetCachedPath(path", source);
-            Assert.Contains("网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”。", source);
+            Assert.Contains("TryGetSnapshot(path", source);
+            Assert.Contains("SQLite", source);
+            Assert.DoesNotContain("TryGetCachedPath(path", source);
             Assert.DoesNotContain("MachineWorkbookSource.Refresh(path)", source);
         }
 
@@ -24,9 +25,28 @@ namespace UNCAD.Tests
             string source = File.ReadAllText(PathOf("src", "UNCAD", "Features",
                 "Stat", "XstsFeature.cs"));
 
-            Assert.Contains("TryGetCachedPath(configuredPath", source);
-            Assert.Contains("网络 Excel 尚未缓存，请在 U1SET 中点击“刷新”", source);
+            Assert.Contains("TryGetSnapshot(configuredPath", source);
+            Assert.Contains("SQLite", source);
+            Assert.DoesNotContain("TryGetCachedPath(configuredPath", source);
             Assert.DoesNotContain("MachineWorkbookSource.Refresh", source);
+        }
+
+        [Fact]
+        public void CommandPaths_NeverParseTheSourceWorkbookDirectly()
+        {
+            string[] files =
+            {
+                PathOf("src", "UNCAD", "Features", "Fill", "FillFeature.cs"),
+                PathOf("src", "UNCAD", "Features", "Fill", "BatchFillUpdateCoordinator.cs"),
+                PathOf("src", "UNCAD", "Features", "Stat", "XstsFeature.cs"),
+                PathOf("src", "UNCAD", "Features", "XLayout", "XLayoutFeature.cs")
+            };
+            foreach (string file in files)
+            {
+                string source = File.ReadAllText(file);
+                Assert.DoesNotContain("ExcelMachineReader.ReadRows", source);
+                Assert.DoesNotContain("MachineWorkbookSource.Refresh", source);
+            }
         }
 
         private static string PathOf(params string[] parts)

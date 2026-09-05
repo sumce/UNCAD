@@ -228,7 +228,7 @@ namespace UNCAD.UI
             _machineSuggest.Visible = list.Count > 0;
         }
 
-        /// <summary>选定机台 → 加载该机台回路（只做一次 Excel 扫描）。</summary>
+        /// <summary>选定机台后按需查询该机台的 SQLite 快照回路。</summary>
         private void CommitMachine()
         {
             string mid = (_machineSuggest.SelectedItem as string) ?? _machineInput.Text.Trim();

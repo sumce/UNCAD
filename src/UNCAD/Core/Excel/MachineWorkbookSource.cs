@@ -14,8 +14,13 @@ namespace UNCAD.Core.Excel
         public bool Updated { get; set; }
         public bool UsedCachedFallback { get; set; }
         public string Warning { get; set; }
+        public MachineWorkbookSnapshotInfo Snapshot { get; set; }
     }
 
+    /// <summary>
+    /// Handles the explicit U1SET refresh operation. Commands do not call this
+    /// class; they read the SQLite snapshot through MachineWorkbookSnapshotStore.
+    /// </summary>
     internal static class MachineWorkbookSource
     {
         private const long MaximumBytes = 100L * 1024L * 1024L;
@@ -26,18 +31,29 @@ namespace UNCAD.Core.Excel
                 && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         }
 
+        internal static bool HasSnapshot(string source)
+            => MachineWorkbookSnapshotStore.Default.HasSnapshot(source);
+
+        internal static bool TryGetSnapshot(string source,
+            out MachineWorkbookSnapshotInfo snapshot)
+            => MachineWorkbookSnapshotStore.Default.TryGetSnapshot(source, out snapshot);
+
         /// <summary>
-        /// Resolves the cache created by <see cref="Refresh"/> without touching the network.
-        /// A cache is only considered available when the file still exists.
+        /// Retained for older diagnostics that need the downloaded XLSX path.
+        /// Production command paths must use TryGetSnapshot instead.
         /// </summary>
         internal static bool TryGetCachedPath(string source, out string path)
+            => TryGetCachedPath(source, null, out path);
+
+        internal static bool TryGetCachedPath(string source, string cacheDirectory,
+            out string path)
         {
             path = null;
             if (!Uri.TryCreate((source ?? "").Trim(), UriKind.Absolute, out Uri uri)
                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
                 return false;
 
-            path = CachePath(uri);
+            path = CachePath(uri, cacheDirectory);
             if (!File.Exists(path))
             {
                 path = null;
@@ -46,53 +62,126 @@ namespace UNCAD.Core.Excel
             return true;
         }
 
+        /// <summary>
+        /// Imports a local or remote workbook only when U1SET explicitly invokes
+        /// refresh. A successful refresh always replaces the SQLite snapshot,
+        /// even when the XLSX bytes are unchanged.
+        /// </summary>
         internal static MachineWorkbookSourceResult Refresh(string source)
+            => Refresh(source, MachineWorkbookSnapshotStore.Default, null);
+
+        internal static MachineWorkbookSourceResult Refresh(string source,
+            MachineWorkbookSnapshotStore store, string cacheDirectory = null)
         {
-            if (!Uri.TryCreate((source ?? "").Trim(), UriKind.Absolute, out Uri uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            if (store == null) throw new ArgumentNullException(nameof(store));
+            string value = (source ?? "").Trim();
+            if (value.Length == 0)
+                throw new ArgumentException("机台数据源不能为空。", nameof(source));
+
+            if (!IsRemote(value))
+            {
+                if (!File.Exists(value))
+                    throw new FileNotFoundException("机台数据 Excel 不存在。", value);
+                MachineWorkbookSnapshotInfo snapshot =
+                    store.RefreshFromFile(value, value);
+                return new MachineWorkbookSourceResult
+                {
+                    LocalPath = Path.GetFullPath(value),
+                    Updated = true,
+                    Snapshot = snapshot
+                };
+            }
+
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri uri))
                 throw new ArgumentException("机台数据源不是有效的 HTTP/HTTPS 地址。",
                     nameof(source));
 
-            string cachePath = CachePath(uri);
-            Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+            string cachePath = CachePath(uri, cacheDirectory);
             string downloadPath = cachePath + ".download-" + Guid.NewGuid().ToString("N");
             try
             {
-                Download(uri, downloadPath);
-                ValidateWorkbook(downloadPath);
-                if (File.Exists(cachePath) && SameContent(downloadPath, cachePath))
-                    return new MachineWorkbookSourceResult { LocalPath = cachePath };
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+                    Download(uri, downloadPath);
+                }
+                catch (InvalidDataException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // A network outage after a successful prior refresh is non-fatal;
+                    // the command can continue using the last explicit SQLite snapshot.
+                    if (store.TryGetSnapshot(value,
+                        out MachineWorkbookSnapshotInfo previous))
+                        return new MachineWorkbookSourceResult
+                        {
+                            LocalPath = File.Exists(cachePath) ? cachePath : null,
+                            UsedCachedFallback = true,
+                            Warning = ex.Message,
+                            Snapshot = previous
+                        };
+                    throw new IOException("无法下载网络机台 Excel，且没有可用 SQLite 快照。", ex);
+                }
 
-                if (File.Exists(cachePath)) File.Replace(downloadPath, cachePath, null);
-                else File.Move(downloadPath, cachePath);
+                // Parsing and SQLite replacement happen before the optional XLSX
+                // compatibility cache is swapped, so a parse failure leaves the
+                // old database snapshot and old downloaded file intact.
+                MachineWorkbookSnapshotInfo snapshot =
+                    store.RefreshFromFile(value, downloadPath);
+                string cacheWarning = null;
+                try
+                {
+                    if (File.Exists(cachePath)) File.Replace(downloadPath, cachePath, null);
+                    else File.Move(downloadPath, cachePath);
+                }
+                catch (Exception ex)
+                {
+                    // The XLSX file is only a compatibility diagnostic cache;
+                    // a successful SQLite refresh must not be reported as failed
+                    // merely because that optional copy cannot be replaced.
+                    cacheWarning = "下载文件缓存未更新: " + ex.Message;
+                }
                 return new MachineWorkbookSourceResult
                 {
-                    LocalPath = cachePath,
-                    Updated = true
-                };
-            }
-            catch (InvalidDataException)
-            {
-                // A downloaded workbook with an unsupported schema must never
-                // fall back to an older cached workbook: that would re-enable
-                // the very legacy fields the reader is required to reject.
-                throw;
-            }
-            catch (Exception ex)
-            {
-                if (!File.Exists(cachePath))
-                    throw new IOException("无法下载或验证网络机台 Excel，且没有可用缓存。", ex);
-                return new MachineWorkbookSourceResult
-                {
-                    LocalPath = cachePath,
-                    UsedCachedFallback = true,
-                    Warning = ex.Message
+                    LocalPath = File.Exists(cachePath) ? cachePath : null,
+                    Updated = true,
+                    Snapshot = snapshot,
+                    Warning = cacheWarning
                 };
             }
             finally
             {
                 try { if (File.Exists(downloadPath)) File.Delete(downloadPath); }
                 catch { }
+            }
+        }
+
+        internal static void ValidateWorkbook(string path)
+        {
+            try
+            {
+                ExcelMachineReader.ReadRows(path);
+            }
+            catch (InvalidDataException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("下载的机台 Excel 无法解析。", ex);
+            }
+        }
+
+        internal static string CacheKey(Uri uri)
+        {
+            if (uri == null) throw new ArgumentNullException(nameof(uri));
+            string normalized = new UriBuilder(uri) { Fragment = "" }.Uri.AbsoluteUri;
+            using (SHA256 sha = SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                return BitConverter.ToString(hash, 0, 12).Replace("-", "").ToLowerInvariant();
             }
         }
 
@@ -134,56 +223,17 @@ namespace UNCAD.Core.Excel
             }
         }
 
-        internal static void ValidateWorkbook(string path)
+        private static string CachePath(Uri uri, string cacheDirectory)
         {
-            try
+            string directory = cacheDirectory;
+            if (string.IsNullOrWhiteSpace(directory))
             {
-                ExcelMachineReader.ReadRows(path);
+                string root = Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData);
+                if (string.IsNullOrWhiteSpace(root)) root = Path.GetTempPath();
+                directory = Path.Combine(root, "UNCAD", "cache");
             }
-            catch (InvalidDataException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidDataException("下载的机台 Excel 无法解析。", ex);
-            }
-        }
-
-        internal static string CacheKey(Uri uri)
-        {
-            if (uri == null) throw new ArgumentNullException(nameof(uri));
-            var normalized = new UriBuilder(uri) { Fragment = "" }.Uri.AbsoluteUri;
-            using (SHA256 sha = SHA256.Create())
-            {
-                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(
-                    normalized));
-                return BitConverter.ToString(hash, 0, 12).Replace("-", "").ToLowerInvariant();
-            }
-        }
-
-        private static string CachePath(Uri uri)
-        {
-            string directory = Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData), "UNCAD", "cache");
             return Path.Combine(directory, "machine-" + CacheKey(uri) + ".xlsx");
-        }
-
-        private static bool SameContent(string left, string right)
-        {
-            var leftInfo = new FileInfo(left);
-            var rightInfo = new FileInfo(right);
-            if (leftInfo.Length != rightInfo.Length) return false;
-            using (SHA256 sha = SHA256.Create())
-            using (FileStream leftStream = File.OpenRead(left))
-            using (FileStream rightStream = File.OpenRead(right))
-            {
-                byte[] leftHash = sha.ComputeHash(leftStream);
-                byte[] rightHash = sha.ComputeHash(rightStream);
-                for (int index = 0; index < leftHash.Length; index++)
-                    if (leftHash[index] != rightHash[index]) return false;
-                return true;
-            }
         }
     }
 }

@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.0 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
+Current 2.4.1 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,12 @@ Current 2.4.0 builds publish 24 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.1
+
+- U1SET 只有在用户点击“刷新”时才解析本地或网络机台工作簿，并将结果写入本机 SQLite 快照。
+- U1F/U1U/XSTS/XLAYOUT 只按需查询上次成功的 SQLite 快照；源 Excel 修改后必须再次手动刷新才会生效。
+- 刷新失败保留上一次有效快照；统一程序集、产品元数据和 Bundle 版本为 `2.4.1` / `2.4.1.0`。
 
 ## v2.4.0
 
@@ -261,7 +267,7 @@ Current 2.4.0 builds publish 24 commands and intentionally do not include the re
 - 新代码强制注释模块责任、状态分离、回滚和异常分支的原因。
 - 明确拆分 `SUM-STAT/求和统计` 与 `BOQ-TABLE/清单表格` 模块；日志和错误均显示模块ID、阶段及耗时。
 - 填充配置改为单次不可变快照；未匹配项目固定禁止生成，旧版“未匹配管材默认选择”配置不再生效。
-- BOQ分类规格建立一次索引；机台与固定清单使用自动失效缓存。
+- BOQ分类规格建立一次索引；机台数据只在用户点击“刷新”时解析并写入 SQLite，命令按需查询快照。
 - 清单表和全部属性块共享一个AutoCAD事务，避免部分写入。
 - 统一管径输入与严格型号匹配；`UNC_CONDUIT`标注使用固定 `2000mm` 占位。
 - 配置中心、机台选择和填充确认统一DPI/Layout、范围校验和错误定位。
@@ -340,11 +346,12 @@ Current 2.4.0 builds publish 24 commands and intentionally do not include the re
 
 `U1F` 和 `U1U` 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 
-- **机台数据 Excel**：本地文件按规范化完整路径和 SHA-256 内容指纹缓存，缓存返回副本，避免预览编辑污染后续命令；HTTP/HTTPS 地址只在 `U1SET` 中点击“刷新”时下载，`U1F/U1U` 始终使用上次成功的本地缓存，不会自动联网。
+- **机台数据 Excel**：用户在 `U1SET` 选择本地或 HTTP/HTTPS 工作簿并点击“刷新”后，程序解析结果写入本机 SQLite 快照；`U1F/U1U/XSTS/XLAYOUT` 只按需查询快照，不检查源文件时间戳、不自动下载或重新解析。源文件的修改会在下一次手动刷新后生效。
+- 快照默认保存在 `%LOCALAPPDATA%\UNCAD\cache\machine-data.db`；删除快照不会删除源 Excel，但需要在 `U1SET` 再次点击“刷新”后才能执行依赖机台数据的命令。
 - 机台数据只按表头绑定的 `U_` 列和 `回路名称` 列逐行读取；不展开、不继承合并单元格内容，空单元格保持为空。
 - 统一数据表中“回路名称”带删除线的行视为已作废，不进入 `U1F/U1U/XSTS` 的机台和回路数据。
 - 固定 BOQ 清单随插件程序集内嵌，启动填充时建立一次索引；用户不提供也不能配置外部清单文件。
-- 每次填充只读取一个机台数据工作簿，机台与回路切换预览不重复扫描整张表。
+- 每次填充只读取一个 SQLite 快照；机台与回路切换预览按需查询，不重复扫描整张源表。
 - 机台数据由用户在 `U1SET` 中手动选择工作簿；读取器只接受包含统一 `U_` 字段和普通 `回路名称` 的数据表，缺失或重复必需字段会中止，绝不回退到旧字段或自动猜测其他表。
 - 当前固定模板的规格列表头为空时，仍兼容第 6 列；建议后续将该表头明确命名为“规格”。
 - 刚性线管和软管先按类别和主别名严格匹配；主别名未命中时，仅允许按数据库的全局唯一`别名1`迁移到指定行，例如`32mm`迁移到该行的`38mm`材料。两列都未命中时必须从固定清单替换或删除，不能直接生成。
@@ -387,7 +394,7 @@ Current 2.4.0 builds publish 24 commands and intentionally do not include the re
 | `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |
 | `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` | 单行文字 / 多行文字参与统计 | 1 / 1 |
 | `UNADD_CABLE_ENABLED` / `UNADD_BRIDGE_ENABLED` / `UNADD_CONDUIT_ENABLED` | 电缆 / 桥架 / 线管参与统计 | 1 / 1 / 1 |
-| `UNC_FILL_EXCEL` | 每次重读的机台数据 Excel | 空 |
+| `UNC_FILL_EXCEL` | 用户选择的机台数据源（内容由 U1SET“刷新”导入 SQLite） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_CLEAR_ROWS` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 每次清空行数 / 表格文字高度 | 1 / 11 / 500 |
 | `UNC_SUBMIT_FOLDER` | `U1F` / `U1U` 自动记录文件夹（保留旧键名兼容已有设置） | 空（默认“文档”目录） |
 
