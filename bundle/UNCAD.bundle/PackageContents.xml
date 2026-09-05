@@ -3,9 +3,9 @@
     AutodeskProduct="AutoCAD"
     Name="UNCAD Pro" LicenseMode="Online" LicenseExpiresUtc="" CustomerCode="" LicenseeCompany="" LicenseeName="" ExpectedAuthorizationYears="" Website="https://www.unsiao.com"
     Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
-    AppVersion="2.4.1.0"
+    AppVersion="2.4.2.0"
     ProductType="Application"
-    ProductCode="{6CDDA662-77EC-4972-835C-F4416B425DB6}"
+    ProductCode="{C023E6EA-58B8-440F-BA22-B8FE0EAD612C}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
   <CompanyDetails Name="UNSIAO.Ltd" Website="https://www.unsiao.com" />
   <Components>

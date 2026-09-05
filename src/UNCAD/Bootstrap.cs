@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -30,7 +31,58 @@ namespace UNCAD
                 _licenseIdleAttached = true;
                 OnlineLicenseMonitor.Start();
             }
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnUpdateNotesIdle;
+            _updateNotesIdleAttached = true;
             Log.Info("UNCAD initialized; Ribbon registration requested");
+        }
+
+        private static bool _updateNotesIdleAttached;
+
+        /// <summary>
+        /// 更新到新版本后第一次打开 CAD 时展示版本更新日志(Idle 触发,不阻塞加载)。
+        /// Core Console 没有 UI 消息循环,弹窗前先确认有活动文档和主窗口。
+        /// </summary>
+        private static void OnUpdateNotesIdle(object sender, EventArgs args)
+        {
+            try
+            {
+                if (_updateNotesDialogOpen) return;
+                string seen = Settings.Get(ConfigKeys.UpdateNotesSeenVersion, "").Trim();
+                if (string.Equals(seen, ProductMetadata.VersionText, StringComparison.Ordinal)) return;
+                List<VersionChangeLogEntry> entries =
+                    VersionChangeLog.EntriesNewerThan(seen);
+                if (entries.Count == 0)
+                {
+                    Settings.Set(ConfigKeys.UpdateNotesSeenVersion, ProductMetadata.VersionText);
+                    DetachUpdateNotesIdle();
+                    return;
+                }
+                var application = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager;
+                if (application == null || application.MdiActiveDocument == null) return;
+                _updateNotesDialogOpen = true;
+                try
+                {
+                    using (var form = new UpdateNotesForm(entries))
+                        Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+                }
+                finally { _updateNotesDialogOpen = false; }
+                Settings.Set(ConfigKeys.UpdateNotesSeenVersion, ProductMetadata.VersionText);
+                DetachUpdateNotesIdle();
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("版本更新日志展示失败: " + ex.Message);
+                DetachUpdateNotesIdle();
+            }
+        }
+
+        private static bool _updateNotesDialogOpen;
+
+        private static void DetachUpdateNotesIdle()
+        {
+            if (!_updateNotesIdleAttached) return;
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnUpdateNotesIdle;
+            _updateNotesIdleAttached = false;
         }
 
         /// <summary>
@@ -120,6 +172,7 @@ namespace UNCAD
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnLicenseIdle;
                 _licenseIdleAttached = false;
             }
+            DetachUpdateNotesIdle();
             OnlineLicenseMonitor.Stop();
         }
     }

@@ -41,6 +41,9 @@ namespace UNCAD.Infra
         public const string StyleBigFont = "UNC_STYLE_BIGFONT";  // SHX 大字体，空=纯 TTF
         public const string StyleWidth = "UNC_STYLE_WIDTH";      // 宽高比
 
+        // 版本更新提示（Bootstrap 已展示过的版本号；空=全新安装）
+        public const string UpdateNotesSeenVersion = "UNC_UPDATE_NOTES_SEEN_VERSION";
+
         // Excel 生成与更新（U1F / U1U；注册表键名保持不变）
         public const string FillExcelPath = "UNC_FILL_EXCEL";    // 机台数据 Excel（用户唯一需要提供的文件）
         public const string FillTableRow = "UNC_FILL_TABLE_ROW"; // Table 起始行（1 基）
