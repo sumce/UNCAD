@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
+using UNCAD.Features.Fill;
 
 namespace UNCAD.Features.Submit
 {
@@ -15,8 +17,12 @@ namespace UNCAD.Features.Submit
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (region == null) throw new ArgumentNullException(nameof(region));
-            return SubmissionRecordExtractor.Extract(CadSubmissionReader.Read(ctx,
-                region.EntityIds.ToArray()));
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                SubmissionRecord result = Read(ctx, transaction, region);
+                transaction.Commit();
+                return result;
+            }
         }
 
         /// <summary>Reads a frame through a caller-owned transaction for batch operations.</summary>
@@ -26,8 +32,22 @@ namespace UNCAD.Features.Submit
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (region == null) throw new ArgumentNullException(nameof(region));
-            return SubmissionRecordExtractor.Extract(CadSubmissionReader.Read(transaction,
-                region.EntityIds.ToArray()));
+            return Read(ctx, transaction, region.EntityIds.ToArray(), true);
+        }
+
+        /// <summary>
+        /// Reads one already-collected entity group with the same identity precedence used by
+        /// XLAYOUT, U1S, and automatic U1F/U1U submission. The caller owns the transaction.
+        /// </summary>
+        public static SubmissionRecord Read(CadContext ctx, Transaction transaction,
+            ObjectId[] ids, bool inferLegacySocketPanels)
+        {
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            SubmissionSourceData source = CadSubmissionReader.Read(transaction, ids);
+            FrameInfoJsonRecord persistedIdentity = FrameInfoJsonBlockWriter.Read(transaction, ids);
+            return SubmissionRecordExtractor.Extract(source, inferLegacySocketPanels,
+                persistedIdentity);
         }
 
         /// <summary>

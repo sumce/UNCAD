@@ -222,22 +222,25 @@ namespace UNCAD.Cad
                     if (useAnchorOwnership)
                     {
                         if (!TryAnchor(entity, out Point3d anchor, includeAllEntities)) continue;
-                        FrameRegionGroup owner = null;
-                        List<FrameRegionGroup> owners = null;
-                        foreach (FrameRegionGroup group in boundaryIndex.QueryPoint(
-                            anchor.X, anchor.Y))
+                        List<FrameRegionGroup> owners;
+                        FrameRegionGroup owner = FindAnchorOwner(boundaryIndex, anchor,
+                            out owners);
+
+                        // A few legacy blocks have a deliberately displaced visible
+                        // geometry (for example a long device label).  Their extents center
+                        // can fall just outside the frame even though the insert point is
+                        // inside it.  Keep the extents-center behavior for normal blocks,
+                        // then use the insert point only when that first anchor has no owner.
+                        if (owner == null && entity is BlockReference block
+                            && IsFinite(block.Position))
                         {
-                            if (!group.Boundary.Contains(anchor.X, anchor.Y)) continue;
-                            if (owner == null) owner = group;
-                            else
-                            {
-                                if (owners == null)
-                                    owners = new List<FrameRegionGroup> { owner };
-                                owners.Add(group);
-                            }
+                            anchor = block.Position;
+                            owner = FindAnchorOwner(boundaryIndex, anchor, out owners);
                         }
-                        if (owners == null) owner?.EntityIds.Add(id);
-                        else SelectAnchorOwner(owners, anchor).EntityIds.Add(id);
+
+                        if (owner != null && owners == null) owner.EntityIds.Add(id);
+                        else if (owners != null)
+                            SelectAnchorOwner(owners, anchor).EntityIds.Add(id);
                         continue;
                     }
 
@@ -431,6 +434,31 @@ namespace UNCAD.Cad
             }
             return selected;
         }
+
+        private static FrameRegionGroup FindAnchorOwner(
+            FrameBoundaryIndex boundaryIndex, Point3d anchor,
+            out List<FrameRegionGroup> owners)
+        {
+            owners = null;
+            if (boundaryIndex == null || !IsFinite(anchor)) return null;
+            FrameRegionGroup owner = null;
+            foreach (FrameRegionGroup group in boundaryIndex.QueryPoint(anchor.X, anchor.Y))
+            {
+                if (!group.Boundary.Contains(anchor.X, anchor.Y)) continue;
+                if (owner == null) owner = group;
+                else
+                {
+                    if (owners == null) owners = new List<FrameRegionGroup> { owner };
+                    owners.Add(group);
+                }
+            }
+            return owner;
+        }
+
+        private static bool IsFinite(Point3d point)
+            => !double.IsNaN(point.X) && !double.IsInfinity(point.X)
+                && !double.IsNaN(point.Y) && !double.IsInfinity(point.Y)
+                && !double.IsNaN(point.Z) && !double.IsInfinity(point.Z);
 
         private static bool TryAnchor(Entity entity, out Point3d anchor, bool includeAllEntities)
         {

@@ -36,23 +36,54 @@ namespace UNCAD.Core.Submission
             => Extract(source, true);
 
         /// <summary>
+        /// Extracts a record while applying the persisted frame identity when it is
+        /// available.  The JSON record is the durable identity source; legacy CAD
+        /// attributes remain a compatibility fallback for older drawings.
+        /// </summary>
+        public static SubmissionRecord Extract(SubmissionSourceData source,
+            FrameInfoJsonRecord persistedIdentity)
+            => Extract(source, true, persistedIdentity);
+
+        /// <summary>
         /// Extracts one submission record. Legacy socket-panel inference is enabled for
         /// explicit U1S migration, but callers that have just applied the editable U1F/U1U
         /// table must disable it so a deliberate panel-row deletion remains durable.
         /// </summary>
         public static SubmissionRecord Extract(SubmissionSourceData source,
             bool inferLegacySocketPanels)
+            => Extract(source, inferLegacySocketPanels, null);
+
+        /// <summary>Core extraction overload used by CAD readers that found frame metadata.</summary>
+        internal static SubmissionRecord Extract(SubmissionSourceData source,
+            bool inferLegacySocketPanels, FrameInfoJsonRecord persistedIdentity)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            string power = Unique(source, FrameBlockFiller.TagPower);
-            string deviceComposite = Unique(source, FrameBlockFiller.TagDevice);
+            string persistedMachineId = (persistedIdentity?.MachineId ?? "").Trim();
+            string persistedDeviceName = (persistedIdentity?.DeviceName ?? "").Trim();
+
+            // Do not validate legacy identity attributes that a persisted JSON field will
+            // replace.  Old drawings can retain duplicate/stale helper blocks; JSON is the
+            // authoritative record once that field is present.
+            string power = persistedMachineId.Length == 0
+                ? Unique(source, FrameBlockFiller.TagPower) : "";
+            string deviceComposite = persistedMachineId.Length == 0
+                || persistedDeviceName.Length == 0
+                ? Unique(source, FrameBlockFiller.TagDevice) : "";
             string machineId = MachineFromPower(power);
-            string deviceName = Unique(source, DeviceBlockFiller.TagDeviceName);
+            string deviceName = persistedDeviceName.Length == 0
+                ? Unique(source, DeviceBlockFiller.TagDeviceName) : "";
 
             if (machineId.Length == 0 && deviceComposite.Length > 0)
                 machineId = MachineFromComposite(deviceComposite);
             if (deviceName.Length == 0 && deviceComposite.Length > 0)
                 deviceName = DeviceFromComposite(deviceComposite, machineId);
+
+            // U1U persists the selected identity in frameinfo_json.  Prefer each non-empty
+            // JSON field independently so partially migrated legacy frames can still use the
+            // remaining attribute fallback, while a complete record is authoritative over stale
+            // DEVICENAME/MACHINEID-* values.
+            if (persistedMachineId.Length > 0) machineId = persistedMachineId;
+            if (persistedDeviceName.Length > 0) deviceName = persistedDeviceName;
 
             if (machineId.Length == 0)
                 throw new InvalidDataException("框选内容中未读取到机台ID（MACHINEID-POWER/MACHINEID-DEVICE）。");

@@ -42,6 +42,16 @@ namespace UNCAD.Tests
             Assert.Contains("group.Boundary.Intersects(minX, minY, maxX, maxY)", collector);
         }
 
+        [Fact]
+        public void LayoutFallsBackToInsertPointForDisplacedBlockGeometry()
+        {
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "FrameRegionCollector.cs"));
+            Assert.Contains("owner == null && entity is BlockReference block", collector);
+            Assert.Contains("anchor = block.Position", collector);
+            Assert.Contains("FindAnchorOwner(boundaryIndex, anchor", collector);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

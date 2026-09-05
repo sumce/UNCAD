@@ -240,8 +240,7 @@ namespace UNCAD.Features.Submit
                 {
                     index++;
                     if (ids == null || ids.Length == 0) continue;
-                    SubmissionSourceData source = CadSubmissionReader.Read(current, ids);
-                    SubmissionRecord record = SubmissionRecordExtractor.Extract(source,
+                    SubmissionRecord record = FrameIdentityReader.Read(ctx, current, ids,
                         inferLegacySocketPanels);
                     if (string.IsNullOrWhiteSpace(record.MachineId)
                         || string.IsNullOrWhiteSpace(record.DeviceName))
@@ -300,11 +299,13 @@ namespace UNCAD.Features.Submit
         private static void ReadBlock(Transaction transaction, BlockReference block,
             SubmissionSourceData source)
         {
+            var presentTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ObjectId attributeId in block.AttributeCollection)
             {
                 var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
                     as AttributeReference;
                 if (attribute == null) continue;
+                presentTags.Add((attribute.Tag ?? "").Trim());
                 string value = attribute.TextString ?? "";
                 if (attribute.IsMTextAttribute)
                 {
@@ -313,14 +314,59 @@ namespace UNCAD.Features.Submit
                 }
                 source.AddAttribute(attribute.Tag, value);
             }
-            if (!block.IsDynamicBlock) return;
-            foreach (DynamicBlockReferenceProperty property
-                in block.DynamicBlockReferencePropertyCollection)
+            if (block.IsDynamicBlock)
             {
-                string value = Convert.ToString(property.Value) ?? "";
-                if (value.Trim().Length == 0) continue;
-                source.DynamicValues.Add(value);
-                source.AddAttribute(property.PropertyName, value);
+                foreach (DynamicBlockReferenceProperty property
+                    in block.DynamicBlockReferencePropertyCollection)
+                {
+                    presentTags.Add((property.PropertyName ?? "").Trim());
+                    string value = Convert.ToString(property.Value) ?? "";
+                    if (value.Trim().Length == 0) continue;
+                    source.DynamicValues.Add(value);
+                    source.AddAttribute(property.PropertyName, value);
+                }
+            }
+
+            // Some legacy/static inserts expose only the attribute definition (no reference),
+            // while U1U's identity reader has always accepted that value.  Mirror that
+            // compatibility fallback here so XLAYOUT/U1S/DWG export see the same identity.
+            var definitionIds = new List<ObjectId> { block.BlockTableRecord };
+            if (block.IsDynamicBlock
+                && block.DynamicBlockTableRecord != block.BlockTableRecord)
+                definitionIds.Add(block.DynamicBlockTableRecord);
+            foreach (ObjectId definitionId in definitionIds)
+            {
+                if (definitionId.IsNull || !definitionId.IsValid) continue;
+                BlockTableRecord definition;
+                try
+                {
+                    definition = transaction.GetObject(definitionId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                }
+                catch
+                {
+                    // Proxy/external-reference definitions are not identity sources.
+                    continue;
+                }
+                if (definition == null) continue;
+                foreach (ObjectId entityId in definition)
+                {
+                    AttributeDefinition attribute;
+                    try
+                    {
+                        attribute = transaction.GetObject(entityId, OpenMode.ForRead, true)
+                            as AttributeDefinition;
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+                    if (attribute == null) continue;
+                    string tag = (attribute.Tag ?? "").Trim();
+                    if (presentTags.Contains(tag)) continue;
+                    presentTags.Add(tag);
+                    source.AddAttribute(tag, attribute.TextString ?? "");
+                }
             }
         }
 

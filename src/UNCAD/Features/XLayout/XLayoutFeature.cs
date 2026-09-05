@@ -12,6 +12,7 @@ using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Submission;
+using UNCAD.Cad.QuickLine;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 using UNCAD.UI;
@@ -62,41 +63,70 @@ namespace UNCAD.Features.XLayout
             var groupsByItem = new Dictionary<XLayoutFrameItem, FrameRegionGroup>();
             var summaries = new Dictionary<string, XLayoutMachineSummary>(
                 StringComparer.OrdinalIgnoreCase);
+            var identityErrors = new List<string>();
+            FrameRegionGroup firstIdentityError = null;
             int index = 0;
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
-            foreach (FrameRegionGroup group in regions.Groups)
-            {
-                index++;
-                SubmissionRecord record;
-                try
+                foreach (FrameRegionGroup group in regions.Groups)
                 {
-                    record = FrameIdentityReader.Read(ctx, readTransaction, group);
+                    index++;
+                    SubmissionRecord record;
+                    try
+                    {
+                        record = FrameIdentityReader.Read(ctx, readTransaction, group);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        string error = DescribeFrameIdentityFailure(group, index,
+                            regions.Groups.Count, ex.Message);
+                        identityErrors.Add(error);
+                        if (firstIdentityError == null) firstIdentityError = group;
+                        continue;
+                    }
+                    string machineId = (record.MachineId ?? "").Trim();
+                    if (machineId.Length == 0)
+                    {
+                        string error = DescribeFrameIdentityFailure(group, index,
+                            regions.Groups.Count, "缺少机台ID。");
+                        identityErrors.Add(error);
+                        if (firstIdentityError == null) firstIdentityError = group;
+                        continue;
+                    }
+                    string deviceName = (record.DeviceName ?? "").Trim();
+                    var item = new XLayoutFrameItem(machineId, deviceName, group.Boundary, group.Handle);
+                    items.Add(item);
+                    groupsByItem[item] = group;
+                    if (!summaries.TryGetValue(machineId, out XLayoutMachineSummary summary))
+                    {
+                        summary = new XLayoutMachineSummary(machineId);
+                        summaries.Add(machineId, summary);
+                    }
+                    summary.CircuitCount++;
                 }
-                catch (System.Exception ex)
-                {
-                    ctx.Write("\n[XLAYOUT] 图框 " + group.Handle + " 身份读取失败: " + ex.Message);
-                    return;
-                }
-                string machineId = (record.MachineId ?? "").Trim();
-                if (machineId.Length == 0)
-                {
-                    ctx.Write("\n[XLAYOUT] 图框 " + group.Handle
-                        + " 缺少机台ID，未执行排版。");
-                    return;
-                }
-                string deviceName = (record.DeviceName ?? "").Trim();
-                var item = new XLayoutFrameItem(machineId, deviceName, group.Boundary, group.Handle);
-                items.Add(item);
-                groupsByItem[item] = group;
-                if (!summaries.TryGetValue(machineId, out XLayoutMachineSummary summary))
-                {
-                    summary = new XLayoutMachineSummary(machineId);
-                    summaries.Add(machineId, summary);
-                }
-                summary.CircuitCount++;
+                readTransaction.Commit();
             }
-            readTransaction.Commit();
+
+            if (identityErrors.Count > 0)
+            {
+                const int maxReportedErrors = 20;
+                ctx.Write("\n[XLAYOUT] 发现 " + identityErrors.Count
+                    + " 个图框身份异常，未执行排版：");
+                foreach (string error in identityErrors.Take(maxReportedErrors))
+                    ctx.Write("\n  " + error);
+                if (identityErrors.Count > maxReportedErrors)
+                    ctx.Write("\n  其余 " + (identityErrors.Count - maxReportedErrors)
+                        + " 个异常未在命令行展开。");
+                if (firstIdentityError?.Boundary != null)
+                {
+                    Point3d center = new Point3d(
+                        (firstIdentityError.Boundary.MinX + firstIdentityError.Boundary.MaxX) / 2d,
+                        (firstIdentityError.Boundary.MinY + firstIdentityError.Boundary.MaxY) / 2d,
+                        0d);
+                    if (QuickLineCadService.TryCenterView(ctx, center))
+                        ctx.Write("\n[XLAYOUT] 视图已定位到第一个异常图框。");
+                }
+                return;
             }
 
             Dictionary<string, HashSet<string>> expectedCircuits =
@@ -185,6 +215,13 @@ namespace UNCAD.Features.XLayout
                     return MachineIncompleteColorIndex;
             }
             return MachineCompleteColorIndex;
+        }
+
+        internal static string DescribeFrameIdentityFailure(FrameRegionGroup group,
+            int index, int total, string reason)
+        {
+            return XLayoutDiagnostics.DescribeFrameIdentityFailure(group?.Handle,
+                group?.Boundary, index, total, group?.EntityIds?.Count ?? 0, reason);
         }
 
         private static HashSet<string> FindDuplicateCircuits(
