@@ -33,6 +33,9 @@ namespace UNCAD.Core.Fill
                     "专业", "设备楼层", "上游楼层", "制图", "审核", "日期", "版本");
         }
 
+        public static bool IsDrawingInfoHeaderStart(string value)
+            => Normalize(value).Equals("专业", StringComparison.OrdinalIgnoreCase);
+
         public static bool IsCurrentDrawingInfoHeader(params string[] cells)
         {
             return MatchesDrawingInfoHeader(cells,

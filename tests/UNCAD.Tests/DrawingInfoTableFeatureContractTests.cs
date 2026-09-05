@@ -24,7 +24,7 @@ namespace UNCAD.Tests
             Assert.Contains("plan.Selection.DrawingInfoTableIds", update);
             Assert.Contains("XFrameMigrationService.Migrate", fill);
             Assert.Contains("XFrameMigrationService.Migrate", update);
-            Assert.Contains("FrameRegionCollector.SupportedFrameName", migration);
+            Assert.Contains("FrameRegionCollector.IsLegacyFrame(transaction, frame)", migration);
             Assert.Contains("frame.BlockTableRecord = targetDefinitionId", migration);
             Assert.Contains("EraseTables(transaction, oldTables)", migration);
             Assert.Contains("selection.TableIds = new[] { boqId }", migration);

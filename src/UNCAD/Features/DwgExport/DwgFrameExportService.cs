@@ -52,11 +52,12 @@ namespace UNCAD.Features.DwgExport
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             var frames = new List<DwgExportFrame>();
+            var definitions = new CadBlockDefinitionReader(transaction);
             int index = 0;
             foreach (FrameRegionGroup group in groups ?? Enumerable.Empty<FrameRegionGroup>())
             {
                 index++;
-                SubmissionRecord record = FrameIdentityReader.Read(ctx, transaction, group);
+                SubmissionRecord record = FrameIdentityReader.Read(ctx, transaction, group, definitions);
                 string machineId = (record.MachineId ?? "").Trim();
                 string deviceName = (record.DeviceName ?? "").Trim();
                 ValidatePathPart(machineId, "机台ID");

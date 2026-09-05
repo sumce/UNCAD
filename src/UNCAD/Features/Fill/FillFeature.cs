@@ -538,13 +538,15 @@ namespace UNCAD.Features.Fill
 
         internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
             FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options,
-            bool updateMode = false)
+            bool updateMode = false, Transaction transaction = null)
         {
             if (review == null) return true;
             options = options ?? FillPlanningOptions.Default;
             ObjectId[] blockIds = selection?.RuanguanBlockIds ?? Array.Empty<ObjectId>();
             string meters = blockIds.Length == 0 ? ""
-                : FillSelectionCollector.ReadRuanguanLengthMeters(ctx, blockIds);
+                : transaction != null
+                    ? FillSelectionCollector.ReadRuanguanLengthMeters(transaction, blockIds)
+                    : FillSelectionCollector.ReadRuanguanLengthMeters(ctx, blockIds);
             RuanguanLengthState state = ClassifyRuanguanLength(blockIds.Length,
                 selection?.StatisticsScopeComplete == true, updateMode, meters);
             if (state == RuanguanLengthState.InvalidOrUnknown)
@@ -702,18 +704,29 @@ namespace UNCAD.Features.Fill
         }
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
-            FillSelection selection, MachineRow picked, BoqCatalogIndex catalog)
+            FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,
+            Transaction transaction = null, CadBlockDefinitionReader definitions = null)
         {
             if (picked == null) return;
+            if (transaction == null)
+            {
+                using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    ResolveUpdateCableFromExistingTable(ctx, selection, picked, catalog,
+                        readTransaction);
+                    readTransaction.Commit();
+                }
+                return;
+            }
             catalog = catalog ?? new BoqCatalogIndex(null);
             string originalModel = (picked.Cable ?? "").Trim();
-            FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(ctx,
+            FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(transaction,
                 selection?.FrameInfoJsonBlockIds);
             var sourceIds = new List<ObjectId>();
             sourceIds.AddRange(selection?.FrameBlockIds ?? Array.Empty<ObjectId>());
             sourceIds.AddRange(selection?.TableIds ?? Array.Empty<ObjectId>());
-            SubmissionSourceData tableSource = CadSubmissionReader.Read(ctx,
-                sourceIds.Distinct().ToArray());
+            SubmissionSourceData tableSource = CadSubmissionReader.Read(transaction,
+                sourceIds.Distinct().ToArray(), definitions);
 
             // The current table is authoritative for procurement. If the row was merged or
             // deleted, frameinfo_json preserves the user's previously confirmed substitute.

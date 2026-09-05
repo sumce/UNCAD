@@ -235,13 +235,13 @@ namespace UNCAD.Cad.QuickLine
             // runs before the broad geometry pass.  A valid geometric score
             // wins over a merely adjacent line; an immediate neighbour is a
             // last-resort fallback for labels that were moved far away.
+            var linesByOrder = lines.ToDictionary(line => line.Order);
             foreach (LabelSnapshot label in textLabels.OrderBy(item => item.Order))
             {
                 if (assignedLabels.Contains(label.Id)) continue;
-                var localCandidates = lines
+                var localCandidates = new[] { label.Order - 2, label.Order - 1 }
+                    .Where(linesByOrder.ContainsKey).Select(orderKey => linesByOrder[orderKey])
                     .Where(line => !assignedLines.ContainsKey(line.Id)
-                        && label.Order > line.Order
-                        && label.Order - line.Order <= 2
                         && IsLikelyAdjacentLabel(line, label))
                     .Select(line =>
                     {

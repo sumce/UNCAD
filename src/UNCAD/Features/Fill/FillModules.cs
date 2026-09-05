@@ -23,9 +23,10 @@ namespace UNCAD.Features.Fill
         }
 
         internal static SummationOutput Execute(CadContext ctx, Transaction transaction,
-            ObjectId[] textIds, double mmPerGrid, bool statisticsScopeComplete)
+            ObjectId[] textIds, double mmPerGrid, bool statisticsScopeComplete,
+            StatisticsSettingsSnapshot settings = null)
         {
-            StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
+            settings = settings ?? StatisticsSettings.Current();
             List<string> lines = ModuleRunner.Run(SummationModule.Descriptor,
                 "读取图中文字", () => FillSelectionCollector.ReadStatisticsLines(
                     transaction, textIds, settings.IncludeText, settings.IncludeMText));

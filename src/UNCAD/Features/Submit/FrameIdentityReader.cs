@@ -27,12 +27,12 @@ namespace UNCAD.Features.Submit
 
         /// <summary>Reads a frame through a caller-owned transaction for batch operations.</summary>
         public static SubmissionRecord Read(CadContext ctx, Transaction transaction,
-            FrameRegionGroup region)
+            FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (region == null) throw new ArgumentNullException(nameof(region));
-            return Read(ctx, transaction, region.EntityIds.ToArray(), true);
+            return Read(ctx, transaction, region.EntityIds.ToArray(), true, definitions);
         }
 
         /// <summary>
@@ -40,11 +40,11 @@ namespace UNCAD.Features.Submit
         /// XLAYOUT, U1S, and automatic U1F/U1U submission. The caller owns the transaction.
         /// </summary>
         public static SubmissionRecord Read(CadContext ctx, Transaction transaction,
-            ObjectId[] ids, bool inferLegacySocketPanels)
+            ObjectId[] ids, bool inferLegacySocketPanels, CadBlockDefinitionReader definitions = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
-            SubmissionSourceData source = CadSubmissionReader.Read(transaction, ids);
+            SubmissionSourceData source = CadSubmissionReader.Read(transaction, ids, definitions);
             FrameInfoJsonRecord persistedIdentity = FrameInfoJsonBlockWriter.Read(transaction, ids);
             return SubmissionRecordExtractor.Extract(source, inferLegacySocketPanels,
                 persistedIdentity);
@@ -62,6 +62,7 @@ namespace UNCAD.Features.Submit
             var result = new List<SubmissionRecord>();
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                var definitions = new CadBlockDefinitionReader(transaction);
                 foreach (FrameRegionGroup region in regions ?? Enumerable.Empty<FrameRegionGroup>())
                 {
                     if (region == null)
@@ -71,7 +72,7 @@ namespace UNCAD.Features.Submit
                     }
                     try
                     {
-                        result.Add(Read(ctx, transaction, region));
+                        result.Add(Read(ctx, transaction, region, definitions));
                     }
                     catch (Exception ex)
                     {

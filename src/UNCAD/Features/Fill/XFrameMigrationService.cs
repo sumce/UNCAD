@@ -137,15 +137,7 @@ namespace UNCAD.Features.Fill
         {
             BlockReference frame = transaction.GetObject(id, OpenMode.ForRead, true)
                 as BlockReference;
-            if (frame == null) return false;
-            ObjectId definitionId = frame.IsDynamicBlock
-                ? frame.DynamicBlockTableRecord : frame.BlockTableRecord;
-            BlockTableRecord definition = transaction.GetObject(definitionId,
-                OpenMode.ForRead, true) as BlockTableRecord;
-            return definition != null && string.Equals(
-                BlockNameNormalizer.RemoveMangledSuffix(definition.Name),
-                FrameRegionCollector.SupportedFrameName,
-                StringComparison.OrdinalIgnoreCase);
+            return FrameRegionCollector.IsLegacyFrame(transaction, frame);
         }
 
         private static bool HasCurrentDrawingInfoTable(Transaction transaction,
@@ -247,22 +239,31 @@ namespace UNCAD.Features.Fill
                 BlockReference frame = transaction.GetObject(id, OpenMode.ForRead, true)
                     as BlockReference;
                 if (frame == null) continue;
-                ObjectId definitionId = frame.IsDynamicBlock
-                    ? frame.DynamicBlockTableRecord : frame.BlockTableRecord;
-                if (definitionsWithoutTag.Contains(definitionId)) continue;
-                BlockTableRecord definition = transaction.GetObject(definitionId,
-                    OpenMode.ForRead, true) as BlockTableRecord;
-                AttributeDefinition projectDefinition = definition?.Cast<ObjectId>()
-                    .Select(attributeId => transaction.GetObject(attributeId,
-                        OpenMode.ForRead, true) as AttributeDefinition)
-                    .FirstOrDefault(attribute => attribute != null
-                        && !attribute.Constant && string.Equals(attribute.Tag,
-                            ProjectNameTag, StringComparison.OrdinalIgnoreCase));
-                if (projectDefinition == null)
+                BlockTableRecord definition = null;
+                AttributeDefinition projectDefinition = null;
+                foreach (ObjectId definitionId in FrameRegionCollector.DefinitionIds(frame))
                 {
+                    if (definitionsWithoutTag.Contains(definitionId)) continue;
+                    try
+                    {
+                        definition = transaction.GetObject(definitionId,
+                            OpenMode.ForRead, true) as BlockTableRecord;
+                    }
+                    catch
+                    {
+                        definitionsWithoutTag.Add(definitionId);
+                        continue;
+                    }
+                    projectDefinition = definition?.Cast<ObjectId>()
+                        .Select(attributeId => transaction.GetObject(attributeId,
+                            OpenMode.ForRead, true) as AttributeDefinition)
+                        .FirstOrDefault(attribute => attribute != null
+                            && !attribute.Constant && string.Equals(attribute.Tag,
+                                ProjectNameTag, StringComparison.OrdinalIgnoreCase));
+                    if (projectDefinition != null) break;
                     definitionsWithoutTag.Add(definitionId);
-                    continue;
                 }
+                if (projectDefinition == null) continue;
                 frame.UpgradeOpen();
                 if (!string.Equals(projectDefinition.TextString, DefaultProjectName,
                     StringComparison.Ordinal))

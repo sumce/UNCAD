@@ -24,10 +24,15 @@ namespace UNCAD.Cad
         {
             headerRow = -1;
             if (table == null || table.Columns.Count < 6) return false;
-            for (int row = 0; row < table.Rows.Count; row++)
+            int rowCount = table.Rows.Count;
+            int columnCount = Math.Min(table.Columns.Count, 7);
+            for (int row = 0; row < rowCount; row++)
             {
-                var cells = new string[Math.Min(table.Columns.Count, 7)];
-                for (int column = 0; column < cells.Length; column++)
+                string first = table.Cells[row, 0].TextString ?? "";
+                if (!TableLayoutClassifier.IsDrawingInfoHeaderStart(first)) continue;
+                var cells = new string[columnCount];
+                cells[0] = first;
+                for (int column = 1; column < cells.Length; column++)
                     cells[column] = table.Cells[row, column].TextString ?? "";
                 bool matches = currentOnly
                     ? TableLayoutClassifier.IsCurrentDrawingInfoHeader(cells)

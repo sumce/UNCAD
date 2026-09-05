@@ -235,13 +235,14 @@ namespace UNCAD.Features.Submit
             var records = new List<SubmissionRecord>();
             Action<Transaction> read = current =>
             {
+                var definitions = new CadBlockDefinitionReader(current);
                 int index = 0;
                 foreach (ObjectId[] ids in sourceGroups ?? Enumerable.Empty<ObjectId[]>())
                 {
                     index++;
                     if (ids == null || ids.Length == 0) continue;
                     SubmissionRecord record = FrameIdentityReader.Read(ctx, current, ids,
-                        inferLegacySocketPanels);
+                        inferLegacySocketPanels, definitions);
                     if (string.IsNullOrWhiteSpace(record.MachineId)
                         || string.IsNullOrWhiteSpace(record.DeviceName))
                         throw new InvalidDataException("第 " + index
@@ -277,9 +278,11 @@ namespace UNCAD.Features.Submit
             }
         }
 
-        public static SubmissionSourceData Read(Transaction transaction, ObjectId[] ids)
+        public static SubmissionSourceData Read(Transaction transaction, ObjectId[] ids,
+            CadBlockDefinitionReader definitions = null)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            definitions = definitions ?? new CadBlockDefinitionReader(transaction);
             var source = new SubmissionSourceData();
             foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
             {
@@ -290,14 +293,14 @@ namespace UNCAD.Features.Submit
                     if (!CadTableLayoutClassifier.IsDrawingInfoTable(table))
                         ReadTable(table, source);
                 }
-                else if (entity is BlockReference block) ReadBlock(transaction, block, source);
+                else if (entity is BlockReference block) ReadBlock(transaction, block, source, definitions);
                 else if (entity is DBText || entity is MText) source.TextEntityCount++;
             }
             return source;
         }
 
         private static void ReadBlock(Transaction transaction, BlockReference block,
-            SubmissionSourceData source)
+            SubmissionSourceData source, CadBlockDefinitionReader definitions)
         {
             var presentTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ObjectId attributeId in block.AttributeCollection)
@@ -330,42 +333,15 @@ namespace UNCAD.Features.Submit
             // Some legacy/static inserts expose only the attribute definition (no reference),
             // while U1U's identity reader has always accepted that value.  Mirror that
             // compatibility fallback here so XLAYOUT/U1S/DWG export see the same identity.
-            var definitionIds = new List<ObjectId> { block.BlockTableRecord };
-            if (block.IsDynamicBlock
-                && block.DynamicBlockTableRecord != block.BlockTableRecord)
-                definitionIds.Add(block.DynamicBlockTableRecord);
-            foreach (ObjectId definitionId in definitionIds)
+            foreach (ObjectId definitionId in FrameRegionCollector.DefinitionIds(block))
             {
                 if (definitionId.IsNull || !definitionId.IsValid) continue;
-                BlockTableRecord definition;
-                try
+                foreach (KeyValuePair<string, string> attribute in definitions.Read(definitionId).Attributes)
                 {
-                    definition = transaction.GetObject(definitionId,
-                        OpenMode.ForRead, true) as BlockTableRecord;
-                }
-                catch
-                {
-                    // Proxy/external-reference definitions are not identity sources.
-                    continue;
-                }
-                if (definition == null) continue;
-                foreach (ObjectId entityId in definition)
-                {
-                    AttributeDefinition attribute;
-                    try
-                    {
-                        attribute = transaction.GetObject(entityId, OpenMode.ForRead, true)
-                            as AttributeDefinition;
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-                    if (attribute == null) continue;
-                    string tag = (attribute.Tag ?? "").Trim();
+                    string tag = attribute.Key.Trim();
                     if (presentTags.Contains(tag)) continue;
                     presentTags.Add(tag);
-                    source.AddAttribute(tag, attribute.TextString ?? "");
+                    source.AddAttribute(tag, attribute.Value);
                 }
             }
         }

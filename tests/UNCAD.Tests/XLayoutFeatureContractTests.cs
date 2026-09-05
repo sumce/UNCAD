@@ -47,9 +47,12 @@ namespace UNCAD.Tests
         {
             string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
                 "FrameRegionCollector.cs"));
-            Assert.Contains("owner == null && entity is BlockReference block", collector);
+            Assert.Contains("entity is BlockReference block && !(entity is Table)", collector);
+            Assert.Contains("TryAssignAtAnchor(boundaryIndex, block.Position, id)", collector);
             Assert.Contains("anchor = block.Position", collector);
             Assert.Contains("FindAnchorOwner(boundaryIndex, anchor", collector);
+            Assert.Contains("TryAssignByBounds(boundaryIndex, entity, id, includeAllEntities)",
+                collector);
         }
 
         private static string RepoFile(params string[] parts)

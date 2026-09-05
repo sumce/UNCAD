@@ -149,15 +149,9 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// Writes metadata and transparently migrates old frame drawings that do not yet
-        /// contain a frameinfo_json insert. The legacy frame geometry and attributes remain
-        /// untouched; only a dedicated invisible metadata block is added at the frame center.
-        /// </summary>
-        /// <summary>
-        /// One sweep over the current space listing every standalone
-        /// frameinfo_json insert and its position. Scanning once per batch and
-        /// sharing the result replaces the previous per-frame O(entities) scan
-        /// inside the write transaction.
+        /// One sweep over the current space listing every standalone frameinfo_json insert and
+        /// its position. Scanning once per batch and sharing the result replaces the previous
+        /// per-frame O(entities) scan inside the write transaction.
         /// </summary>
         internal sealed class MetadataBlockIndex
         {
@@ -247,14 +241,9 @@ namespace UNCAD.Features.Fill
         internal static bool IsFrameInfoJsonBlock(Transaction transaction,
             BlockReference block)
         {
-            if (block == null) return false;
-            ObjectId definitionId = block.IsDynamicBlock
-                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-            BlockTableRecord definition = transaction.GetObject(definitionId,
-                OpenMode.ForRead, true) as BlockTableRecord;
-            return definition != null && string.Equals(
+            return Definitions(transaction, block).Any(definition => string.Equals(
                 BlockNameNormalizer.RemoveMangledSuffix(definition.Name), DefinitionName,
-                StringComparison.OrdinalIgnoreCase);
+                StringComparison.OrdinalIgnoreCase));
         }
 
         internal static bool IsJsonHostBlock(Transaction transaction,
@@ -283,22 +272,25 @@ namespace UNCAD.Features.Fill
         {
             if (frame == null || HasJsonAttribute(transaction, frame)) return true;
 
-            ObjectId definitionId = frame.IsDynamicBlock
-                ? frame.DynamicBlockTableRecord : frame.BlockTableRecord;
-            BlockTableRecord definition = transaction.GetObject(definitionId,
-                OpenMode.ForRead, true) as BlockTableRecord;
-            if (definition == null) return false;
-
+            List<BlockTableRecord> definitions = Definitions(transaction, frame).ToList();
+            if (definitions.Count == 0) return false;
+            // Add new attributes to the named definition when possible so all dynamic states
+            // inherit the metadata; read an existing attribute from either definition.
+            BlockTableRecord definition = definitions.Last();
             AttributeDefinition jsonDefinition = null;
-            foreach (ObjectId entityId in definition)
+            foreach (BlockTableRecord candidateDefinition in definitions)
             {
-                AttributeDefinition candidate = transaction.GetObject(entityId,
-                    OpenMode.ForRead, true) as AttributeDefinition;
-                if (candidate != null && !candidate.Constant && IsJsonTag(candidate.Tag))
+                foreach (ObjectId entityId in candidateDefinition)
                 {
-                    jsonDefinition = candidate;
-                    break;
+                    AttributeDefinition candidate = transaction.GetObject(entityId,
+                        OpenMode.ForRead, true) as AttributeDefinition;
+                    if (candidate != null && !candidate.Constant && IsJsonTag(candidate.Tag))
+                    {
+                        jsonDefinition = candidate;
+                        break;
+                    }
                 }
+                if (jsonDefinition != null) break;
             }
             try
             {
@@ -455,22 +447,20 @@ namespace UNCAD.Features.Fill
             if (Attributes(transaction, block).Any(attribute => IsJsonTag(attribute.Tag)))
                 return true;
 
-            ObjectId definitionId = block.IsDynamicBlock
-                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-            BlockTableRecord definition = transaction.GetObject(definitionId,
-                OpenMode.ForRead, true) as BlockTableRecord;
-            if (definition == null) return false;
-
             AttributeDefinition jsonDefinition = null;
-            foreach (ObjectId entityId in definition)
+            foreach (BlockTableRecord definition in Definitions(transaction, block))
             {
-                AttributeDefinition candidate = transaction.GetObject(entityId,
-                    OpenMode.ForRead, true) as AttributeDefinition;
-                if (candidate != null && !candidate.Constant && IsJsonTag(candidate.Tag))
+                foreach (ObjectId entityId in definition)
                 {
-                    jsonDefinition = candidate;
-                    break;
+                    AttributeDefinition candidate = transaction.GetObject(entityId,
+                        OpenMode.ForRead, true) as AttributeDefinition;
+                    if (candidate != null && !candidate.Constant && IsJsonTag(candidate.Tag))
+                    {
+                        jsonDefinition = candidate;
+                        break;
+                    }
                 }
+                if (jsonDefinition != null) break;
             }
             if (jsonDefinition == null) return false;
 
@@ -482,6 +472,26 @@ namespace UNCAD.Features.Fill
             block.AttributeCollection.AppendAttribute(reference);
             transaction.AddNewlyCreatedDBObject(reference, true);
             return true;
+        }
+
+        private static IEnumerable<BlockTableRecord> Definitions(Transaction transaction,
+            BlockReference block)
+        {
+            if (transaction == null || block == null) yield break;
+            foreach (ObjectId definitionId in FrameRegionCollector.DefinitionIds(block))
+            {
+                BlockTableRecord definition;
+                try
+                {
+                    definition = transaction.GetObject(definitionId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                }
+                catch
+                {
+                    continue;
+                }
+                if (definition != null) yield return definition;
+            }
         }
 
         private static string AttributeText(AttributeReference attribute)

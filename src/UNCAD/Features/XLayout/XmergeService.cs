@@ -187,15 +187,7 @@ namespace UNCAD.Features.XLayout
         {
             var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
             if (block == null) return false;
-            try
-            {
-                ObjectId definitionId = block.IsDynamicBlock
-                    ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-                BlockTableRecord definition = transaction.GetObject(definitionId,
-                    OpenMode.ForRead, true) as BlockTableRecord;
-                return FrameRegionCollector.IsSupportedFrameName(definition?.Name);
-            }
-            catch { return false; }
+            return FrameRegionCollector.IsSupportedFrame(transaction, block);
         }
 
         private static string ReadMachineId(Transaction transaction, ObjectId id, string path)

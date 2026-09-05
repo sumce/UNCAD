@@ -209,8 +209,9 @@ namespace UNCAD.Features.Fill
         }
 
         internal static FillSelection Split(Transaction transaction, ObjectId[] ids,
-            bool statisticsScopeComplete = false)
+            bool statisticsScopeComplete = false, CadBlockDefinitionReader definitions = null)
         {
+            definitions = definitions ?? new CadBlockDefinitionReader(transaction);
             var tables = new List<ObjectId>();
             var drawingInfoTables = new List<ObjectId>();
             var texts = new List<ObjectId>();
@@ -239,33 +240,43 @@ namespace UNCAD.Features.Fill
                     else if (entity is BlockReference block)
                     {
                         BlockDefinitionFlags flags = GetDefinitionFlags(tr, block,
-                            definitionCache);
-                        if (flags.IsFrame || IsFillTargetBlock(tr, block)) frames.Add(id);
-                        if (flags.IsDevice || HasAttributeTag(tr, block,
-                            DeviceBlockFiller.TagDeviceName)
-                            || TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _))
-                            devices.Add(id);
+                            definitionCache, definitions);
+                        // Classify each insert once. Definition flags are copied above so one
+                        // insert's extra attributes cannot contaminate another insert.
+                        foreach (ObjectId attributeId in block.AttributeCollection)
+                        {
+                            var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
+                                as AttributeReference;
+                            if (attribute == null) continue;
+                            string tag = attribute.Tag ?? "";
+                            flags.IsFrame |= FrameBlockFiller.IsKnownTag(tag);
+                            flags.IsJson |= string.Equals(tag, "JSON", StringComparison.OrdinalIgnoreCase);
+                            flags.IsUpstreamColor |= IsUpstreamTag(tag);
+                            flags.IsDeviceColor |= IsDownstreamTag(tag);
+                            ApplyValueTag(flags, tag);
+                        }
+                        if (block.IsDynamicBlock)
+                            foreach (DynamicBlockReferenceProperty property
+                                in block.DynamicBlockReferencePropertyCollection)
+                                ApplyValueTag(flags, property.PropertyName);
+                        if (flags.IsFrame) frames.Add(id);
+                        if (flags.IsDevice) devices.Add(id);
                         if (flags.IsRuanguan)
                             ruanguan.Add(id);
-                        if (flags.IsJson || HasAttributeTag(tr, block, "JSON"))
+                        if (flags.IsJson)
                             frameInfoJson.Add(id);
-                        if (flags.IsUpstreamInfo || HasAttributeTag(tr, block,
-                            ConnectionBlockFiller.TagUpstreamInfo)
-                            || IsUpstreamInfoBlock(tr, block))
+                        if (flags.IsUpstreamInfo)
                             upstreamInfo.Add(id);
                         if (flags.IsUpstream)
                             upstreamState.Add(id);
-                        if (flags.HasUpstreamAxis || HasAttributeTag(tr, block,
-                            ConnectionBlockFiller.TagUpstreamAxis)
-                            || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamAxis, out _))
+                        if (flags.HasUpstreamAxis)
                             upstreamAxis.Add(id);
-                        if (flags.HasDownstreamAxis || HasAttributeTag(tr, block,
-                            ConnectionBlockFiller.TagDownstreamAxis)
-                            || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
+                        if (flags.HasDownstreamAxis)
                             downstreamAxis.Add(id);
-                        if (IsDeviceColorBlock(tr, block, flags))
+                        if (flags.IsDeviceColor || flags.IsDevice || flags.HasDownstreamAxis)
                             deviceColor.Add(id);
-                        if (IsUpstreamColorBlock(tr, block, flags))
+                        if (flags.IsUpstreamColor || flags.IsUpstream || flags.IsUpstreamInfo
+                            || flags.HasUpstreamAxis)
                             upstreamColor.Add(id);
                     }
             }
@@ -306,10 +317,13 @@ namespace UNCAD.Features.Fill
             public bool IsDevice;
             public bool HasUpstreamAxis;
             public bool HasDownstreamAxis;
+            public bool IsUpstreamColor;
+            public bool IsDeviceColor;
         }
 
         private static BlockDefinitionFlags GetDefinitionFlags(Transaction tr,
-            BlockReference block, IDictionary<ObjectId, BlockDefinitionFlags> cache)
+            BlockReference block, IDictionary<ObjectId, BlockDefinitionFlags> cache,
+            CadBlockDefinitionReader definitions)
         {
             var result = new BlockDefinitionFlags();
             foreach (ObjectId definitionId in DefinitionIds(block))
@@ -317,8 +331,7 @@ namespace UNCAD.Features.Fill
                 if (!cache.TryGetValue(definitionId, out BlockDefinitionFlags flags))
                 {
                     flags = new BlockDefinitionFlags();
-                    BlockTableRecord definition = tr.GetObject(definitionId,
-                        OpenMode.ForRead, true) as BlockTableRecord;
+                    CadBlockDefinitionReader.Definition definition = definitions.Read(definitionId);
                     if (definition != null)
                     {
                         string name = BlockNameNormalizer.RemoveMangledSuffix(definition.Name);
@@ -331,27 +344,15 @@ namespace UNCAD.Features.Fill
                         flags.IsUpstreamInfo = name.StartsWith("upstream_info",
                             StringComparison.OrdinalIgnoreCase);
                         flags.IsDevice = IsDeviceName(name);
-                        foreach (ObjectId entityId in definition)
+                        foreach (KeyValuePair<string, string> attribute in definition.Attributes)
                         {
-                            AttributeDefinition attribute = tr.GetObject(entityId,
-                                OpenMode.ForRead, true) as AttributeDefinition;
-                            if (attribute == null) continue;
-                            string tag = attribute.Tag ?? "";
+                            string tag = attribute.Key;
                             flags.IsFrame |= FrameBlockFiller.IsKnownTag(tag);
                             flags.IsJson |= tag.IndexOf("JSON",
                                 StringComparison.OrdinalIgnoreCase) >= 0;
-                            flags.HasUpstreamAxis |= string.Equals(tag,
-                                ConnectionBlockFiller.TagUpstreamAxis,
-                                StringComparison.OrdinalIgnoreCase);
-                            flags.HasDownstreamAxis |= string.Equals(tag,
-                                ConnectionBlockFiller.TagDownstreamAxis,
-                                StringComparison.OrdinalIgnoreCase);
-                            flags.IsDevice |= string.Equals(tag,
-                                DeviceBlockFiller.TagDeviceName,
-                                StringComparison.OrdinalIgnoreCase);
-                            flags.IsUpstreamInfo |= string.Equals(tag,
-                                ConnectionBlockFiller.TagUpstreamInfo,
-                                StringComparison.OrdinalIgnoreCase);
+                            flags.IsUpstreamColor |= IsUpstreamTag(tag);
+                            flags.IsDeviceColor |= IsDownstreamTag(tag);
+                            ApplyValueTag(flags, tag);
                         }
                     }
                     cache.Add(definitionId, flags);
@@ -364,98 +365,22 @@ namespace UNCAD.Features.Fill
                 result.IsDevice |= flags.IsDevice;
                 result.HasUpstreamAxis |= flags.HasUpstreamAxis;
                 result.HasDownstreamAxis |= flags.HasDownstreamAxis;
+                result.IsUpstreamColor |= flags.IsUpstreamColor;
+                result.IsDeviceColor |= flags.IsDeviceColor;
             }
             return result;
         }
 
-        private static bool HasAttributeTag(Transaction tr, BlockReference block, string tag)
+        private static void ApplyValueTag(BlockDefinitionFlags flags, string tag)
         {
-            if (block == null) return false;
-            foreach (ObjectId id in block.AttributeCollection)
-            {
-                AttributeReference attribute = tr.GetObject(id, OpenMode.ForRead, true)
-                    as AttributeReference;
-                if (attribute != null && string.Equals(attribute.Tag, tag,
-                    StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
-        }
-
-        private static bool IsUpstreamColorBlock(Transaction tr, BlockReference block,
-            BlockDefinitionFlags flags)
-        {
-            if (block == null) return false;
-            try
-            {
-                if (flags != null && (flags.IsUpstream || flags.IsUpstreamInfo
-                    || flags.HasUpstreamAxis)) return true;
-                if (IsUpstreamInfoBlock(tr, block)
-                    || CadDynamicBlockStateService.IsUpstreamBlock(tr, block)) return true;
-
-                foreach (ObjectId attributeId in block.AttributeCollection)
-                {
-                    AttributeReference attribute = tr.GetObject(attributeId,
-                        OpenMode.ForRead, true) as AttributeReference;
-                    if (attribute != null && IsUpstreamTag(attribute.Tag)) return true;
-                }
-
-                foreach (ObjectId definitionId in DefinitionIds(block))
-                {
-                    BlockTableRecord definition = tr.GetObject(definitionId,
-                        OpenMode.ForRead, true) as BlockTableRecord;
-                    if (definition == null) continue;
-                    if (IsUpstreamName(definition.Name)) return true;
-                    foreach (ObjectId entityId in definition)
-                    {
-                        AttributeDefinition attribute = tr.GetObject(entityId,
-                            OpenMode.ForRead, true) as AttributeDefinition;
-                        if (attribute != null && IsUpstreamTag(attribute.Tag)) return true;
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Log.Warn("上游颜色目标识别失败，已跳过该块: " + ex.Message);
-            }
-            return false;
-        }
-
-        /// <summary>Finds device/downstream inserts that may be purely graphical.</summary>
-        private static bool IsDeviceColorBlock(Transaction tr, BlockReference block,
-            BlockDefinitionFlags flags)
-        {
-            if (block == null) return false;
-            try
-            {
-                if (flags != null && (flags.IsDevice || flags.HasDownstreamAxis)) return true;
-                if (TryGetBlockValue(tr, block, DeviceBlockFiller.TagDeviceName, out _)
-                    || TryGetBlockValue(tr, block, ConnectionBlockFiller.TagDownstreamAxis, out _))
-                    return true;
-                foreach (ObjectId attributeId in block.AttributeCollection)
-                {
-                    AttributeReference attribute = tr.GetObject(attributeId,
-                        OpenMode.ForRead, true) as AttributeReference;
-                    if (attribute != null && IsDownstreamTag(attribute.Tag)) return true;
-                }
-                foreach (ObjectId definitionId in DefinitionIds(block))
-                {
-                    BlockTableRecord definition = tr.GetObject(definitionId,
-                        OpenMode.ForRead, true) as BlockTableRecord;
-                    if (definition == null) continue;
-                    if (IsDeviceName(definition.Name)) return true;
-                    foreach (ObjectId entityId in definition)
-                    {
-                        AttributeDefinition attribute = tr.GetObject(entityId,
-                            OpenMode.ForRead, true) as AttributeDefinition;
-                        if (attribute != null && IsDownstreamTag(attribute.Tag)) return true;
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Log.Warn("设备颜色目标识别失败，已跳过该块: " + ex.Message);
-            }
-            return false;
+            flags.IsDevice |= string.Equals(tag, DeviceBlockFiller.TagDeviceName,
+                StringComparison.OrdinalIgnoreCase);
+            flags.IsUpstreamInfo |= string.Equals(tag, ConnectionBlockFiller.TagUpstreamInfo,
+                StringComparison.OrdinalIgnoreCase);
+            flags.HasUpstreamAxis |= string.Equals(tag, ConnectionBlockFiller.TagUpstreamAxis,
+                StringComparison.OrdinalIgnoreCase);
+            flags.HasDownstreamAxis |= string.Equals(tag, ConnectionBlockFiller.TagDownstreamAxis,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsDeviceName(string value)
@@ -490,11 +415,7 @@ namespace UNCAD.Features.Fill
         }
 
         private static IEnumerable<ObjectId> DefinitionIds(BlockReference block)
-        {
-            yield return block.BlockTableRecord;
-            if (block.IsDynamicBlock && block.DynamicBlockTableRecord != block.BlockTableRecord)
-                yield return block.DynamicBlockTableRecord;
-        }
+            => FrameRegionCollector.DefinitionIds(block);
 
         private static bool IsUpstreamName(string value)
         {
@@ -531,46 +452,6 @@ namespace UNCAD.Features.Fill
                 !char.IsWhiteSpace(character) && character != '_' && character != '-')
                 .ToArray()).ToLowerInvariant();
 
-        private static bool IsUpstreamInfoBlock(Transaction tr, BlockReference block)
-        {
-            if (block == null) return false;
-            if (TryGetBlockValue(tr, block, ConnectionBlockFiller.TagUpstreamInfo, out _))
-                return true;
-            try
-            {
-                ObjectId definitionId = block.IsDynamicBlock
-                    ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-                BlockTableRecord definition = tr.GetObject(definitionId, OpenMode.ForRead, true)
-                    as BlockTableRecord;
-                string name = BlockNameNormalizer.RemoveMangledSuffix(definition?.Name);
-                return name.StartsWith("upstream_info", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool IsFillTargetBlock(Transaction tr, BlockReference block)
-        {
-            if (block == null) return false;
-            ObjectId recordId = block.IsDynamicBlock
-                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-            BlockTableRecord record = tr.GetObject(recordId, OpenMode.ForRead, true)
-                as BlockTableRecord;
-            // Legacy frame inserts may have no recognizable attributes yet. The stable
-            // definition name is the migration anchor for adding frameinfo_json.
-            if (record != null && FrameRegionCollector.IsSupportedFrameName(record.Name))
-                return true;
-            foreach (ObjectId attributeId in block.AttributeCollection)
-            {
-                var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
-                    as AttributeReference;
-                if (attribute != null && FrameBlockFiller.IsKnownTag(attribute.Tag)) return true;
-            }
-            return false;
-        }
-
         private static bool TryGetBlockValue(Transaction tr, BlockReference block,
             string name, out string value)
         {
@@ -598,17 +479,31 @@ namespace UNCAD.Features.Fill
                 }
             }
 
-            var recordIds = new List<ObjectId> { block.BlockTableRecord };
-            if (block.IsDynamicBlock && block.DynamicBlockTableRecord != block.BlockTableRecord)
-                recordIds.Add(block.DynamicBlockTableRecord);
-            foreach (ObjectId recordId in recordIds)
+            foreach (ObjectId recordId in DefinitionIds(block))
             {
-                var record = tr.GetObject(recordId, OpenMode.ForRead, true) as BlockTableRecord;
+                BlockTableRecord record;
+                try
+                {
+                    record = tr.GetObject(recordId, OpenMode.ForRead, true)
+                        as BlockTableRecord;
+                }
+                catch
+                {
+                    continue;
+                }
                 if (record == null) continue;
                 foreach (ObjectId entityId in record)
                 {
-                    var definition = tr.GetObject(entityId, OpenMode.ForRead, true)
-                        as AttributeDefinition;
+                    AttributeDefinition definition;
+                    try
+                    {
+                        definition = tr.GetObject(entityId, OpenMode.ForRead, true)
+                            as AttributeDefinition;
+                    }
+                    catch
+                    {
+                        continue;
+                    }
                     if (definition == null || !string.Equals(definition.Tag, name,
                         StringComparison.OrdinalIgnoreCase)) continue;
                     value = definition.TextString ?? "";

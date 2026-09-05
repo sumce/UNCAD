@@ -45,6 +45,7 @@ namespace UNCAD.Features.Fill
         {
             if (regions == null || regions.Count < 2) return;
             FillRuntimeOptions options = FillSettings.Current();
+            StatisticsSettingsSnapshot statisticsSettings = StatisticsSettings.Current();
             string path = FillFeature.ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
 
@@ -71,11 +72,12 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 正在批量预检 " + regions.Count + " 个图框，请稍候...");
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                var definitions = new CadBlockDefinitionReader(readTransaction);
                 foreach (FrameRegionGroup region in regions)
                 {
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     Preflight(ctx, readTransaction, region, options, workbook, plans,
-                        errors, cableRequests);
+                        errors, cableRequests, definitions, statisticsSettings);
                     clock.Stop();
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
                         + clock.ElapsedMilliseconds + " ms");
@@ -394,11 +396,12 @@ namespace UNCAD.Features.Fill
             FrameRegionGroup region,
             FillRuntimeOptions options, FillWorkbookSnapshot workbook,
             List<Plan> plans, List<string> errors,
-            List<BatchCableCatalogRequest> cableRequests)
+            List<BatchCableCatalogRequest> cableRequests,
+            CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
-                region.EntityIds.ToArray(), true);
+                region.EntityIds.ToArray(), true, definitions);
             if (selection.FrameBlockIds.Length != 1)
             {
                 errors.Add(prefix + "没有读取到唯一图框块。");
@@ -437,7 +440,8 @@ namespace UNCAD.Features.Fill
                 return;
 
             SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
-                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
+                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
+                statisticsSettings);
             CableStatResult statistics = summation.Statistics;
             if (statistics.CableState == MeasurementState.Unknown
                 || statistics.BridgeState == MeasurementState.Unknown
@@ -448,7 +452,8 @@ namespace UNCAD.Features.Fill
             try
             {
                 // Batch U1U must use the current CAD table as the cable fallback before planning.
-                FillFeature.ResolveUpdateCableFromExistingTable(ctx, selection, machine, workbook.Catalog);
+                FillFeature.ResolveUpdateCableFromExistingTable(ctx, selection, machine,
+                    workbook.Catalog, readTransaction, definitions);
             }
             catch (Exception ex)
             {
@@ -494,7 +499,7 @@ namespace UNCAD.Features.Fill
             try
             {
                 if (!FillFeature.ApplyRuanguanLength(ctx, selection, review,
-                        workbook.Catalog, options.Planning, true))
+                        workbook.Catalog, options.Planning, true, readTransaction))
                 {
                     errors.Add(prefix + "Ruanguan 软管长度无法确认。");
                     return;

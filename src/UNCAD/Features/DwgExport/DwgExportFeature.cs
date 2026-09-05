@@ -19,7 +19,7 @@ namespace UNCAD.Features.DwgExport
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.DwgExport);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请框选或点选需要导出的图框（frame_20260812/xframe）: ",
+                "\n请框选或点选需要导出的图框（" + FrameRegionCollector.SupportedFrameDescription + "）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
@@ -36,7 +36,7 @@ namespace UNCAD.Features.DwgExport
             }
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[U1DWG] 未找到有效图框（frame_20260812/xframe）。");
+                ctx.Write("\n[U1DWG] 未找到有效图框（" + FrameRegionCollector.SupportedFrameDescription + "）。");
                 return;
             }
 

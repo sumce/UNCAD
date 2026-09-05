@@ -19,7 +19,7 @@ using UNCAD.UI;
 
 namespace UNCAD.Features.XLayout
 {
-    /// <summary>Arranges selected frame_20260812 blocks by machine and shows circuit totals.</summary>
+    /// <summary>Arranges selected legacy/xframe blocks by machine and shows circuit totals.</summary>
     [Feature("xlayout", "图框自动排版", Commands = CommandIds.XLayoutFeatureCommands,
         Description = "按机台ID将图框分行排版，并统计每个机台的回路数量")]
     public sealed class XLayoutFeature : CommandBase
@@ -38,7 +38,7 @@ namespace UNCAD.Features.XLayout
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.XLayout);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请框选或点选需要排版的图框（frame_20260812/xframe）: ",
+                "\n请框选或点选需要排版的图框（" + FrameRegionCollector.SupportedFrameDescription + "）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
@@ -55,7 +55,7 @@ namespace UNCAD.Features.XLayout
             }
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[XLAYOUT] 未找到有效图框（frame_20260812/xframe）。");
+                ctx.Write("\n[XLAYOUT] 未找到有效图框（" + FrameRegionCollector.SupportedFrameDescription + "）。");
                 return;
             }
 
@@ -68,13 +68,14 @@ namespace UNCAD.Features.XLayout
             int index = 0;
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                var definitions = new CadBlockDefinitionReader(readTransaction);
                 foreach (FrameRegionGroup group in regions.Groups)
                 {
                     index++;
                     SubmissionRecord record;
                     try
                     {
-                        record = FrameIdentityReader.Read(ctx, readTransaction, group);
+                        record = FrameIdentityReader.Read(ctx, readTransaction, group, definitions);
                     }
                     catch (System.Exception ex)
                     {

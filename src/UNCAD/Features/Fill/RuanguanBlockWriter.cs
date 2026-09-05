@@ -220,13 +220,19 @@ namespace UNCAD.Features.Fill
         private static bool IsRuanguan(Transaction transaction, BlockReference block)
         {
             if (block == null) return false;
-            ObjectId definitionId = block.IsDynamicBlock
-                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-            var definition = transaction.GetObject(definitionId, OpenMode.ForRead, true)
-                as BlockTableRecord;
-            return definition != null && string.Equals(
-                BlockNameNormalizer.RemoveMangledSuffix(definition.Name), "Ruanguan",
-                StringComparison.OrdinalIgnoreCase);
+            foreach (ObjectId definitionId in FrameRegionCollector.DefinitionIds(block))
+            {
+                try
+                {
+                    var definition = transaction.GetObject(definitionId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                    if (definition != null && string.Equals(
+                        BlockNameNormalizer.RemoveMangledSuffix(definition.Name), "Ruanguan",
+                        StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { }
+            }
+            return false;
         }
 
         private static void SetAttributeValue(CadContext ctx,

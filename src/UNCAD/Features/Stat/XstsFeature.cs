@@ -30,7 +30,7 @@ namespace UNCAD.Features.Stat
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.Statistics);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n请选择要统计的图框（frame_20260812/xframe）: ",
+                "\n请选择要统计的图框（" + FrameRegionCollector.SupportedFrameDescription + "）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
@@ -50,22 +50,27 @@ namespace UNCAD.Features.Stat
             }
 
             var selectedRows = new List<XstsCircuitRecord>();
-            foreach (FrameRegionGroup region in regions.Groups)
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                try
+                var definitions = new CadBlockDefinitionReader(transaction);
+                foreach (FrameRegionGroup region in regions.Groups)
                 {
-                    SubmissionRecord record = FrameIdentityReader.Read(ctx, region);
-                    selectedRows.Add(new XstsCircuitRecord(record.MachineId,
-                        record.DeviceName));
+                    try
+                    {
+                        SubmissionRecord record = FrameIdentityReader.Read(ctx, transaction,
+                            region, definitions);
+                        selectedRows.Add(new XstsCircuitRecord(record.MachineId,
+                            record.DeviceName));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        // Preserve individual issue rows even though the read transaction is shared.
+                        string detail = "图框 " + region.Handle + " 身份读取失败: " + ex.Message;
+                        ctx.Write("\n[XSTS] " + detail);
+                        selectedRows.Add(new XstsCircuitRecord("", "", detail));
+                    }
                 }
-                catch (System.Exception ex)
-                {
-                    // One malformed/legacy frame must not discard the other selected
-                    // machines. Keep an explicit issue row for the report and continue.
-                    string detail = "图框 " + region.Handle + " 身份读取失败: " + ex.Message;
-                    ctx.Write("\n[XSTS] " + detail);
-                    selectedRows.Add(new XstsCircuitRecord("", "", detail));
-                }
+                transaction.Commit();
             }
 
             // When an Excel machine workbook is configured, use it as the expected set,

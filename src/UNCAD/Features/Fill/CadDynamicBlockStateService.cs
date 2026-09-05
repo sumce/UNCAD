@@ -162,11 +162,22 @@ namespace UNCAD.Features.Fill
 
         private static string EffectiveName(Transaction transaction, BlockReference block)
         {
-            ObjectId recordId = block.IsDynamicBlock
-                ? block.DynamicBlockTableRecord : block.BlockTableRecord;
-            BlockTableRecord record = transaction.GetObject(recordId, OpenMode.ForRead, true)
-                as BlockTableRecord;
-            return record?.Name ?? "";
+            string fallback = "";
+            foreach (ObjectId recordId in FrameRegionCollector.DefinitionIds(block))
+            {
+                try
+                {
+                    BlockTableRecord record = transaction.GetObject(recordId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                    string name = record?.Name ?? "";
+                    if (fallback.Length == 0) fallback = name;
+                    string normalized = BlockNameNormalizer.RemoveMangledSuffix(name);
+                    if (DynamicBlockStatePolicy.IsDeviceBlock(normalized)
+                        || DynamicBlockStatePolicy.IsUpstreamBlock(normalized)) return name;
+                }
+                catch { }
+            }
+            return fallback;
         }
     }
 }

@@ -23,18 +23,20 @@ $runId = [Guid]::NewGuid().ToString('N')
 $tempDir = [System.IO.Path]::GetTempPath()
 $scriptPath = Join-Path $tempDir "uncad-cad-$runId.scr"
 $resultPath = Join-Path $tempDir "uncad-cad-$runId.result"
+$drawingPath = Join-Path $tempDir "uncad-cad-$runId.dwg"
 $previousResult = $env:UNCAD_CAD_INTEGRATION_RESULT
 try {
+    Copy-Item -LiteralPath $InputDrawing -Destination $drawingPath
     $commands = @(
         '_.NETLOAD',
         ('"' + ($assembly -replace '\\', '/') + '"'),
         $Command,
         '_.QUIT',
-        '_N'
+        '_Y'
     )
     Set-Content -LiteralPath $scriptPath -Value $commands -Encoding ASCII
     $env:UNCAD_CAD_INTEGRATION_RESULT = $resultPath
-    $consoleOutput = (& $console /i $InputDrawing /s $scriptPath 2>&1) -join [Environment]::NewLine
+    $consoleOutput = (& $console /i $drawingPath /s $scriptPath 2>&1) -join [Environment]::NewLine
     $consoleExitCode = $LASTEXITCODE
     $resultExists = Test-Path -LiteralPath $resultPath
     $resultValue = if ($resultExists) {
@@ -43,7 +45,7 @@ try {
         ''
     }
     if (!$resultExists -or $resultValue -ne 'PASS') {
-        throw "AutoCAD integration test $Command did not report PASS (exit code $consoleExitCode).`n$consoleOutput"
+        throw "AutoCAD integration test $Command did not report PASS (exit code $consoleExitCode).`n$resultValue`n$consoleOutput"
     }
     Write-Host 'UNCAD AutoCAD integration: PASS'
 }
@@ -51,4 +53,6 @@ finally {
     $env:UNCAD_CAD_INTEGRATION_RESULT = $previousResult
     Remove-Item -LiteralPath $scriptPath -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $resultPath -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $drawingPath -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ([IO.Path]::ChangeExtension($drawingPath, '.bak')) -ErrorAction SilentlyContinue
 }
