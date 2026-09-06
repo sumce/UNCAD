@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -25,18 +26,75 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
+            if (SupportsStartupUi())
+            {
+                Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnStartupSplashIdle;
+                _startupSplashIdleAttached = true;
+            }
             if (ProductMetadata.RequiresOnlineLicense)
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnLicenseIdle;
                 _licenseIdleAttached = true;
                 OnlineLicenseMonitor.Start();
             }
-            Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnUpdateNotesIdle;
-            _updateNotesIdleAttached = true;
             Log.Info("UNCAD initialized; Ribbon registration requested");
         }
 
+        private static bool _startupSplashIdleAttached;
+        private static bool _startupSplashShown;
+
+        /// <summary>
+        /// CAD 界面就绪后(Idle)展示一次全屏品牌动画。U1SET 可关闭;Core Console、
+        /// 后续文档切换不重复展示。更新日志弹窗在动画之后触发。
+        /// </summary>
+        private static void OnStartupSplashIdle(object sender, EventArgs args)
+        {
+            if (_startupSplashShown) return;
+            var documentManager = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager;
+            if (documentManager == null || documentManager.MdiActiveDocument == null) return;
+            _startupSplashShown = true;
+            DetachStartupSplashIdle();
+            try
+            {
+                if (!Settings.GetBool(ConfigKeys.StartupSplashEnabled, true))
+                {
+                    Log.Info("启动动画已通过设置关闭");
+                    return;
+                }
+                IntPtr handle = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow?.Handle
+                    ?? IntPtr.Zero;
+                Rectangle bounds = handle == IntPtr.Zero
+                    ? Screen.PrimaryScreen.Bounds : Screen.FromHandle(handle).Bounds;
+                using (var splash = new StartupSplashForm(bounds))
+                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(splash);
+            }
+            catch (System.Exception ex)
+            {
+                // 动画失败绝不能阻塞 CAD 使用。
+                Log.Warn("启动动画展示失败: " + ex.Message);
+            }
+            finally
+            {
+                // 在当前 Idle 回调中才订阅，确保更新日志最早在下一次 Idle 展示。
+                AttachUpdateNotesIdle();
+            }
+        }
+
+        private static void DetachStartupSplashIdle()
+        {
+            if (!_startupSplashIdleAttached) return;
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnStartupSplashIdle;
+            _startupSplashIdleAttached = false;
+        }
+
         private static bool _updateNotesIdleAttached;
+
+        private static void AttachUpdateNotesIdle()
+        {
+            if (_updateNotesIdleAttached || !SupportsStartupUi()) return;
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnUpdateNotesIdle;
+            _updateNotesIdleAttached = true;
+        }
 
         /// <summary>
         /// 更新到新版本后第一次打开 CAD 时展示版本更新日志(Idle 触发,不阻塞加载)。
@@ -46,6 +104,11 @@ namespace UNCAD
         {
             try
             {
+                if (!SupportsStartupUi())
+                {
+                    DetachUpdateNotesIdle();
+                    return;
+                }
                 if (_updateNotesDialogOpen) return;
                 string seen = Settings.Get(ConfigKeys.UpdateNotesSeenVersion, "").Trim();
                 if (string.Equals(seen, ProductMetadata.VersionText, StringComparison.Ordinal)) return;
@@ -112,6 +175,11 @@ namespace UNCAD
 
         private static int _warmedUp;
 
+        private static bool SupportsStartupUi()
+            => StartupSplashForm.SupportsHost(
+                System.Diagnostics.Process.GetCurrentProcess().ProcessName,
+                Environment.UserInteractive);
+
         /// <summary>
         /// 启动空闲时预热:第一次 U1F/U1U 等命令的"卡"主要来自一次性成本
         /// (内嵌固定清单解析、规划/Excel 模块 JIT)。挪到 Idle 执行,
@@ -142,6 +210,7 @@ namespace UNCAD
         private static void OnLicenseIdle(object sender, EventArgs args)
         {
             WarmUp();
+            if (!SupportsStartupUi() || _startupSplashIdleAttached) return;
             if (_licenseDialogOpen) return;
             if (OnlineLicenseMonitor.TryTakeActivationRequest(out string reason))
             {
@@ -172,6 +241,7 @@ namespace UNCAD
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnLicenseIdle;
                 _licenseIdleAttached = false;
             }
+            DetachStartupSplashIdle();
             DetachUpdateNotesIdle();
             OnlineLicenseMonitor.Stop();
         }

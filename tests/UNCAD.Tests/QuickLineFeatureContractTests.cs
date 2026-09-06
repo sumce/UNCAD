@@ -46,13 +46,13 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void NoThreeDimensionalRemnantsInProject()
+        public void NoThreeDimensionalQuickLineRemnantsInProject()
         {
             string project = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
             Assert.DoesNotContain("OpenTK", project);
-            Assert.DoesNotContain("WebView2", project);
             string feature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Unl", "QuickLineFeature.cs"));
+            Assert.DoesNotContain("WebView2", feature);
             Assert.DoesNotContain("Line3d", feature);
             Assert.DoesNotContain("IsometricScene", feature);
             Assert.DoesNotContain("SchematicLayout", feature);

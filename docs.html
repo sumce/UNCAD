@@ -72,23 +72,81 @@
     filter: blur(0);
   }
 
-  .hint {
+  .product-version {
     position: absolute;
-    left: 50%; bottom: 40px;
-    transform: translateX(-50%);
+    left: 50%;
+    top: calc(50% + var(--logo-h) * 0.66);
     z-index: 3;
-    font-size: 12px;
-    letter-spacing: 0.4em;
-    color: #c2c2c2;
+    transform: translateX(-50%);
+    color: #747474;
+    font-size: calc(var(--logo-h) * 0.09);
+    white-space: nowrap;
     opacity: 0;
-    transition: opacity 1s ease;
-    pointer-events: none;
-    user-select: none;
+    transition: opacity 0.45s ease;
   }
-  .hint.visible { opacity: 1; }
+  .product-version.visible { opacity: 1; }
+
+  /* ---------- 右下角 Windows 风格 Loader ---------- */
+  .win-loader-container {
+    position: absolute;
+    right: 40px;
+    bottom: 40px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+    pointer-events: none;
+  }
+  .win-loader-container.visible {
+    opacity: 1;
+  }
+
+  .win-loader {
+    position: relative;
+    width: 32px;
+    height: 32px;
+  }
+
+  .win-loader .dot {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    animation: winSpin 3.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  }
+
+  .win-loader .dot::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 14px;
+    width: 4px;
+    height: 4px;
+    background-color: var(--ink);
+    border-radius: 50%;
+  }
+
+  .win-loader .dot:nth-child(1) { animation-delay: 0.12s; }
+  .win-loader .dot:nth-child(2) { animation-delay: 0.24s; }
+  .win-loader .dot:nth-child(3) { animation-delay: 0.36s; }
+  .win-loader .dot:nth-child(4) { animation-delay: 0.48s; }
+  .win-loader .dot:nth-child(5) { animation-delay: 0.60s; }
+
+  @keyframes winSpin {
+    0% { transform: rotate(0deg); opacity: 0; }
+    5% { opacity: 1; }
+    50% { transform: rotate(360deg); opacity: 1; }
+    90% { transform: rotate(720deg); opacity: 0; }
+    100% { transform: rotate(720deg); opacity: 0; }
+  }
 
   @media (prefers-reduced-motion: reduce) {
-    .brand-content, .letter, #particleCanvas { transition: none !important; }
+    .brand-content, .letter, #particleCanvas, .product-version, .win-loader-container { transition: none !important; }
+    .win-loader .dot { animation: none !important; }
   }
 </style>
 </head>
@@ -113,7 +171,17 @@
       </div>
     </div>
 
-    <div class="hint" id="hint">点击重播</div>
+    <div class="product-version" id="productVersion">UNCAD Pro · v{{VERSION}}</div>
+
+    <div class="win-loader-container" id="loaderContainer">
+      <div class="win-loader">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -126,7 +194,8 @@
     const svgLogo = document.getElementById('svgLogo');
     const brandText = document.getElementById('brandText');
     const letters = [...brandText.querySelectorAll('.letter')];
-    const hint = document.getElementById('hint');
+    const productVersion = document.getElementById('productVersion');
+    const loaderContainer = document.getElementById('loaderContainer');
 
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const TAU = Math.PI * 2;
@@ -292,28 +361,29 @@
 
     /* ============ 粒子 → 矢量 无缝交接 ============ */
     function handoff() {
-      // 1) 矢量 LOGO 先淡入，稍后粒子层才淡出（交叉淡化，避免亮度凹陷）
+      // 1) 矢量 LOGO 先淡入，稍后粒子层才淡出
       brandContent.classList.add('active');
       timer(() => canvas.classList.add('hidden'), 200);
 
-      // 2) 整体左移让位（JS 精确计算居中偏移），字母依次飞入
+      // 2) 整体左移让位，字母依次飞入
       timer(() => {
         letters.forEach((el, i) => (el.style.transitionDelay = `${0.1 + i * 0.07}s`));
         brandContent.style.transform = `translateX(${-computeShift()}px)`;
         brandContent.classList.add('show-text');
+        productVersion.classList.add('visible');
         timer(() => letters.forEach(el => (el.style.transitionDelay = '0s')), 1400);
       }, 450);
 
-      // 3) 收尾：彻底停止渲染循环，不空耗性能
+      // 3) 全部动画播放完毕后：停止渲染循环，并【在此处淡入展示右下角 Loading】
       timer(() => {
         state.running = false;
         state.finished = true;
         ctx.clearRect(0, 0, state.W, state.H);
-        hint.classList.add('visible');
-      }, 2600);
+        loaderContainer.classList.add('visible'); // LOGO动画完全结束后才显示加载动画
+      }, 2100);
     }
 
-    /* ============ 启动 / 重播 ============ */
+    /* ============ 启动动画 ============ */
     function start() {
       cancelTimers();
       state.running = false;
@@ -325,7 +395,8 @@
       brandContent.style.transform = '';
       canvas.classList.remove('hidden');
       letters.forEach(el => (el.style.transitionDelay = '0s'));
-      hint.classList.remove('visible');
+      productVersion.classList.remove('visible');
+      loaderContainer.classList.remove('visible'); // 保证开始时不展示 Loader
 
       if (reduced) { finishInstantly(); return; }
 
@@ -356,7 +427,8 @@
       brandContent.style.transform = `translateX(${-computeShift()}px)`;
       canvas.classList.add('hidden');
       state.finished = true;
-      hint.classList.add('visible');
+      productVersion.classList.add('visible');
+      loaderContainer.classList.add('visible');
     }
 
     /* ============ 工具与事件 ============ */
@@ -370,17 +442,15 @@
     document.addEventListener('mouseleave', () => { state.mouse.x = state.mouse.y = -9999; });
     window.addEventListener('blur', () => { state.mouse.x = state.mouse.y = -9999; });
 
-    window.addEventListener('pointerdown', () => { if (state.finished) start(); });
-
     let resizeTimer = 0;
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         if (state.finished) {
-          layout();  // 已完成：只重排版面，不重播
+          layout();  // 已完成：只重排版面
           brandContent.style.transform = `translateX(${-computeShift()}px)`;
         } else {
-          start();   // 进行中：干净地重启
+          start();   // 进行中：重启
         }
       }, 180);
     });

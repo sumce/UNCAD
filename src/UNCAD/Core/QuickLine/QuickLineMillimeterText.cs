@@ -100,6 +100,17 @@ namespace UNCAD.Core.QuickLine
         public static bool TryExtractSingleCad(string text, out double millimeters)
             => TryExtractSingle(NormalizeCadText(text), out millimeters);
 
+        /// <summary>True when the label's trailing mm value ends in 00.</summary>
+        public static bool IsPlaceholder(string text)
+        {
+            string normalized = NormalizeCadText(text).TrimEnd();
+            MatchCollection matches = MillimeterTokenRegex.Matches(normalized);
+            if (matches.Count == 0) return false;
+            Match match = matches[matches.Count - 1];
+            return match.Index + match.Length == normalized.Length
+                && match.Groups[1].Value.EndsWith("00", StringComparison.Ordinal);
+        }
+
         /// <summary>
         /// Parses a numeric-only value.  This is intentionally separate from
         /// <see cref="TryParse"/> so ordinary numeric drawing text is never

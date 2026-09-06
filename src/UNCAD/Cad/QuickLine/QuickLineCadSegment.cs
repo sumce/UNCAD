@@ -36,9 +36,8 @@ namespace UNCAD.Cad.QuickLine
         public double? LabelMillimetres { get; }
         public bool HasMillimetreLabel => !LabelId.IsNull && LabelMillimetres.HasValue;
         /// <summary>
-        /// True when U1LX has explicitly confirmed this label.  It is separate
-        /// from the text value because a real measured distance can equal the
-        /// U1L placeholder (normally 2000mm).
+        /// True when U1LX has explicitly confirmed this label. Values ending
+        /// in 00mm can still be treated as editable placeholders.
         /// </summary>
         public bool HasCompletionMarker { get; }
         /// <summary>CAD source kind used for diagnostics (DBText/MText/Dimension/Attribute).</summary>

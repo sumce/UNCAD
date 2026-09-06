@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.3", "2026-09-06",
+                    "新增：AutoCAD 启动后显示全屏 UNCAD 品牌动画，由 .NET 在 5 秒后自动关闭，可在 U1SET 中关闭。",
+                    "修复 U1LX：从末端线任一端点击都能遍历完整连通路线。",
+                    "U1LX 将末尾为 00mm 的标注继续视为可修改占位符，便于重新执行后纠正误填值。"),
                 new VersionChangeLogEntry("2.4.2", "2026-09-06",
                     "性能优化：U1U、XLAYOUT、XSTS、U1S、U1DWG、Xmerge 批量读取共用一个 CAD 事务和块定义缓存，大幅减少大图批量操作的等待时间。",
                     "图框识别支持旧版 frame 块（frame_20260812/frame/xframe 均可）。",

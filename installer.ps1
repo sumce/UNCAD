@@ -142,6 +142,8 @@ function Get-PackageInfo {
         "PackageContents.xml",
         "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll", "NPOI.OpenXml4Net.dll",
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+        "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
+        "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $payloadFiles) {

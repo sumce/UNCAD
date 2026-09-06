@@ -39,6 +39,14 @@ if (-not $SkipBundle) {
         Where-Object { $outputDllNames -notcontains $_.Name } |
         Remove-Item -Force
     $outputDlls | Copy-Item -Destination $bundleDir -Force
+    $webViewLoaderRelative = "runtimes\win-x64\native\WebView2Loader.dll"
+    $webViewLoader = Join-Path $outputDir $webViewLoaderRelative
+    if (-not (Test-Path -LiteralPath $webViewLoader -PathType Leaf)) {
+        throw "WebView2 x64 loader is missing: $webViewLoader"
+    }
+    $bundleWebViewLoader = Join-Path $bundleDir $webViewLoaderRelative
+    New-Item (Split-Path -Parent $bundleWebViewLoader) -ItemType Directory -Force | Out-Null
+    Copy-Item -LiteralPath $webViewLoader -Destination $bundleWebViewLoader -Force
 
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
@@ -52,6 +60,8 @@ if (-not $SkipBundle) {
         "PackageContents.xml", "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll",
         "NPOI.OpenXml4Net.dll", "NPOI.OpenXmlFormats.dll",
         "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+        "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
+        "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"

@@ -74,6 +74,20 @@ namespace UNCAD.Tests
         }
 
         [Theory]
+        [InlineData("2000mm", true)]
+        [InlineData("1200mm", true)]
+        [InlineData(@"{\fSimSun|b0;3400mm}", true)]
+        [InlineData("cable 3000MM", true)]
+        [InlineData("20mm conduit 3400mm", true)]
+        [InlineData("1250mm", false)]
+        [InlineData("3400mm note", false)]
+        public void IsPlaceholder_UsesTrailingValueEndingIn00(
+            string text, bool expected)
+        {
+            Assert.Equal(expected, QuickLineMillimeterText.IsPlaceholder(text));
+        }
+
+        [Theory]
         [InlineData("1250", 1250.0)]
         [InlineData(" 1250.5 ", 1250.5)]
         [InlineData(".5", 0.5)]

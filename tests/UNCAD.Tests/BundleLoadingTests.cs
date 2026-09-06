@@ -141,6 +141,9 @@ namespace UNCAD.Tests
                 "PackageContents.xml", "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll",
                 "NPOI.OpenXml4Net.dll", "NPOI.OpenXmlFormats.dll",
                 "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
+                "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
+                "Microsoft.Web.WebView2.Wpf.dll",
+                "runtimes\\win-x64\\native\\WebView2Loader.dll",
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
             };
             string build = File.ReadAllText(RepoFile("build.ps1"));
@@ -159,18 +162,18 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void PackagePipeline_ShipsNativeEditorWithoutWebPayload()
+        public void PackagePipeline_UsesWebView2OnlyForStartupSplash()
         {
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
             string csproj = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
 
-            // WebView2 与 Web 资源已随原生 OpenTK 编辑器移除。
-            Assert.DoesNotContain("WebView2", build);
+            Assert.Contains("WebView2Loader.dll", build);
             Assert.DoesNotContain("Web\\QuickLine3D", build);
-            Assert.DoesNotContain("WebView2", installer);
+            Assert.Contains("WebView2Loader.dll", installer);
             Assert.DoesNotContain("Web\\QuickLine3D", installer);
-            Assert.DoesNotContain("Microsoft.Web.WebView2", csproj);
+            Assert.Contains("Microsoft.Web.WebView2", csproj);
+            Assert.Contains("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);
             Assert.DoesNotContain("UNCAD_TEMPORARY_LICENSE", csproj);

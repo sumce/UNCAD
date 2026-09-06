@@ -26,7 +26,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void EndpointPick_TraversesAwayFromClickedEndpoint()
+        public void EndpointPick_AtEitherEndOfTerminalSegmentTraversesConnectedRoute()
         {
             var graph = QuickLineGraph.Build(new[]
             {
@@ -35,16 +35,17 @@ namespace UNCAD.Tests
                 Line("C", 20, 0, 30, 0)
             });
 
-            QuickLineTraversalPlan plan = QuickLineTraversal.CreatePlan(
+            QuickLineTraversalPlan startPick = QuickLineTraversal.CreatePlan(
                 graph, "A", new QuickLinePoint(0, 0));
+            QuickLineTraversalPlan endPick = QuickLineTraversal.CreatePlan(
+                graph, "A", new QuickLinePoint(10, 0));
 
-            Assert.Equal(QuickLineClickRegion.StartEndpoint, plan.ClickRegion);
-            Assert.Equal(QuickLineEndpoint.End, plan.ExitEndpoint);
+            Assert.Equal(QuickLineClickRegion.StartEndpoint, startPick.ClickRegion);
+            Assert.Equal(QuickLineEndpoint.End, startPick.ExitEndpoint);
             Assert.Equal(new[] { "A", "B", "C" },
-                plan.Steps.Select(step => step.SegmentId).ToArray());
-            Assert.Equal(QuickLineEndpoint.Start, plan.Steps[0].EntryEndpoint);
-            Assert.Equal(QuickLineEndpoint.End, plan.Steps[0].ExitEndpoint);
-            Assert.Equal(QuickLineEndpoint.Start, plan.Steps[1].EntryEndpoint);
+                startPick.Steps.Select(step => step.SegmentId).ToArray());
+            Assert.Equal(new[] { "A", "B", "C" },
+                endPick.Steps.Select(step => step.SegmentId).ToArray());
         }
 
         [Fact]

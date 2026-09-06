@@ -31,12 +31,11 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void OlderSeenVersionShowsNewerEntriesOnly()
+        public void PreviousSeenVersionShowsLatestEntryOnly()
         {
-            // 2.4.1 is a shipped entry, so an upgrade from it sees exactly 2.4.2.
-            var from241 = VersionChangeLog.EntriesNewerThan("2.4.1");
-            Assert.Single(from241);
-            Assert.Equal(ProductMetadata.VersionLabel, from241[0].Version);
+            var from242 = VersionChangeLog.EntriesNewerThan("2.4.2");
+            Assert.Single(from242);
+            Assert.Equal(ProductMetadata.VersionLabel, from242[0].Version);
         }
 
         [Fact]

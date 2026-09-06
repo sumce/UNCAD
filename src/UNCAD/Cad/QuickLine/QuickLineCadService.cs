@@ -76,8 +76,8 @@ namespace UNCAD.Cad.QuickLine
         /// <summary>
         /// Registered application used for U1L/U1LX metadata.  Keeping the
         /// association in the drawing makes the scanner reliable after a
-        /// label is moved, and the completion flag remains valid when the
-        /// measured value happens to equal the placeholder.
+        /// label is moved. Values ending in 00mm remain editable placeholders
+        /// even when an earlier U1LX run marked them complete.
         /// </summary>
         public const string MetadataApplicationName = QuickLineMetadataStore.ApplicationName;
 
@@ -267,14 +267,14 @@ namespace UNCAD.Cad.QuickLine
                 assignedLabels.Add(label.Id);
             }
 
-            // A drafter may keep the U1L 2000mm DBText as the writable target
+            // A drafter may keep a U1L value ending in 00mm as the writable target
             // and add the measured value as another TEXT/MTEXT/block attribute.
             // Match those observations before the broad pass can attach them
             // to a different nearby line, then retain the U1L target id while
             // exposing the observed value to the 3D editor.
             var observationLines = lines.Where(line =>
                     assignedLines.TryGetValue(line.Id, out LabelSnapshot current)
-                    && !current.HasCompletionMarker)
+                    && QuickLineMillimeterText.IsPlaceholder(current.Text))
                 .ToList();
             var observationLabels = textLabels.Where(label =>
                     !assignedLabels.Contains(label.Id)
@@ -476,11 +476,8 @@ namespace UNCAD.Cad.QuickLine
                     if (!TryPrepareLabelUpdate(entity, millimetres,
                             out LabelMutation mutation)) return false;
                     mutation.Apply();
-                    // The value itself is deliberately not used as the only
-                    // completion signal: 2000mm can be a genuine measurement.
-                    // If registration/XData is unavailable, the text update is
-                    // still committed and the legacy non-placeholder heuristic
-                    // remains available to the next scan.
+                    // Persist completion for compatibility. Placeholder status
+                    // is still derived from a trailing 00mm on the next scan.
                     if (QuickLineMetadataStore.EnsureApplication(ctx.Db, tr))
                         entity.XData = QuickLineMetadataStore.Build(entity,
                             QuickLineMetadataStore.ReadAssociatedLineHandle(entity), true);
@@ -952,10 +949,7 @@ namespace UNCAD.Cad.QuickLine
         {
             if (label == null || !string.IsNullOrEmpty(
                     label.AssociatedLineHandle)) return false;
-            if (!string.Equals(label.SourceKind, "DBText",
-                    StringComparison.OrdinalIgnoreCase)) return true;
-            return label.HasCompletionMarker
-                || Math.Abs(label.Millimetres - 2000.0) > 1e-7;
+            return !QuickLineMillimeterText.IsPlaceholder(label.Text);
         }
 
         private static Point3d GetExtentsCenter(Entity entity)

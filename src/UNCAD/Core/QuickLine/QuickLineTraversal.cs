@@ -66,7 +66,8 @@ namespace UNCAD.Core.QuickLine
     {
         /// <summary>
         /// Builds a route beginning with startSegmentId. A click at an endpoint
-        /// traverses away from that endpoint. An interior click chooses the
+        /// traverses away from that endpoint, unless that would immediately
+        /// stop while the clicked side is connected. An interior click chooses the
         /// side with more reachable, unprocessed segments; equal sides choose
         /// Start for deterministic behavior. Pass -1 for endpointTolerance to
         /// use the graph's configured tolerance; all other values must be
@@ -112,10 +113,16 @@ namespace UNCAD.Core.QuickLine
                 traverseAlreadyVisited);
 
             QuickLineEndpoint exitEndpoint;
-            if (clickRegion == QuickLineClickRegion.StartEndpoint)
-                exitEndpoint = QuickLineEndpoint.End;
-            else if (clickRegion == QuickLineClickRegion.EndEndpoint)
-                exitEndpoint = QuickLineEndpoint.Start;
+            if (clickRegion != QuickLineClickRegion.Interior)
+            {
+                exitEndpoint = startSegment.OtherEndpoint(clickedEndpoint);
+                int exitSideCount = exitEndpoint == QuickLineEndpoint.Start
+                    ? startSideCount : endSideCount;
+                int clickedSideCount = clickedEndpoint == QuickLineEndpoint.Start
+                    ? startSideCount : endSideCount;
+                if (exitSideCount == 0 && clickedSideCount > 0)
+                    exitEndpoint = clickedEndpoint;
+            }
             else
                 exitEndpoint = startSideCount >= endSideCount
                     ? QuickLineEndpoint.Start
@@ -129,7 +136,7 @@ namespace UNCAD.Core.QuickLine
             QuickLineEndpoint currentExit = exitEndpoint;
             QuickLineEndpoint currentEntry = clickRegion == QuickLineClickRegion.Interior
                 ? QuickLineEndpoint.None
-                : clickedEndpoint;
+                : startSegment.OtherEndpoint(currentExit);
 
             while (true)
             {

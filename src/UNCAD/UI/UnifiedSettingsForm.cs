@@ -13,7 +13,7 @@ namespace UNCAD.UI
 {
     /// <summary>
     /// 统一配置中心对话框（U1SET）。
-    /// 页签：线段绘制 / 桥架标注 / 线管标注 / 拱桥开洞 / 统计汇总。
+    /// 页签：线段绘制 / 桥架标注 / 线管标注 / 拱桥开洞 / 统计汇总 / 文字样式 / Excel 数据。
     /// 确定时一次性写回全部配置键（Features 只读，这里统一写）。
     /// </summary>
     public sealed class UnifiedSettingsForm : Form
@@ -60,6 +60,10 @@ namespace UNCAD.UI
         private readonly NumericUpDown _statHgt = NumberBox(180m, 1m, 100000m);
         private readonly NumericUpDown _statMm = NumberBox(250m, 1m, 100000m);
         private readonly ToolTip _toolTips = new ToolTip();
+
+        // 启动动画
+        private readonly CheckBox _splashEnabled =
+            new CheckBox { Text = "启动时显示全屏品牌动画", AutoSize = true };
 
         // 文字样式
         private readonly TextBox _styleName = new TextBox { Width = 140 };
@@ -190,6 +194,7 @@ namespace UNCAD.UI
             _statCable.Checked = Settings.GetBool(ConfigKeys.UnaddCableEnabled, true);
             _statBridge.Checked = Settings.GetBool(ConfigKeys.UnaddBridgeEnabled, true);
             _statConduit.Checked = Settings.GetBool(ConfigKeys.UnaddConduitEnabled, true);
+            _splashEnabled.Checked = Settings.GetBool(ConfigKeys.StartupSplashEnabled, true);
 
             // 文字样式
             _styleName.Text = Settings.Get(ConfigKeys.StyleName, "UNC-标注");
@@ -246,6 +251,7 @@ namespace UNCAD.UI
             Settings.SetBool(ConfigKeys.UnaddCableEnabled, _statCable.Checked);
             Settings.SetBool(ConfigKeys.UnaddBridgeEnabled, _statBridge.Checked);
             Settings.SetBool(ConfigKeys.UnaddConduitEnabled, _statConduit.Checked);
+            Settings.SetBool(ConfigKeys.StartupSplashEnabled, _splashEnabled.Checked);
 
             // 文字样式
             Settings.Set(ConfigKeys.StyleName, _styleName.Text.Trim());
@@ -497,11 +503,12 @@ namespace UNCAD.UI
 
         private TabPage BuildStyleTab()
         {
-            var g = Grid(4);
+            var g = Grid(5);
             g.Controls.Add(Lbl("样式名:"), 0, 0); g.Controls.Add(_styleName, 1, 0);
             g.Controls.Add(Lbl("字体文件(如 msyh.ttf):"), 0, 1); g.Controls.Add(_styleFont, 1, 1);
             g.Controls.Add(Lbl("大字体文件(空=TTF):"), 0, 2); g.Controls.Add(_styleBigFont, 1, 2);
             g.Controls.Add(Lbl("宽高比:"), 0, 3); g.Controls.Add(_styleWidth, 1, 3);
+            g.Controls.Add(Lbl("启动界面:"), 0, 4); g.Controls.Add(_splashEnabled, 1, 4);
             return Page("文字样式", g);
         }
 

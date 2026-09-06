@@ -59,6 +59,32 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void TextStyleTab_ExposesStartupSplashSwitch()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new UnifiedSettingsForm(5))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+                        TabControl tabs = Find<TabControl>(form);
+                        Assert.Equal("文字样式", tabs.SelectedTab.Text);
+                        Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab), checkBox =>
+                            checkBox.Text == "启动时显示全屏品牌动画");
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
         public void ExcelTab_HasConfigurableTemplateClearRange()
         {
             Exception failure = null;

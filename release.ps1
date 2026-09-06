@@ -59,6 +59,7 @@ if ($NoBuild) {
     # their staleness must also reject a -NoBuild shortcut.
     $sourceInputs += @(Get-ChildItem $root -File |
         Where-Object { $_.Extension -in @(".ps1", ".xml") })
+    $sourceInputs += @(Get-Item (Join-Path $root "docs.html"))
     $sourceInputs += @(Get-ChildItem (Join-Path $root "bundle") -Recurse -File |
         Where-Object { $_.Extension -in @(".xml", ".ps1") })
     $newerInput = $sourceInputs |
