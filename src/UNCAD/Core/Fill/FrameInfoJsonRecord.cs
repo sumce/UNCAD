@@ -12,6 +12,7 @@ namespace UNCAD.Core.Fill
         public string Region { get; set; } = "";
         public string OriginalCableModel { get; set; } = "";
         public string BoqCableModel { get; set; } = "";
+        public string BoqBusPlugBoxCode { get; set; } = "";
         public string Fr { get; set; } = "";
         public string Detail { get; set; } = "";
         public string Seq { get; set; } = "";

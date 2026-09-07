@@ -23,6 +23,37 @@ namespace UNCAD.Cad
             return styles.Has("Standard") ? styles["Standard"] : ctx.Db.Textstyle;
         }
 
+        /// <summary>Copies the source Standard definition into an empty export database.</summary>
+        internal static void CopyStandardTextStyle(Database sourceDatabase,
+            Database targetDatabase, Transaction targetTransaction)
+        {
+            using (Transaction sourceTransaction =
+                sourceDatabase.TransactionManager.StartOpenCloseTransaction())
+            {
+                TextStyleTable sourceStyles = sourceTransaction.GetObject(
+                    sourceDatabase.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+                TextStyleTable targetStyles = targetTransaction.GetObject(
+                    targetDatabase.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+                if (sourceStyles == null || targetStyles == null
+                    || !sourceStyles.Has("Standard") || !targetStyles.Has("Standard"))
+                    return;
+
+                TextStyleTableRecord sourceStyle = sourceTransaction.GetObject(
+                    sourceStyles["Standard"], OpenMode.ForRead) as TextStyleTableRecord;
+                TextStyleTableRecord targetStyle = targetTransaction.GetObject(
+                    targetStyles["Standard"], OpenMode.ForWrite) as TextStyleTableRecord;
+                if (sourceStyle == null || targetStyle == null) return;
+
+                // WblockCloneObjects reuses the Standard record already created by Database.
+                targetStyle.FileName = sourceStyle.FileName;
+                targetStyle.BigFontFileName = sourceStyle.BigFontFileName;
+                targetStyle.XScale = sourceStyle.XScale;
+                targetStyle.TextSize = sourceStyle.TextSize;
+                targetStyle.ObliquingAngle = sourceStyle.ObliquingAngle;
+                sourceTransaction.Commit();
+            }
+        }
+
         /// <summary>按配置（UNC_STYLE_*）获取/创建文字样式。</summary>
         public static ObjectId EnsureConfiguredStyle(CadContext ctx, Transaction tr)
         {

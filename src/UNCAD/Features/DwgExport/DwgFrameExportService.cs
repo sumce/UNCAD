@@ -131,7 +131,7 @@ namespace UNCAD.Features.DwgExport
                 throw new InvalidDataException(label + "包含非法文件名字符：" + value);
         }
 
-        private static void WriteMachine(Database sourceDatabase, string target,
+        internal static void WriteMachine(Database sourceDatabase, string target,
             IReadOnlyList<DwgFramePlacement> layout, string machineId)
         {
             string temporary = target + "." + Guid.NewGuid().ToString("N") + ".dwg";
@@ -139,12 +139,7 @@ namespace UNCAD.Features.DwgExport
             {
                 var sourceIds = new ObjectIdCollection();
                 var seen = new HashSet<ObjectId>();
-                // Wblock preserves handles for cloned entities, so the exported
-                // database is rearranged by source-handle ownership instead of
-                // recomputing anchors there.  Recomputing can disagree with the
-                // source region collector (extents differ after clone) and
-                // misplace or silently drop entities.
-                var ownerByHandle = new Dictionary<long, DwgFramePlacement>();
+                var ownerBySourceId = new Dictionary<ObjectId, DwgFramePlacement>();
                 foreach (DwgFramePlacement placement in layout)
                 {
                     DwgExportFrame frame = placement.Item as DwgExportFrame;
@@ -158,33 +153,24 @@ namespace UNCAD.Features.DwgExport
                         if (seen.Add(id))
                         {
                             sourceIds.Add(id);
-                            ownerByHandle[id.Handle.Value] = placement;
+                            ownerBySourceId[id] = placement;
                         }
                     }
                 }
                 if (sourceIds.Count == 0)
                     throw new InvalidDataException("没有可导出的图框实体。");
 
-                // One Wblock for the whole machine keeps all selected geometry and all source
-                // dependent styles in one database, avoiding cross-database ObjectId errors.
-                Database output;
-                try
-                {
-                    output = sourceDatabase.Wblock(sourceIds, Point3d.Origin);
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException("U1DWG Wblock源实体失败：" + ex.Message, ex);
-                }
-                using (output)
+                using (var output = new Database(true, true))
                 {
                     try
                     {
-                        TransformExportedFrames(output, ownerByHandle);
+                        CloneAndTransformFrames(sourceDatabase, output, sourceIds,
+                            ownerBySourceId);
                     }
                     catch (Exception ex)
                     {
-                        throw new InvalidOperationException("U1DWG排列图框失败：" + ex.Message, ex);
+                        throw new InvalidOperationException("U1DWG复制并排列图框失败："
+                            + ex.Message, ex);
                     }
                     try
                     {
@@ -289,26 +275,38 @@ namespace UNCAD.Features.DwgExport
             }
         }
 
-        private static void TransformExportedFrames(Database database,
-            Dictionary<long, DwgFramePlacement> ownerByHandle)
+        private static void CloneAndTransformFrames(Database sourceDatabase,
+            Database outputDatabase, ObjectIdCollection sourceIds,
+            IReadOnlyDictionary<ObjectId, DwgFramePlacement> ownerBySourceId)
         {
-            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            using (Transaction transaction = outputDatabase.TransactionManager.StartTransaction())
             {
-                BlockTableRecord space = transaction.GetObject(database.CurrentSpaceId,
-                    OpenMode.ForRead) as BlockTableRecord;
-                foreach (ObjectId id in space)
+                BlockTableRecord space = transaction.GetObject(outputDatabase.CurrentSpaceId,
+                    OpenMode.ForWrite) as BlockTableRecord;
+                if (space == null) throw new InvalidOperationException("无法创建导出模型空间。");
+
+                // Wblock does not guarantee that cloned entities keep their source handles.
+                // IdMapping is AutoCAD's authoritative source-to-destination relationship.
+                var mapping = new IdMapping();
+                sourceDatabase.WblockCloneObjects(sourceIds, space.ObjectId, mapping,
+                    DuplicateRecordCloning.Replace, false);
+                StyleManager.CopyStandardTextStyle(sourceDatabase, outputDatabase, transaction);
+                foreach (KeyValuePair<ObjectId, DwgFramePlacement> item in ownerBySourceId)
                 {
-                    // Wblock keeps source handles, so ownership travels with the
-                    // clone.  Entities the collector never claimed (dependent
-                    // records AutoCAD appended) keep their position untouched.
-                    if (!ownerByHandle.TryGetValue(id.Handle.Value,
-                            out DwgFramePlacement owner))
-                        continue;
-                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, false)
+                    if (!mapping.Contains(item.Key))
+                        throw new InvalidDataException("实体 " + item.Key.Handle
+                            + " 未出现在导出映射中。");
+                    IdPair pair = mapping[item.Key];
+                    if (!pair.IsCloned || pair.Value.IsNull || !pair.Value.IsValid)
+                        throw new InvalidDataException("实体 " + item.Key.Handle
+                            + " 未完整复制到导出图纸。");
+                    Entity entity = transaction.GetObject(pair.Value, OpenMode.ForWrite, false)
                         as Entity;
-                    if (entity == null) continue;
+                    if (entity == null)
+                        throw new InvalidDataException("导出对象不是有效实体："
+                            + item.Key.Handle + "。");
                     entity.TransformBy(Matrix3d.Displacement(new Vector3d(
-                        owner.TranslationX, owner.TranslationY, 0d)));
+                        item.Value.TranslationX, item.Value.TranslationY, 0d)));
                 }
                 transaction.Commit();
             }

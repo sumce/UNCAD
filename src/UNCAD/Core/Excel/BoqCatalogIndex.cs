@@ -56,6 +56,7 @@ namespace UNCAD.Core.Excel
             .OrderBy(item => item.Code ?? "", StringComparer.Ordinal).ToList();
         public IReadOnlyList<ListItem> Cables => _cableCandidates;
         public IReadOnlyList<ListItem> Breakers => _breakers;
+        public IReadOnlyList<ListItem> BusPlugBoxes => _busPlugBoxes.Values.ToList();
         public IReadOnlyList<ListItem> Outlets => _outlets;
         public IReadOnlyList<ListItem> OutletPanels => _outletPanels;
 

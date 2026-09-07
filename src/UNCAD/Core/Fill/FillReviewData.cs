@@ -119,14 +119,15 @@ namespace UNCAD.Core.Fill
 
         /// <summary>
         /// Returns rows selected for writing. Batch U1U may explicitly accept fallback
-        /// rows whose catalog code is unavailable; single-frame U1F keeps the strict
-        /// catalog-only default.
+        /// rows whose catalog code is unavailable, except bus plug boxes which require
+        /// a selected rating. Single-frame U1F keeps the strict catalog-only default.
         /// </summary>
         public List<TableFillRow> SelectedRows(bool allowUnmatchedDefaults)
         {
             var selected = new List<TableFillRow>();
             foreach (FillReviewItem item in Items.Where(item =>
-                item.Included && (item.CatalogMatched || allowUnmatchedDefaults)))
+                item.Included && (item.CatalogMatched || (allowUnmatchedDefaults
+                    && item.Category != TableFillCategory.BusPlugBox))))
             {
                 TableFillRow row = item.ToTableRow();
                 row.SortOrder = selected.Count + 1;
@@ -141,7 +142,8 @@ namespace UNCAD.Core.Fill
             int count = 0;
             foreach (FillReviewItem item in Items)
             {
-                if (item.CatalogMatched) continue;
+                if (item.CatalogMatched || item.Category == TableFillCategory.BusPlugBox)
+                    continue;
                 item.Included = true;
                 count++;
             }
@@ -150,6 +152,27 @@ namespace UNCAD.Core.Fill
 
         public FillReviewItem CableItem()
             => Items.FirstOrDefault(item => item.Category == TableFillCategory.Cable);
+
+        public FillReviewItem BusPlugBoxItem()
+            => Items.FirstOrDefault(item => item.Category == TableFillCategory.BusPlugBox);
+
+        /// <summary>Restores a confirmed catalog choice only for the same frame identity and supply data.</summary>
+        internal void RestoreBusPlugBoxChoice(FrameInfoJsonRecord previous, BoqCatalogIndex catalog)
+        {
+            FillReviewItem item = BusPlugBoxItem();
+            if (previous == null || item == null
+                || string.IsNullOrWhiteSpace(previous.BoqBusPlugBoxCode)
+                || !string.Equals(previous.MachineId, Machine.MachineId, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(previous.DeviceName, Machine.CircuitName, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(previous.Next, Machine.Next, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(previous.Detail, Machine.Detail, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            ListItem selected = catalog?.FindByCode(previous.BoqBusPlugBoxCode);
+            if (selected == null || !string.Equals(selected.Category?.Trim(),
+                    CategoryName(TableFillCategory.BusPlugBox), StringComparison.Ordinal)) return;
+            ReplaceWithCatalogItem(item, selected, catalog);
+        }
 
         public FillReviewItem FlexibleConduitItem()
             => Items.FirstOrDefault(item =>

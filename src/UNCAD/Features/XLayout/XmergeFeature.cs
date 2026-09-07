@@ -25,11 +25,15 @@ namespace UNCAD.Features.XLayout
                     != System.Windows.Forms.DialogResult.OK) return;
                 if (form.Files.Count == 0) return;
                 XmergeResult result = XmergeService.Merge(ctx, form.Files);
+                // Cloned AutoCAD tables can keep a stale display cache until the next REGEN.
+                // Refresh now so a successful merge is immediately visible to the user.
+                ctx.Ed.Regen();
                 ctx.Write("\n[Xmerge] 已合并 " + result.FileCount + " 个 DWG，导入 "
-                    + result.EntityCount + " 个实体。当前图纸已按 XLAYOUT 间距排布。"
-                    + (result.UnplacedCount > 0
-                        ? "\n[Xmerge] 注意: " + result.UnplacedCount
-                            + " 个无外包框实体无法定位归属，已按原坐标导入。"
+                    + result.FrameCount + " 个图框、" + result.EntityCount
+                    + " 个实体。当前图纸已按 XLAYOUT 间距排布。"
+                    + (result.UnplacedEntityCount > 0
+                        ? "\n[Xmerge] 注意: " + result.UnplacedEntityCount
+                            + " 个无可用坐标的实体已按源坐标导入。"
                         : ""));
             }
         }

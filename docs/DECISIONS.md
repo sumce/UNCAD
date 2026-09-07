@@ -105,3 +105,23 @@ rewrite an existing entry.
 - Consequence: an empty or uncached formula result in `U_机台ID` cannot abort
   the workbook refresh; other valid machine rows continue into the SQLite
   snapshot.
+
+## D-014: 350A Bus Plug Box Uses The 400A Catalog Item (2026-09-07)
+
+- Status: superseded by D-015
+- Decision: when a bus-plug upstream is rated `350A` and the fixed catalog has
+  no exact `350A` item, use the fixed `400A` bus-plug-box item.
+- Consequence: U1F/U1U write the `400A` catalog code, description, unit, and
+  quantity without raising an unmatched-catalog prompt. Other ratings remain
+  exact-match only.
+
+## D-015: Ask For Unmatched Bus Plug Box Ratings (2026-09-07)
+
+- Status: accepted
+- Decision: unmatched bus-plug-box ratings, including `350A`, require the user
+  to select a replacement rating from the fixed catalog. Do not automatically
+  round up or use an uncoded default row.
+- Consequence: batch U1U lists the affected machine and circuit and requires
+  an explicit selection before writing CAD or BOQ. Persist the confirmed code
+  in `frameinfo_json`; reuse it only while the frame identity and supply data
+  remain unchanged and the catalog item is still valid.

@@ -31,7 +31,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BatchDefaults_CanExplicitlyIncludeUnmatchedRows()
+        public void BatchDefaults_CannotBypassBusPlugBoxRatingSelection()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
             {
@@ -45,10 +45,10 @@ namespace UNCAD.Tests
             });
 
             Assert.Empty(data.SelectedRows());
-            Assert.Equal(1, data.AcceptUnmatchedDefaults());
-            TableFillRow row = Assert.Single(data.SelectedRows(true));
-            Assert.Equal("母线插接箱", row.Name);
-            Assert.False(row.CatalogMatched);
+            Assert.Equal(0, data.AcceptUnmatchedDefaults());
+            Assert.Empty(data.SelectedRows(true));
+            data.Items[0].Included = true;
+            Assert.Empty(data.SelectedRows(true));
         }
 
         [Fact]

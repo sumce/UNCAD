@@ -212,6 +212,30 @@ namespace UNCAD.Tests
             Assert.Equal("1", busPlug.Quantity);
         }
 
+        [Theory]
+        [InlineData("350A")]
+        [InlineData("360A")]
+        public void Build_LeavesUnknownBusPlugBoxRatingForUserSelection(string rating)
+        {
+            var machine = new MachineRow
+            {
+                Next = "母线插接口",
+                Detail = "N208 3P4W 3P" + rating
+            };
+            List<ListItem> items = Items();
+            items.Add(Item("5.6", "母线插接箱",
+                "SQ-D PLUG-IN 400A 母线插接开关箱", "个", "400A"));
+
+            TableFillRow busPlug = TableFillPlanner.Build(
+                machine, items, new CableStatResult()).Single(row =>
+                    row.Category == TableFillCategory.BusPlugBox);
+
+            Assert.Equal("", busPlug.Code);
+            Assert.Contains(rating, busPlug.Description);
+            Assert.False(busPlug.CatalogMatched);
+            Assert.Equal("1", busPlug.Quantity);
+        }
+
         [Fact]
         public void Build_DoesNotAddFlexibleConduitWithoutCableDerivedDiameter()
         {

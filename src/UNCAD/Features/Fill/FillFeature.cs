@@ -240,6 +240,9 @@ namespace UNCAD.Features.Fill
                     ? deviceOutlet.Code : "未匹配") : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
+            if (updateMode)
+                review.RestoreBusPlugBoxChoice(FrameInfoJsonBlockWriter.Read(ctx,
+                    selection.FrameInfoJsonBlockIds), catalog);
             ResolveMissingCableCatalog(review, catalog);
             // Resolve a replacement before reading Ruanguan so an initially unknown
             // cable can still create the correctly mapped hose row.

@@ -30,9 +30,16 @@ namespace UNCAD.Features.Submit
             FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            return Read(transaction, region, definitions);
+        }
+
+        /// <summary>Reads one frame from a detached DWG using a caller-owned transaction.</summary>
+        internal static SubmissionRecord Read(Transaction transaction,
+            FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
+        {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (region == null) throw new ArgumentNullException(nameof(region));
-            return Read(ctx, transaction, region.EntityIds.ToArray(), true, definitions);
+            return Read(transaction, region.EntityIds.ToArray(), true, definitions);
         }
 
         /// <summary>
@@ -43,6 +50,12 @@ namespace UNCAD.Features.Submit
             ObjectId[] ids, bool inferLegacySocketPanels, CadBlockDefinitionReader definitions = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            return Read(transaction, ids, inferLegacySocketPanels, definitions);
+        }
+
+        private static SubmissionRecord Read(Transaction transaction, ObjectId[] ids,
+            bool inferLegacySocketPanels, CadBlockDefinitionReader definitions)
+        {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             SubmissionSourceData source = CadSubmissionReader.Read(transaction, ids, definitions);
             FrameInfoJsonRecord persistedIdentity = FrameInfoJsonBlockWriter.Read(transaction, ids);

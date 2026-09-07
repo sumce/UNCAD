@@ -260,13 +260,28 @@ namespace UNCAD.Cad
         public static FrameRegionCollection CollectForLayout(CadContext ctx, ObjectId[] selectedIds)
             => CollectCore(ctx, selectedIds, true, true);
 
+        /// <summary>Runs XLAYOUT collection against a detached, in-memory DWG database.</summary>
+        internal static FrameRegionCollection CollectForLayout(Database database,
+            ObjectId spaceId, ObjectId[] selectedIds)
+            => CollectCore(database, spaceId, selectedIds, true, true, true);
+
         private static FrameRegionCollection CollectCore(CadContext ctx, ObjectId[] selectedIds,
             bool includeAllEntities, bool useAnchorOwnership)
         {
-            var result = new FrameRegionCollection();
-            if (ctx == null || selectedIds == null || selectedIds.Length == 0) return result;
+            if (ctx == null) return new FrameRegionCollection();
+            return CollectCore(ctx.Db, ctx.Db.CurrentSpaceId, selectedIds,
+                includeAllEntities, useAnchorOwnership);
+        }
 
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+        private static FrameRegionCollection CollectCore(Database database, ObjectId spaceId,
+            ObjectId[] selectedIds, bool includeAllEntities, bool useAnchorOwnership,
+            bool selectedIdsAreFrames = false)
+        {
+            var result = new FrameRegionCollection();
+            if (database == null || spaceId.IsNull || selectedIds == null
+                || selectedIds.Length == 0) return result;
+
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
                 var selectedFrames = new HashSet<ObjectId>();
                 var boundaryCache = new Dictionary<ObjectId, FrameBorderBounds>();
@@ -285,8 +300,9 @@ namespace UNCAD.Cad
                         continue;
                     }
                     if (block == null || block is Table
-                        || block.OwnerId != ctx.Db.CurrentSpaceId
-                        || !IsSupportedFrame(transaction, block)) continue;
+                        || block.OwnerId != spaceId
+                        || (!selectedIdsAreFrames
+                            && !IsSupportedFrame(transaction, block))) continue;
                     selectedFrames.Add(id);
                     result.SelectedFrameCount++;
                     AddFrame(result, transaction, block, boundaryCache);
@@ -295,7 +311,7 @@ namespace UNCAD.Cad
                 if (result.Groups.Count == 0) return result;
                 if (result.Errors.Count > 0) return result;
 
-                BlockTableRecord space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                BlockTableRecord space = transaction.GetObject(spaceId,
                     OpenMode.ForRead) as BlockTableRecord;
                 if (space == null)
                 {
@@ -971,6 +987,16 @@ namespace UNCAD.Cad
                 }
             }
             return false;
+        }
+
+        /// <summary>Reads the same explicit outer border used by XLAYOUT.</summary>
+        internal static FrameRectangle ReadBoundary(Transaction transaction,
+            BlockReference block)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (block == null) throw new ArgumentNullException(nameof(block));
+            return ReadBorderBoundary(transaction, block,
+                new Dictionary<ObjectId, FrameBorderBounds>());
         }
 
         /// <summary>

@@ -9,7 +9,7 @@ namespace UNCAD.Core.Fill
     {
         private static readonly string[] TrackedFields =
         {
-            "MachineId", "DeviceName", "Region", "OriginalCableModel", "BoqCableModel",
+            "MachineId", "DeviceName", "Region", "OriginalCableModel", "BoqCableModel", "BoqBusPlugBoxCode",
             "Fr", "Detail", "Seq", "HoseDiameter", "Next", "UpstreamAxis",
             "DownstreamAxis", "DeviceFloor", "PanelFloor", "FacilitySwitch"
         };
@@ -28,6 +28,7 @@ namespace UNCAD.Core.Fill
                 review?.OriginalCableModel, machine.Cable);
             string boq = FirstNonEmpty(review?.BoqCableModel,
                 previous.BoqCableModel, original);
+            FillReviewItem busPlugBox = review?.BusPlugBoxItem();
             var next = new FrameInfoJsonRecord
             {
                 SchemaVersion = "1",
@@ -36,6 +37,9 @@ namespace UNCAD.Core.Fill
                 Region = machine.Region ?? "",
                 OriginalCableModel = original,
                 BoqCableModel = boq,
+                BoqBusPlugBoxCode = review == null ? previous.BoqBusPlugBoxCode
+                    : busPlugBox?.CatalogMatched == true && busPlugBox.Included
+                        ? busPlugBox.Code : "",
                 Fr = machine.Fr ?? "",
                 Detail = machine.Detail ?? "",
                 Seq = machine.Seq ?? "",
@@ -101,6 +105,7 @@ namespace UNCAD.Core.Fill
                 case "Region": return record.Region ?? "";
                 case "OriginalCableModel": return record.OriginalCableModel ?? "";
                 case "BoqCableModel": return record.BoqCableModel ?? "";
+                case "BoqBusPlugBoxCode": return record.BoqBusPlugBoxCode ?? "";
                 case "Fr": return record.Fr ?? "";
                 case "Detail": return record.Detail ?? "";
                 case "Seq": return record.Seq ?? "";

@@ -2,12 +2,73 @@ using System;
 using System.Linq;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Stat;
 using Xunit;
 
 namespace UNCAD.Tests
 {
     public sealed class FrameInfoJsonRecordUpdaterTests
     {
+        [Fact]
+        public void Update_PersistsUserBusPlugBoxChoiceWithoutChangingSourceRating()
+        {
+            var machine = new MachineRow
+            {
+                MachineId = "MECTT03", CircuitName = "AC Rack 2-1",
+                Next = "母线插接口", Detail = "N208 3P4W 3P350A"
+            };
+            var catalog = new BoqCatalogIndex(ListItemReader.ReadEmbedded());
+            FillReviewData BuildReview() => FillReviewData.Create(machine,
+                TableFillPlanner.Build(machine, catalog, new CableStatResult(),
+                    FillPlanningOptions.Default));
+            FillReviewData review = BuildReview();
+            Assert.True(review.BusPlugBoxItem().RequiresCatalogConfirmation);
+
+            review.ReplaceWithCatalogItem(review.BusPlugBoxItem(),
+                catalog.FindBusPlugBox("400A"), catalog);
+            FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(FrameInfoJsonCodec.Serialize(
+                FrameInfoJsonRecordUpdater.Update(null, machine, review, "U1U", DateTime.UtcNow)));
+            Assert.Equal("5.6", record.BoqBusPlugBoxCode);
+            Assert.Contains("350A", record.Detail);
+            Assert.Contains(record.Changes, change => change.Field == "BoqBusPlugBoxCode"
+                && change.After == "5.6");
+
+            FillReviewData restored = BuildReview();
+            restored.RestoreBusPlugBoxChoice(record, catalog);
+            TableFillRow row = Assert.Single(restored.SelectedRows());
+            Assert.Equal("5.6", row.Code);
+            Assert.Contains("400A", row.Description);
+            Assert.Equal("1", row.Quantity);
+            Assert.Contains("350A", restored.Machine.Detail);
+
+            // A later catalog addition must not replace the already confirmed choice.
+            var exact = new ListItem { Category = "母线插接箱", Code = "5.test",
+                Name = "母线插接箱", Alias = "350A", Feature = "350A", Unit = "个" };
+            var expandedCatalog = new BoqCatalogIndex(catalog.Items.Concat(new[] { exact }));
+            FillReviewData expandedReview = FillReviewData.Create(machine,
+                TableFillPlanner.Build(machine, expandedCatalog, new CableStatResult(),
+                    FillPlanningOptions.Default));
+            expandedReview.RestoreBusPlugBoxChoice(record, expandedCatalog);
+            Assert.Equal("5.6", expandedReview.BusPlugBoxItem().Code);
+
+            machine.Detail = "N208 3P4W 3P360A";
+            FillReviewData changed = BuildReview();
+            changed.RestoreBusPlugBoxChoice(record, catalog);
+            Assert.True(changed.BusPlugBoxItem().RequiresCatalogConfirmation);
+
+            machine.Detail = record.Detail;
+            machine.CircuitName = "Different circuit";
+            changed = BuildReview();
+            changed.RestoreBusPlugBoxChoice(record, catalog);
+            Assert.True(changed.BusPlugBoxItem().RequiresCatalogConfirmation);
+
+            machine.CircuitName = record.DeviceName;
+            record.BoqBusPlugBoxCode = "1.1";
+            changed = BuildReview();
+            changed.RestoreBusPlugBoxChoice(record, catalog);
+            Assert.True(changed.BusPlugBoxItem().RequiresCatalogConfirmation);
+        }
+
         [Fact]
         public void Update_PreservesConfirmedCableOverrideAndDoesNotMutatePreviousHistory()
         {

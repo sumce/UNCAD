@@ -8,53 +8,56 @@ using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
-    /// <summary>One unresolved cable model in a multi-frame U1U update.</summary>
-    public sealed class BatchCableCatalogRequest
+    /// <summary>One unresolved material in a multi-frame U1U update, with category-limited candidates.</summary>
+    internal sealed class BatchCatalogRequest
     {
-        public BatchCableCatalogRequest(string key, string machineId, string deviceName,
-            string originalModel, IEnumerable<ListItem> candidates)
+        public BatchCatalogRequest(string key, string machineId, string deviceName,
+            string category, string originalModel, IEnumerable<ListItem> candidates)
         {
             Key = (key ?? "").Trim();
             MachineId = (machineId ?? "").Trim();
             DeviceName = (deviceName ?? "").Trim();
+            Category = (category ?? "").Trim();
             OriginalModel = (originalModel ?? "").Trim();
             Candidates = (candidates ?? Enumerable.Empty<ListItem>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Code)
-                    && !string.IsNullOrWhiteSpace(item.Name))
+                    && !string.IsNullOrWhiteSpace(item.Name)
+                    && string.Equals(item.Category?.Trim(), Category, StringComparison.Ordinal))
                 .OrderBy(item => item.Code, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         public string Key { get; }
         public string MachineId { get; }
         public string DeviceName { get; }
+        public string Category { get; }
         public string OriginalModel { get; }
         public IReadOnlyList<ListItem> Candidates { get; }
     }
 
-    /// <summary>Single dialog for resolving every unmatched cable before batch writes.</summary>
-    public sealed class BatchCableCatalogSelectionForm : Form
+    /// <summary>Collects explicit catalog selections from passed-in requests before batch writes.</summary>
+    internal sealed class BatchCatalogSelectionForm : Form
     {
-        private readonly IReadOnlyList<BatchCableCatalogRequest> _requests;
+        private readonly IReadOnlyList<BatchCatalogRequest> _requests;
         private readonly DataGridView _grid;
         private readonly Button _confirm;
 
-        public BatchCableCatalogSelectionForm(IEnumerable<BatchCableCatalogRequest> requests)
+        public BatchCatalogSelectionForm(IEnumerable<BatchCatalogRequest> requests)
         {
-            _requests = (requests ?? Enumerable.Empty<BatchCableCatalogRequest>()).ToList();
-            DialogLayout.Apply(this, "U1U 批量电缆型号确认", new Size(980, 620),
-                new Size(760, 460));
+            _requests = (requests ?? Enumerable.Empty<BatchCatalogRequest>()).ToList();
+            DialogLayout.Apply(this, "U1U 未匹配规格选择", new Size(1060, 620),
+                new Size(840, 460));
 
             var notice = new Label
             {
                 Dock = DockStyle.Top,
                 Height = 48,
                 Padding = new Padding(10, 8, 10, 4),
-                Text = "以下电缆型号无法直接匹配固定清单。请为每个图框选择型号；全部确认后才会写入 CAD 和 BOQ。",
+                Text = "未匹配项目 " + _requests.Count + " 项，替代规格待确认。",
                 AutoEllipsis = true
             };
             _grid = new DataGridView
             {
-                Name = "BatchCableCatalogGrid",
+                Name = "BatchCatalogGrid",
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
@@ -69,18 +72,25 @@ namespace UNCAD.UI
             };
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "Frame", HeaderText = "机台 / 设备", Width = 250, ReadOnly = true
+                Name = "Frame", HeaderText = "机台 / 回路", Width = 250, ReadOnly = true
             });
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "Original", HeaderText = "原始型号", Width = 220, ReadOnly = true
+                Name = "Category", HeaderText = "项目", Width = 110, ReadOnly = true
+            });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Original", HeaderText = "原型号 / 配电信息", Width = 220, ReadOnly = true
             });
             _grid.Columns.Add(new DataGridViewComboBoxColumn
             {
-                Name = "Catalog", HeaderText = "固定清单型号", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                Name = "Catalog", HeaderText = "替代固定清单规格", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                MinimumWidth = 150,
                 DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton,
                 FlatStyle = FlatStyle.Flat,
-                DisplayMember = nameof(ListItem.Alias)
+                DisplayMember = nameof(ListItem.Alias),
+                ValueMember = nameof(ListItem.Code),
+                ValueType = typeof(string)
             });
 
             _confirm = UiTheme.PrimaryButton("确认全部选择");
@@ -94,6 +104,13 @@ namespace UNCAD.UI
             Controls.Add(notice);
             Controls.Add(commands);
             UiTheme.StyleGrid(_grid);
+            _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+            _grid.CurrentCellDirtyStateChanged += (sender, args) =>
+            {
+                if (_grid.IsCurrentCellDirty)
+                    _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+            _grid.CellValueChanged += (sender, args) => UpdateConfirmation();
             AcceptButton = _confirm;
             CancelButton = cancel;
 
@@ -105,33 +122,49 @@ namespace UNCAD.UI
         private void Populate()
         {
             _grid.Rows.Clear();
-            foreach (BatchCableCatalogRequest request in _requests)
+            foreach (BatchCatalogRequest request in _requests)
             {
                 int rowIndex = _grid.Rows.Add();
                 DataGridViewRow row = _grid.Rows[rowIndex];
                 row.Tag = request;
                 row.Cells["Frame"].Value = request.MachineId + " / " + request.DeviceName;
+                row.Cells["Category"].Value = request.Category;
                 row.Cells["Original"].Value = request.OriginalModel.Length == 0
                     ? "未读取到" : request.OriginalModel;
                 var cell = (DataGridViewComboBoxCell)row.Cells["Catalog"];
                 foreach (ListItem item in request.Candidates)
                     cell.Items.Add(item);
-                if (cell.Items.Count > 0) cell.Value = cell.Items[0];
             }
+            UpdateConfirmation();
+        }
+
+        private void UpdateConfirmation()
+        {
             _confirm.Enabled = _requests.Count > 0
-                && _requests.All(request => request.Candidates.Count > 0);
+                && _grid.Rows.Count == _requests.Count
+                && _grid.Rows.Cast<DataGridViewRow>().All(row =>
+                    SelectedItem(row) != null);
+        }
+
+        private static ListItem SelectedItem(DataGridViewRow row)
+        {
+            if (!(row.Tag is BatchCatalogRequest request)
+                || !(row.Cells["Catalog"].Value is string code)) return null;
+            return request.Candidates.FirstOrDefault(item =>
+                string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase));
         }
 
         private void Confirm(object sender, EventArgs e)
         {
+            _grid.EndEdit();
             var result = new Dictionary<string, ListItem>(StringComparer.OrdinalIgnoreCase);
             foreach (DataGridViewRow row in _grid.Rows)
             {
-                BatchCableCatalogRequest request = row.Tag as BatchCableCatalogRequest;
-                ListItem selected = row.Cells["Catalog"].Value as ListItem;
+                BatchCatalogRequest request = row.Tag as BatchCatalogRequest;
+                ListItem selected = SelectedItem(row);
                 if (request == null || selected == null)
                 {
-                    MessageBox.Show(this, "请为每个未匹配电缆选择固定清单型号。",
+                    MessageBox.Show(this, "仍有未匹配项目未选择替代规格。",
                         "U1U", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }

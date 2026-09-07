@@ -37,6 +37,7 @@ namespace UNCAD.Features.Fill
             public string DeviceState { get; set; }
             public bool DeviceOutletStateKnown { get; set; }
             public string CableRequestKey { get; set; }
+            public string BusPlugBoxRequestKey { get; set; }
             public bool HoseWasMissingBeforeCableChoice { get; set; }
             public bool AllowUnmatchedDefaults { get; set; }
         }
@@ -68,7 +69,7 @@ namespace UNCAD.Features.Fill
 
             var plans = new List<Plan>();
             var errors = new List<string>();
-            var cableRequests = new List<BatchCableCatalogRequest>();
+            var catalogRequests = new List<BatchCatalogRequest>();
             ctx.Write("\n[U1U] 正在批量预检 " + regions.Count + " 个图框，请稍候...");
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -77,7 +78,7 @@ namespace UNCAD.Features.Fill
                 {
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     Preflight(ctx, readTransaction, region, options, workbook, plans,
-                        errors, cableRequests, definitions, statisticsSettings);
+                        errors, catalogRequests, definitions, statisticsSettings);
                     clock.Stop();
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
                         + clock.ElapsedMilliseconds + " ms");
@@ -97,25 +98,26 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            if (cableRequests.Count > 0)
+            if (catalogRequests.Count > 0)
             {
-                using (var picker = new BatchCableCatalogSelectionForm(cableRequests))
+                using (var picker = new BatchCatalogSelectionForm(catalogRequests))
                 {
                     if (AcApplication.ShowModalDialog(picker) != DialogResult.OK) return;
                     foreach (Plan plan in plans)
                     {
-                        if (string.IsNullOrWhiteSpace(plan.CableRequestKey)
-                            || !picker.Selections.TryGetValue(plan.CableRequestKey,
-                                out ListItem selected)) continue;
-                        FillReviewItem cable = plan.Review?.CableItem();
-                        if (cable != null)
-                            plan.Review.ReplaceWithCatalogItem(cable, selected,
-                                workbook.Catalog);
-                        if (plan.HoseWasMissingBeforeCableChoice
-                            && plan.Review?.FlexibleConduitItem() != null)
-                            if (!FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
+                        if (!string.IsNullOrWhiteSpace(plan.CableRequestKey))
+                        {
+                            plan.Review.ReplaceWithCatalogItem(plan.Review.CableItem(),
+                                picker.Selections[plan.CableRequestKey], workbook.Catalog);
+                            if (plan.HoseWasMissingBeforeCableChoice
+                                && plan.Review.FlexibleConduitItem() != null
+                                && !FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
                                     plan.Review, workbook.Catalog, options.Planning, true))
                                 return;
+                        }
+                        if (!string.IsNullOrWhiteSpace(plan.BusPlugBoxRequestKey))
+                            plan.Review.ReplaceWithCatalogItem(plan.Review.BusPlugBoxItem(),
+                                picker.Selections[plan.BusPlugBoxRequestKey], workbook.Catalog);
                     }
                 }
             }
@@ -130,17 +132,27 @@ namespace UNCAD.Features.Fill
                 .ToList();
             if (unresolvedDefaults.Count > 0)
             {
-                string details = string.Join("、", unresolvedDefaults.Select(entry =>
-                    entry.Item2.Name).Where(name => !string.IsNullOrWhiteSpace(name))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).Take(12));
-                if (unresolvedDefaults.Count > 12) details += " 等";
+                List<string> details = unresolvedDefaults.Select((entry, index) =>
+                    (index + 1) + ". 机台：" + PromptValue(entry.Item1.Machine.MachineId)
+                    + "；回路：" + PromptValue(entry.Item1.Machine.CircuitName)
+                    + "；图框：" + PromptValue(entry.Item1.Region.Handle)
+                    + "\r\n   项目：" + PromptValue(entry.Item2.Name)
+                    + "；配电信息：" + PromptValue(entry.Item1.Machine.Detail))
+                    .ToList();
+                foreach (string detail in details)
+                    ctx.Write("\n[U1U] 未匹配固定清单："
+                        + detail.Replace("\r\n   ", "；"));
+                string dialogDetails = string.Join("\r\n", details.Take(12));
+                if (details.Count > 12)
+                    dialogDetails += "\r\n其余 " + (details.Count - 12)
+                        + " 项已输出到 CAD 命令行。";
                 DialogResult useDefaults = MessageBox.Show(Owner(),
                     "批量更新中有 " + unresolvedDefaults.Count
                         + " 个清单项目未匹配固定清单（可能已在现有表格中合并）。\r\n"
-                        + (details.Length > 0 ? "项目：" + details + "\r\n\r\n" : "\r\n")
-                        + "是否采用当前默认数据继续更新表格？\r\n"
-                        + "选择“否”将取消整批，CAD 和 BOQ 均不修改。",
-                    "U1U 批量默认数据", MessageBoxButtons.YesNo,
+                        + "\r\n未匹配明细：\r\n" + dialogDetails + "\r\n\r\n"
+                        + "选择“是”：默认项写入 CAD 表格，但不写入自动 BOQ 数量。\r\n"
+                        + "选择“否”：取消整批，CAD 和 BOQ 均不修改。",
+                    "U1U 未匹配固定清单", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question, MessageBoxDefaultButton.Button1);
                 if (useDefaults != DialogResult.Yes) return;
                 foreach (Plan plan in plans)
@@ -156,7 +168,8 @@ namespace UNCAD.Features.Fill
                 List<FillReviewItem> unresolved = plan.Review?.Items.Where(item =>
                     item.RequiresCatalogConfirmation).ToList()
                     ?? new List<FillReviewItem>();
-                if (unresolved.Count > 0 && !plan.AllowUnmatchedDefaults)
+                if (unresolved.Count > 0 && (!plan.AllowUnmatchedDefaults
+                    || unresolved.Any(item => item.Category == TableFillCategory.BusPlugBox)))
                 {
                     errors.Add("机台 " + plan.Machine.MachineId + "；设备 "
                         + plan.Machine.CircuitName + "；图框 " + plan.Region.Handle
@@ -396,7 +409,7 @@ namespace UNCAD.Features.Fill
             FrameRegionGroup region,
             FillRuntimeOptions options, FillWorkbookSnapshot workbook,
             List<Plan> plans, List<string> errors,
-            List<BatchCableCatalogRequest> cableRequests,
+            List<BatchCatalogRequest> catalogRequests,
             CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings)
         {
             string prefix = "图框 " + region.Handle + "：";
@@ -496,6 +509,9 @@ namespace UNCAD.Features.Fill
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
+            FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
+                selection.FrameInfoJsonBlockIds);
+            review.RestoreBusPlugBoxChoice(previousRecord, workbook.Catalog);
             try
             {
                 if (!FillFeature.ApplyRuanguanLength(ctx, selection, review,
@@ -515,6 +531,7 @@ namespace UNCAD.Features.Fill
                 item.RequiresCatalogConfirmation).ToList();
             FillReviewItem unresolvedCable = unresolved.FirstOrDefault(item =>
                 item.Category == TableFillCategory.Cable);
+            string cableRequestKey = "";
             if (unresolvedCable != null)
             {
                 if (workbook.Catalog.Cables.Count == 0)
@@ -522,30 +539,25 @@ namespace UNCAD.Features.Fill
                     errors.Add(prefix + "固定清单没有可选择的电缆型号。");
                     return;
                 }
-                string requestKey = region.Handle + ":cable";
-                cableRequests.Add(new BatchCableCatalogRequest(requestKey,
-                    machine.MachineId, machine.CircuitName, review.BoqCableModel,
+                cableRequestKey = region.Handle + ":cable";
+                catalogRequests.Add(new BatchCatalogRequest(cableRequestKey,
+                    machine.MachineId, machine.CircuitName, "电缆", review.BoqCableModel,
                     workbook.Catalog.Cables));
-                plans.Add(new Plan
+            }
+
+            string busPlugBoxRequestKey = "";
+            if (unresolved.Any(item => item.Category == TableFillCategory.BusPlugBox))
+            {
+                busPlugBoxRequestKey = region.Handle + ":busPlugBox";
+                var request = new BatchCatalogRequest(busPlugBoxRequestKey,
+                    machine.MachineId, machine.CircuitName, "母线插接箱", machine.Detail,
+                    workbook.Catalog.BusPlugBoxes);
+                if (request.Candidates.Count == 0)
                 {
-                    Region = region,
-                    Selection = selection,
-                    Machine = machine,
-                    Summation = summation,
-                    Statistics = statistics,
-                    Review = review,
-                    CableRequestKey = requestKey,
-                    HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
-                    DeviceState = deviceState,
-                    DeviceOutletStateKnown = deviceOutletStateKnown,
-                    PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                        selection.FrameInfoJsonBlockIds),
-                    ExistingRows = FillRowDiffBuilder.ReadRows(
-                        CadSubmissionReader.Read(readTransaction, selection.TableIds)),
-                    LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
-                        readTransaction, selection)
-                });
-                return;
+                    errors.Add(prefix + "固定清单没有可选择的母线插接箱规格。");
+                    return;
+                }
+                catalogRequests.Add(request);
             }
 
             plans.Add(new Plan
@@ -557,11 +569,12 @@ namespace UNCAD.Features.Fill
                 Statistics = statistics,
                 Review = review,
                 Rows = review.SelectedRows(),
+                CableRequestKey = cableRequestKey,
+                BusPlugBoxRequestKey = busPlugBoxRequestKey,
                 HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
                 DeviceState = deviceState,
                 DeviceOutletStateKnown = deviceOutletStateKnown,
-                PreviousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                    selection.FrameInfoJsonBlockIds),
+                PreviousRecord = previousRecord,
                 ExistingRows = FillRowDiffBuilder.ReadRows(
                     CadSubmissionReader.Read(readTransaction, selection.TableIds)),
                 LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
@@ -576,5 +589,8 @@ namespace UNCAD.Features.Fill
                 ? IntPtr.Zero : AcApplication.MainWindow.Handle;
             return new WindowWrapper(handle);
         }
+
+        private static string PromptValue(string value)
+            => string.IsNullOrWhiteSpace(value) ? "（空）" : value.Trim();
     }
 }

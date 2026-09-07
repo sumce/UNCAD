@@ -15,6 +15,25 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void BatchUpdate_UnmatchedDefaultsIdentifyAffectedMachineAndImpact()
+        {
+            string source = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs");
+            int start = source.IndexOf("List<Tuple<Plan, FillReviewItem>> unresolvedDefaults",
+                StringComparison.Ordinal);
+            int end = source.IndexOf("foreach (Plan plan in plans)", start,
+                StringComparison.Ordinal);
+
+            Assert.True(start >= 0 && end > start);
+            string prompt = source.Substring(start, end - start);
+            Assert.Contains("entry.Item1.Machine.MachineId", prompt);
+            Assert.Contains("entry.Item1.Machine.CircuitName", prompt);
+            Assert.Contains("entry.Item1.Region.Handle", prompt);
+            Assert.Contains("entry.Item1.Machine.Detail", prompt);
+            Assert.Contains("不写入自动 BOQ 数量", prompt);
+        }
+
+        [Fact]
         public void SingleUpdate_CompareFailureStopsInsteadOfWritingBlindly()
         {
             string source = Read("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
