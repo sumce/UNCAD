@@ -88,7 +88,9 @@ namespace UNCAD.Tests
             Assert.Contains(report.Issues, issue => issue.Description.Contains("重复"));
             Assert.Contains(report.Issues, issue => issue.Description == "缺少机台ID");
             Assert.Contains(report.Issues, issue => issue.Description.Contains("Excel基准"));
-            Assert.Equal("A", Assert.Single(report.Machines[0].UnexpectedCircuits));
+            Assert.Empty(report.Machines[0].UnexpectedCircuits);
+            Assert.Equal("部分无法判断", report.ExpectedCircuitText);
+            Assert.Equal("部分无法判断", report.MissingCircuitText);
         }
 
         [Fact]
@@ -103,6 +105,8 @@ namespace UNCAD.Tests
             Assert.False(machine.ExpectedDataAvailable);
             Assert.Equal("无法判断", machine.ExpectedCircuitText);
             Assert.Equal("无法判断", machine.MissingText);
+            Assert.Empty(machine.UnexpectedCircuits);
+            Assert.Equal(0, report.UnexpectedCircuitCount);
             Assert.Contains(report.Issues, issue => issue.Description.Contains("Excel基准"));
         }
 

@@ -13,6 +13,24 @@ namespace UNCAD.Features.Submit
     /// <summary>Shared adapter that reads one frame's current identity and BOQ state.</summary>
     internal static class FrameIdentityReader
     {
+        /// <summary>
+        /// Reads only the durable frame identity. Layout and statistics commands do not
+        /// need the full BOQ/material extraction path; keeping this path lightweight also
+        /// prevents an unrelated malformed table from hiding a valid machine ID.
+        /// </summary>
+        internal static ExistingFillIdentity ReadIdentity(Transaction transaction,
+            FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (region == null) throw new ArgumentNullException(nameof(region));
+            FillSelection selection = FillSelectionCollector.Split(transaction,
+                region.EntityIds.ToArray(), false, definitions);
+            if (!FillSelectionCollector.TryReadExistingIdentity(transaction, selection,
+                out ExistingFillIdentity identity, out string error))
+                throw new InvalidDataException(error);
+            return identity;
+        }
+
         public static SubmissionRecord Read(CadContext ctx, FrameRegionGroup region)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));

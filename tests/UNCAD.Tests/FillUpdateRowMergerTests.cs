@@ -94,6 +94,12 @@ namespace UNCAD.Tests
             => Assert.Equal(TableFillCategory.Bridge,
                 FillUpdateRowMerger.ExistingCategory(name, code));
 
+        [Fact]
+        public void ExistingCategory_CleansFormattedCatalogCode()
+            => Assert.Equal(TableFillCategory.Cable,
+                FillUpdateRowMerger.ExistingCategory("电缆",
+                    @"{\fSimSun|b0|i0;1.1}"));
+
         private static TableFillRow Cable(string quantity) => new TableFillRow
         {
             Category = TableFillCategory.Cable,

@@ -6,6 +6,7 @@ using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Submission;
+using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
 
 namespace UNCAD.Features.Fill
@@ -80,12 +81,12 @@ namespace UNCAD.Features.Fill
             foreach (List<string> cells in source?.TableRows ?? new List<List<string>>())
             {
                 if (cells == null || cells.Count < 5) continue;
-                string number = Cell(cells, 0);
-                string name = Cell(cells, 1);
+                string number = CleanCell(cells, 0);
+                string name = CleanCell(cells, 1);
                 string description = Cell(cells, 2);
-                string unit = Cell(cells, 3);
-                string quantity = Cell(cells, 4);
-                string code = Cell(cells, 5);
+                string unit = CleanCell(cells, 3);
+                string quantity = CleanCell(cells, 4);
+                string code = CleanCell(cells, 5);
                 if (TableLayoutClassifier.IsHeaderLike(number, name, code)) continue;
                 // The first column is normally only the display ordinal (1, 2, ...).
                 // Treat it as a catalog identity only when it has the fixed BOQ form;
@@ -117,8 +118,8 @@ namespace UNCAD.Features.Fill
 
         internal static TableFillCategory? ExistingCategory(string name, string code)
         {
-            code = (code ?? "").Trim();
-            name = (name ?? "").Trim();
+            code = TextParser.CleanMText(code ?? "").Trim();
+            name = TextParser.CleanMText(name ?? "").Trim();
             if (code.Length > 0)
             {
                 if (code.StartsWith("1.", StringComparison.OrdinalIgnoreCase))
@@ -154,6 +155,9 @@ namespace UNCAD.Features.Fill
 
         private static string Cell(List<string> row, int index)
             => index >= 0 && index < row.Count ? (row[index] ?? "").Trim() : "";
+
+        private static string CleanCell(List<string> row, int index)
+            => TextParser.CleanMText(Cell(row, index)).Trim();
 
         private static bool CatalogCode(string value)
             => SubmissionRecordExtractor.IsCatalogCode(value);

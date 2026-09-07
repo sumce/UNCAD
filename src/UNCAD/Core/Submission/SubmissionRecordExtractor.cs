@@ -30,7 +30,7 @@ namespace UNCAD.Core.Submission
             @"^\d+\.\d+$", RegexOptions.Compiled);
 
         internal static bool IsCatalogCode(string value)
-            => CatalogCode.IsMatch((value ?? "").Trim());
+            => CatalogCode.IsMatch(TextParser.CleanMText(value ?? "").Trim());
 
         public static SubmissionRecord Extract(SubmissionSourceData source)
             => Extract(source, true);
@@ -65,18 +65,18 @@ namespace UNCAD.Core.Submission
             // replace.  Old drawings can retain duplicate/stale helper blocks; JSON is the
             // authoritative record once that field is present.
             string power = persistedMachineId.Length == 0
-                ? Unique(source, FrameBlockFiller.TagPower) : "";
+                ? NormalizeIdentity(Unique(source, FrameBlockFiller.TagPower)) : "";
             string deviceComposite = persistedMachineId.Length == 0
                 || persistedDeviceName.Length == 0
-                ? Unique(source, FrameBlockFiller.TagDevice) : "";
+                ? NormalizeIdentity(Unique(source, FrameBlockFiller.TagDevice)) : "";
             string machineId = MachineFromPower(power);
             string deviceName = persistedDeviceName.Length == 0
-                ? Unique(source, DeviceBlockFiller.TagDeviceName) : "";
+                ? NormalizeIdentity(Unique(source, DeviceBlockFiller.TagDeviceName)) : "";
 
             if (machineId.Length == 0 && deviceComposite.Length > 0)
-                machineId = MachineFromComposite(deviceComposite);
+                machineId = NormalizeIdentity(MachineFromComposite(deviceComposite));
             if (deviceName.Length == 0 && deviceComposite.Length > 0)
-                deviceName = DeviceFromComposite(deviceComposite, machineId);
+                deviceName = NormalizeIdentity(DeviceFromComposite(deviceComposite, machineId));
 
             // U1U persists the selected identity in frameinfo_json.  Prefer each non-empty
             // JSON field independently so partially migrated legacy frames can still use the
@@ -178,12 +178,12 @@ namespace UNCAD.Core.Submission
         {
             foreach (List<string> row in source.TableRows.Where(IsCableRow))
             {
-                string description = Cell(row, 2);
+                string description = CleanCell(row, 2);
                 Match match = CableModelInDescription.Match(description);
                 if (match.Success) return match.Groups[1].Value.Trim();
                 if (LooksLikeDirectCableModel(description))
                     return NormalizeTableText(description);
-                string name = Cell(row, 1);
+                string name = CleanCell(row, 1);
                 if (CodeStarts(row, "1.") && LooksLikeDirectCableModel(name)) return name;
             }
             return "";
@@ -205,7 +205,8 @@ namespace UNCAD.Core.Submission
         {
             foreach (List<string> row in source.TableRows.Where(predicate))
             {
-                string text = string.Join(" ", row);
+                string text = string.Join(" ", row.Select(value =>
+                    TextParser.CleanMText(value ?? "")));
                 Match symbol = Diameter.Match(text);
                 if (symbol.Success) return symbol.Groups[1].Value;
                 Match millimeter = MillimeterValue.Match(text);
@@ -224,10 +225,10 @@ namespace UNCAD.Core.Submission
             var values = new List<string>();
             foreach (List<string> row in source.TableRows.Where(predicate))
             {
-                string name = Cell(row, 1);
+                string name = CleanCell(row, 1);
                 if (name.Length == 0) name = NormalizeTableText(Cell(row, 2));
-                string quantity = Cell(row, 4);
-                string unit = Cell(row, 3);
+                string quantity = CleanCell(row, 4);
+                string unit = CleanCell(row, 3);
                 values.Add((name + (quantity.Length > 0
                     ? " " + quantity + (unit.Length > 0 ? unit : "M") : "")).Trim());
             }
@@ -241,7 +242,7 @@ namespace UNCAD.Core.Submission
             foreach (List<string> row in source.TableRows.Where(predicate))
             {
                 if (row.Count <= 4) continue;
-                total += ParseMeters(row[4]);
+                total += ParseMeters(CleanCell(row, 4));
             }
             return FormatMeters(total);
         }
@@ -285,12 +286,12 @@ namespace UNCAD.Core.Submission
             foreach (List<string> row in source.TableRows)
             {
                 if (row.Count < 5) continue;
-                string number = Cell(row, 0);
-                string name = Cell(row, 1);
+                string number = CleanCell(row, 0);
+                string name = CleanCell(row, 1);
                 string description = Cell(row, 2);
-                string unit = Cell(row, 3);
-                string quantity = Cell(row, 4);
-                string code = Cell(row, 5);
+                string unit = CleanCell(row, 3);
+                string quantity = CleanCell(row, 4);
+                string code = CleanCell(row, 5);
                 if (TableLayoutClassifier.IsHeaderLike(number, name, code)) continue;
                 if (!TableLayoutClassifier.IsNumberedDataRow(number)
                     && quantity.Length == 0) continue;
@@ -430,7 +431,7 @@ namespace UNCAD.Core.Submission
                 return CableBridgeCategory.Unknown;
             }
 
-            string name = Cell(row, 1);
+            string name = CleanCell(row, 1);
             if (Contains(name, "桥架")) return CableBridgeCategory.Bridge;
             return Contains(name, "电缆")
                 ? CableBridgeCategory.Cable : CableBridgeCategory.Unknown;
@@ -438,9 +439,9 @@ namespace UNCAD.Core.Submission
 
         private static string CatalogCodeFromRow(List<string> row)
         {
-            string code = Cell(row, 5);
+            string code = CleanCell(row, 5);
             if (IsCatalogCode(code)) return code;
-            string legacyCode = Cell(row, 0);
+            string legacyCode = CleanCell(row, 0);
             return IsCatalogCode(legacyCode) ? legacyCode : "";
         }
 
@@ -453,7 +454,7 @@ namespace UNCAD.Core.Submission
                 || RowContains(row, "穿线管")) && !IsFlexibleConduitRow(row);
 
         private static bool CodeStarts(List<string> row, string prefix)
-            => Cell(row, 5).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            => CleanCell(row, 5).StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
 
         private static bool RowContains(List<string> row, string value)
             => row.Any(cell => Contains(cell, value));
@@ -466,6 +467,12 @@ namespace UNCAD.Core.Submission
             if (distinct.Count > 1)
                 throw new InvalidDataException("框选内容中存在多个不同的 " + tag + " 值，请每次只提交一台设备。");
             return distinct.Count == 1 ? distinct[0] : "";
+        }
+
+        private static string NormalizeIdentity(string value)
+        {
+            return string.Join(" ", TextParser.SplitMTextLines(
+                TextParser.CleanMText(value ?? ""))).Trim();
         }
 
         private static string MachineFromPower(string value)
@@ -521,9 +528,14 @@ namespace UNCAD.Core.Submission
         }
 
         private static bool Contains(string value, string fragment)
-            => (value ?? "").IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0;
+            => TextParser.CleanMText(value ?? "")
+                .IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0;
 
         private static bool IsCode(string value, string prefix)
-            => (value ?? "").Trim().StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+            => TextParser.CleanMText(value ?? "").Trim()
+                .StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+
+        private static string CleanCell(List<string> row, int index)
+            => TextParser.CleanMText(Cell(row, index)).Trim();
     }
 }

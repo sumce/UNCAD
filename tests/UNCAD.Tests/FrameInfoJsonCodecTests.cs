@@ -14,7 +14,8 @@ namespace UNCAD.Tests
                 DeviceName = "插座01",
                 OriginalCableModel = "OLD",
                 BoqCableModel = "NEW",
-                LastModifiedUtc = "2026-09-02T08:00:00Z"
+                LastModifiedUtc = "2026-09-02T08:00:00Z",
+                LastModifiedUser = "tester"
             };
             source.Changes.Add(new FrameInfoJsonChange
             {
@@ -32,6 +33,7 @@ namespace UNCAD.Tests
             Assert.Equal("插座01", actual.DeviceName);
             Assert.Equal("OLD", actual.OriginalCableModel);
             Assert.Equal("NEW", actual.BoqCableModel);
+            Assert.Equal("tester", actual.LastModifiedUser);
             Assert.Equal("BoqCableModel", Assert.Single(actual.Changes).Field);
         }
 

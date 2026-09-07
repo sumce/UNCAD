@@ -30,7 +30,7 @@ namespace UNCAD.Tests
             Assert.Contains("entry.Item1.Machine.CircuitName", prompt);
             Assert.Contains("entry.Item1.Region.Handle", prompt);
             Assert.Contains("entry.Item1.Machine.Detail", prompt);
-            Assert.Contains("不写入自动 BOQ 数量", prompt);
+            Assert.Contains("批量更新已取消", prompt);
         }
 
         [Fact]

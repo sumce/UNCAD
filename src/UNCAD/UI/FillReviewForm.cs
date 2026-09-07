@@ -515,8 +515,10 @@ namespace UNCAD.UI
             Data.Machine.Next = _panel.Text.Trim();
             Data.Machine.Fr = _fr.Text.Trim();
             Data.Machine.Seq = _seq.Text.Trim();
-            Data.SetFlexibleConduitDiameter(
-                _diameter.Text, _catalog, _planningOptions);
+            // Diameter edits are applied by FlexibleConduitDiameterChanged. Do not
+            // re-create a deleted hose row here from the stale text-box value; the
+            // presence of a Ruanguan block and the user's row deletion are resolved
+            // by FillFeature before/after this dialog.
             Data.Machine.DownstreamAxis = _downstream.Text.Trim();
             Data.Machine.UpstreamAxis = _upstream.Text.Trim();
             Data.Machine.Detail = _detail.Text.Trim();

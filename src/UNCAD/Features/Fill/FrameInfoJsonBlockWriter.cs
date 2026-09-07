@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -31,6 +32,7 @@ namespace UNCAD.Features.Fill
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds)
         {
+            FrameInfoJsonRecord result = null;
             foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
             {
                 BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
@@ -40,8 +42,8 @@ namespace UNCAD.Features.Fill
                 foreach (AttributeReference attribute in attributes)
                 {
                     if (!IsJsonTag(attribute.Tag) && attributes.Count != 1) continue;
-                    FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(AttributeText(attribute));
-                    if (record != null) return record;
+                    FrameInfoJsonRecord record = ParsePayload(AttributeText(attribute), id);
+                    if (record != null) result = Merge(result, record, id);
                 }
                 if (block.IsDynamicBlock)
                 {
@@ -52,12 +54,13 @@ namespace UNCAD.Features.Fill
                         in dynamicProperties.Where(property => IsJsonTag(property.PropertyName)
                             || (dynamicProperties.Length == 1 && property.Value is string)))
                     {
-                        FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(Convert.ToString(property.Value));
-                        if (record != null) return record;
+                        FrameInfoJsonRecord record = ParsePayload(
+                            Convert.ToString(property.Value), id);
+                        if (record != null) result = Merge(result, record, id);
                     }
                 }
             }
-            return null;
+            return result;
         }
 
         internal static FillWriteResult Fill(CadContext ctx, Transaction transaction,
@@ -70,6 +73,7 @@ namespace UNCAD.Features.Fill
             int blocks = 0;
             int values = 0;
             var visited = new HashSet<ObjectId>();
+            var targets = new List<ObjectId>();
             foreach (ObjectId id in blockIds)
             {
                 if (!visited.Add(id)) continue;
@@ -84,10 +88,31 @@ namespace UNCAD.Features.Fill
                 if (IsFrameInfoJsonBlock(transaction, block))
                     EnsureJsonAttributeReference(ctx.Db, transaction, block);
 
-                FrameInfoJsonRecord previous = ReadBlock(transaction, block);
-                FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previous,
-                    machine, review, commandName, DateTime.UtcNow);
-                string payload = FrameInfoJsonCodec.Serialize(next);
+                targets.Add(id);
+            }
+
+            // A frame can temporarily contain both an embedded and a standalone metadata
+            // insert. Read them as one source of truth before writing so a stale second copy
+            // cannot silently overwrite a user's confirmed replacement.
+            FrameInfoJsonRecord previousRecord = null;
+            foreach (ObjectId id in targets)
+            {
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                FrameInfoJsonRecord current = ReadBlock(transaction, block);
+                if (current != null)
+                    previousRecord = Merge(previousRecord, current, id);
+            }
+
+            FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previousRecord,
+                machine, review, commandName, DateTime.UtcNow);
+            string payload = FrameInfoJsonCodec.Serialize(next);
+            foreach (ObjectId id in targets)
+            {
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block == null) continue;
+
                 bool touched = false;
                 List<AttributeReference> attributes = Attributes(transaction, block).ToList();
                 List<AttributeReference> jsonAttributes = attributes
@@ -182,14 +207,22 @@ namespace UNCAD.Features.Fill
 
             internal ObjectId FindNear(Extents3d extents)
             {
+                ObjectId found = ObjectId.Null;
                 foreach (KeyValuePair<ObjectId, Point3d> block in _blocks)
                 {
                     Point3d p = block.Value;
                     if (p.X >= extents.MinPoint.X && p.X <= extents.MaxPoint.X
                         && p.Y >= extents.MinPoint.Y && p.Y <= extents.MaxPoint.Y)
-                        return block.Key;
+                    {
+                        if (!found.IsNull)
+                            throw new InvalidDataException(
+                                "同一图框范围内存在多个 frameinfo_json 块（"
+                                + found.Handle + "、" + block.Key.Handle
+                                + "），请只保留一个后重试。");
+                        found = block.Key;
+                    }
                 }
-                return ObjectId.Null;
+                return found;
             }
         }
 
@@ -257,14 +290,54 @@ namespace UNCAD.Features.Fill
         private static FrameInfoJsonRecord ReadBlock(Transaction transaction,
             BlockReference block)
         {
-            foreach (AttributeReference attribute in Attributes(transaction, block))
+            FrameInfoJsonRecord result = null;
+            List<AttributeReference> attributes = Attributes(transaction, block).ToList();
+            foreach (AttributeReference attribute in attributes)
             {
                 if (!IsJsonTag(attribute.Tag)
                     && block.AttributeCollection.Count != 1) continue;
-                FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(AttributeText(attribute));
-                if (record != null) return record;
+                FrameInfoJsonRecord record = ParsePayload(AttributeText(attribute),
+                    block.ObjectId);
+                if (record != null) result = Merge(result, record, block.ObjectId);
             }
+            if (block.IsDynamicBlock)
+            {
+                DynamicBlockReferenceProperty[] properties = block
+                    .DynamicBlockReferencePropertyCollection.Cast<DynamicBlockReferenceProperty>()
+                    .ToArray();
+                foreach (DynamicBlockReferenceProperty property in properties.Where(property =>
+                    IsJsonTag(property.PropertyName)
+                    || (properties.Length == 1 && property.Value is string)))
+                {
+                    FrameInfoJsonRecord record = ParsePayload(
+                        Convert.ToString(property.Value), block.ObjectId);
+                    if (record != null) result = Merge(result, record, block.ObjectId);
+                }
+            }
+            return result;
+        }
+
+        private static FrameInfoJsonRecord ParsePayload(string payload, ObjectId id)
+        {
+            string text = (payload ?? "").Trim();
+            if (text.Length == 0) return null;
+            FrameInfoJsonRecord record = FrameInfoJsonCodec.Parse(text);
+            if (record != null) return record;
+            if (text.StartsWith("{", StringComparison.Ordinal))
+                throw new InvalidDataException("frameinfo_json 块 " + id.Handle
+                    + " 包含无效 JSON，已停止读取以避免覆盖历史替代型号。");
             return null;
+        }
+
+        private static FrameInfoJsonRecord Merge(FrameInfoJsonRecord current,
+            FrameInfoJsonRecord next, ObjectId id)
+        {
+            if (current == null) return next;
+            if (!string.Equals(FrameInfoJsonCodec.Serialize(current),
+                FrameInfoJsonCodec.Serialize(next), StringComparison.Ordinal))
+                throw new InvalidDataException("图框中存在多个不一致的 frameinfo_json 记录（块 "
+                    + id.Handle + "）。请只保留一个有效记录后重试。");
+            return current;
         }
 
         private static bool EnsureFrameJsonAttribute(Database database,
@@ -336,6 +409,10 @@ namespace UNCAD.Features.Fill
             {
                 Extents3d extents = frame.GeometricExtents;
                 return index.FindNear(extents);
+            }
+            catch (InvalidDataException)
+            {
+                throw;
             }
             catch
             {

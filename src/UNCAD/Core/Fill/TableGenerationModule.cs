@@ -102,8 +102,14 @@ namespace UNCAD.Core.Fill
         public FillReviewData CreateReview(MachineRow machine,
             FillPlanningOptions options)
         {
+            return CreateReview(machine, options, null);
+        }
+
+        public FillReviewData CreateReview(MachineRow machine,
+            FillPlanningOptions options, string originalCableModel)
+        {
             FillReviewData review = FillReviewData.Create(
-                machine, CopyDefaultRows(), options);
+                machine, CopyDefaultRows(), options, originalCableModel);
             if (review.CableMeters.Length == 0)
                 review.CableMeters = DefaultCableMeters;
             return review;

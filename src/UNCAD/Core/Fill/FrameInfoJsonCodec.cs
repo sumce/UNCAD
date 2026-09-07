@@ -33,6 +33,7 @@ namespace UNCAD.Core.Fill
                 ["panelFloor"] = record.PanelFloor,
                 ["facilitySwitch"] = record.FacilitySwitch,
                 ["lastModifiedUtc"] = record.LastModifiedUtc,
+                ["lastModifiedUser"] = record.LastModifiedUser,
                 ["changes"] = (record.Changes ?? new List<FrameInfoJsonChange>()).Select(change =>
                     new Dictionary<string, object>
                     {
@@ -74,7 +75,8 @@ namespace UNCAD.Core.Fill
                     DeviceFloor = Get(root, "deviceFloor"),
                     PanelFloor = Get(root, "panelFloor"),
                     FacilitySwitch = Get(root, "facilitySwitch"),
-                    LastModifiedUtc = Get(root, "lastModifiedUtc")
+                    LastModifiedUtc = Get(root, "lastModifiedUtc"),
+                    LastModifiedUser = Get(root, "lastModifiedUser")
                 };
                 if (root.TryGetValue("changes", out object rawChanges)
                     && rawChanges is IEnumerable changes)

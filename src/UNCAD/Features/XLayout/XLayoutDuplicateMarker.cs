@@ -52,6 +52,12 @@ namespace UNCAD.Features.XLayout
 
         internal static bool IsMarker(Entity entity)
         {
+            return TryGetSourceHandle(entity, out _);
+        }
+
+        internal static bool TryGetSourceHandle(Entity entity, out string sourceHandle)
+        {
+            sourceHandle = "";
             if (entity == null) return false;
             try
             {
@@ -63,10 +69,11 @@ namespace UNCAD.Features.XLayout
                         if (value.TypeCode == (int)DxfCode.ExtendedDataAsciiString)
                             values.Add(Convert.ToString(value.Value,
                                 CultureInfo.InvariantCulture) ?? "");
-                    foreach (string value in values)
-                        if (string.Equals(value, Kind, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    return false;
+                    int kind = values.FindIndex(value =>
+                        string.Equals(value, Kind, StringComparison.OrdinalIgnoreCase));
+                    if (kind < 0 || kind + 1 >= values.Count) return false;
+                    sourceHandle = values[kind + 1].Trim();
+                    return sourceHandle.Length > 0;
                 }
             }
             catch { return false; }

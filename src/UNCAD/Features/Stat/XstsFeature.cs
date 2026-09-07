@@ -9,6 +9,7 @@ using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Report;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Submission;
@@ -41,7 +42,6 @@ namespace UNCAD.Features.Stat
             if (regions.Errors.Count > 0)
             {
                 foreach (string error in regions.Errors) ctx.Write("\n[XSTS] " + error);
-                return;
             }
             if (regions.Groups.Count == 0)
             {
@@ -57,10 +57,10 @@ namespace UNCAD.Features.Stat
                 {
                     try
                     {
-                        SubmissionRecord record = FrameIdentityReader.Read(ctx, transaction,
-                            region, definitions);
-                        selectedRows.Add(new XstsCircuitRecord(record.MachineId,
-                            record.DeviceName));
+                        ExistingFillIdentity identity = FrameIdentityReader.ReadIdentity(
+                            transaction, region, definitions);
+                        selectedRows.Add(new XstsCircuitRecord(identity.MachineId,
+                            identity.DeviceName));
                     }
                     catch (System.Exception ex)
                     {
@@ -86,29 +86,33 @@ namespace UNCAD.Features.Stat
                 expectedStatus = XstsExpectedDataStatus.NotConfigured;
                 expectedDetail = "未配置机台 Excel";
             }
-            else if (!MachineWorkbookSource.TryGetSnapshot(configuredPath,
-                out MachineWorkbookSnapshotInfo snapshot))
-            {
-                expectedStatus = XstsExpectedDataStatus.FileNotFound;
-                expectedDetail = "机台数据尚未刷新到 SQLite，请在 U1SET 中点击“刷新”";
-            }
             else
             {
                 try
                 {
-                    var selectedMachines = new HashSet<string>(selectedRows
-                        .Select(item => item.MachineId.Trim())
-                        .Where(value => value.Length > 0),
-                        StringComparer.OrdinalIgnoreCase);
-                    foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
-                        .ReadRowsForMachines(configuredPath, selectedMachines))
+                    if (!MachineWorkbookSource.TryGetSnapshot(configuredPath,
+                        out MachineWorkbookSnapshotInfo snapshot))
                     {
-                        if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
-                        expectedRows.Add(new XstsCircuitRecord(row.MachineId, row.CircuitName));
+                        expectedStatus = XstsExpectedDataStatus.FileNotFound;
+                        expectedDetail = "机台数据尚未刷新到 SQLite，请在 U1SET 中点击“刷新”";
                     }
-                    expectedStatus = XstsExpectedDataStatus.Available;
-                    expectedDetail = "SQLite 快照（手动刷新时间 "
-                        + (snapshot?.RefreshedUtc ?? "未知") + "）";
+                    else
+                    {
+                        var selectedMachines = new HashSet<string>(selectedRows
+                            .Select(item => item.MachineId.Trim())
+                            .Where(value => value.Length > 0),
+                            StringComparer.OrdinalIgnoreCase);
+                        foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
+                            .ReadRowsForMachines(configuredPath, selectedMachines))
+                        {
+                            if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
+                            expectedRows.Add(new XstsCircuitRecord(row.MachineId,
+                                row.CircuitName));
+                        }
+                        expectedStatus = XstsExpectedDataStatus.Available;
+                        expectedDetail = "SQLite 快照（手动刷新时间 "
+                            + (snapshot?.RefreshedUtc ?? "未知") + "）";
+                    }
                 }
                 catch (System.Exception ex)
                 {
@@ -118,17 +122,26 @@ namespace UNCAD.Features.Stat
             }
             XstsReport report = XstsReportBuilder.Build(selectedRows, expectedRows,
                 expectedStatus, expectedDetail);
+            // Include frames whose boundary could not be collected. They are still part of
+            // the user's selection and are listed in the issue sheet; omitting them from the
+            // headline would make the physical frame count disagree with the diagnostics.
+            report.FrameCount = regions.SelectedFrameCount;
+            foreach (string error in regions.Errors)
+                report.Issues.Add(new XstsFrameIssue { Description = error });
             string outputRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
             if (outputRoot.Length == 0) outputRoot = Environment.GetFolderPath(
                 Environment.SpecialFolder.MyDocuments);
             Directory.CreateDirectory(outputRoot);
             string path = Path.Combine(outputRoot, "UNCAD_XSTS_"
-                + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".xlsx");
+                + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".xlsx");
             XstsExcelReporter.WriteToFile(report, path);
             string coverage = report.ExpectedDataAvailable
+                && !report.HasUnknownMachineBaseline
                 ? "缺少 " + report.MissingCircuitCount + " 个回路，多出 "
                     + report.UnexpectedCircuitCount + " 个回路"
-                : "缺少回路无法判断（" + report.ExpectedDataDetail + "）";
+                : report.ExpectedDataAvailable
+                    ? "部分机台缺少/多出回路无法判断（" + report.ExpectedDataDetail + "）"
+                    : "缺少回路无法判断（" + report.ExpectedDataDetail + "）";
             ctx.Write("\n[XSTS] 统计完成: " + report.Machines.Count + " 个机台、"
                 + report.FrameCount + " 张图纸，"
                 + report.SelectedCircuitCount + " 个有效已选回路，" + coverage

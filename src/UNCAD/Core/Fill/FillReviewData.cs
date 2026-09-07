@@ -54,18 +54,35 @@ namespace UNCAD.Core.Fill
         {
             options = options ?? FillPlanningOptions.Default;
             MachineRow machine = CloneMachine(source);
+            return Create(machine, rows, options, null);
+        }
+
+        /// <summary>
+        /// Creates review data from a planning machine whose cable may already be the
+        /// confirmed BOQ alias. The persisted machine copy still keeps the original
+        /// workbook/device cable, while the BOQ field retains the planning alias.
+        /// </summary>
+        public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows,
+            FillPlanningOptions options, string originalCableModel)
+        {
+            options = options ?? FillPlanningOptions.Default;
+            MachineRow machine = CloneMachine(source);
+            string planningCable = (machine.Cable ?? "").Trim();
+            string original = FirstNonEmpty(originalCableModel, planningCable);
+            string boq = FirstNonEmpty(planningCable, original);
+            machine.Cable = original;
             var data = new FillReviewData
             {
                 Machine = machine,
-                OriginalCableModel = (machine.Cable ?? "").Trim(),
-                BoqCableModel = (machine.Cable ?? "").Trim()
+                OriginalCableModel = original,
+                BoqCableModel = boq
             };
             foreach (TableFillRow row in rows ?? Enumerable.Empty<TableFillRow>())
             {
                 data.Items.Add(new FillReviewItem
                 {
-                    // Unmatched rows stay excluded until a catalog replacement is selected,
-                    // or a batch U1U caller explicitly accepts fallback defaults.
+                    // Unmatched rows stay excluded until a fixed-catalog replacement is
+                    // selected. There is no uncoded fallback because CAD and BOQ must agree.
                     Included = row.CatalogMatched,
                     Category = row.Category,
                     Name = row.Name ?? "",
@@ -115,39 +132,16 @@ namespace UNCAD.Core.Fill
         /// unchecked rows leave no gaps; manual rows remain where the user added them.
         /// </summary>
         public List<TableFillRow> SelectedRows()
-            => SelectedRows(false);
-
-        /// <summary>
-        /// Returns rows selected for writing. Batch U1U may explicitly accept fallback
-        /// rows whose catalog code is unavailable, except bus plug boxes which require
-        /// a selected rating. Single-frame U1F keeps the strict catalog-only default.
-        /// </summary>
-        public List<TableFillRow> SelectedRows(bool allowUnmatchedDefaults)
         {
             var selected = new List<TableFillRow>();
             foreach (FillReviewItem item in Items.Where(item =>
-                item.Included && (item.CatalogMatched || (allowUnmatchedDefaults
-                    && item.Category != TableFillCategory.BusPlugBox))))
+                item.Included && item.CatalogMatched))
             {
                 TableFillRow row = item.ToTableRow();
                 row.SortOrder = selected.Count + 1;
                 selected.Add(row);
             }
             return selected;
-        }
-
-        /// <summary>Marks unresolved generated rows as accepted fallback data for batch U1U.</summary>
-        public int AcceptUnmatchedDefaults()
-        {
-            int count = 0;
-            foreach (FillReviewItem item in Items)
-            {
-                if (item.CatalogMatched || item.Category == TableFillCategory.BusPlugBox)
-                    continue;
-                item.Included = true;
-                count++;
-            }
-            return count;
         }
 
         public FillReviewItem CableItem()
@@ -310,9 +304,13 @@ namespace UNCAD.Core.Fill
             string value = normalized.Length > 0 ? normalized : sourceValue;
             Machine.Dia = value;
             FillReviewItem flexible = FlexibleConduitItem();
+            if (value.Length == 0)
+            {
+                if (flexible != null) RemoveItem(flexible);
+                return null;
+            }
             if (flexible == null)
             {
-                if (value.Length == 0) return null;
                 TableFillRow generated = TableFillPlanner.BuildFlexibleConduitRow(
                     value, catalog, options);
                 flexible = new FillReviewItem
@@ -381,5 +379,8 @@ namespace UNCAD.Core.Fill
                 FacilitySwitch = source.FacilitySwitch
             };
         }
+
+        private static string FirstNonEmpty(params string[] values)
+            => values?.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "";
     }
 }

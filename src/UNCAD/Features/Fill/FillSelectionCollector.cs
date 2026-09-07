@@ -185,13 +185,13 @@ namespace UNCAD.Features.Fill
                 if (block == null) continue;
                 if (TryGetBlockValue(transaction, block, FrameBlockFiller.TagPower,
                     out string power))
-                    powers.Add(power);
+                    powers.Add(NormalizeIdentityValue(power));
                 if (TryGetBlockValue(transaction, block, FrameBlockFiller.TagDevice,
                     out string composite))
-                    composites.Add(composite);
+                    composites.Add(NormalizeIdentityValue(composite));
                 if (TryGetBlockValue(transaction, block, DeviceBlockFiller.TagDeviceName,
                     out string device))
-                    devices.Add(device);
+                    devices.Add(NormalizeIdentityValue(device));
             }
             return ExistingFillIdentityResolver.TryResolve(
                 powers, composites, devices, out identity, out error);
@@ -514,5 +514,9 @@ namespace UNCAD.Features.Fill
             value = "";
             return false;
         }
+
+        private static string NormalizeIdentityValue(string value)
+            => string.Join(" ", TextParser.SplitMTextLines(
+                TextParser.CleanMText(value ?? ""))).Trim();
     }
 }

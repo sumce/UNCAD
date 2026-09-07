@@ -235,6 +235,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Extract_CleansFormattedTableCodesBeforeClassification()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
+            source.AddTableRow("1", "电缆", "1.名称:3*2.5", "M", "12",
+                @"{\fSimSun|b0|i0;1.1}");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Single(record.Materials);
+            Assert.Equal("1.1", record.Materials[0].Code);
+            Assert.Empty(record.DroppedRows);
+            Assert.Equal("12", record.CableMeters);
+        }
+
+        [Fact]
         public void Extract_ClassifiesUncodedCableTrayAsBridgeOnly()
         {
             var source = new SubmissionSourceData();

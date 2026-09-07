@@ -17,13 +17,15 @@ namespace UNCAD.UI
                 new Size(680, 420));
             Panel header = UiTheme.Header("机台回路统计 · " + report.Machines.Count
                 + " 个机台 / " + report.FrameCount + " 张图纸",
-                report.ExpectedDataAvailable
+                report.ExpectedDataAvailable && !report.HasUnknownMachineBaseline
                     ? "有效回路 " + report.SelectedCircuitCount + " / 应有 "
                         + report.ExpectedCircuitCount + " · 缺少 "
                         + report.MissingCircuitCount + " · 多出 "
                         + report.UnexpectedCircuitCount + " · 异常 " + report.Issues.Count
                     : "有效回路 " + report.SelectedCircuitCount
-                        + " · 缺少回路无法判断 · " + report.ExpectedDataDetail
+                        + " · 应有/缺少/多出 "
+                        + (report.ExpectedDataAvailable ? "部分无法判断" : "无法判断")
+                        + " · " + report.ExpectedDataDetail
                         + " · 异常 " + report.Issues.Count);
             var grid = new DataGridView
             {

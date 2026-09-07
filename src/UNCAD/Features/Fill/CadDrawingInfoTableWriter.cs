@@ -26,18 +26,30 @@ namespace UNCAD.Features.Fill
                 || CadTableLayoutClassifier.IsCurrentDrawingInfoTable(table)) return false;
 
             int valueRow = headerRow + 1;
-            string deviceFloor = TextParser.CleanMText(valueRow < table.Rows.Count
-                ? table.Cells[valueRow, 1].TextString ?? "" : "").Trim();
-            string upstreamFloor = TextParser.CleanMText(valueRow < table.Rows.Count
-                ? table.Cells[valueRow, 2].TextString ?? "" : "").Trim();
+            string deviceFloor = CellText(table, valueRow, 1);
+            string upstreamFloor = CellText(table, valueRow, 2);
             string floor = JoinFloors(deviceFloor, upstreamFloor);
-            double floorWidth = table.Columns[1].Width + table.Columns[2].Width;
+            string drafter = CellText(table, valueRow, 3);
+            string reviewer = CellText(table, valueRow, 4);
+            string date = CellText(table, valueRow, 5);
+            string version = CellText(table, valueRow, 6);
 
             table.UpgradeOpen();
-            table.DeleteColumns(2, 1);
-            table.Columns[1].Width = floorWidth;
             table.Cells[headerRow, 1].TextString = "楼层";
-            if (valueRow < table.Rows.Count) table.Cells[valueRow, 1].TextString = floor;
+            table.Cells[headerRow, 2].TextString = "制图";
+            table.Cells[headerRow, 3].TextString = "审核";
+            table.Cells[headerRow, 4].TextString = "日期";
+            table.Cells[headerRow, 5].TextString = "版本";
+            table.Cells[headerRow, 6].TextString = "";
+            if (valueRow < table.Rows.Count)
+            {
+                table.Cells[valueRow, 1].TextString = floor;
+                table.Cells[valueRow, 2].TextString = drafter;
+                table.Cells[valueRow, 3].TextString = reviewer;
+                table.Cells[valueRow, 4].TextString = date;
+                table.Cells[valueRow, 5].TextString = version;
+                table.Cells[valueRow, 6].TextString = "";
+            }
             table.GenerateLayout();
             table.RecordGraphicsModified(true);
             return true;
@@ -66,5 +78,11 @@ namespace UNCAD.Features.Fill
             => string.Join("/", new[] { deviceFloor, upstreamFloor }
                 .Select(value => (value ?? "").Trim())
                 .Where(value => value.Length > 0));
+
+        private static string CellText(Table table, int row, int column)
+            => row >= 0 && row < table.Rows.Count && column >= 0
+                && column < table.Columns.Count
+                ? TextParser.CleanMText(table.Cells[row, column].TextString ?? "").Trim()
+                : "";
     }
 }

@@ -39,7 +39,6 @@ namespace UNCAD.Features.Fill
             public string CableRequestKey { get; set; }
             public string BusPlugBoxRequestKey { get; set; }
             public bool HoseWasMissingBeforeCableChoice { get; set; }
-            public bool AllowUnmatchedDefaults { get; set; }
         }
 
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
@@ -122,9 +121,8 @@ namespace UNCAD.Features.Fill
                 }
             }
 
-            // A merged/deleted material row can legitimately have no fixed-catalog match.
-            // Ask once for the whole batch and keep the decision explicit in the plan; do
-            // not turn this recoverable situation into a preflight warning/error.
+            // A merged/deleted material row has no fixed-catalog identity. Do not write it:
+            // a CAD row without a BOQ code would make the two sources disagree.
             List<Tuple<Plan, FillReviewItem>> unresolvedDefaults = plans
                 .SelectMany(plan => (plan.Review?.Items ?? new List<FillReviewItem>())
                     .Where(item => item.RequiresCatalogConfirmation)
@@ -146,21 +144,14 @@ namespace UNCAD.Features.Fill
                 if (details.Count > 12)
                     dialogDetails += "\r\n其余 " + (details.Count - 12)
                         + " 项已输出到 CAD 命令行。";
-                DialogResult useDefaults = MessageBox.Show(Owner(),
+                MessageBox.Show(Owner(),
                     "批量更新中有 " + unresolvedDefaults.Count
                         + " 个清单项目未匹配固定清单（可能已在现有表格中合并）。\r\n"
                         + "\r\n未匹配明细：\r\n" + dialogDetails + "\r\n\r\n"
-                        + "选择“是”：默认项写入 CAD 表格，但不写入自动 BOQ 数量。\r\n"
-                        + "选择“否”：取消整批，CAD 和 BOQ 均不修改。",
-                    "U1U 未匹配固定清单", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question, MessageBoxDefaultButton.Button1);
-                if (useDefaults != DialogResult.Yes) return;
-                foreach (Plan plan in plans)
-                {
-                    if (plan.Review == null) continue;
-                    plan.AllowUnmatchedDefaults = plan.Review.AcceptUnmatchedDefaults() > 0;
-                }
-                ctx.Write("\n[U1U] 用户确认采用默认数据更新未匹配项目。未编码默认项不会写入自动 BOQ 材料数量。");
+                        + "。批量更新已取消。请删除这些行，或在单图 U1U 中选择固定清单替代项后重试。",
+                    "U1U 未匹配固定清单", MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
             }
 
             foreach (Plan plan in plans)
@@ -168,8 +159,7 @@ namespace UNCAD.Features.Fill
                 List<FillReviewItem> unresolved = plan.Review?.Items.Where(item =>
                     item.RequiresCatalogConfirmation).ToList()
                     ?? new List<FillReviewItem>();
-                if (unresolved.Count > 0 && (!plan.AllowUnmatchedDefaults
-                    || unresolved.Any(item => item.Category == TableFillCategory.BusPlugBox)))
+                if (unresolved.Count > 0)
                 {
                     errors.Add("机台 " + plan.Machine.MachineId + "；设备 "
                         + plan.Machine.CircuitName + "；图框 " + plan.Region.Handle
@@ -177,7 +167,7 @@ namespace UNCAD.Features.Fill
                             unresolved.Select(item => item.Name)));
                     continue;
                 }
-                plan.Rows = plan.Review.SelectedRows(plan.AllowUnmatchedDefaults);
+                plan.Rows = plan.Review.SelectedRows();
                 int capacity = FillFeature.ResolveTableWriteCapacity(ctx,
                     plan.Selection.TableIds, options.StartRow, options.ClearRows);
                 if (plan.Rows.Count > capacity)
@@ -275,6 +265,17 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         plans.Select(plan => plan.Selection));
+                    foreach (Plan plan in plans)
+                    {
+                        int migratedCapacity = FillFeature.ResolveTableWriteCapacity(
+                            transaction, plan.Selection.TableIds, options.StartRow,
+                            options.ClearRows);
+                        if (plan.Rows.Count > migratedCapacity)
+                            throw new InvalidOperationException("图框 "
+                                + plan.Region.Handle + " 迁移后的新版清单表容量只有 "
+                                + migratedCapacity + " 行，当前清单需要 "
+                                + plan.Rows.Count + " 行；本次已回滚。");
+                    }
                     // Shared once-per-batch state: scanning frameinfo_json inserts and
                     // normalizing shared block definitions per frame used to repeat
                     // whole-space/whole-definition walks inside the write transaction.
@@ -351,13 +352,9 @@ namespace UNCAD.Features.Fill
                     }
                     // Read the modified entities through the same transaction. If BOQ output
                     // fails, disposing this transaction rolls back the whole CAD batch.
-                    automaticExcel = plans.Any(plan => plan.AllowUnmatchedDefaults)
-                        ? AutomaticSubmissionService.WriteBatchWithDefaults(ctx, transaction,
-                            automaticExcelPath,
-                            plans.Select(plan => plan.Selection.SourceIds), outputBatch)
-                        : AutomaticSubmissionService.Write(ctx, transaction,
-                            automaticExcelPath,
-                            plans.Select(plan => plan.Selection.SourceIds), outputBatch);
+                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
+                        automaticExcelPath, plans.Select(plan => plan.Selection.SourceIds),
+                        outputBatch);
                     transaction.Commit();
                     outputBatch.Complete();
                 }
@@ -451,6 +448,7 @@ namespace UNCAD.Features.Fill
             }
             if (!validIdentity || machine == null || !validTableShape)
                 return;
+            string originalCableModel = (machine.Cable ?? "").Trim();
 
             SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
                 selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
@@ -508,7 +506,8 @@ namespace UNCAD.Features.Fill
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters);
-            FillReviewData review = tablePlan.CreateReview(machine, options.Planning);
+            FillReviewData review = tablePlan.CreateReview(machine, options.Planning,
+                originalCableModel);
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
                 selection.FrameInfoJsonBlockIds);
             review.RestoreBusPlugBoxChoice(previousRecord, workbook.Catalog);
@@ -564,7 +563,7 @@ namespace UNCAD.Features.Fill
             {
                 Region = region,
                 Selection = selection,
-                Machine = machine,
+                Machine = review.Machine,
                 Summation = summation,
                 Statistics = statistics,
                 Review = review,

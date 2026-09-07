@@ -30,5 +30,26 @@ namespace UNCAD.Tests
             }
             finally { workbook.Close(); }
         }
+
+        [Fact]
+        public void CreateWorkbook_WritesKnownCountsAsNumericCells()
+        {
+            XstsReport report = XstsReportBuilder.Build(
+                new[] { new XstsCircuitRecord("M1", "A") },
+                new[] { new XstsCircuitRecord("M1", "A") });
+
+            IWorkbook workbook = XstsExcelReporter.CreateWorkbook(report);
+            try
+            {
+                ISheet summary = workbook.GetSheet("回路统计");
+                Assert.Equal(CellType.Numeric, summary.GetRow(2).GetCell(1).CellType);
+                Assert.Equal(1d, summary.GetRow(2).GetCell(1).NumericCellValue);
+                Assert.Equal(CellType.Numeric, summary.GetRow(5).GetCell(1).CellType);
+                Assert.Equal(CellType.Numeric, summary.GetRow(5).GetCell(2).CellType);
+                Assert.Equal(CellType.Numeric, summary.GetRow(6).GetCell(1).CellType);
+                Assert.Equal(CellType.Numeric, summary.GetRow(6).GetCell(2).CellType);
+            }
+            finally { workbook.Close(); }
+        }
     }
 }

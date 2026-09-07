@@ -10,6 +10,7 @@ using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Submission;
 using UNCAD.Cad.QuickLine;
@@ -32,6 +33,7 @@ namespace UNCAD.Features.XLayout
         private const double MachineLabelLeftDistance = 300000d;
         private const short MachineCompleteColorIndex = 3;
         private const short MachineIncompleteColorIndex = 1;
+        private const short MachineUnknownColorIndex = 8;
         private const short DuplicateMarkerColorIndex = 2;
 
         protected override void Execute(CadContext ctx)
@@ -72,10 +74,11 @@ namespace UNCAD.Features.XLayout
                 foreach (FrameRegionGroup group in regions.Groups)
                 {
                     index++;
-                    SubmissionRecord record;
+                    ExistingFillIdentity identity;
                     try
                     {
-                        record = FrameIdentityReader.Read(ctx, readTransaction, group, definitions);
+                        identity = FrameIdentityReader.ReadIdentity(readTransaction, group,
+                            definitions);
                     }
                     catch (System.Exception ex)
                     {
@@ -85,7 +88,7 @@ namespace UNCAD.Features.XLayout
                         if (firstIdentityError == null) firstIdentityError = group;
                         continue;
                     }
-                    string machineId = (record.MachineId ?? "").Trim();
+                    string machineId = (identity.MachineId ?? "").Trim();
                     if (machineId.Length == 0)
                     {
                         string error = DescribeFrameIdentityFailure(group, index,
@@ -94,7 +97,7 @@ namespace UNCAD.Features.XLayout
                         if (firstIdentityError == null) firstIdentityError = group;
                         continue;
                     }
-                    string deviceName = (record.DeviceName ?? "").Trim();
+                    string deviceName = (identity.DeviceName ?? "").Trim();
                     var item = new XLayoutFrameItem(machineId, deviceName, group.Boundary, group.Handle);
                     items.Add(item);
                     groupsByItem[item] = group;
@@ -145,7 +148,10 @@ namespace UNCAD.Features.XLayout
 
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                RemoveDuplicateMarkers(ctx, transaction);
+                HashSet<string> targetHandles = new HashSet<string>(
+                    placements.Select(placement => placement.Item.Handle ?? ""),
+                    StringComparer.OrdinalIgnoreCase);
+                RemoveDuplicateMarkers(ctx, transaction, targetHandles);
                 var moved = new HashSet<ObjectId>();
                 foreach (XLayoutPlacement placement in placements)
                 {
@@ -214,6 +220,7 @@ namespace UNCAD.Features.XLayout
                 if (summary.DuplicateCircuitCount > 0
                     || (summary.StatusKnown && !summary.IsComplete))
                     return MachineIncompleteColorIndex;
+                if (!summary.StatusKnown) return MachineUnknownColorIndex;
             }
             return MachineCompleteColorIndex;
         }
@@ -270,10 +277,10 @@ namespace UNCAD.Features.XLayout
         {
             string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
             if (configured.Length == 0) return null;
-            if (!MachineWorkbookSource.TryGetSnapshot(configured,
-                out MachineWorkbookSnapshotInfo snapshot)) return null;
             try
             {
+                if (!MachineWorkbookSource.TryGetSnapshot(configured,
+                    out MachineWorkbookSnapshotInfo snapshot)) return null;
                 var result = new Dictionary<string, HashSet<string>>(
                     StringComparer.OrdinalIgnoreCase);
                 foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
@@ -298,7 +305,8 @@ namespace UNCAD.Features.XLayout
             }
         }
 
-        private static void RemoveDuplicateMarkers(CadContext ctx, Transaction transaction)
+        private static void RemoveDuplicateMarkers(CadContext ctx, Transaction transaction,
+            ISet<string> targetHandles)
         {
             // XData filter selects only entities carrying the marker RegApp;
             // a plain space sweep would open and inspect every entity.
@@ -316,7 +324,11 @@ namespace UNCAD.Features.XLayout
                 if (selected == null || selected.ObjectId.IsNull) continue;
                 Entity entity = transaction.GetObject(selected.ObjectId,
                     OpenMode.ForRead, true) as Entity;
-                if (entity == null || !XLayoutDuplicateMarker.IsMarker(entity)) continue;
+                if (entity == null
+                    || !XLayoutDuplicateMarker.TryGetSourceHandle(entity,
+                        out string sourceHandle)
+                    || targetHandles == null
+                    || !targetHandles.Contains(sourceHandle)) continue;
                 entity.UpgradeOpen();
                 entity.Erase();
             }

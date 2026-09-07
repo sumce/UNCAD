@@ -69,11 +69,20 @@ namespace UNCAD.Core.Stat
         public int ExpectedCircuitCount => Machines.Sum(item => item.ExpectedCircuitCount);
         public int MissingCircuitCount => Machines.Sum(item => item.MissingCircuits.Count);
         public int UnexpectedCircuitCount => Machines.Sum(item => item.UnexpectedCircuits.Count);
+        public int UnknownMachineCount => Machines.Count(item => !item.ExpectedDataAvailable);
+        public bool HasUnknownMachineBaseline
+            => ExpectedDataAvailable && UnknownMachineCount > 0;
         public string ExpectedCircuitText => ExpectedDataAvailable
-            ? ExpectedCircuitCount.ToString()
+            ? HasUnknownMachineBaseline ? "部分无法判断"
+            : ExpectedCircuitCount.ToString()
             : "无法判断";
         public string MissingCircuitText => ExpectedDataAvailable
-            ? MissingCircuitCount.ToString()
+            ? HasUnknownMachineBaseline ? "部分无法判断"
+            : MissingCircuitCount.ToString()
+            : "无法判断";
+        public string UnexpectedCircuitText => ExpectedDataAvailable
+            ? HasUnknownMachineBaseline ? "部分无法判断"
+            : UnexpectedCircuitCount.ToString()
             : "无法判断";
     }
 
@@ -116,15 +125,18 @@ namespace UNCAD.Core.Stat
                 HashSet<string> expectedNames = expectedGroups.TryGetValue(machineId,
                     out HashSet<string> expectedSet) ? expectedSet : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 row.SelectedCircuitCount = selectedNames.Count;
-                row.ExpectedCircuitCount = expectedNames.Count;
                 row.SelectedCircuits.AddRange(selectedNames.OrderBy(value => value,
                     StringComparer.OrdinalIgnoreCase));
-                row.MissingCircuits.AddRange(expectedNames.Except(selectedNames,
-                    StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
-                    StringComparer.OrdinalIgnoreCase));
-                row.UnexpectedCircuits.AddRange(selectedNames.Except(expectedNames,
-                    StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
-                    StringComparer.OrdinalIgnoreCase));
+                if (row.ExpectedDataAvailable)
+                {
+                    row.ExpectedCircuitCount = expectedNames.Count;
+                    row.MissingCircuits.AddRange(expectedNames.Except(selectedNames,
+                        StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
+                        StringComparer.OrdinalIgnoreCase));
+                    row.UnexpectedCircuits.AddRange(selectedNames.Except(expectedNames,
+                        StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
+                        StringComparer.OrdinalIgnoreCase));
+                }
                 if (report.ExpectedDataAvailable && !expectedGroups.ContainsKey(machineId))
                 {
                     report.Issues.Add(new XstsFrameIssue

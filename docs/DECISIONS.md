@@ -125,3 +125,14 @@ rewrite an existing entry.
   an explicit selection before writing CAD or BOQ. Persist the confirmed code
   in `frameinfo_json`; reuse it only while the frame identity and supply data
   remain unchanged and the catalog item is still valid.
+
+## D-016: CAD And BOQ Must Share Catalog Identity (2026-09-07)
+
+- Status: accepted
+- Decision: every material row written by U1F/U1U and every material row
+  exported to the automatic BOQ must carry the same fixed-catalog project
+  code. Uncoded or unmatched rows are not allowed to be written to CAD as a
+  batch fallback.
+- Consequence: an unmatched row stops the batch before the CAD transaction or
+  BOQ file is changed. The user must delete the row or choose a fixed-catalog
+  replacement; the confirmed replacement is persisted in `frameinfo_json`.

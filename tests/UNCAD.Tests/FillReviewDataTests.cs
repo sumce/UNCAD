@@ -31,7 +31,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BatchDefaults_CannotBypassBusPlugBoxRatingSelection()
+        public void UnmatchedItems_CannotBypassCatalogIdentity()
         {
             FillReviewData data = FillReviewData.Create(new MachineRow(), new[]
             {
@@ -45,10 +45,8 @@ namespace UNCAD.Tests
             });
 
             Assert.Empty(data.SelectedRows());
-            Assert.Equal(0, data.AcceptUnmatchedDefaults());
-            Assert.Empty(data.SelectedRows(true));
             data.Items[0].Included = true;
-            Assert.Empty(data.SelectedRows(true));
+            Assert.Empty(data.SelectedRows());
         }
 
         [Fact]
@@ -313,6 +311,22 @@ namespace UNCAD.Tests
             Assert.Equal(TableFillCategory.Outlet, selected[0].Category);
             Assert.Equal(TableFillCategory.Manual, selected[1].Category);
             Assert.Equal(new[] { 1, 2 }, selected.ConvertAll(row => row.SortOrder));
+        }
+
+        [Fact]
+        public void Create_WithPlanningCableKeepsOriginalAndBoqModelsSeparate()
+        {
+            var planningMachine = new MachineRow
+            {
+                MachineId = "M1", CircuitName = "设备A", Cable = "CATALOG_ALIAS"
+            };
+
+            FillReviewData review = FillReviewData.Create(planningMachine, Rows(),
+                FillPlanningOptions.Default, "EXCEL_ORIGINAL");
+
+            Assert.Equal("EXCEL_ORIGINAL", review.OriginalCableModel);
+            Assert.Equal("CATALOG_ALIAS", review.BoqCableModel);
+            Assert.Equal("EXCEL_ORIGINAL", review.Machine.Cable);
         }
 
         [Theory]

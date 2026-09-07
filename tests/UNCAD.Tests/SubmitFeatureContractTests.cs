@@ -57,17 +57,17 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BatchU1U_UsesExplicitFallbackWriterOnlyAfterConfirmation()
+        public void BatchU1U_RejectsUnmatchedRowsToKeepCadAndBoqAligned()
         {
             string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Submit", "AutomaticSubmissionService.cs"));
             string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Fill", "BatchFillUpdateCoordinator.cs"));
 
-            Assert.Contains("WriteBatchWithDefaults", service);
-            Assert.Contains("allowUnmatchedDefaults = false", service);
-            Assert.Contains("plans.Any(plan => plan.AllowUnmatchedDefaults)", batch);
-            Assert.Contains("WriteBatchWithDefaults(ctx, transaction", batch);
+            Assert.DoesNotContain("WriteBatchWithDefaults", service);
+            Assert.DoesNotContain("AllowUnmatchedDefaults", batch);
+            Assert.Contains("批量更新已取消", batch);
+            Assert.Contains("AutomaticSubmissionService.Write(ctx, transaction", batch);
         }
 
         [Fact]
@@ -76,11 +76,10 @@ namespace UNCAD.Tests
             string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "Submit", "AutomaticSubmissionService.cs"));
 
-            // The final two arguments are allowUnmatchedDefaults and
-            // allowEmptyMaterials. U1F/U1U must pass true for both so a deliberately
+            // U1F/U1U must pass true for allowEmptyMaterials so a deliberately
             // empty CAD table clears the corresponding BOQ device column.
-            Assert.Contains("sourceGroups, null, false, true, true);", service);
-            Assert.Contains("sourceGroups, batch, false, true, true);", service);
+            Assert.Contains("sourceGroups, null, false, true);", service);
+            Assert.Contains("sourceGroups, batch, false, true);", service);
         }
 
         private static string RepoFile(params string[] parts)

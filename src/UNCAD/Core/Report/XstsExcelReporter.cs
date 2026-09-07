@@ -37,7 +37,7 @@ namespace UNCAD.Core.Report
             Set(sheet.CreateRow(row++), 0, "生成时间: " + DateTime.Now.ToString(
                 "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
             Set(sheet.CreateRow(row++), 0, "框选机台数量");
-            Set(sheet.GetRow(row - 1), 1, report.FrameCount.ToString(CultureInfo.InvariantCulture));
+            Set(sheet.GetRow(row - 1), 1, report.FrameCount);
             Set(sheet.CreateRow(row++), 0, "回路基准状态");
             Set(sheet.GetRow(row - 1), 1, ExpectedStatusText(report));
             Set(sheet.GetRow(row - 1), 2, report.ExpectedDataDetail);
@@ -50,18 +50,19 @@ namespace UNCAD.Core.Report
             {
                 IRow current = sheet.CreateRow(row++);
                 Set(current, 0, item.MachineId);
-                Set(current, 1, item.SelectedCircuitCount.ToString(CultureInfo.InvariantCulture));
-                Set(current, 2, item.ExpectedCircuitText);
+                Set(current, 1, item.SelectedCircuitCount);
+                if (item.ExpectedDataAvailable) Set(current, 2, item.ExpectedCircuitCount);
+                else Set(current, 2, item.ExpectedCircuitText);
                 Set(current, 3, item.MissingText);
                 Set(current, 4, item.UnexpectedText);
             }
             Set(sheet.CreateRow(row++), 0, "合计", workbook, true);
-            Set(sheet.GetRow(row - 1), 1, report.SelectedCircuitCount.ToString(CultureInfo.InvariantCulture));
-            Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitText);
+            Set(sheet.GetRow(row - 1), 1, report.SelectedCircuitCount);
+            if (report.ExpectedDataAvailable && !report.HasUnknownMachineBaseline)
+                Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitCount);
+            else Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitText);
             Set(sheet.GetRow(row - 1), 3, report.MissingCircuitText);
-            Set(sheet.GetRow(row - 1), 4, report.ExpectedDataAvailable
-                ? report.UnexpectedCircuitCount.ToString(CultureInfo.InvariantCulture)
-                : "无法判断");
+            Set(sheet.GetRow(row - 1), 4, report.UnexpectedCircuitText);
 
             ISheet issues = workbook.CreateSheet("异常图框");
             IRow issueHeader = issues.CreateRow(0);
@@ -88,7 +89,10 @@ namespace UNCAD.Core.Report
         {
             switch (report.ExpectedDataStatus)
             {
-                case XstsExpectedDataStatus.Available: return "已读取";
+                case XstsExpectedDataStatus.Available:
+                    return report.HasUnknownMachineBaseline
+                        ? "已读取，但部分机台不存在于基准"
+                        : "已读取";
                 case XstsExpectedDataStatus.NotConfigured: return "未配置，无法判断缺少回路";
                 case XstsExpectedDataStatus.FileNotFound: return "文件不存在，无法判断缺少回路";
                 default: return "读取失败，无法判断缺少回路";
@@ -100,6 +104,19 @@ namespace UNCAD.Core.Report
         {
             ICell cell = row.CreateCell(index);
             cell.SetCellValue(value ?? "");
+            ApplyBold(cell, workbook, bold);
+        }
+
+        private static void Set(IRow row, int index, int value, IWorkbook workbook = null,
+            bool bold = false)
+        {
+            ICell cell = row.CreateCell(index);
+            cell.SetCellValue(value);
+            ApplyBold(cell, workbook, bold);
+        }
+
+        private static void ApplyBold(ICell cell, IWorkbook workbook, bool bold)
+        {
             if (!bold || workbook == null) return;
             // NPOI caps a workbook at 64k cell styles; reuse one shared bold
             // style per workbook instead of creating one for every cell.

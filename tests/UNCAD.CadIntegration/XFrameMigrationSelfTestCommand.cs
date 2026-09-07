@@ -162,10 +162,13 @@ namespace UNCAD.CadIntegration
                 AssertCurrentInfoHeader(upgradedInfo);
                 if (upgradedInfo.Cells[1, 1].TextString != "3F/2F"
                     || upgradedInfo.Cells[1, 3].TextString != "CHECKER"
-                    || Math.Abs(upgradedInfo.Columns[1].Width - originalFloorWidth) > 0.01
+                    || Math.Abs(upgradedInfo.Columns[1].Width
+                        - originalFloorWidth / 2d) > 0.01
+                    || Math.Abs(upgradedInfo.Columns[2].Width
+                        - originalFloorWidth / 2d) > 0.01
                     || Math.Abs(upgradedInfo.Width - splitWidth) > 0.01)
                     throw new InvalidOperationException(
-                        "Split drawing-info table was not restored without resizing.");
+                        "Split drawing-info table was changed beyond text migration.");
             }
 
             using (Transaction transaction = database.TransactionManager.StartTransaction())
@@ -192,9 +195,9 @@ namespace UNCAD.CadIntegration
             {
                 "专业", "楼层", "制图", "审核", "日期", "版本"
             };
-            if (table == null || table.Columns.Count != expected.Length)
+            if (table == null || table.Columns.Count < expected.Length)
                 throw new InvalidOperationException(
-                    "Drawing-info table must contain six columns.");
+                    "Drawing-info table must contain at least six columns.");
             for (int column = 0; column < expected.Length; column++)
                 if (TextParser.CleanMText(table.Cells[0, column].TextString).Trim()
                     != expected[column])

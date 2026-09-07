@@ -146,6 +146,7 @@ namespace UNCAD.Features.Fill
             double textHeight = options.TextHeight;
 
             MachineRow picked;
+            string originalCableModel = "";
             if (updateMode)
             {
                 if (!FillSelectionCollector.TryReadExistingIdentity(ctx, selection,
@@ -161,6 +162,7 @@ namespace UNCAD.Features.Fill
                     ctx.Write("\n[U1U] " + matchError);
                     return;
                 }
+                originalCableModel = (picked.Cable ?? "").Trim();
                 ResolveUpdateCableFromExistingTable(ctx, selection, picked, catalog);
                 ctx.Write("\n[U1U] 已自动读取: "
                     + picked.MachineId + " " + picked.CircuitName);
@@ -239,7 +241,8 @@ namespace UNCAD.Features.Fill
                 + (deviceHasOutlet ? "输出 " + (deviceOutlet.Code.Length > 0
                     ? deviceOutlet.Code : "未匹配") : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
-            FillReviewData review = tablePlan.CreateReview(picked, options.Planning);
+            FillReviewData review = tablePlan.CreateReview(picked, options.Planning,
+                updateMode ? originalCableModel : null);
             if (updateMode)
                 review.RestoreBusPlugBoxChoice(FrameInfoJsonBlockWriter.Read(ctx,
                     selection.FrameInfoJsonBlockIds), catalog);
@@ -407,6 +410,12 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         new[] { selection });
+                    int migratedCapacity = ResolveTableWriteCapacity(transaction,
+                        selection.TableIds, startRow, clearRowCount);
+                    if (tableRows.Count > migratedCapacity)
+                        throw new InvalidOperationException("图框迁移后的新版清单表容量只有 "
+                            + migratedCapacity + " 行，当前清单需要 " + tableRows.Count
+                            + " 行；本次已回滚，请删除清单项后重试。");
                     migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
                         selection.TextIds, options.MmPerGrid);
                     filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
@@ -515,21 +524,30 @@ namespace UNCAD.Features.Fill
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
             int startRow, int configuredRows)
         {
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                int capacity = ResolveTableWriteCapacity(transaction, tableIds,
+                    startRow, configuredRows);
+                transaction.Commit();
+                return capacity;
+            }
+        }
+
+        internal static int ResolveTableWriteCapacity(Transaction transaction,
+            ObjectId[] tableIds, int startRow, int configuredRows)
+        {
             // Multiple selected tables are written together, so the smallest resolved
             // capacity is the only value that can guarantee the atomic write will fit.
             int capacity = int.MaxValue;
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
             {
-                foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
-                {
-                    Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
-                    if (table == null) continue;
-                    int zeroBasedStart = CadTableFillWriter.ResolveWriteStartRow(table, startRow);
-                    int available = zeroBasedStart < 0
-                        ? 0 : table.Rows.Count - zeroBasedStart;
-                    capacity = Math.Min(capacity,
-                        TableClearPolicy.ResolveRows(available, configuredRows));
-                }
+                Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
+                if (table == null) continue;
+                int zeroBasedStart = CadTableFillWriter.ResolveWriteStartRow(table, startRow);
+                int available = zeroBasedStart < 0
+                    ? 0 : table.Rows.Count - zeroBasedStart;
+                capacity = Math.Min(capacity,
+                    TableClearPolicy.ResolveRows(available, configuredRows));
             }
             return capacity == int.MaxValue ? 0 : capacity;
         }
@@ -877,14 +895,24 @@ namespace UNCAD.Features.Fill
             CadContext ctx, string configuredPath)
         {
             string path = (configuredPath ?? "").Trim();
-            if (!string.IsNullOrEmpty(path)
-                && MachineWorkbookSource.TryGetSnapshot(path,
-                    out MachineWorkbookSnapshotInfo snapshot))
+            try
             {
-                ctx.Write("\n[U1F/U1U] 使用上次手动刷新后的 SQLite 机台快照: "
-                    + (snapshot?.SourceDisplay ?? path)
-                    + "（不会自动读取源 Excel）");
-                return path;
+                if (!string.IsNullOrEmpty(path)
+                    && MachineWorkbookSource.TryGetSnapshot(path,
+                        out MachineWorkbookSnapshotInfo snapshot))
+                {
+                    ctx.Write("\n[U1F/U1U] 使用上次手动刷新后的 SQLite 机台快照: "
+                        + (snapshot?.SourceDisplay ?? path)
+                        + "（不会自动读取源 Excel）");
+                    return path;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[U1F/U1U] SQLite 机台快照不可用，请在 U1SET 重新刷新: "
+                    + ex.Message);
+                Log.Warn("U1F/U1U machine SQLite snapshot check failed: " + ex.Message);
+                return null;
             }
 
             if (!string.IsNullOrEmpty(path))

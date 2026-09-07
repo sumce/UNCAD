@@ -42,5 +42,20 @@ namespace UNCAD.Tests
             Assert.Equal("208AE", result.MachineId);
             Assert.Equal("新设备", result.DeviceName);
         }
+
+        [Fact]
+        public void Extract_CleansMTextFormattingFromLegacyIdentity()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute("MACHINEID-POWER",
+                @"{\fSimSun|b0|i0;208AE-POWER}");
+            source.AddAttribute("DEVICENAME",
+                @"{\fSimSun|b0|i0;设备回路A\P}");
+
+            SubmissionRecord result = SubmissionRecordExtractor.Extract(source, false);
+
+            Assert.Equal("208AE", result.MachineId);
+            Assert.Equal("设备回路A", result.DeviceName);
+        }
     }
 }
