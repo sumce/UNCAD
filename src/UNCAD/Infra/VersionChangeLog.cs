@@ -31,6 +31,11 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.4", "2026-09-07",
+                    "修复：U1F/U1U/U1S 批量流程统一使用固定清单项目编码，避免 CAD 与 BOQ 对账不一致。",
+                    "修复：替代型号、图框身份和变更记录写入 frameinfo_json，后续 U1U 会复用已确认的数据。",
+                    "修复：强化旧图框/xframe 识别、图框迁移、Xlayout 身份读取和 XSTS 统计异常报告。",
+                    "修复：Xmerge 合并过程的块定义冲突与批量回滚问题。"),
                 new VersionChangeLogEntry("2.4.3", "2026-09-06",
                     "新增：AutoCAD 启动后显示全屏 UNCAD 品牌动画，由 .NET 在 5 秒后自动关闭，可在 U1SET 中关闭。",
                     "修复 U1LX：从末端线任一端点击都能遍历完整连通路线。",
