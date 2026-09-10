@@ -78,7 +78,12 @@ namespace UNCAD.UI
             {
                 Text = string.IsNullOrWhiteSpace(outputPath) ? "未导出 Excel" : "Excel: " + outputPath,
                 AutoEllipsis = true,
-                Dock = DockStyle.Fill,
+                // 必须是 Bottom 而不是 Fill：Fill 会与报表 TabControl 争抢同一块
+                // 剩余空间，两个 Fill 兄弟会得到完全相同的边界，后加入的页脚渲染在
+                // 上层，把整张报表遮住。Dock 按加入顺序逆序生效，这里配合下方
+                // Controls.Add 的顺序（tabs → pathLabel → commands → header）即可让
+                // 页脚固定在命令栏上方。
+                Dock = DockStyle.Bottom,
                 TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = UiTheme.TextSecondary,
                 Margin = new Padding(UiTheme.SpaceS, UiTheme.SpaceS, UiTheme.SpaceS, 0)
