@@ -22,6 +22,32 @@ namespace UNCAD.Tests
         };
 
         [Fact]
+        public void Build_ResolvesBridgeBoqModelFromCatalogFeature()
+        {
+            var items = Items();
+            items[1].Feature = "1.名称:梯形桥架200Wx100H\n2.材质:铝合金粉体烤漆";
+            var machine = new MachineRow { MachineId = "M1", CircuitName = "X" };
+            var stat = StatCalculator.Calculate(new[] { "桥架200*100 10格" }, 250.0);
+
+            TableFillPlanner.Build(machine, items, stat);
+
+            // 图框随后据此显示 BOQ 型号而不是图上量的规格写法。
+            Assert.Equal("梯形桥架200Wx100H", stat.Bridges[0].CatalogModel);
+        }
+
+        [Fact]
+        public void Build_ThrowsWhenBridgeSpecIsNotInCatalog()
+        {
+            // D-016：未匹配的桥架没有清单编码，必须在 CAD 事务之前失败，
+            // 而不是写出一行无编码的清单。
+            var machine = new MachineRow { MachineId = "M1", CircuitName = "X" };
+            var stat = StatCalculator.Calculate(new[] { "桥架250*80 10格" }, 250.0);
+
+            Assert.Throws<System.IO.InvalidDataException>(
+                () => TableFillPlanner.Build(machine, Items(), stat));
+        }
+
+        [Fact]
         public void Build_OrdersOnlyActualItems_AndCarriesAllColumns()
         {
             var machine = new MachineRow

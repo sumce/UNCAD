@@ -153,6 +153,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void BuildValues_PrefersBoqBridgeModelOverDrawingSpec()
+        {
+            var stat = StatCalculator.Calculate(new[]
+            {
+                "桥架200*100 10格",
+                "桥架200*100 2格",
+                "桥架400*100 4格"
+            }, 250.0);
+            stat.Bridges[0].CatalogModel = "梯形桥架200Wx100H";
+            stat.Bridges[1].CatalogModel = "梯形桥架400Wx100H";
+
+            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+
+            Assert.Equal("梯形桥架200Wx100H 3M; 梯形桥架400Wx100H 1M",
+                v[FrameBlockFiller.TagBridge]);
+        }
+
+        [Fact]
         public void BuildValues_UpdateModeOmitsStatisticsTagsWithoutFreshMeasurements()
         {
             var empty = new CableStatResult();

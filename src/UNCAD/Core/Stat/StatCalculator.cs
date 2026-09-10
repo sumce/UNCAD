@@ -16,6 +16,13 @@ namespace UNCAD.Core.Stat
     public sealed class BridgeStat
     {
         public string Spec { get; set; }
+
+        /// <summary>
+        /// 固定清单中的 BOQ 型号（如 梯形桥架200Wx100H）。图框属性显示该型号而不是
+        /// 图纸上的规格写法（桥架200*100）。由规划阶段查清单后填入；为空时回退到 Spec。
+        /// </summary>
+        public string CatalogModel { get; set; }
+
         public List<double> Grids { get; } = new List<double>();
         public double MmPerGrid { get; set; } = 250.0;
 

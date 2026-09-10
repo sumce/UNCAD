@@ -106,8 +106,12 @@ namespace UNCAD.Core.Fill
 
             if (stat != null && stat.Bridges.Count > 0)
             {
+                // 图框显示固定清单的 BOQ 型号（梯形桥架200Wx100H）加长度，而不是图上
+                // 量的规格写法（桥架200*100）。CatalogModel 由规划阶段查清单后填入；
+                // 为空时（例如未经规划直接写框）回退到规格写法，避免写出空型号。
                 d[TagBridge] = string.Join("; ", stat.Bridges.Select(b =>
-                    b.Spec + " " + TextFormatter.FormatNum(b.TotalM) + "M"));
+                    (string.IsNullOrWhiteSpace(b.CatalogModel) ? b.Spec : b.CatalogModel)
+                        + " " + TextFormatter.FormatNum(b.TotalM) + "M"));
             }
             else
             {

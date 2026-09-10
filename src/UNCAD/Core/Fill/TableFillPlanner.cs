@@ -119,6 +119,16 @@ namespace UNCAD.Core.Fill
             {
                 string spec = NormalizeBridgeSpec(bridge.Spec);
                 ListItem item = catalog.FindBridge(spec);
+                // D-016：未匹配的桥架没有固定清单编码，不得写出一行无编码的清单。
+                // 在 CAD 事务之前失败，由调用方整体中止本次操作。
+                if (item == null)
+                {
+                    throw new System.IO.InvalidDataException(
+                        "固定清单中没有桥架规格“" + bridge.Spec
+                            + "”。请在固定清单中补充对应项目后重试。");
+                }
+                // 图框显示 BOQ 型号（梯形桥架200Wx100H）；型号存在项目特征的 1.名称 段。
+                bridge.CatalogModel = BoqFeatureName.Extract(item.Feature);
                 rows.Add(FromItem(TableFillCategory.Bridge, 200 + index++, item,
                     bridge.Spec, "1.名称:" + bridge.Spec, "M",
                     TextFormatter.FormatNum(bridge.TotalM)));
