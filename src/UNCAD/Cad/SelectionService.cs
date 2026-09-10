@@ -37,7 +37,17 @@ namespace UNCAD.Cad
         {
             var implied = ctx.Ed.SelectImplied();
             if (implied.Status == PromptStatus.OK && implied.Value != null && implied.Value.Count > 0)
-                return implied.Value.GetObjectIds();
+            {
+                ObjectId[] impliedIds = implied.Value.GetObjectIds();
+                // U1Q receives a pick-first set when the user selects a line before
+                // starting the command.  AutoCAD does not reapply the selection filter
+                // to that set, so a stale text/block selection used to reach the offsetter
+                // and end as the vague "0 curves" warning.  U1C intentionally keeps the
+                // complete pick-first set because it also accepts frame/INSERT objects.
+                return includeInserts
+                    ? impliedIds
+                    : FilterOffsetCurves(ctx, impliedIds);
+            }
 
             var options = new PromptSelectionOptions { MessageForAdding = prompt };
             options.Keywords.Add("D");
@@ -58,10 +68,48 @@ namespace UNCAD.Cad
                     }
                     continue;
                 }
-                return result.Status == PromptStatus.OK && result.Value != null && result.Value.Count > 0
+                if (result.Status != PromptStatus.OK || result.Value == null
+                    || result.Value.Count == 0) return null;
+                return includeInserts
                     ? result.Value.GetObjectIds()
-                    : null;
+                    : FilterOffsetCurves(ctx, result.Value.GetObjectIds());
             }
+        }
+
+        /// <summary>
+        /// Applies the same entity contract to pick-first and command-time selections.
+        /// The AutoCAD DXF filter accepts both 2D and 3D POLYLINE; the annotator only
+        /// supports independent LINE/LWPOLYLINE/2D POLYLINE entities.
+        /// </summary>
+        private static ObjectId[] FilterOffsetCurves(CadContext ctx, ObjectId[] ids)
+        {
+            if (ctx == null || ids == null || ids.Length == 0)
+                return new ObjectId[0];
+
+            var result = new System.Collections.Generic.List<ObjectId>();
+            using (Transaction transaction = ctx.Db.TransactionManager
+                .StartOpenCloseTransaction())
+            {
+                foreach (ObjectId id in ids)
+                {
+                    if (id.IsNull || !id.IsValid) continue;
+                    try
+                    {
+                        Entity entity = transaction.GetObject(id, OpenMode.ForRead, true)
+                            as Entity;
+                        if (entity == null || entity.IsErased) continue;
+                        if (entity is Line || entity is Polyline || entity is Polyline2d)
+                            result.Add(id);
+                    }
+                    catch
+                    {
+                        // A stale/erased pick-first id must not prevent valid lines
+                        // from being processed.
+                    }
+                }
+                transaction.Commit();
+            }
+            return result.ToArray();
         }
 
         /// <summary>清除预选择高亮。</summary>

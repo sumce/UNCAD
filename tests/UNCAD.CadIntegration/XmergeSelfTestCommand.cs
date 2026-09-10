@@ -29,7 +29,9 @@ namespace UNCAD.CadIntegration
             try
             {
                 ClearCurrentSpace(document.Database);
-                RenameSupportedFrameDefinitions(document.Database);
+                SetStandardTextStyle(document.Database, "arial.ttf", 0.85d);
+                ObjectId existingFrameDefinition =
+                    CreateCompatibleFrameDefinition(document.Database);
                 AddExistingTargetLine(document.Database);
                 HashSet<string> originalMangledBlocks = MangledBlockNames(document.Database);
                 string[] names = { "$12$frame", "frame_20260812", "xframe", "xframe" };
@@ -102,6 +104,8 @@ namespace UNCAD.CadIntegration
 
                 Require(frameIds.Count == 4, "written frame count; blocks="
                     + string.Join(",", writtenBlockNames));
+                Require(frameDefinitions.Contains(existingFrameDefinition),
+                    "target same-name frame definition was not reused by Ignore");
                 Require(frameDefinitions.Count == 3,
                     "same-name frame definitions were duplicated per source");
                 Require(!MangledBlockNames(document.Database).Except(originalMangledBlocks,
@@ -142,6 +146,66 @@ namespace UNCAD.CadIntegration
                 Require(rejected, "incompatible same-name definitions were accepted");
                 Require(CurrentEntityCount(document.Database) == beforeRejectedMerge,
                     "rejected merge changed the target drawing");
+
+                // ---- Replace (empty target) branch ----
+                // Every merge above ran against a target that already contained entities,
+                // so they all took the Ignore path. Clear the space completely and merge once
+                // more: with zero existing entities the service must use
+                // DuplicateRecordCloning.Replace, copy the source Standard text style into
+                // the empty drawing, and never mangle block names.
+                ClearCurrentSpace(document.Database);
+                SetStandardTextXScale(document.Database, 1.0d);
+                string replaceSource = Path.Combine(tempRoot, "replace-source.dwg");
+                CreateSource(replaceSource, "frame_20260812", "M05", "DEV05", 100d, true);
+                Require(CurrentEntityCount(document.Database) == 0,
+                    "replace branch target was not empty");
+                XmergeResult replaceResult = XmergeService.Merge(document.Database,
+                    new[] { replaceSource });
+                Require(replaceResult.FrameCount == 1, "replace branch frame count");
+                Require(replaceResult.EntityCount == 5, "replace branch entity count");
+                Require(!FrameDefinitionIsMangled(document.Database),
+                    "replace branch mangled the frame definition name");
+                Require(Math.Abs(StandardTextXScale(document.Database) - 0.85d) < 1e-9,
+                    "replace branch did not copy the source Standard text style");
+                // A source whose same-name text style differs from the target must be
+                // rejected instead of silently reusing the target's style definition.
+                string styleConflict = Path.Combine(tempRoot, "style-conflict.dwg");
+                CreateSource(styleConflict, "frame", "M05", "DEV05", 100d,
+                    false, "simhei.ttf", 1.0d);
+                int beforeStyleConflict = CurrentEntityCount(document.Database);
+                bool styleConflictRejected = false;
+                try
+                {
+                    XmergeService.Merge(ctx, new[] { styleConflict });
+                }
+                catch (InvalidDataException)
+                {
+                    styleConflictRejected = true;
+                }
+                Require(styleConflictRejected,
+                    "conflicting text style was silently reused");
+                Require(CurrentEntityCount(document.Database) == beforeStyleConflict,
+                    "rejected style-conflict merge changed the target drawing");
+                // Empty text isolates the style-signature check from the bounds check:
+                // an empty DBText has identical geometric extents regardless of font.
+                string styleConflictEmpty = Path.Combine(tempRoot,
+                    "style-conflict-empty.dwg");
+                CreateSource(styleConflictEmpty, "frame", "M06", "DEV06", 100d,
+                    false, "simhei.ttf", 1.0d, emptyText: true);
+                int beforeEmptyConflict = CurrentEntityCount(document.Database);
+                bool emptyConflictRejected = false;
+                try
+                {
+                    XmergeService.Merge(ctx, new[] { styleConflictEmpty });
+                }
+                catch (InvalidDataException)
+                {
+                    emptyConflictRejected = true;
+                }
+                Require(emptyConflictRejected,
+                    "empty-text style conflict was silently reused");
+                Require(CurrentEntityCount(document.Database) == beforeEmptyConflict,
+                    "rejected empty-text style conflict changed the target drawing");
                 string realSource = Environment.GetEnvironmentVariable(
                     "UNCAD_XMERGE_REAL_SOURCE");
                 if (!string.IsNullOrWhiteSpace(realSource)
@@ -165,7 +229,8 @@ namespace UNCAD.CadIntegration
 
         private static void CreateSource(string path, string frameName,
             string machineId, string deviceName, double width = 100d,
-            bool includeFrameInfo = false)
+            bool includeFrameInfo = false, string standardFont = "arial.ttf",
+            double standardXScale = 0.85d, bool emptyText = false)
         {
             using (var database = new Database(true, true))
             {
@@ -177,8 +242,8 @@ namespace UNCAD.CadIntegration
                         database.TextStyleTableId, OpenMode.ForRead);
                     var standard = (TextStyleTableRecord)transaction.GetObject(
                         styles["Standard"], OpenMode.ForWrite);
-                    standard.FileName = "arial.ttf";
-                    standard.XScale = 0.85d;
+                    standard.FileName = standardFont;
+                    standard.XScale = standardXScale;
                     var definition = new BlockTableRecord { Name = frameName };
                     ObjectId definitionId = blocks.Add(definition);
                     transaction.AddNewlyCreatedDBObject(definition, true);
@@ -224,7 +289,7 @@ namespace UNCAD.CadIntegration
                     var text = new DBText();
                     text.SetDatabaseDefaults(database);
                     text.TextStyleId = standard.ObjectId;
-                    text.TextString = machineId;
+                    text.TextString = emptyText ? "" : machineId;
                     text.Position = new Point3d(30, 40, 0);
                     text.Height = 2.5d;
                     model.AppendEntity(text);
@@ -307,26 +372,42 @@ namespace UNCAD.CadIntegration
             }
         }
 
-        private static void RenameSupportedFrameDefinitions(Database database)
+        private static ObjectId CreateCompatibleFrameDefinition(Database database)
         {
             using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
                 var blocks = (BlockTable)transaction.GetObject(database.BlockTableId,
-                    OpenMode.ForRead);
-                int index = 0;
+                    OpenMode.ForWrite);
+                // Remove existing supported frame definitions to avoid incompatible
+                // conflicts. The final-commit DuplicateRecordCloning.Ignore path reuses
+                // same-name symbols, so a compatible definition is created below.
                 foreach (ObjectId id in blocks.Cast<ObjectId>().ToArray())
                 {
-                    var definition = transaction.GetObject(id, OpenMode.ForRead, true)
+                    var existing = transaction.GetObject(id, OpenMode.ForRead, true)
                         as BlockTableRecord;
-                    if (definition == null || definition.IsLayout
-                        || !FrameRegionCollector.IsSupportedFrameName(definition.Name)) continue;
-                    string name;
-                    do { name = "UNCAD_SELFTEST_EXISTING_FRAME_" + index++; }
-                    while (blocks.Has(name));
-                    definition.UpgradeOpen();
-                    definition.Name = name;
+                    if (existing == null || existing.IsLayout) continue;
+                    if (FrameRegionCollector.IsSupportedFrameName(existing.Name))
+                        existing.Erase();
                 }
+                var frame = new BlockTableRecord { Name = "frame" };
+                ObjectId frameId = blocks.Add(frame);
+                transaction.AddNewlyCreatedDBObject(frame, true);
+
+                var border = new Polyline(4) { Closed = true };
+                border.AddVertexAt(0, new Point2d(0, 0), 0, 0, 0);
+                border.AddVertexAt(1, new Point2d(100, 0), 0, 0, 0);
+                border.AddVertexAt(2, new Point2d(100, 50), 0, 0, 0);
+                border.AddVertexAt(3, new Point2d(0, 50), 0, 0, 0);
+                frame.AppendEntity(border);
+                transaction.AddNewlyCreatedDBObject(border, true);
+
+                AddAttribute(transaction, frame, "MACHINEID-POWER",
+                    new Point3d(10, 10, 0));
+                AddAttribute(transaction, frame, "MACHINEID-DEVICE",
+                    new Point3d(10, 20, 0));
+
                 transaction.Commit();
+                return frameId;
             }
         }
 
@@ -358,6 +439,109 @@ namespace UNCAD.CadIntegration
             }
         }
 
+        private static void SetStandardTextXScale(Database database, double xScale)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                var styles = (TextStyleTable)transaction.GetObject(
+                    database.TextStyleTableId, OpenMode.ForWrite);
+                if (!styles.Has("Standard")) return;
+                var standard = (TextStyleTableRecord)transaction.GetObject(styles["Standard"],
+                    OpenMode.ForWrite);
+                standard.XScale = xScale;
+                transaction.Commit();
+            }
+        }
+
+        private static double StandardTextXScale(Database database)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                var styles = (TextStyleTable)transaction.GetObject(
+                    database.TextStyleTableId, OpenMode.ForRead);
+                if (!styles.Has("Standard")) return double.NaN;
+                var standard = (TextStyleTableRecord)transaction.GetObject(styles["Standard"],
+                    OpenMode.ForRead);
+                return standard.XScale;
+            }
+        }
+
+        private static bool FrameDefinitionIsMangled(Database database)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                var blocks = (BlockTable)transaction.GetObject(database.BlockTableId,
+                    OpenMode.ForRead);
+                foreach (ObjectId id in blocks.Cast<ObjectId>().ToArray())
+                {
+                    var definition = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as BlockTableRecord;
+                    if (definition == null || definition.IsLayout) continue;
+                    if (FrameRegionCollector.IsSupportedFrameName(definition.Name)
+                        && definition.Name.StartsWith("$", StringComparison.Ordinal))
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Sets the target Standard text style to match the self-test sources.</summary>
+        private static void SetStandardTextStyle(Database database, string font,
+            double xscale)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                var styles = (TextStyleTable)transaction.GetObject(
+                    database.TextStyleTableId, OpenMode.ForRead);
+                if (!styles.Has("Standard")) return;
+                var standard = (TextStyleTableRecord)transaction.GetObject(styles["Standard"],
+                    OpenMode.ForWrite);
+                standard.FileName = font;
+                standard.XScale = xscale;
+                transaction.Commit();
+            }
+        }
+
+        /// <summary>
+        /// Real sources may define a different Standard text style than the target drawing.
+        /// Sync it so style-aware clone validation sees matching definitions.
+        /// </summary>
+        private static void SyncStandardStyle(Database target, string sourcePath)
+        {
+            try
+            {
+                using (var source = new Database(false, true))
+                {
+                    source.ReadDwgFile(sourcePath, FileOpenMode.OpenForReadAndAllShare,
+                        false, "");
+                    source.CloseInput(true);
+                    using (Transaction tr = target.TransactionManager.StartTransaction())
+                    using (Transaction sr = source.TransactionManager
+                        .StartOpenCloseTransaction())
+                    {
+                        TextStyleTable srcStyles = sr.GetObject(
+                            source.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+                        TextStyleTable tgtStyles = tr.GetObject(
+                            target.TextStyleTableId, OpenMode.ForRead) as TextStyleTable;
+                        if (srcStyles == null || tgtStyles == null
+                            || !srcStyles.Has("Standard") || !tgtStyles.Has("Standard"))
+                            return;
+                        TextStyleTableRecord src = sr.GetObject(srcStyles["Standard"],
+                            OpenMode.ForRead) as TextStyleTableRecord;
+                        TextStyleTableRecord tgt = tr.GetObject(tgtStyles["Standard"],
+                            OpenMode.ForWrite) as TextStyleTableRecord;
+                        if (src == null || tgt == null) return;
+                        tgt.FileName = src.FileName;
+                        tgt.BigFontFileName = src.BigFontFileName;
+                        tgt.XScale = src.XScale;
+                        tgt.TextSize = src.TextSize;
+                        tr.Commit();
+                    }
+                }
+            }
+            catch { }
+        }
+
         private static void VerifyRealSource(CadContext ctx, Database target,
             string tempRoot, string source)
         {
@@ -386,6 +570,7 @@ namespace UNCAD.CadIntegration
             string[] sourceTableSignatures = sourceTables
                 .OrderBy(value => value, StringComparer.Ordinal).ToArray();
             int sourceTableCount = sourceTableSignatures.Length;
+            SyncStandardStyle(target, copies[0]);
             XmergeResult result = XmergeService.Merge(ctx, copies);
             Require(result.FrameCount > 0, "real source frame count");
             Require(result.UnplacedEntityCount == 0,

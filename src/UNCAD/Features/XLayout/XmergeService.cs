@@ -37,7 +37,13 @@ namespace UNCAD.Features.XLayout
         public static XmergeResult Merge(CadContext ctx, IEnumerable<string> filePaths)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
-            string activeDrawing = GetFullPathOrEmpty(ctx.Db.Filename);
+            return Merge(ctx.Db, filePaths);
+        }
+
+        public static XmergeResult Merge(Database database, IEnumerable<string> filePaths)
+        {
+            if (database == null) throw new ArgumentNullException(nameof(database));
+            string activeDrawing = GetFullPathOrEmpty(database.Filename);
             var fileSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string raw in filePaths ?? Enumerable.Empty<string>())
             {
@@ -70,9 +76,9 @@ namespace UNCAD.Features.XLayout
                     XLayoutLayout.Arrange(items).ToDictionary(placement => placement.Item);
                 prepared = BuildInMemory(sources, itemByFrame, placements);
 
-                using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+                using (Transaction transaction = database.TransactionManager.StartTransaction())
                 {
-                    BlockTableRecord target = transaction.GetObject(ctx.CurrentSpaceId,
+                    BlockTableRecord target = transaction.GetObject(database.CurrentSpaceId,
                         OpenMode.ForWrite) as BlockTableRecord;
                     if (target == null) throw new InvalidOperationException("无法打开当前图纸空间。");
 
@@ -84,8 +90,8 @@ namespace UNCAD.Features.XLayout
                         ? DuplicateRecordCloning.Ignore
                         : DuplicateRecordCloning.Replace;
                     if (!targetHasEntities)
-                        StyleManager.CopyStandardTextStyle(prepared.Database, ctx.Db,
-                            transaction);
+                        StyleManager.CopyStandardTextStyle(prepared.Database,
+                            database, transaction);
                     var mapping = new IdMapping();
                     prepared.Database.WblockCloneObjects(prepared.EntityIds, target.ObjectId,
                         mapping, policy, false);
@@ -497,7 +503,8 @@ namespace UNCAD.Features.XLayout
         private sealed class EntitySnapshot
         {
             private EntitySnapshot(ObjectId id, string handle, string type,
-                BoundsSnapshot bounds, BoundsSnapshot frameBoundary, string blockState)
+                BoundsSnapshot bounds, BoundsSnapshot frameBoundary, string blockState,
+                string styleSignature)
             {
                 Id = id;
                 Handle = handle;
@@ -505,6 +512,7 @@ namespace UNCAD.Features.XLayout
                 Bounds = bounds;
                 FrameBoundary = frameBoundary;
                 BlockState = blockState;
+                StyleSignature = styleSignature;
             }
 
             public ObjectId Id { get; }
@@ -513,6 +521,7 @@ namespace UNCAD.Features.XLayout
             private BoundsSnapshot Bounds { get; }
             private BoundsSnapshot FrameBoundary { get; }
             private string BlockState { get; }
+            private string StyleSignature { get; }
 
             public static EntitySnapshot Capture(Transaction transaction, Entity entity)
             {
@@ -531,8 +540,9 @@ namespace UNCAD.Features.XLayout
                 }
                 return new EntitySnapshot(entity.ObjectId, entity.Handle.ToString(),
                     entity.GetType().FullName ?? entity.GetType().Name,
-                    block == null ? null : BoundsSnapshot.TryCapture(entity),
-                    frameBoundary, state);
+                    BoundsSnapshot.TryCapture(entity),
+                    frameBoundary, state,
+                    CaptureStyleSignature(transaction, entity));
             }
 
             public bool Matches(EntitySnapshot other, bool compareEntityBounds,
@@ -563,6 +573,14 @@ namespace UNCAD.Features.XLayout
                         + DescribeStateDifference(BlockState, other.BlockState);
                     return false;
                 }
+                if (!string.Equals(StyleSignature, other.StyleSignature,
+                    StringComparison.Ordinal))
+                {
+                    reason = "实体线型或文字样式不兼容（源: "
+                        + (StyleSignature ?? "<none>") + " -> 实际: "
+                        + (other.StyleSignature ?? "<none>") + "）";
+                    return false;
+                }
                 reason = "";
                 return true;
             }
@@ -583,6 +601,63 @@ namespace UNCAD.Features.XLayout
                 string result = (value ?? "<none>").Replace('\u001f', '|')
                     .Replace('\u001e', ',');
                 return result.Length <= 240 ? result : result.Substring(0, 240) + "...";
+            }
+
+            /// <summary>
+            /// Captures the named symbol definitions a cloned entity resolves to in its
+            /// own database: the linetype identity and, for text, the text style that
+            /// produced the visible appearance.  In Ignore mode WblockCloneObjects reuses
+            /// same-name records, so a clone can silently resolve to the target's version;
+            /// comparing the two signatures makes that detectable.
+            /// </summary>
+            private static string CaptureStyleSignature(Transaction transaction,
+                Entity entity)
+            {
+                if (entity == null) return "";
+                var parts = new List<string>();
+                try
+                {
+                    ObjectId linetypeId = entity.LinetypeId;
+                    string linetypeName = linetypeId.IsNull ? "ByLayer"
+                        : ReadSymbolName(transaction, linetypeId);
+                    parts.Add("L:" + linetypeName);
+                }
+                catch { }
+
+                string style = entity is DBText text
+                    ? ReadStyleSignature(transaction, text.TextStyleId)
+                    : entity is MText mText
+                        ? ReadStyleSignature(transaction, mText.TextStyleId)
+                        : null;
+                if (style != null) parts.Add("T:" + style);
+
+                return parts.Count == 0 ? "" : string.Join("|", parts);
+            }
+
+            private static string ReadSymbolName(Transaction transaction, ObjectId id)
+            {
+                try
+                {
+                    SymbolTableRecord record = transaction.GetObject(id,
+                        OpenMode.ForRead, true) as SymbolTableRecord;
+                    return record != null ? LogicalName(record.Name) : id.ToString();
+                }
+                catch { return id.ToString(); }
+            }
+
+            private static string ReadStyleSignature(Transaction transaction,
+                ObjectId styleId)
+            {
+                if (styleId.IsNull) return null;
+                try
+                {
+                    TextStyleTableRecord style = transaction.GetObject(styleId,
+                        OpenMode.ForRead, true) as TextStyleTableRecord;
+                    if (style == null) return null;
+                    return (style.FileName ?? "") + ":" + (style.BigFontFileName ?? "")
+                        + ":" + FormatValue(style.XScale);
+                }
+                catch { return null; }
             }
 
             private static string CaptureBlockState(Transaction transaction,

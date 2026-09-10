@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -44,12 +45,26 @@ namespace UNCAD.Cad
 
             int count = 0;
             int skipped = 0;
+            int skippedUnsupported = 0;
+            int skippedAlreadyGenerated = 0;
+            int skippedGeometry = 0;
+            int skippedOffset = 0;
+            int skippedLabel = 0;
             ObjectId[] sourceIds = ids.Distinct().ToArray();
+            bool metadataReady = !string.IsNullOrWhiteSpace(options.AnnotationKind)
+                && ParallelAnnotationMetadata.EnsureApplication(ctx.Db, transaction);
+            int resolvedGenerated = 0;
+            if (metadataReady)
+                sourceIds = ResolveSourceIds(ctx, transaction, sourceIds,
+                    options.AnnotationKind, out resolvedGenerated);
+            if (sourceIds.Length == 0)
+            {
+                ctx.Write("\n[UNCAD] 选中的对象不是可处理的独立线段，或原始线段已不存在。");
+                return 0;
+            }
             HashSet<string> sourceHandles = new HashSet<string>(
                 sourceIds.Select(id => id.Handle.ToString()),
                 StringComparer.OrdinalIgnoreCase);
-            bool metadataReady = !string.IsNullOrWhiteSpace(options.AnnotationKind)
-                && ParallelAnnotationMetadata.EnsureApplication(ctx.Db, transaction);
             Dictionary<string, List<ObjectId>> previous = metadataReady
                 ? CollectPrevious(ctx, transaction, options.AnnotationKind, sourceHandles)
                 : new Dictionary<string, List<ObjectId>>(StringComparer.OrdinalIgnoreCase);
@@ -62,12 +77,31 @@ namespace UNCAD.Cad
             ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
             foreach (ObjectId id in sourceIds)
             {
-                var source = transaction.GetObject(id, OpenMode.ForRead, true) as Curve;
-                if (!IsSupported(source)) continue;
+                Curve source;
+                try { source = transaction.GetObject(id, OpenMode.ForRead, true) as Curve; }
+                catch
+                {
+                    skipped++;
+                    skippedUnsupported++;
+                    continue;
+                }
+                if (!IsSupported(source))
+                {
+                    skipped++;
+                    skippedUnsupported++;
+                    continue;
+                }
                 // A previous generated offset can be selected by a window. Never use it as
-                // a new source, otherwise each run walks one level farther from the design line.
+                // a new source, otherwise each run walks one level farther from the design
+                // line. ResolveSourceIds normally maps same-kind output back to its source;
+                // this guard remains for foreign kinds or stale metadata.
                 if (metadataReady && ParallelAnnotationMetadata.TryRead(source,
-                    out _, out _)) continue;
+                    out _, out _))
+                {
+                    skipped++;
+                    skippedAlreadyGenerated++;
+                    continue;
+                }
 
                 double length;
                 Point3d sourceMid;
@@ -76,10 +110,20 @@ namespace UNCAD.Cad
                 try
                 {
                     length = GetLength(source);
-                    if (length <= 0) { skipped++; continue; }
+                    if (length <= 0)
+                    {
+                        skipped++;
+                        skippedGeometry++;
+                        continue;
+                    }
                     sourceMid = source.GetPointAtDist(length / 2.0);
                     Vector3d tangent = source.GetFirstDerivative(sourceMid);
-                    if (tangent.Length < 1e-9) { skipped++; continue; }
+                    if (tangent.Length < 1e-9)
+                    {
+                        skipped++;
+                        skippedGeometry++;
+                        continue;
+                    }
                     sourceAngle = GeoMath.ReadableAngle(sourceMid,
                         sourceMid + tangent);
                     double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
@@ -101,7 +145,12 @@ namespace UNCAD.Cad
                 OffsetCandidate rejected = ReferenceEquals(selected, positive)
                     ? negative : positive;
                 rejected?.Dispose();
-                if (selected == null) { skipped++; continue; }
+                if (selected == null)
+                {
+                    skipped++;
+                    skippedOffset++;
+                    continue;
+                }
 
                 DBText text;
                 try
@@ -126,6 +175,7 @@ namespace UNCAD.Cad
                 {
                     selected.Dispose();
                     skipped++;
+                    skippedLabel++;
                     Log.Warn("Parallel curve label preflight failed for " + id + ": "
                         + ex.Message);
                     continue;
@@ -159,10 +209,84 @@ namespace UNCAD.Cad
                     selected.Dispose();
                 }
             }
+            if (resolvedGenerated > 0)
+                ctx.Write("\n[UNCAD] 已识别已生成的平行标注线，并回溯源线更新 "
+                    + resolvedGenerated + " 条。");
             if (skipped > 0)
+            {
+                var reasons = new List<string>();
+                if (skippedUnsupported > 0) reasons.Add("对象类型不支持 "
+                    + skippedUnsupported);
+                if (skippedAlreadyGenerated > 0) reasons.Add("已有平行标注且未找到可用源线 "
+                    + skippedAlreadyGenerated);
+                if (skippedGeometry > 0) reasons.Add("退化或无长度 " + skippedGeometry);
+                if (skippedOffset > 0) reasons.Add("偏移失败 " + skippedOffset);
+                if (skippedLabel > 0) reasons.Add("文字位置失败 " + skippedLabel);
                 ctx.Write("\n[UNCAD] 已跳过 " + skipped
-                    + " 条无法偏移或无法标注的曲线。");
+                    + " 条曲线" + (reasons.Count == 0
+                        ? "。" : "（" + string.Join("、", reasons) + "）。"));
+            }
             return count;
+        }
+
+        /// <summary>
+        /// If the user clicks a red line produced by this command, use its recorded source
+        /// line instead of silently treating the output as a new source. This preserves the
+        /// one-level/idempotent geometry rule while making ordinary click selection usable.
+        /// </summary>
+        private static ObjectId[] ResolveSourceIds(CadContext ctx, Transaction transaction,
+            ObjectId[] ids, string annotationKind, out int resolvedCount)
+        {
+            resolvedCount = 0;
+            var result = new List<ObjectId>();
+            foreach (ObjectId id in ids ?? new ObjectId[0])
+            {
+                Entity entity;
+                try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
+                catch { continue; }
+                if (entity == null || entity.IsErased) continue;
+
+                if (ParallelAnnotationMetadata.TryRead(entity,
+                    out string existingKind, out string sourceHandle)
+                    && string.Equals(existingKind, annotationKind,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryResolveHandle(ctx.Db, sourceHandle, out ObjectId sourceId))
+                    {
+                        try
+                        {
+                            Entity source = transaction.GetObject(sourceId,
+                                OpenMode.ForRead, true) as Entity;
+                            if (source is Curve sourceCurve && IsSupported(sourceCurve))
+                            {
+                                result.Add(sourceId);
+                                resolvedCount++;
+                            }
+                        }
+                        catch { }
+                    }
+                    // A generated line with a missing/invalid source is not a valid
+                    // fallback source; offsetting it would compound the error.
+                    continue;
+                }
+                result.Add(id);
+            }
+            return result.Distinct().ToArray();
+        }
+
+        private static bool TryResolveHandle(Database database, string value,
+            out ObjectId id)
+        {
+            id = ObjectId.Null;
+            if (database == null || string.IsNullOrWhiteSpace(value)
+                || !long.TryParse(value.Trim(), NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out long raw)) return false;
+            try
+            {
+                id = database.GetObjectId(false, new Handle(raw), 0);
+                return !id.IsNull && id.IsValid;
+            }
+            catch { return false; }
         }
 
         private static Dictionary<string, List<ObjectId>> CollectPrevious(CadContext ctx,

@@ -44,6 +44,11 @@ namespace UNCAD.Tests
             Assert.Contains("DuplicateRecordCloning.Ignore", service);
             Assert.Contains("DuplicateRecordCloning.Replace", service);
             Assert.DoesNotContain("DuplicateRecordCloning.MangleName", service);
+            // The service exposes a Database entry point so the Replace/Ignore branch can
+            // be exercised without a running AutoCAD Document, and the CadContext overload
+            // delegates to it instead of duplicating the merge logic.
+            Assert.Contains("public static XmergeResult Merge(Database database,", service);
+            Assert.Contains("return Merge(ctx.Db, filePaths)", service);
             Assert.Contains("ValidateClones", service);
             Assert.Contains("NormalizeInMemoryBlockNames", service);
             Assert.Contains("prepared.Database.WblockCloneObjects", service);
