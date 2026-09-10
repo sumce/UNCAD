@@ -58,6 +58,7 @@ namespace UNCAD.Tests
         [InlineData("⌀20线管 2000mm", "⌀20线管", 2000.0)]
         [InlineData("Ø25线管 2500mm", "⌀25线管", 2500.0)]
         [InlineData("Φ32 线管 3000MM", "⌀32线管", 3000.0)]
+        [InlineData("线管20 3000mm", "⌀20线管", 3000.0)]
         public void ExtractConduit_NormalizesSpecAndReadsLength(
             string input, string expectedSpec, double expectedLength)
         {
@@ -77,8 +78,10 @@ namespace UNCAD.Tests
         [Fact]
         public void SplitMTextLines_SplitsOnBackslashP_AndTrims()
         {
-            var lines = TextParser.SplitMTextLines("第一行\\P  第二行  \\P第三行");
-            Assert.Equal(new List<string> { "第一行", "第二行", "第三行" }, lines);
+            var lines = TextParser.SplitMTextLines(
+                "第一行\\P  第二行  \\X第三行\n第四行");
+            Assert.Equal(new List<string>
+                { "第一行", "第二行", "第三行", "第四行" }, lines);
         }
 
         [Fact]
@@ -96,6 +99,15 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("\\f", cleaned);
             Assert.DoesNotContain("{", cleaned);
             Assert.DoesNotContain("}", cleaned);
+            Assert.Contains("2/3", cleaned);
+        }
+
+        [Fact]
+        public void CleanMText_StripsPerLineColorAndHeightCodes()
+        {
+            Assert.Equal("3000mm", TextParser.CleanMText("{\\C1;3000mm}"));
+            Assert.Equal("线管20 3000mm",
+                TextParser.CleanMText("{\\H0.7x;线管20 3000mm}"));
         }
 
         [Fact]

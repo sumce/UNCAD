@@ -32,6 +32,7 @@ namespace UNCAD.Infra
             {
                 E(CommandIds.Line, "带标注线段", "U1L", "连续绘制独立 Line 并生成长度文字", "正式命令；长度设置必须为正数毫米，非法值回退 2000mm。"),
                 E(CommandIds.LineQuick, "快速标注距离", "U1LX", "点选一根 LINE 线段,从点击端起沿连通路线逐段填写毫米标注", "输入距离回车即写入并自动跳到下一段;直接回车保留原值,Esc 结束;点击在段中部时会询问向哪端走。"),
+                E(CommandIds.DimensionText, "对齐标注转文字", "U1D", "将选中的对齐标注文字转换为可编辑单行文字", "文字高度使用 U1SET 的电缆文字高度，位置和角度跟随原标注；原尺寸线保留。"),
                 E(CommandIds.LegacyLineQuick, "快速标注距离", "UNLX", "调用 U1LX 的快速标注功能", "兼容旧键盘命令名。"),
                 E(CommandIds.LegacyLine, "带标注线段", "UNL", "调用 U1L 的连续线段绘制功能", "兼容旧命令名。"),
                 E(CommandIds.Arch, "拱桥开洞", "U1R", "在线段交叉位置生成拱桥开洞", "生成后将两侧直线和半圆弧合并为一条 Polyline；直径使用 U1SET 设置。"),
@@ -52,7 +53,7 @@ namespace UNCAD.Infra
                 E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "直接回车使用原点；每行首框左侧生成高度 25000 的机台 ID 文字。"),
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路优先读取 U1SET 配置的机台 Excel。"),
                 E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),
-                E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "统计分类可在 U1SET 独立开关。"),
+                E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "多行文字和统计分类可在 U1SET 独立开关。"),
                 E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。")
             };
 

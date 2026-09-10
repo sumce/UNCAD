@@ -31,6 +31,7 @@ namespace UNCAD.Infra
         public const string UnaddMmPerGrid = "UNADD_MM_PER_GRID";
         public const string UnaddTextEnabled = "UNADD_TEXT_ENABLED";
         public const string UnaddMTextEnabled = "UNADD_MTEXT_ENABLED";
+        public const string UnaddDimensionEnabled = "UNADD_DIMENSION_ENABLED";
         public const string UnaddCableEnabled = "UNADD_CABLE_ENABLED";
         public const string UnaddBridgeEnabled = "UNADD_BRIDGE_ENABLED";
         public const string UnaddConduitEnabled = "UNADD_CONDUIT_ENABLED";
@@ -60,6 +61,7 @@ namespace UNCAD.Infra
             "UNC_FILL_INCLUDE_UNMATCHED_CONDUITS"; // 仅兼容旧配置；运行时固定忽略
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
+
 
         // BOQ 与 DWG 自动输出目录；沿用旧键名以迁移已有用户设置。
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹

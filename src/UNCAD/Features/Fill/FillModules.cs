@@ -29,7 +29,8 @@ namespace UNCAD.Features.Fill
             settings = settings ?? StatisticsSettings.Current();
             List<string> lines = ModuleRunner.Run(SummationModule.Descriptor,
                 "读取图中文字", () => FillSelectionCollector.ReadStatisticsLines(
-                    transaction, textIds, settings.IncludeText, settings.IncludeMText));
+                    transaction, textIds, settings.IncludeText, settings.IncludeMText,
+                    settings.IncludeDimension));
             settings.Calculation.MmPerGrid = mmPerGrid;
             SummationOutput output = ModuleRunner.Run(SummationModule.Descriptor,
                 "解析并求和", () => SummationModule.Execute(

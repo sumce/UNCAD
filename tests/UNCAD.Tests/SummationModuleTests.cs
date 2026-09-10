@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UNCAD.Core.Stat;
+using UNCAD.Core.Text;
 using Xunit;
 
 namespace UNCAD.Tests
@@ -73,6 +74,25 @@ namespace UNCAD.Tests
             Assert.Equal(MeasurementState.Measured, statistics.CableState);
             Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.BridgeState);
             Assert.Equal(MeasurementState.ConfirmedEmpty, statistics.ConduitState);
+        }
+
+        [Fact]
+        public void Execute_RecognizesFormattedMultilineCadAnnotations()
+        {
+            string cadText = "{\\C1;3000mm}\\P"
+                + "{\\fSimSun;桥架200*100 2500mm}\\X"
+                + "{\\H0.7x;线管20 3000mm}";
+            List<string> lines = TextParser.SplitMTextLines(cadText)
+                .ConvertAll(TextParser.CleanMText);
+
+            SummationOutput output = SummationModule.Execute(new SummationRequest(
+                lines, new StatCalculationOptions { MmPerGrid = 250 }));
+
+            Assert.Equal(3, output.SourceLineCount);
+            Assert.Equal(3, output.TotalMatchCount);
+            Assert.Equal(3.0, output.Statistics.CableSum);
+            Assert.Equal(2.5, Assert.Single(output.Statistics.Bridges).TotalM);
+            Assert.Equal(3.0, Assert.Single(output.Statistics.Conduits).TotalM);
         }
     }
 }

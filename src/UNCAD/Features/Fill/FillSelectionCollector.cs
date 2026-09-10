@@ -38,7 +38,7 @@ namespace UNCAD.Features.Fill
 
             ObjectId[] picked = SelectionService.Pick(ctx,
                 "请框选或点选清单表/图框块/设备块/统计文字: ",
-                new TypedValue(0, "TEXT,MTEXT,ACAD_TABLE,INSERT"));
+                new TypedValue(0, "TEXT,MTEXT,DIMENSION,ACAD_TABLE,INSERT"));
             return picked == null ? selection : ExpandSingleFrame(ctx, Split(ctx, picked));
         }
 
@@ -62,32 +62,30 @@ namespace UNCAD.Features.Fill
         }
 
         public static List<string> ReadStatisticsLines(CadContext ctx, ObjectId[] textIds,
-            bool includeText, bool includeMText)
+            bool includeText, bool includeMText, bool includeDimension)
         {
             using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 List<string> lines = ReadStatisticsLines(transaction, textIds,
-                    includeText, includeMText);
+                    includeText, includeMText, includeDimension);
                 transaction.Commit();
                 return lines;
             }
         }
 
         internal static List<string> ReadStatisticsLines(Transaction transaction,
-            ObjectId[] textIds, bool includeText, bool includeMText)
+            ObjectId[] textIds, bool includeText, bool includeMText, bool includeDimension)
         {
             var lines = new List<string>();
             if (textIds == null || textIds.Length == 0) return lines;
             foreach (ObjectId id in textIds)
             {
                 var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                if (includeText && entity is DBText text)
-                    lines.Add(TextParser.CleanMText(text.TextString));
-                else if (includeMText && entity is MText mtext)
-                    lines.AddRange(TextParser.SplitMTextLines(mtext.Contents)
-                        .ConvertAll(TextParser.CleanMText));
+                if (entity == null || entity.IsErased) continue;
+                StatisticsTextReader.AppendLines(entity, includeText, includeMText,
+                    includeDimension, lines);
             }
-            return lines;
+            return lines.ConvertAll(TextParser.CleanMText);
         }
 
         public static string ReadRuanguanLengthMeters(CadContext ctx, ObjectId[] blockIds)
@@ -236,7 +234,9 @@ namespace UNCAD.Features.Fill
                             drawingInfoTables.Add(id);
                         else tables.Add(id);
                     }
-                    else if (entity is DBText || entity is MText) texts.Add(id);
+                    else if (entity is DBText || entity is MText
+                        || entity is AlignedDimension || entity is RotatedDimension)
+                        texts.Add(id);
                     else if (entity is BlockReference block)
                     {
                         BlockDefinitionFlags flags = GetDefinitionFlags(tr, block,

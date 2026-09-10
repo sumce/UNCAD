@@ -15,14 +15,14 @@ namespace UNCAD.Tests
         {
             Assert.Equal(new[]
             {
-                "U1L", "U1LX", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
+                "U1L", "U1LX", "U1D", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
                 "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP"
             }, CommandIds.Canonical);
             Assert.Equal(new[] { "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD" },
                 CommandIds.Legacy);
             Assert.Equal("U1LX;UNLX", CommandIds.QuickLineFeatureCommands);
-            Assert.Equal(24, CommandIds.Registered.Count);
-            Assert.Equal(24, CommandIds.Registered.Distinct(
+            Assert.Equal(25, CommandIds.Registered.Count);
+            Assert.Equal(25, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
             Assert.DoesNotContain(CommandIds.Registered, command =>
                 command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));
@@ -60,7 +60,7 @@ namespace UNCAD.Tests
 
             string[] registeredConstants =
             {
-                "Line", "LineQuick", "Arch", "Tray100", "Tray200", "Tray400",
+                "Line", "LineQuick", "DimensionText", "Arch", "Tray100", "Tray200", "Tray400",
                 "Fill", "FillUpdate", "Submit", "Conduit", "About", "Settings",
                 "DwgExport", "XLayout", "Statistics", "Merge", "Help", "LegacyLine", "LegacyLineQuick",
                 "LegacyArch", "LegacyTray100", "LegacyTray200", "LegacyTray400",

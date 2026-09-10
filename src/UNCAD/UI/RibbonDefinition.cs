@@ -81,6 +81,8 @@ namespace UNCAD.UI
                         "连续绘制线段并自动生成长度文字"),
                     RibbonItemDefinition.Button("快速标注距离", CommandIds.LineQuick,
                         "点选线段后逐段快速填写毫米标注（兼容命令 UNLX）"),
+                    RibbonItemDefinition.Button("标注转文字", CommandIds.DimensionText,
+                        "将对齐标注的文字转换为可编辑单行文字，保留原尺寸线"),
                     RibbonItemDefinition.Button("开拱桥", CommandIds.Arch,
                         "在线段交叉位置生成拱桥开洞")),
                 new RibbonPanelDefinition("统计",

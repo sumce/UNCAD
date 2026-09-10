@@ -70,7 +70,8 @@ namespace UNCAD.Features.Unq
                         System.Globalization.CultureInfo.InvariantCulture)));
             if (ids == null || ids.Length == 0)
             {
-                ctx.Write("\n[" + commandName + "] 未选择线段，已取消。");
+                ctx.Write("\n[" + commandName
+                    + "] 未找到可处理的独立直线/二维多段线，已取消（块内线段、三维多段线或无效预选不可直接偏移）。");
                 return;
             }
 

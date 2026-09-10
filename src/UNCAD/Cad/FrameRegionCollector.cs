@@ -1123,8 +1123,8 @@ namespace UNCAD.Cad
                 anchor = block.Position;
                 return true;
             }
-            if (!includeAllEntities && !(entity is Table) && !(entity is DBText)
-                && !(entity is MText)) return false;
+            if (!includeAllEntities && !(entity is Table)
+                && !StatisticsTextReader.IsSupported(entity)) return false;
             return TryExtentsCenter(entity, out anchor);
         }
 
@@ -1152,7 +1152,8 @@ namespace UNCAD.Cad
         {
             minX = minY = maxX = maxY = 0;
             if (entity == null || (!includeAllEntities && !(entity is Table)
-                && !(entity is DBText) && !(entity is MText) && !(entity is BlockReference)))
+                && !(entity is BlockReference)
+                && !StatisticsTextReader.IsSupported(entity)))
                 return false;
             try
             {

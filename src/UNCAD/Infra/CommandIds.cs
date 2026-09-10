@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.4.4.</summary>
+    /// <summary>Public AutoCAD command contract for v2.4.5.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -21,6 +21,7 @@ namespace UNCAD.Infra
         public const string Tray400 = "U1Q4";
         public const string Line = "U1L";
         public const string LineQuick = "U1LX";
+        public const string DimensionText = "U1D";
         public const string Arch = "U1R";
 
         public const string LegacyLine = "UNL";
@@ -38,6 +39,7 @@ namespace UNCAD.Infra
         public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
         public const string LineFeatureCommands = Line;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
+        public const string DimensionTextFeatureCommands = DimensionText;
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
@@ -47,7 +49,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help
         };
 
@@ -59,7 +61,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, LineQuick, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics

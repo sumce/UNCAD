@@ -17,7 +17,7 @@ namespace UNCAD.Features.Unadd
     /// </summary>
     [Feature("unadd", "文字统计汇总",
         Commands = CommandIds.StatisticsFeatureCommands,
-        Description = "框选 TEXT/MTEXT，统计电缆、桥架和线管长度并输出图纸汇总")]
+        Description = "框选 TEXT/MTEXT/尺寸标注，统计电缆、桥架和线管长度并输出图纸汇总")]
     public class UnaddFeature : CommandBase
     {
         // UNADD is intentionally the only public statistics command retained for compatibility.
@@ -66,7 +66,7 @@ namespace UNCAD.Features.Unadd
             StatisticsSettingsSnapshot settings = StatisticsSettings.Current();
             if (settings.SelectionFilter.Length == 0)
             {
-                ctx.Write("\n[UNADD] TEXT和MTEXT来源均已关闭，请先在配置中心开启。");
+                ctx.Write("\n[UNADD] 文字来源（TEXT/MTEXT）均已关闭，请先在配置中心开启。");
                 return null;
             }
             if (!settings.Calculation.IncludeCable && !settings.Calculation.IncludeBridge
@@ -92,10 +92,9 @@ namespace UNCAD.Features.Unadd
                         foreach (var id in ids)
                         {
                             var entity = transaction.GetObject(id, OpenMode.ForRead) as Entity;
-                            if (settings.IncludeText && entity is DBText text)
-                                lines.Add(text.TextString);
-                            else if (settings.IncludeMText && entity is MText mtext)
-                                lines.AddRange(TextParser.SplitMTextLines(mtext.Contents));
+                            if (entity == null || entity.IsErased) continue;
+                            StatisticsTextReader.AppendLines(entity, settings.IncludeText,
+                                settings.IncludeMText, settings.IncludeDimension, lines);
                         }
                     }
                     return lines;
@@ -112,8 +111,8 @@ namespace UNCAD.Features.Unadd
 
         private static string SourceLabel(StatisticsSettingsSnapshot settings)
         {
-            if (settings.IncludeText && settings.IncludeMText) return "TEXT + MTEXT";
-            return settings.IncludeText ? "TEXT" : "MTEXT";
+            if (settings.IncludeText && settings.IncludeMText) return "TEXT/DIMENSION + MTEXT";
+            return settings.IncludeText ? "TEXT/DIMENSION" : "MTEXT";
         }
 
         private static string CategoryLabel(StatCalculationOptions options)

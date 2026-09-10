@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace UNCAD.Core.Text
@@ -11,11 +12,14 @@ namespace UNCAD.Core.Text
     /// </summary>
     public static class TextParser
     {
-        // 清理 MTEXT 控制符（与 LISP UNADD-CleanMText 的 Pattern 逐字对应）：
-        // \f...; 字体代码、\A0-2; 对齐代码、\[a-zA-HJ-Z0-9]+ 其他格式代码、{} 花括号
-        private static readonly Regex MTextCodeRegex = new Regex(
-            @"\\f[^;]+;|\\A[0-2];|\\[a-zA-HJ-Z0-9]+|[{}]",
-            RegexOptions.Compiled);
+        private static readonly Regex MTextLineBreakRegex = new Regex(
+            @"\\[PpXx]|\r\n|\r|\n", RegexOptions.Compiled);
+        private static readonly Regex MTextStackRegex = new Regex(
+            @"\\[Ss]([^;]*);", RegexOptions.Compiled);
+        private static readonly Regex MTextSemicolonCodeRegex = new Regex(
+            @"\\[A-Za-z][^;\\]*;", RegexOptions.Compiled);
+        private static readonly Regex MTextToggleCodeRegex = new Regex(
+            @"\\[A-Za-z~]", RegexOptions.Compiled);
         private static readonly Regex BridgeLabelRegex = new Regex(
             @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -26,25 +30,25 @@ namespace UNCAD.Core.Text
         public static string CleanMText(string s)
         {
             if (string.IsNullOrEmpty(s)) return s ?? "";
-            return MTextCodeRegex.Replace(s, "");
+            string value = s.Replace("\\P", "\n")
+                .Replace("\\p", "\n")
+                .Replace("\\X", "\n")
+                .Replace("\\x", "\n")
+                .Replace("\\~", " ");
+            value = MTextStackRegex.Replace(value, "$1");
+            value = MTextSemicolonCodeRegex.Replace(value, "");
+            value = MTextToggleCodeRegex.Replace(value, "");
+            return value.Replace("{", "").Replace("}", "");
         }
 
-        /// <summary>按 MTEXT 换行符 \P 拆分成多行。</summary>
+        /// <summary>按 MTEXT/尺寸文字换行符及实际换行拆分。</summary>
         public static List<string> SplitMTextLines(string s)
         {
-            var lines = new List<string>();
-            if (string.IsNullOrEmpty(s)) return lines;
-            string rest = s;
-            int pos;
-            while ((pos = rest.IndexOf("\\P", StringComparison.Ordinal)) >= 0)
-            {
-                string line = rest.Substring(0, pos).Trim();
-                if (line.Length > 0) lines.Add(line);
-                rest = rest.Substring(pos + 2);
-            }
-            rest = rest.Trim();
-            if (rest.Length > 0) lines.Add(rest);
-            return lines;
+            if (string.IsNullOrEmpty(s)) return new List<string>();
+            return MTextLineBreakRegex.Split(s)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
         }
 
         /// <summary>
@@ -125,15 +129,19 @@ namespace UNCAD.Core.Text
         public static string ExtractConduitSpec(string s)
         {
             var m = Regex.Match((s ?? "").Trim(),
-                @"^[⌀ØΦ]\s*([0-9]+(?:\.[0-9]+)?)\s*线管", RegexOptions.IgnoreCase);
-            return m.Success ? "⌀" + m.Groups[1].Value + "线管" : null;
+                @"^(?:[⌀ØΦ]\s*([0-9]+(?:\.[0-9]+)?)\s*线管|线管\s*([0-9]+(?:\.[0-9]+)?))",
+                RegexOptions.IgnoreCase);
+            if (!m.Success) return null;
+            string diameter = m.Groups[1].Success
+                ? m.Groups[1].Value : m.Groups[2].Value;
+            return "⌀" + diameter + "线管";
         }
 
         /// <summary>线管长度：完整格式“⌀20线管 2000mm”，返回毫米数。</summary>
         public static double? ExtractConduitLength(string s)
         {
             var m = Regex.Match((s ?? "").Trim(),
-                @"^[⌀ØΦ]\s*[0-9]+(?:\.[0-9]+)?\s*线管\s*([0-9]+(?:\.[0-9]+)?)\s*mm$",
+                @"^(?:[⌀ØΦ]\s*[0-9]+(?:\.[0-9]+)?\s*线管|线管\s*[0-9]+(?:\.[0-9]+)?)\s*([0-9]+(?:\.[0-9]+)?)\s*mm$",
                 RegexOptions.IgnoreCase);
             if (m.Success)
                 return double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
