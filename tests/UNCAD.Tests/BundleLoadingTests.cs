@@ -38,6 +38,34 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ManifestAppVersion_AgreesModuleVersionLabel()
+        {
+            XElement package = LoadManifest();
+            string appVersion = (string)package.Attribute("AppVersion");
+            Assert.NotNull(appVersion);
+            // ProductMetadata.VersionLabel is the 3-part user-facing label; the
+            // bundle manifest carries the 4-part numeric version, so the label
+            // must be the first three components (or the whole value for a
+            // three-part package). installer.ps1 applies the same rule to the
+            // DLL FileVersion, so this is the join that keeps the running app
+            // and the shipped package on the same version (D-010).
+            string expected = ProductMetadata.VersionLabel + ".0";
+            Assert.True(
+                appVersion == ProductMetadata.VersionLabel || appVersion == expected,
+                "Package AppVersion='" + appVersion + "' does not agree with ProductMetadata.VersionLabel='" +
+                ProductMetadata.VersionLabel + "'.");
+        }
+
+        [Fact]
+        public void ReleaseNoteDocument_ExistsForVersionLabel()
+        {
+            string path = RepoFile("docs", "RELEASE-" + ProductMetadata.VersionLabel + ".md");
+            Assert.True(File.Exists(path),
+                "Release note document is missing: docs/RELEASE-" + ProductMetadata.VersionLabel + ".md");
+            Assert.NotEmpty(File.ReadAllText(path).Trim());
+        }
+
+        [Fact]
         public void Manifest_DeclaresEveryCanonicalCommandForOnDemandLoading()
         {
             XElement entry = LoadManifest().Element("Components")
@@ -134,6 +162,19 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ReleaseScript_AssertsVersionLabelAgreesWithPackageAndReleaseNote()
+        {
+            string script = File.ReadAllText(RepoFile("release.ps1"));
+
+            // D-010: release.ps1 must own the join between the user-facing label,
+            // the bundle manifest AppVersion, and the release note document.
+            Assert.Contains("ProductMetadata.VersionLabel was not found", script);
+            Assert.Contains("Release version mismatch:", script);
+            Assert.Contains("Release note document is missing:", script);
+            Assert.Contains("Release note document is empty:", script);
+        }
+
+        [Fact]
         public void PackagePipeline_UsesExplicitPayloadAllowList()
         {
             string[] expected =
@@ -143,6 +184,11 @@ namespace UNCAD.Tests
                 "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
+                "System.Text.Json.dll", "System.Text.Encodings.Web.dll",
+                "System.Buffers.dll", "System.Memory.dll",
+                "System.Numerics.Vectors.dll", "System.Runtime.CompilerServices.Unsafe.dll",
+                "Microsoft.Bcl.AsyncInterfaces.dll", "System.Threading.Tasks.Extensions.dll",
+                "System.ValueTuple.dll",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
             };

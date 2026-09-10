@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.4 builds publish 24 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; older `U1X` references below are historical release notes.
+Current 2.4.5 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,13 @@ Current 2.4.4 builds publish 24 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.5
+
+- `U1F/U1U/UNADD` 统计支持识别对齐/转角标注中人工输入的文字（如 `2000mm`）；自动测量的标注不参与统计，可在 `U1SET` 独立开关（默认开启）。
+- 新增 `U1D` 对齐标注转文字：将标注文字转换为可编辑单行文字并保留原尺寸线。
+- 修复 150% 及以上屏幕缩放下 U1SET 等窗口输入框和页面显示不全的问题。
+- U1Q/U1LX 标注重跑不再重复生成，跳过原因逐项提示；Xmerge 保持块样式并增强批量导入。
 
 ## v2.4.4
 
@@ -290,6 +297,7 @@ Current 2.4.4 builds publish 24 commands and intentionally do not include the re
 | --- | --- | --- |
 | `U1L` | `UNL` | 绘制带长度占位标注的线条 |
 | `U1LX` | `UNLX` | 选择已有 U1L 线段，在 3D 正交视图中编辑相连线路及毫米距离 |
+| `U1D` | — | 将对齐标注文字转换为单行文字，保留原尺寸线 |
 | `U1X` | - | 无需选择线段，直接进入东南等轴侧 3D 正交绘图器并写回 CAD |
 | `U1R` | `UNR` | 开拱桥并截断相交直线 |
 | `U1Q1` / `U1Q2` / `U1Q4` | `UNQ1` / `UNQ2` / `UNQ4` | 绘制 100 / 200 / 400 mm 桥架标注 |
@@ -388,9 +396,9 @@ Current 2.4.4 builds publish 24 commands and intentionally do not include the re
 
 ## 统计匹配规则
 
-- `TEXT`按单个文字实体统计；`MTEXT`按 `\P` 拆分后逐行统计，两种来源可在 `U1SET → 统计汇总` 分别开关。
+- `TEXT`按单个文字实体统计；`MTEXT`按换行拆分后逐行统计。多行文字识别可在`U1SET → 统计汇总`开启，默认关闭。
 - 电缆、桥架和线管类别可分别开关，默认全部开启。
-- 电缆严格格式：`2000mm`；桥架严格格式：`桥架200*100 12格`；线管严格格式：`Φ20线管 2000mm`。
+- 电缆严格格式：`2000mm`；桥架严格格式：`桥架200*100 12格`；线管严格格式：`Φ20线管 2000mm`，并兼容旧图的`线管20 2000mm`。
 - 每行必须完整匹配，不接受 `(共用)`、`共用`、前后备注或中间附加文字。桥架只支持 `*`、`x`、`X` 作为规格分隔符。
 
 ## 设置持久化
@@ -404,7 +412,7 @@ Current 2.4.4 builds publish 24 commands and intentionally do not include the re
 | `UNR_DIAMETER` | UNR 拱桥直径 | 300 |
 | `UNC_STYLE_NAME` / `UNC_STYLE_FONT` / `UNC_STYLE_BIGFONT` / `UNC_STYLE_WIDTH` | 文字样式：样式名 / 字体文件 / 大字体(空=TTF) / 宽高比 | UNC-标注 / msyh.ttf / (空) / 0.8 |
 | `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |
-| `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` | 单行文字 / 多行文字参与统计 | 1 / 1 |
+| `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` / `UNADD_DIMENSION_ENABLED` | 单行文字 / 多行文字 / 对齐·转角标注文字参与统计（标注只读人工输入的文字覆盖，自动测量不计） | 1 / 0 / 1 |
 | `UNADD_CABLE_ENABLED` / `UNADD_BRIDGE_ENABLED` / `UNADD_CONDUIT_ENABLED` | 电缆 / 桥架 / 线管参与统计 | 1 / 1 / 1 |
 | `UNC_FILL_EXCEL` | 用户选择的机台数据源（内容由 U1SET“刷新”导入 SQLite） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_CLEAR_ROWS` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 每次清空行数 / 表格文字高度 | 1 / 11 / 500 |

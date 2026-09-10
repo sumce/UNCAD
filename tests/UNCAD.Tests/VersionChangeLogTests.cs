@@ -33,9 +33,11 @@ namespace UNCAD.Tests
         [Fact]
         public void PreviousSeenVersionShowsLatestEntryOnly()
         {
-            var from243 = VersionChangeLog.EntriesNewerThan("2.4.3");
-            Assert.Single(from243);
-            Assert.Equal(ProductMetadata.VersionLabel, from243[0].Version);
+            // Use the second-newest entry so this test survives future releases.
+            string previousVersion = VersionChangeLog.Entries[1].Version;
+            var previousSeen = VersionChangeLog.EntriesNewerThan(previousVersion);
+            Assert.Single(previousSeen);
+            Assert.Equal(ProductMetadata.VersionLabel, previousSeen[0].Version);
         }
 
         [Fact]

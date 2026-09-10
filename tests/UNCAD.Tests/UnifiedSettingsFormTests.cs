@@ -29,7 +29,9 @@ namespace UNCAD.Tests
                         List<GroupBox> groups = FindAll<GroupBox>(tabs.SelectedTab);
                         List<CheckBox> switches = FindAll<CheckBox>(tabs.SelectedTab);
                         Assert.Equal(3, groups.Count);
-                        Assert.Equal(5, switches.Count);
+                        Assert.Equal(6, switches.Count);
+                        Assert.Contains(switches, checkBox =>
+                            checkBox.Text == "尺寸标注文字 (DIMENSION)");
                         Assert.Equal(2, FindAll<NumericUpDown>(tabs.SelectedTab).Count);
                         groups.Sort((left, right) => left.Top.CompareTo(right.Top));
                         foreach (GroupBox group in groups)

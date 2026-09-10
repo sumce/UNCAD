@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.4`.
+- Current release: `2.4.5`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -32,7 +32,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1DWG`, `U1SET` |
-| Drawing helpers | `U1L`, `U1LX`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U1D`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 

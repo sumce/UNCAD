@@ -31,6 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.5", "2026-09-09",
+                    "新增：U1F/U1U/UNADD 统计支持识别对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。",
+                    "新增：U1SET 统计汇总提供“尺寸标注文字 (DIMENSION)”独立开关，默认开启。",
+                    "新增：U1D 对齐标注转文字，将标注文字转换为可编辑单行文字并保留原尺寸线。",
+                    "修复：150% 及以上屏幕缩放下 U1SET 等窗口输入框和页面显示不全的问题。",
+                    "优化：U1Q/U1LX 标注重跑不再重复生成，跳过原因逐项提示；Xmerge 保持块样式并增强批量导入。"),
                 new VersionChangeLogEntry("2.4.4", "2026-09-07",
                     "修复：U1F/U1U/U1S 批量流程统一使用固定清单项目编码，避免 CAD 与 BOQ 对账不一致。",
                     "修复：替代型号、图框身份和变更记录写入 frameinfo_json，后续 U1U 会复用已确认的数据。",

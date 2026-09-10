@@ -93,6 +93,29 @@ if ([string]$package.Name -ne $productName -or
     -not [string]::IsNullOrWhiteSpace([string]$package.LicenseExpiresUtc)) {
     throw "Unified Pro package metadata is inconsistent."
 }
+# D-010: the user-facing version label must agree with the bundle manifest and
+# its release note. The assembly, the change log, and the test suite enforce
+# their own halves of the contract; this is the join release.ps1 owns, so a
+# single edited source cannot ship a package whose reported version drifts from
+# the running application.
+$metadataSource = Join-Path $root "src\UNCAD\Infra\ProductMetadata.cs"
+$labelMatch = [regex]::Match(
+    (Get-Content -LiteralPath $metadataSource -Raw -Encoding UTF8),
+    'VersionLabel\s*=\s*"([^"]+)"')
+if (-not $labelMatch.Success) {
+    throw "ProductMetadata.VersionLabel was not found in $metadataSource."
+}
+$versionLabel = $labelMatch.Groups[1].Value
+if ($version -ne $versionLabel -and $version -ne ($versionLabel + ".0")) {
+    throw "Release version mismatch: ProductMetadata.VersionLabel='$versionLabel' does not agree with PackageContents.xml AppVersion='$version'."
+}
+$releaseNote = Join-Path $root ("docs\RELEASE-" + $versionLabel + ".md")
+if (-not (Test-Path $releaseNote -PathType Leaf)) {
+    throw "Release note document is missing: docs\RELEASE-$versionLabel.md (see docs/RELEASE.md)."
+}
+if ([IO.File]::ReadAllText($releaseNote).Trim().Length -eq 0) {
+    throw "Release note document is empty: docs\RELEASE-$versionLabel.md"
+}
 $baseName = "UNCAD-Pro-v" + $version
 if (-not [string]::IsNullOrWhiteSpace($Suffix)) { $baseName += "-" + $Suffix.Trim("-") }
 $artifacts = Join-Path $root "artifacts\Pro"

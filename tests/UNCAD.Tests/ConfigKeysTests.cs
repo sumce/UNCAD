@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.4.4", info.Version);
+            Assert.Equal("2.4.5", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);
@@ -93,9 +93,42 @@ namespace UNCAD.Tests
         {
             Assert.Equal("UNADD_TEXT_ENABLED", ConfigKeys.UnaddTextEnabled);
             Assert.Equal("UNADD_MTEXT_ENABLED", ConfigKeys.UnaddMTextEnabled);
+            Assert.Equal("UNADD_DIMENSION_ENABLED", ConfigKeys.UnaddDimensionEnabled);
             Assert.Equal("UNADD_CABLE_ENABLED", ConfigKeys.UnaddCableEnabled);
             Assert.Equal("UNADD_BRIDGE_ENABLED", ConfigKeys.UnaddBridgeEnabled);
             Assert.Equal("UNADD_CONDUIT_ENABLED", ConfigKeys.UnaddConduitEnabled);
+            Assert.False(StatisticsSettings.DefaultIncludeMText);
+            Assert.True(StatisticsSettings.DefaultIncludeDimension);
+        }
+
+        [Fact]
+        public void StatisticsTextSource_IncludesDimensionOverridesWithText()
+        {
+            Assert.Equal("TEXT,DIMENSION", new StatisticsSettingsSnapshot
+            {
+                IncludeText = true,
+                IncludeDimension = true
+            }.SelectionFilter);
+            Assert.Equal("TEXT,MTEXT,DIMENSION", new StatisticsSettingsSnapshot
+            {
+                IncludeText = true,
+                IncludeMText = true,
+                IncludeDimension = true
+            }.SelectionFilter);
+            Assert.Equal("MTEXT", new StatisticsSettingsSnapshot
+            {
+                IncludeMText = true
+            }.SelectionFilter);
+            // 标注识别是独立开关：关闭后过滤器不得再选中 DIMENSION。
+            Assert.Equal("TEXT", new StatisticsSettingsSnapshot
+            {
+                IncludeText = true,
+                IncludeDimension = false
+            }.SelectionFilter);
+            Assert.Equal("DIMENSION", new StatisticsSettingsSnapshot
+            {
+                IncludeDimension = true
+            }.SelectionFilter);
         }
 
         [Fact]

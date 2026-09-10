@@ -3,7 +3,7 @@
     AutodeskProduct="AutoCAD"
     Name="UNCAD Pro" LicenseMode="Online" LicenseExpiresUtc="" CustomerCode="" LicenseeCompany="" LicenseeName="" ExpectedAuthorizationYears="" Website="https://www.unsiao.com"
     Description="U1 系列生成、更新、绘制与设置命令 / 保留传统 UN 命令"
-    AppVersion="2.4.4.0"
+    AppVersion="2.4.5.0"
     ProductType="Application"
     ProductCode="{CC72B556-8A04-4FFE-9E13-4C65446A3AED}"
     UpgradeCode="{41F7BA86-67B4-4C2C-BE9C-13FAF437F264}">
@@ -18,6 +18,7 @@
       <Commands GroupName="UNCAD">
         <Command Global="U1L" />
         <Command Global="U1LX" />
+        <Command Global="U1D" />
         <Command Global="U1R" />
         <Command Global="U1Q1" />
         <Command Global="U1Q2" />
