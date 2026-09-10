@@ -116,6 +116,17 @@ if (-not (Test-Path $releaseNote -PathType Leaf)) {
 if ([IO.File]::ReadAllText($releaseNote).Trim().Length -eq 0) {
     throw "Release note document is empty: docs\RELEASE-$versionLabel.md"
 }
+# 标签门禁:发布的版本必须有一个指向本线的 tag。没有门禁时标签会静默断档
+# (曾一直停在 v2.1.6)。要求 tag 是 HEAD 的祖先而不是 HEAD 本身,是为了允许
+# 在发布提交之后再追加不改变产物的提交(例如文档或仓库卫生)。
+$versionTag = "v" + $versionLabel
+if (-not (git -C $root rev-parse -q --verify "refs/tags/$versionTag" 2>$null)) {
+    throw "Release tag '$versionTag' does not exist. Tag the release commit first, for example: git tag -a $versionTag -m 'UNCAD Pro $versionLabel'"
+}
+& git -C $root merge-base --is-ancestor "$versionTag^{commit}" HEAD 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw "Release tag '$versionTag' does not point at an ancestor of HEAD; it belongs to another line of history."
+}
 $baseName = "UNCAD-Pro-v" + $version
 if (-not [string]::IsNullOrWhiteSpace($Suffix)) { $baseName += "-" + $Suffix.Trim("-") }
 $artifacts = Join-Path $root "artifacts\Pro"

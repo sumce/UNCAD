@@ -54,3 +54,8 @@ venv/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Local tool state (not project source)
+.claude-tmp/
+.workbuddy/
+.claude/settings.local.json
