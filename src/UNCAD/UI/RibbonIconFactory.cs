@@ -73,29 +73,30 @@ namespace UNCAD.UI
                 || string.Equals(command, CommandIds.Tray200, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Tray400, StringComparison.OrdinalIgnoreCase)) return "tray";
             if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(command, CommandIds.LineQuick, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(command, CommandIds.LineQuick, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.DimensionText, StringComparison.OrdinalIgnoreCase))
                 return "line";
             if (string.Equals(command, CommandIds.Arch, StringComparison.OrdinalIgnoreCase)) return "arch";
             if (string.Equals(command, CommandIds.LegacyStatistics, StringComparison.OrdinalIgnoreCase)) return "stat";
             return "tool";
         }
 
-        // 图标色与 UiTheme 色板对齐(此处为 WPF Color,与 WinForms Color 不通用):
-        // Accent #0E6FD1 / Success #1E7A45 / Warning #8A5300 / Danger #B4302B /
-        // TextSecondary #5F6B76,派生色保持同饱和度。
+        // 图标色取自 UiTheme 色板。WPF Color 与 WinForms Color 类型不通用，
+        // 因此这里做一次显式转换，而不是各自维护一份十六进制值——原先两处
+        // 独立定义会随主题调整漂移。
         private static Color IconColor(string icon)
         {
-            if (icon == "fill") return Color.FromRgb(0x0E, 0x6F, 0xD1);
-            if (icon == "submit") return Color.FromRgb(0x1E, 0x7A, 0x45);
-            if (icon == "settings") return Color.FromRgb(0x8A, 0x53, 0x00);
-            if (icon == "about") return Color.FromRgb(0x5F, 0x6B, 0x76);
-            if (icon == "conduit") return Color.FromRgb(0x0B, 0x5A, 0xAB);
-            if (icon == "tray") return Color.FromRgb(0xB4, 0x30, 0x2B);
-            if (icon == "line") return Color.FromRgb(0x0E, 0x6F, 0xD1);
-            if (icon == "arch") return Color.FromRgb(0x1E, 0x7A, 0x45);
-            if (icon == "stat") return Color.FromRgb(0x5F, 0x6B, 0x76);
-            if (icon == "excel") return Color.FromRgb(0x1E, 0x7A, 0x45);
-            return Color.FromRgb(0x9A, 0xA3, 0xAC);
+            if (icon == "fill" || icon == "line") return ToWpf(UiTheme.Accent);
+            if (icon == "submit" || icon == "arch" || icon == "excel")
+                return ToWpf(UiTheme.SuccessFg);
+            if (icon == "settings") return ToWpf(UiTheme.WarningFg);
+            if (icon == "tray") return ToWpf(UiTheme.DangerFg);
+            if (icon == "conduit") return ToWpf(UiTheme.AccentDark);
+            if (icon == "about" || icon == "stat") return ToWpf(UiTheme.TextSecondary);
+            return ToWpf(UiTheme.TextDisabled);
         }
+
+        private static Color ToWpf(System.Drawing.Color token)
+            => Color.FromRgb(token.R, token.G, token.B);
     }
 }

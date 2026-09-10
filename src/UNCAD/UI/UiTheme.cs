@@ -27,6 +27,8 @@ namespace UNCAD.UI
         public static readonly Color Accent = Color.FromArgb(0x0E, 0x6F, 0xD1);
         public static readonly Color AccentHover = Color.FromArgb(0x1B, 0x7E, 0xDD);
         public static readonly Color AccentSoft = Color.FromArgb(0xE8, 0xF1, 0xFB);
+        /// <summary>Accent 的深色变体，供 Ribbon 图标区分同色系命令。</summary>
+        public static readonly Color AccentDark = Color.FromArgb(0x0B, 0x5A, 0xAB);
 
         // ---- 语义色 ----
         public static readonly Color WarningBg = Color.FromArgb(0xFF, 0xF6, 0xDD);
@@ -41,6 +43,8 @@ namespace UNCAD.UI
 
         // ---- 字体 ----
         private const string FontFamily = "微软雅黑";
+        /// <summary>商标字标使用的西文字体：与中文正文分开，避免改变品牌外观。</summary>
+        public const string BrandFontFamily = "Segoe UI";
         public static Font FontBody => new Font(FontFamily, 9f);
         public static Font FontBodyBold => new Font(FontFamily, 9f, FontStyle.Bold);
         public static Font FontHeader => new Font(FontFamily, 11.5f, FontStyle.Bold);
@@ -56,6 +60,37 @@ namespace UNCAD.UI
         public const int SpaceXL = 24;
         public static Padding CardPadding => new Padding(14, 12, 14, 12);
         public static Padding FormPadding => new Padding(SpaceM);
+
+        // ---- DPI 缩放 ----
+        // 所有窗体经 DialogLayout.Apply 设置 AutoScaleMode.Dpi +
+        // AutoScaleDimensions=(96,96)，由 WinForms 在窗体加载时按实际 DPI 统一
+        // 缩放。绝不要对普通控件属性做手工换算——那会与自动缩放叠加，150% 屏幕上
+        // 得到 2.25 倍而不是 1.5 倍（实测：控件边界与 TableLayoutPanel 的 Absolute
+        // 行列样式都在自动缩放的覆盖范围内）。因此默认写法是直接写 96-DPI 设计值。
+
+        /// <summary>
+        /// 仅用于 WinForms 自动缩放**不覆盖**的尺寸属性。实测确认这类属性只有：
+        /// <c>ComboBox.ItemHeight</c>、<c>DataGridView.RowTemplate.Height</c>、
+        /// <c>DataGridViewColumn.Width</c>、<c>ListView</c> 的 <c>ColumnHeader.Width</c>。
+        /// 它们不随 AutoScaleDimensions 缩放，写死设计值会让高 DPI 下行高/列宽偏小，
+        /// 因此必须在此手工换算。其余控件属性一律直接写设计值，不要调用本方法。
+        /// 局限：取主显示器 DPI，多显示器混合 DPI 场景下不精确。
+        /// </summary>
+        public static int NotAutoScaled(int designValue)
+            => (int)Math.Round(designValue * SystemDpiScale);
+
+        private static float SystemDpiScale
+        {
+            get
+            {
+                try
+                {
+                    using (var graphics = Graphics.FromHwnd(IntPtr.Zero))
+                        return graphics.DpiX / 96f;
+                }
+                catch { return 1f; }
+            }
+        }
 
         // ---- 按钮工厂 ----
 

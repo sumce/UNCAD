@@ -136,3 +136,18 @@ rewrite an existing entry.
 - Consequence: an unmatched row stops the batch before the CAD transaction or
   BOQ file is changed. The user must delete the row or choose a fixed-catalog
   replacement; the confirmed replacement is persisted in `frameinfo_json`.
+
+## D-017: Dialogs Are Native WinForms (2026-09-10)
+
+- Status: accepted
+- Decision: every user-facing dialog is native WinForms styled through
+  `UiTheme` and sized through `DialogLayout`. The parallel WebView2 + HTML
+  dialog framework (the `UseWebUI` switch, its `WebForm`/`WebBridge` base
+  types, and the HTML dialog resources) is removed.
+- Consequence: do not reintroduce an HTML dialog layer without a new decision.
+  `UseWebUI` and `WebDevDir` are no longer valid configuration keys — an
+  existing `UNC_USE_WEB_UI` registry value is inert and needs no migration.
+  WebView2 remains a dependency only for the startup splash
+  (`StartupSplashForm`); removing that package would require rewriting the
+  splash to its existing `StartupSplashCanvas` fallback and updating the
+  bundle payload, installer, and packaging tests together.

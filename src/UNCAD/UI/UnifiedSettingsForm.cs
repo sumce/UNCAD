@@ -52,8 +52,21 @@ namespace UNCAD.UI
         private readonly NumericUpDown _unrDia = NumberBox(300m, 1m, 100000m);
 
         // 统计汇总
-        private readonly CheckBox _statText = new CheckBox { Text = "单行文字 (TEXT)", AutoSize = true };
-        private readonly CheckBox _statMText = new CheckBox { Text = "多行文字 (MTEXT)", AutoSize = true };
+        private readonly CheckBox _statText = new CheckBox
+        {
+            Text = "单行文字 (TEXT)",
+            AutoSize = true
+        };
+        private readonly CheckBox _statMText = new CheckBox
+        {
+            Text = "支持多行文本识别 (MTEXT)",
+            AutoSize = true
+        };
+        private readonly CheckBox _statDim = new CheckBox
+        {
+            Text = "尺寸标注文字 (DIMENSION)",
+            AutoSize = true
+        };
         private readonly CheckBox _statCable = new CheckBox { Text = "电缆长度", AutoSize = true };
         private readonly CheckBox _statBridge = new CheckBox { Text = "桥架长度", AutoSize = true };
         private readonly CheckBox _statConduit = new CheckBox { Text = "线管长度", AutoSize = true };
@@ -190,7 +203,10 @@ namespace UNCAD.UI
             SetNumber(_statHgt, Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0));
             SetNumber(_statMm, Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0));
             _statText.Checked = Settings.GetBool(ConfigKeys.UnaddTextEnabled, true);
-            _statMText.Checked = Settings.GetBool(ConfigKeys.UnaddMTextEnabled, true);
+            _statMText.Checked = Settings.GetBool(ConfigKeys.UnaddMTextEnabled,
+                StatisticsSettings.DefaultIncludeMText);
+            _statDim.Checked = Settings.GetBool(ConfigKeys.UnaddDimensionEnabled,
+                StatisticsSettings.DefaultIncludeDimension);
             _statCable.Checked = Settings.GetBool(ConfigKeys.UnaddCableEnabled, true);
             _statBridge.Checked = Settings.GetBool(ConfigKeys.UnaddBridgeEnabled, true);
             _statConduit.Checked = Settings.GetBool(ConfigKeys.UnaddConduitEnabled, true);
@@ -248,6 +264,7 @@ namespace UNCAD.UI
                 .ToString("0.##", CultureInfo.InvariantCulture));
             Settings.SetBool(ConfigKeys.UnaddTextEnabled, _statText.Checked);
             Settings.SetBool(ConfigKeys.UnaddMTextEnabled, _statMText.Checked);
+            Settings.SetBool(ConfigKeys.UnaddDimensionEnabled, _statDim.Checked);
             Settings.SetBool(ConfigKeys.UnaddCableEnabled, _statCable.Checked);
             Settings.SetBool(ConfigKeys.UnaddBridgeEnabled, _statBridge.Checked);
             Settings.SetBool(ConfigKeys.UnaddConduitEnabled, _statConduit.Checked);
@@ -281,11 +298,16 @@ namespace UNCAD.UI
         private void ConfigureStatisticsToolTips()
         {
             _toolTips.ShowAlways = true;
-            _toolTips.SetToolTip(_statText, "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
-            _toolTips.SetToolTip(_statMText, "读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
+            _toolTips.SetToolTip(_statText,
+                "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
+            _toolTips.SetToolTip(_statMText,
+                "开启后，U1F/U1U/UNADD读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
+            _toolTips.SetToolTip(_statDim,
+                "开启后，U1F/U1U/UNADD 读取对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。");
             _toolTips.SetToolTip(_statCable, "严格格式示例：2000mm；不允许前后缀或备注。");
             _toolTips.SetToolTip(_statBridge, "严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。");
-            _toolTips.SetToolTip(_statConduit, "严格格式示例：Φ20线管 2000mm；不允许前后缀或备注。");
+            _toolTips.SetToolTip(_statConduit,
+                "严格格式示例：Φ20线管 2000mm；兼容旧图的“线管20 2000mm”。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
             _toolTips.SetToolTip(_fillFlexibleMeters, "仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。");
             _toolTips.SetToolTip(_fillDeviceColor,
@@ -301,7 +323,7 @@ namespace UNCAD.UI
                 Width = 190,
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 22
+                ItemHeight = UiTheme.NotAutoScaled(22)
             };
             box.Items.AddRange(new object[]
             {
@@ -327,6 +349,9 @@ namespace UNCAD.UI
             var choice = box.Items[e.Index] as CadColorChoice;
             if (choice == null) return;
 
+            // 实测：ComboBox.ItemHeight 不在 WinForms 自动缩放的覆盖范围内，
+            // 行高恒为设计值，因此这里的固定像素内边距与色块宽度在任意 DPI 下
+            // 都与行高保持同一比例，不需要额外换算。
             var swatch = new Rectangle(e.Bounds.Left + 5, e.Bounds.Top + 4, 20,
                 e.Bounds.Height - 8);
             using (var brush = new SolidBrush(choice.Preview))
@@ -454,17 +479,22 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                Padding = new Padding(8, 8, 8, 4)
+                Padding = new Padding(
+                    8, 8,
+                    8, 4)
             };
             source.Controls.Add(_statText);
             source.Controls.Add(_statMText);
+            source.Controls.Add(_statDim);
 
             var categories = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                Padding = new Padding(8, 8, 8, 4)
+                Padding = new Padding(
+                    8, 8,
+                    8, 4)
             };
             categories.Controls.Add(_statCable);
             categories.Controls.Add(_statBridge);
@@ -473,7 +503,9 @@ namespace UNCAD.UI
             var output = Grid(2);
             output.AutoSize = false;
             output.Dock = DockStyle.Fill;
-            output.Padding = new Padding(8, 4, 8, 4);
+            output.Padding = new Padding(
+                    8, 4,
+                    8, 4);
             output.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
             output.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             output.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
@@ -488,7 +520,9 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 4,
-                Padding = new Padding(12, 10, 12, 10)
+                Padding = new Padding(
+                    12, 10,
+                    12, 10)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
@@ -532,7 +566,9 @@ namespace UNCAD.UI
                 Dock = DockStyle.Bottom,
                 Height = 30,
                 ForeColor = UiTheme.Accent,
-                Padding = new Padding(14, 4, 14, 4)
+                Padding = new Padding(
+                    14, 4,
+                    14, 4)
             });
             return page;
         }

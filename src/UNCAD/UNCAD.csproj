@@ -15,11 +15,11 @@
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
     <AssemblyCompany>UNSIAO.Ltd</AssemblyCompany>
-    <AssemblyVersion>2.4.4.0</AssemblyVersion>
-    <FileVersion>2.4.4.0</FileVersion>
-    <Version>2.4.4</Version>
+    <AssemblyVersion>2.4.5.0</AssemblyVersion>
+    <FileVersion>2.4.5.0</FileVersion>
+    <Version>2.4.5</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
-    <InformationalVersion>2.4.4+build.$(BuildTimestampCompact)</InformationalVersion>
+    <InformationalVersion>2.4.5+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->
@@ -61,12 +61,14 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <PackageReference Include="System.Text.Json" Version="8.0.0" />
     <PackageReference Include="NPOI" Version="2.5.6" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\Icons\*.svg" />
     <EmbeddedResource Include="Assets\unsiao-mark.png" />
+    <!-- 启动动画资源（根目录 docs.html 历史命名，仅 StartupSplashForm 使用） -->
     <EmbeddedResource Include="..\..\docs.html"
                       Link="Assets\StartupSplash.html"
                       LogicalName="UNCAD.Assets.StartupSplash.html" />

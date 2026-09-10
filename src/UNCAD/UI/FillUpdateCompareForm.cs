@@ -60,7 +60,9 @@ namespace UNCAD.UI
                 Text = "有更新记录的图框(" + _items.Count + " 个)",
                 Font = UiTheme.FontBodyBold,
                 ForeColor = UiTheme.TextPrimary,
-                Padding = new Padding(8, 6, 4, 0)
+                Padding = new Padding(
+                    8, 6,
+                    4, 0)
             };
             _itemList = new ListBox
             {
@@ -81,7 +83,9 @@ namespace UNCAD.UI
                 Height = 30,
                 Font = UiTheme.FontBodyBold,
                 ForeColor = UiTheme.Accent,
-                Padding = new Padding(8, 4, 4, 0)
+                Padding = new Padding(
+                    8, 4,
+                    4, 0)
             };
             _history = new Label
             {
@@ -89,7 +93,9 @@ namespace UNCAD.UI
                 Height = 22,
                 Font = UiTheme.FontCaption,
                 ForeColor = UiTheme.TextSecondary,
-                Padding = new Padding(8, 0, 4, 0)
+                Padding = new Padding(
+                    8, 0,
+                    4, 0)
             };
             _summary = new Label
             {
@@ -97,7 +103,9 @@ namespace UNCAD.UI
                 Height = 22,
                 Font = UiTheme.FontCaption,
                 ForeColor = UiTheme.TextPrimary,
-                Padding = new Padding(8, 0, 4, 0)
+                Padding = new Padding(
+                    8, 0,
+                    4, 0)
             };
 
             _previousList = CreateBomList();
@@ -159,7 +167,9 @@ namespace UNCAD.UI
                 Text = text,
                 Font = UiTheme.FontCaption,
                 ForeColor = UiTheme.TextSecondary,
-                Padding = new Padding(2, 4, 2, 2)
+                Padding = new Padding(
+                    2, 4,
+                    2, 2)
             };
         }
 
@@ -257,10 +267,17 @@ namespace UNCAD.UI
         {
             foreach (ListView list in new[] { _previousList, _plannedList })
             {
-                int width = Math.Max(360, list.ClientSize.Width - 8);
-                int[] fixedWidths = { 44, 0, 44, 76, 70 };
+                // 列宽不在 WinForms 自动缩放覆盖范围内：ClientSize 已缩放，
+                // 这里的固定列宽与内缩量需手工换算。
+                int width = Math.Max(UiTheme.NotAutoScaled(360),
+                    list.ClientSize.Width - UiTheme.NotAutoScaled(8));
+                int[] fixedWidths =
+                {
+                    UiTheme.NotAutoScaled(44), 0, UiTheme.NotAutoScaled(44),
+                    UiTheme.NotAutoScaled(76), UiTheme.NotAutoScaled(70)
+                };
                 int fixedTotal = fixedWidths.Sum();
-                int nameWidth = Math.Max(120, width - fixedTotal);
+                int nameWidth = Math.Max(UiTheme.NotAutoScaled(120), width - fixedTotal);
                 list.Columns[0].Width = fixedWidths[0];
                 list.Columns[1].Width = nameWidth;
                 for (int i = 2; i < fixedWidths.Length; i++)

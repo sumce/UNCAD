@@ -46,7 +46,9 @@ namespace UNCAD.UI
                 Text = "机台 ID",
                 Dock = DockStyle.Top,
                 Height = 54,
-                Padding = new Padding(8, 21, 8, 6)
+                Padding = new Padding(
+                    8, 21,
+                    8, 6)
             };
             _machineInput = new TextBox { Dock = DockStyle.Fill, Font = UiTheme.FontInput };
             UiTheme.StyleInput(_machineInput);
@@ -71,7 +73,9 @@ namespace UNCAD.UI
                 Height = 24,
                 ForeColor = UiTheme.Accent,
                 Font = UiTheme.FontBodyBold,
-                Padding = new Padding(6, 4, 4, 0),
+                Padding = new Padding(
+                    6, 4,
+                    4, 0),
                 Text = "请输入机台 ID"
             };
 
@@ -80,7 +84,9 @@ namespace UNCAD.UI
             {
                 Text = "设备 / 回路",
                 Dock = DockStyle.Fill,
-                Padding = new Padding(8, 26, 8, 6)
+                Padding = new Padding(
+                    8, 26,
+                    8, 6)
             };
             _circuit = new ListView
             {
@@ -309,12 +315,16 @@ namespace UNCAD.UI
 
         private void ResizeCircuitColumns()
         {
-            int width = Math.Max(480, _circuit.ClientSize.Width - 6);
-            int nameWidth = Math.Max(180, (int)(width * 0.32));
-            int panelWidth = Math.Max(110, (int)(width * 0.18));
+            // ClientSize 已被自动缩放，但列宽不在自动缩放覆盖范围内，
+            // 因此固定下限与内缩量需手工换算（比例部分 width * N 已随之缩放）。
+            int width = Math.Max(UiTheme.NotAutoScaled(480),
+                _circuit.ClientSize.Width - UiTheme.NotAutoScaled(6));
+            int nameWidth = Math.Max(UiTheme.NotAutoScaled(180), (int)(width * 0.32));
+            int panelWidth = Math.Max(UiTheme.NotAutoScaled(110), (int)(width * 0.18));
             _circuit.Columns[0].Width = nameWidth;
             _circuit.Columns[1].Width = panelWidth;
-            _circuit.Columns[2].Width = Math.Max(180, width - nameWidth - panelWidth);
+            _circuit.Columns[2].Width = Math.Max(UiTheme.NotAutoScaled(180),
+                width - nameWidth - panelWidth);
         }
 
         private static string BuildCircuitDetail(MachineRow row)

@@ -38,7 +38,9 @@ namespace UNCAD.UI
             var fields = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(8, 12, 8, 8),
+                Padding = new Padding(
+                    8, 12,
+                    8, 8),
                 ColumnCount = 2,
                 RowCount = 3
             };

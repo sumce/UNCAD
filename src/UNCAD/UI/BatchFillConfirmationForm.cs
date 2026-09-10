@@ -55,7 +55,7 @@ namespace UNCAD.UI
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                RowTemplate = { Height = 28 }
+                RowTemplate = { Height = UiTheme.NotAutoScaled(28) }
             };
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {

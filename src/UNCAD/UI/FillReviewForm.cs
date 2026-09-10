@@ -28,7 +28,9 @@ namespace UNCAD.UI
             Height = 54,
             AutoEllipsis = true,
             UseMnemonic = false,
-            Padding = new Padding(8, 7, 8, 5),
+            Padding = new Padding(
+                8, 7,
+                8, 5),
             ForeColor = UiTheme.WarningFg,
             BackColor = UiTheme.WarningBg,
             Visible = false
@@ -228,7 +230,7 @@ namespace UNCAD.UI
             UiTheme.StyleGrid(grid);
             grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
             grid.AlternatingRowsDefaultCellStyle.BackColor = UiTheme.WindowBg;
-            grid.RowTemplate.Height = 44;
+            grid.RowTemplate.Height = UiTheme.NotAutoScaled(44);
             grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = 52 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = 80, ReadOnly = true });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", Width = 150, ReadOnly = true });
@@ -359,28 +361,39 @@ namespace UNCAD.UI
         private void OpenCatalogPicker(FillReviewItem item)
         {
             string category = FillReviewData.CategoryName(item.Category);
-            using (var form = new ManualListItemForm(
-                _catalog.SelectableItems, true, category))
+            ListItem selected = ShowWinFormsCatalogPicker(category);
+            if (selected == null) return;
+            ApplyCatalogReplacement(item, category, selected);
+        }
+
+        private void ApplyCatalogReplacement(FillReviewItem item, string category, ListItem selected)
+        {
+            string selectedCategory = (selected.Category ?? "").Trim();
+            if (item.Category != TableFillCategory.Manual
+                && !string.Equals(selectedCategory, category, StringComparison.Ordinal))
             {
-                if (form.ShowDialog(this) != DialogResult.OK
-                    || form.SelectedItem == null) return;
-                string selectedCategory = (form.SelectedItem.Category ?? "").Trim();
-                if (item.Category != TableFillCategory.Manual
-                    && !string.Equals(selectedCategory, category, StringComparison.Ordinal))
-                {
-                    MessageBox.Show(this, "只能选择“" + category + "”类别的固定清单项目。",
-                        "固定清单类别不一致", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-                Data.ReplaceWithCatalogItem(item, form.SelectedItem, _catalog);
-                if (item.Category == TableFillCategory.Cable)
-                {
-                    _synchronizing = true;
-                    _cable.Text = Data.BoqCableModel;
-                    _synchronizing = false;
-                }
-                RefreshItem(item);
-                UpdateDeleteState();
+                MessageBox.Show(this, "只能选择“" + category + "”类别的固定清单项目。",
+                    "固定清单类别不一致", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            Data.ReplaceWithCatalogItem(item, selected, _catalog);
+            if (item.Category == TableFillCategory.Cable)
+            {
+                _synchronizing = true;
+                _cable.Text = Data.BoqCableModel;
+                _synchronizing = false;
+            }
+            RefreshItem(item);
+            UpdateDeleteState();
+        }
+
+        private ListItem ShowWinFormsCatalogPicker(string category)
+        {
+            using (var form = new ManualListItemForm(_catalog.SelectableItems, true, category))
+            {
+                if (form.ShowDialog(this) != DialogResult.OK || form.SelectedItem == null)
+                    return null;
+                return form.SelectedItem;
             }
         }
 

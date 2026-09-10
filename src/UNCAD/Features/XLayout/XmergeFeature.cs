@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
@@ -19,6 +17,7 @@ namespace UNCAD.Features.XLayout
         protected override void Execute(CadContext ctx)
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.Merge);
+
             using (var form = new XmergeForm())
             {
                 if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)

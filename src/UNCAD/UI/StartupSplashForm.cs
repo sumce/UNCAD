@@ -258,7 +258,7 @@ namespace UNCAD.UI
                 logoWidth,
                 logoHeight);
 
-            using (var wordFont = new Font("Segoe UI", logoHeight * 0.27f,
+            using (var wordFont = new Font(UiTheme.BrandFontFamily, logoHeight * 0.27f,
                 FontStyle.Bold, GraphicsUnit.Pixel))
             {
                 SizeF wordSize = graphics.MeasureString("UNSIAO", wordFont);
@@ -374,7 +374,7 @@ namespace UNCAD.UI
         {
             float progress = Ease(Progress(ElapsedMilliseconds, 2250, 450));
             if (progress <= 0f) return;
-            using (var font = new Font("Segoe UI", Math.Max(14f, logoHeight * 0.10f),
+            using (var font = new Font(UiTheme.BrandFontFamily, Math.Max(14f, logoHeight * 0.10f),
                 FontStyle.Regular, GraphicsUnit.Pixel))
             using (var brush = new SolidBrush(Color.FromArgb((int)(150 * progress),
                 70, 78, 86)))

@@ -51,7 +51,9 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Top,
                 Height = 48,
-                Padding = new Padding(10, 8, 10, 4),
+                Padding = new Padding(
+                    10, 8,
+                    10, 4),
                 Text = "未匹配项目 " + _requests.Count + " 项，替代规格待确认。",
                 AutoEllipsis = true
             };

@@ -31,7 +31,7 @@ namespace UNCAD.UI
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                RowTemplate = { Height = 34 }
+                RowTemplate = { Height = UiTheme.NotAutoScaled(34) }
             };
             AddColumn(grid, "命令", nameof(CommandHelpEntry.Command), 14);
             AddColumn(grid, "名称", nameof(CommandHelpEntry.Name), 16);

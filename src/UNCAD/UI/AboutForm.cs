@@ -51,8 +51,10 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Top,
                 Height = 82,
-                BackColor = Color.White,
-                Padding = new Padding(18, 10, 18, 8)
+                BackColor = UiTheme.Surface,
+                Padding = new Padding(
+                    18, 10,
+                    18, 8)
             };
             var mark = new BrandMarkControl
             {
@@ -64,7 +66,7 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 2,
-                BackColor = Color.White
+                BackColor = UiTheme.Surface
             };
             copy.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
             copy.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
@@ -205,7 +207,9 @@ namespace UNCAD.UI
                 AutoSize = true,
                 ColumnCount = 2,
                 RowCount = rows,
-                Padding = new Padding(4, 8, 4, 8)
+                Padding = new Padding(
+                    4, 8,
+                    4, 8)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));

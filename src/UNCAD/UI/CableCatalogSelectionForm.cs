@@ -45,13 +45,17 @@ namespace UNCAD.UI
                 Dock = DockStyle.Top,
                 Height = 34,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(8, 0, 8, 0)
+                Padding = new Padding(
+                    8, 0,
+                    8, 0)
             };
             var searchPanel = new Panel
             {
                 Dock = DockStyle.Top,
                 Height = 42,
-                Padding = new Padding(8, 7, 8, 7)
+                Padding = new Padding(
+                    8, 7,
+                    8, 7)
             };
             searchPanel.Controls.Add(_search);
             UiTheme.StyleInput(_search);

@@ -18,7 +18,7 @@ namespace UNCAD.UI
                 new Size(560, 460), new Size(460, 320));
             BackColor = UiTheme.WindowBg;
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 74, BackColor = Color.White,
+            var header = new Panel { Dock = DockStyle.Top, Height = 74, BackColor = UiTheme.Surface,
                 Padding = new Padding(18, 12, 18, 8) };
             header.Controls.Add(new Label
             {

@@ -95,7 +95,9 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                Padding = new Padding(8, 7, 8, 5)
+                Padding = new Padding(
+                    8, 7,
+                    8, 5)
             };
             filters.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
             filters.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -127,7 +129,9 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 Height = 44,
                 ColumnCount = 4,
-                Padding = new Padding(10, 6, 10, 4)
+                Padding = new Padding(
+                    10, 6,
+                    10, 4)
             };
             quantityBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
             quantityBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
@@ -172,7 +176,8 @@ namespace UNCAD.UI
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, replacement ? 0 : 44));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute,
+                replacement ? 0 : 44));
             content.Controls.Add(_categoryTabs, 0, 0);
             content.Controls.Add(filters, 0, 1);
             content.Controls.Add(_list, 0, 2);
