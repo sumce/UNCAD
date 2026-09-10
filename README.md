@@ -304,7 +304,7 @@ Current 2.4.5 builds publish 25 commands and intentionally do not include the re
 | `U1F` | — | 生成单图框清单和属性，完成后自动更新 XLSX |
 | `U1U` | — | 单框或多图框批量更新，完成后自动更新 XLSX |
 | `U1DWG` | — | 框选多个图框，按机台ID分组并横向导出 DWG |
-| `U1C` | — | 按统一设置中的参数绘制软管 |
+| `U1C` | — | 按统一设置中的管径绘制线管标注（同时更新图框内 Ruanguan 软管块长度） |
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
 | `U1SET` | — | 打开全部功能的统一设置中心 |

@@ -1,6 +1,8 @@
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 using UNCAD.Features.ConfigCenter;
 using UNCAD.Infra;
@@ -63,6 +65,27 @@ namespace UNCAD.Features.Unq
             string side = Settings.Get(ConfigKeys.UnqSide, "1");
             ProductMetadata.EnsureCommandAllowed(commandName);
 
+            // 标注第一行写固定清单的「1.名称」，所以规格必须先在清单里找到；
+            // 找不到就没有可写的型号，按 D-016 直接中止，绝不写一行没有编码的标注。
+            if (!BridgeLabelFormatter.TryParseMillimetreLabel(content, out string spec,
+                out double millimetres))
+            {
+                ctx.Write("\n[" + commandName + "] 无法解析桥架规格“" + content
+                    + "”，已取消。");
+                return;
+            }
+            ListItem catalogItem = ListItemReader.EmbeddedCatalogIndex
+                .FindBridge(BoqCatalogIndex.NormalizeBridgeSpec(spec));
+            string model = BoqFeatureName.Extract(catalogItem?.Feature);
+            if (catalogItem == null || model.Length == 0)
+            {
+                ctx.Write("\n[" + commandName + "] 固定清单中没有桥架规格“" + spec
+                    + "”的可标注项目，已取消。请在固定清单中补充对应项目后重试。");
+                return;
+            }
+            string label = AnnotationLabelPair.Build(model,
+                BridgeLabelFormatter.FormatLengthText(millimetres));
+
             var ids = SelectionService.PickCurvesWithOffset(ctx,
                 "请选择基准线段或 [设置红线距离(D)]: ",
                 "\n请输入红线距基线距离", ref lineOff, value =>
@@ -77,6 +100,7 @@ namespace UNCAD.Features.Unq
 
             ConfigPrinter.Print(ctx, commandName,
                 ("规格", "\"" + content + "\""),
+                ("清单型号", "\"" + model + "\""),
                 ("高度", TextFormatter.FormatNum(hgt)),
                 ("红线偏移", TextFormatter.FormatNum(lineOff)),
                 ("文字偏移", TextFormatter.FormatNum(textOff)),
@@ -90,7 +114,9 @@ namespace UNCAD.Features.Unq
                 Above = side != "0",
                 ColorIndex = 1,
                 AnnotationKind = "U1Q",
-                LabelFactory = _ => content
+                LabelFactory = _ => label,
+                // 旧图纸上的单行“桥架200*100 2500mm”要能被认出来替换掉。
+                LegacyLabelKey = AnnotationLabelPair.CollapseText
             });
 
             SelectionService.ClearPickFirst(ctx);

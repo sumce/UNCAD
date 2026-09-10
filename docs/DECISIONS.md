@@ -151,3 +151,24 @@ rewrite an existing entry.
   (`StartupSplashForm`); removing that package would require rewriting the
   splash to its existing `StartupSplashCanvas` fallback and updating the
   bundle payload, installer, and packaging tests together.
+
+## D-018: U1Q/U1C Labels Are Two-Line MTEXT Carrying The Catalog Name (2026-09-10)
+
+- Status: accepted
+- Decision: bridge (`U1Q1/U1Q2/U1Q4`) and conduit (`U1C`) annotations are
+  written as a two-line MTEXT — line 1 is the full fixed-catalog `1.名称`
+  value for the selected specification, line 2 is the length. Alignment stays
+  bottom-centre (or top-centre below the line) so the block attaches at the
+  same point the single-line `DBText` used to. A specification with no
+  catalog row stops the command (`U1Q`) or aborts with a message (`U1C`)
+  instead of writing an unlabelled annotation.
+- Consequence: the statistics engine only understands the single-line forms
+  (`桥架200*100 2500mm`, `⌀20线管 2000mm`), so the reader
+  (`StatisticsTextReader`) pairs the two lines back into that form per MTEXT.
+  Pairing is strict — line 1 must be a catalog bridge/conduit name and line 2
+  must be a bare length — so a lone `2000mm` and every single-line legacy
+  label still count as a cable. Re-running `U1Q*`/`U1C` replaces the legacy
+  single-line labels in the command's own selection; nothing else is migrated
+  automatically. `Φ32` resolves through the catalog `别名1` to the `38mm`
+  row, so a `U1C` run at diameter 32 labels the drawing with that row's name
+  and the statistics report the matching `⌀38线管`.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections;
 using Autodesk.AutoCAD.DatabaseServices;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 
 namespace UNCAD.Cad
@@ -28,7 +29,14 @@ namespace UNCAD.Cad
             }
             if (includeMText && entity is MText mtext)
             {
-                AddLines(lines, TextParser.SplitMTextLines(mtext.Contents));
+                // U1Q/U1C 的两行标注（型号 + 长度）必须先按 MTEXT 为单位配对还原成
+                // 单行，统计引擎才认得；不成立的行原样保留，所以旧的单行标注和
+                // 孤立的 2000mm 仍然按电缆统计。配对只在本实体内部进行，
+                // 不会跨实体把相邻的两段文字吞并。
+                // 先逐行清除格式码，否则 {\C1;型号} 这种写法匹配不上清单型号。
+                AddLines(lines, AnnotationLabelPair.CollapseLines(
+                    TextParser.SplitMTextLines(mtext.Contents)
+                        .ConvertAll(TextParser.CleanMText)));
                 return;
             }
             if (!includeDimension) return;

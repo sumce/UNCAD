@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
+using UNCAD.Core.Fill;
 using UNCAD.Infra;
 
 namespace UNCAD.Cad
@@ -16,6 +17,14 @@ namespace UNCAD.Cad
         public bool Above { get; set; }
         public short ColorIndex { get; set; }
         public Func<double, string> LabelFactory { get; set; }
+
+        /// <summary>
+        /// 旧版重复标注的比对键：把标注内容折算成旧版单行写法。
+        /// 两行标注必须提供，否则旧图纸上同位置的旧单行标注识别不出来、
+        /// 重跑一次就会留下两份。为空时按内容原样比较。
+        /// </summary>
+        public Func<string, string> LegacyLabelKey { get; set; }
+
         /// <summary>U1Q or U1C; repeated runs replace prior output for each source.</summary>
         public string AnnotationKind { get; set; }
     }
@@ -152,7 +161,8 @@ namespace UNCAD.Cad
                     continue;
                 }
 
-                DBText text;
+                Entity text;
+                string labelKey;
                 try
                 {
                     Curve labelCurve = selected.LabelCurve;
@@ -165,7 +175,9 @@ namespace UNCAD.Cad
                     Point3d textPoint = GeoMath.Polar(curvePoint,
                         GeoMath.SideDirection(textAngle, options.Above),
                         options.TextOffset);
-                    text = EntityFactory.DBText(ctx, options.LabelFactory(length), textPoint,
+                    string label = options.LabelFactory(length);
+                    labelKey = LegacyKey(options, label);
+                    text = CreateLabel(ctx, label, textPoint,
                         options.TextHeight, textAngle,
                         options.Above ? AttachmentPoint.BottomCenter
                             : AttachmentPoint.TopCenter,
@@ -199,7 +211,8 @@ namespace UNCAD.Cad
                     // Remove output produced by pre-metadata versions as well. The
                     // generated ObjectIds are excluded so a metadata registration
                     // failure cannot erase the result we just added.
-                    RemoveLegacyDuplicates(transaction, legacy, text, selected.Entities);
+                    RemoveLegacyDuplicates(transaction, legacy, text, labelKey,
+                        options, selected.Entities);
                     ErasePrevious(transaction, previous, id.Handle.ToString());
                     selected.Detach();
                     count++;
@@ -335,7 +348,8 @@ namespace UNCAD.Cad
             public ObjectId Id;
             public bool IsText;
             public string Text;
-            public Point3d Position;
+            /// <summary>旧标注落在哪个点上；DBText 的插入点与对齐点都要看。</summary>
+            public Point3d[] TextAnchors;
             public Type CurveType;
             public double Length;
             public Point3d ExtentsMin;
@@ -343,7 +357,7 @@ namespace UNCAD.Cad
         }
 
         /// <summary>
-        /// One pass over the space collecting untagged, same-colour DBText and
+        /// One pass over the space collecting untagged, same-colour DBText/MText and
         /// Curve snapshots. Older versions did not write metadata, so their
         /// exact-overlap output cannot be associated by source handle.
         /// </summary>
@@ -366,7 +380,20 @@ namespace UNCAD.Cad
                     result.Add(new LegacyCandidate
                     {
                         Id = id, IsText = true, Text = text.TextString,
-                        Position = text.Position
+                        TextAnchors = DbTextAnchors(text.Position, text.AlignmentPoint,
+                            text.Justify)
+                    });
+                    continue;
+                }
+                // 两行标注是 MTEXT；旧版本可能已经被手工改写成 MTEXT 却没有元数据，
+                // 同样要纳入重复判定。
+                if (candidate is MText mtext)
+                {
+                    if (mtext.ColorIndex != colorIndex) continue;
+                    result.Add(new LegacyCandidate
+                    {
+                        Id = id, IsText = true, Text = mtext.Contents,
+                        TextAnchors = new[] { mtext.Location }
                     });
                     continue;
                 }
@@ -393,18 +420,20 @@ namespace UNCAD.Cad
         /// freshly generated ObjectIds can never be erased.
         /// </summary>
         private static void RemoveLegacyDuplicates(Transaction transaction,
-            List<LegacyCandidate> legacy, DBText currentText,
-            IEnumerable<Entity> currentCurves)
+            List<LegacyCandidate> legacy, Entity currentText, string currentKey,
+            ParallelAnnotationOptions options, IEnumerable<Entity> currentCurves)
         {
             if (legacy == null || legacy.Count == 0) return;
             Entity[] generated = (currentCurves ?? Enumerable.Empty<Entity>()).ToArray();
+            Point3d[] currentAnchors = TextAnchors(currentText);
             foreach (LegacyCandidate candidate in legacy)
             {
                 if (candidate.IsText)
                 {
-                    if (string.Equals(candidate.Text, currentText.TextString,
+                    // 新旧写法不同（旧单行 / 新两行），所以先都折算成旧单行写法再比。
+                    if (string.Equals(LegacyKey(options, candidate.Text), currentKey,
                             StringComparison.Ordinal)
-                        && SamePoint(candidate.Position, currentText.Position))
+                        && SharesAnchor(candidate.TextAnchors, currentAnchors))
                         EraseLegacy(transaction, candidate.Id);
                     continue;
                 }
@@ -438,6 +467,56 @@ namespace UNCAD.Cad
 
         private static bool SamePoint(Point3d first, Point3d second)
             => first.DistanceTo(second) <= 1e-6;
+
+        /// <summary>
+        /// 生成标注实体：两行用 MTEXT（DBText 会把 \P 原样画成反斜杠加 P），
+        /// 单行仍用 DBText，保持可直接编辑、与旧读取路径兼容。
+        /// </summary>
+        private static Entity CreateLabel(CadContext ctx, string label, Point3d anchor,
+            double height, double rotation, AttachmentPoint alignment, short colorIndex,
+            ObjectId styleId)
+        {
+            return label.IndexOf(AnnotationLabelPair.Separator,
+                StringComparison.Ordinal) >= 0
+                ? (Entity)EntityFactory.MText(ctx, label, anchor, height, rotation,
+                    alignment, colorIndex, styleId)
+                : EntityFactory.DBText(ctx, label, anchor, height, rotation,
+                    alignment, colorIndex, styleId);
+        }
+
+        /// <summary>把标注内容折算成旧版单行写法；调用方未提供时原样返回。</summary>
+        private static string LegacyKey(ParallelAnnotationOptions options, string label)
+        {
+            if (options.LegacyLabelKey == null) return label ?? "";
+            return options.LegacyLabelKey(label) ?? "";
+        }
+
+        /// <summary>
+        /// DBText 的插入点与对齐点都可能承载实际位置（对齐方式不是 BaseLeft 时
+        /// 生效的是对齐点），所以两个都作为锚点候选；任一相同即视为同一位置。
+        /// </summary>
+        private static Point3d[] DbTextAnchors(Point3d position, Point3d alignmentPoint,
+            AttachmentPoint justify)
+            => justify == AttachmentPoint.BaseLeft
+                ? new[] { position }
+                : new[] { position, alignmentPoint };
+
+        private static Point3d[] TextAnchors(Entity text)
+        {
+            if (text is DBText db)
+                return DbTextAnchors(db.Position, db.AlignmentPoint, db.Justify);
+            if (text is MText mtext) return new[] { mtext.Location };
+            return new Point3d[0];
+        }
+
+        private static bool SharesAnchor(Point3d[] first, Point3d[] second)
+        {
+            if (first == null || second == null) return false;
+            foreach (Point3d a in first)
+                foreach (Point3d b in second)
+                    if (SamePoint(a, b)) return true;
+            return false;
+        }
 
         private static bool IsSupported(Curve curve)
             => curve is Line || curve is Polyline || curve is Polyline2d;

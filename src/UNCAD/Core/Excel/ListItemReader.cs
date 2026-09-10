@@ -37,6 +37,8 @@ namespace UNCAD.Core.Excel
             "UNCAD.Resources.embedded_catalog.tsv";
         private static readonly Lazy<List<ListItem>> EmbeddedCatalog =
             new Lazy<List<ListItem>>(LoadEmbeddedCatalog, true);
+        private static readonly Lazy<BoqCatalogIndex> EmbeddedIndex =
+            new Lazy<BoqCatalogIndex>(() => new BoqCatalogIndex(EmbeddedCatalog.Value), true);
 
         /// <summary>
         /// 内嵌固定清单：数据在编译期打包进插件，随版本发布，用户不再提供清单 Excel。
@@ -44,6 +46,12 @@ namespace UNCAD.Core.Excel
         /// </summary>
         public static List<ListItem> ReadEmbedded()
             => CloneItems(EmbeddedCatalog.Value);
+
+        /// <summary>
+        /// 内嵌固定清单的只读索引，全进程只构建一次。命令运行时按规格查型号用它
+        /// （U1Q/U1C 标注的第一行取清单「1.名称」）。
+        /// </summary>
+        public static BoqCatalogIndex EmbeddedCatalogIndex => EmbeddedIndex.Value;
 
         private static List<ListItem> LoadEmbeddedCatalog()
         {

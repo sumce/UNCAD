@@ -68,6 +68,13 @@ namespace UNCAD.Core.Text
         }
 
         /// <summary>
+        /// 纯长度写法（整数、结尾 0、mm）。三类长度共用同一格式约定，因此
+        /// “这一行是不是长度”也只有这一个判据：两行标注配对、电缆整行匹配都用它。
+        /// </summary>
+        public static bool IsBareLengthToken(string s)
+            => ExtractCableLength(s).HasValue;
+
+        /// <summary>
         /// 兼容旧桥架标注“桥架宽*高 格数格”；不允许前缀、后缀或中间备注。
         /// </summary>
         public static bool TryExtractBridgeLabel(string s, out string spec, out double grids)

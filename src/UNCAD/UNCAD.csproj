@@ -15,11 +15,11 @@
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
     <AssemblyCompany>UNSIAO.Ltd</AssemblyCompany>
-    <AssemblyVersion>2.4.5.0</AssemblyVersion>
-    <FileVersion>2.4.5.0</FileVersion>
-    <Version>2.4.5</Version>
+    <AssemblyVersion>2.4.6.0</AssemblyVersion>
+    <FileVersion>2.4.6.0</FileVersion>
+    <Version>2.4.6</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
-    <InformationalVersion>2.4.5+build.$(BuildTimestampCompact)</InformationalVersion>
+    <InformationalVersion>2.4.6+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->

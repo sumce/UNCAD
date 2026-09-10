@@ -270,11 +270,7 @@ namespace UNCAD.Core.Fill
         }
 
         private static string NormalizeBridgeSpec(string value)
-        {
-            string s = value ?? "";
-            if (s.StartsWith("桥架", StringComparison.Ordinal)) s = s.Substring(2);
-            return s;
-        }
+            => BoqCatalogIndex.NormalizeBridgeSpec(value);
 
         private static string ExtractNumber(string value)
         {

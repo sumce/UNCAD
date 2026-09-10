@@ -3,6 +3,8 @@ using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 using UNCAD.Features.ConfigCenter;
 using UNCAD.Features.Fill;
@@ -39,6 +41,20 @@ namespace UNCAD.Features.Conduit
             double textOff = Settings.GetDouble(ConfigKeys.ConduitTextOff, 0.0);
             string side = Settings.Get(ConfigKeys.ConduitSide, "1");
 
+            // 标注第一行写固定清单的「1.名称」，管径必须先在清单里找到；
+            // 找不到就没有可写的型号，按 D-016 直接中止。
+            ListItem catalogItem = ListItemReader.EmbeddedCatalogIndex
+                .FindRigidConduit(diameter);
+            string model = BoqFeatureName.Extract(catalogItem?.Feature);
+            if (catalogItem == null || model.Length == 0)
+            {
+                ctx.Write("\n[U1C] 固定清单中没有 ⌀" + diameter
+                    + " 线管的可标注项目，已取消。请在固定清单中补充对应项目后重试。");
+                return;
+            }
+            string label = AnnotationLabelPair.Build(model,
+                ConduitLabelFormatter.LengthText);
+
             var ids = SelectionService.PickCurvesWithOffset(ctx,
                 "请选择线管基准线或 [设置紫线距离(D)]: ",
                 "\n请输入紫线距基线距离", ref lineOff, value =>
@@ -66,6 +82,7 @@ namespace UNCAD.Features.Conduit
 
             ConfigPrinter.Print(ctx, "U1C",
                 ("管径", "⌀" + diameter),
+                ("清单型号", "\"" + model + "\""),
                 ("高度", TextFormatter.FormatNum(hgt)),
                 ("紫线偏移", TextFormatter.FormatNum(lineOff)),
                 ("文字偏移", TextFormatter.FormatNum(textOff)),
@@ -85,7 +102,9 @@ namespace UNCAD.Features.Conduit
                         Above = side != "0",
                         ColorIndex = 6,
                         AnnotationKind = "U1C",
-                        LabelFactory = _ => ConduitLabelFormatter.Build(diameter)
+                        LabelFactory = _ => label,
+                        // 旧图纸上的单行“⌀20线管 2000mm”要能被认出来替换掉。
+                        LegacyLabelKey = AnnotationLabelPair.CollapseText
                     });
                 transaction.Commit();
             }

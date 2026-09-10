@@ -87,6 +87,74 @@ namespace UNCAD.Tests
             Assert.Equal("20", result[1].Quantity);
         }
 
+        [Fact]
+        public void MergeRows_NameOnlyMatchKeepsQuantityButNotTheCatalogCode()
+        {
+            // 本次一格电缆长度都没测到、框选范围又不完整 → CableState = Unknown，
+            // 于是走进“保留旧行”分支。此时规划行的电缆型号在清单里查不到，没有编码，
+            // 名称回退成通用的“电缆”；旧行也叫“电缆”但带着 1.10 的编码。
+            //
+            // 只凭“电缆”这两个字根本证明不了两行是同一根电缆，所以旧编码不能借过来——
+            // 借了就等于给 3*185+1*95 盖上 3*10 的编码，而两道写出闸都会放行。
+            var statistics = new CableStatResult
+            {
+                CableState = MeasurementState.Unknown,
+                BridgeState = MeasurementState.ConfirmedEmpty,
+                ConduitState = MeasurementState.ConfirmedEmpty
+            };
+            var planned = new List<TableFillRow>
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.Cable,
+                    SortOrder = 100,
+                    Name = "电缆",
+                    Code = "",
+                    Quantity = "",
+                    CatalogMatched = false
+                }
+            };
+            var existing = new[]
+            {
+                new TableFillRow
+                {
+                    Category = TableFillCategory.Cable,
+                    SortOrder = 1,
+                    Name = "电缆",
+                    Code = "1.10",
+                    Quantity = "12.5",
+                    CatalogMatched = true
+                }
+            };
+
+            TableFillRow row = Assert.Single(
+                FillUpdateRowMerger.MergeRows(planned, existing, statistics));
+
+            Assert.Equal("12.5", row.Quantity);  // 没测到就沿用旧数量
+            Assert.Equal("", row.Code);          // 身份不跨行传染
+            Assert.False(row.CatalogMatched);
+        }
+
+        [Fact]
+        public void MergeRows_SameCodeKeepsQuantityAndIdentity()
+        {
+            // 旧行与新行编码一致时，才是同一项材料，数量和身份都该保留。
+            var statistics = new CableStatResult
+            {
+                CableState = MeasurementState.Unknown,
+                BridgeState = MeasurementState.ConfirmedEmpty,
+                ConduitState = MeasurementState.ConfirmedEmpty
+            };
+
+            List<TableFillRow> result = FillUpdateRowMerger.MergeRows(
+                new List<TableFillRow> { Cable("") }, new[] { Cable("12.5") }, statistics);
+
+            TableFillRow row = Assert.Single(result);
+            Assert.Equal("12.5", row.Quantity);
+            Assert.Equal("1.1", row.Code);
+            Assert.True(row.CatalogMatched);
+        }
+
         [Theory]
         [InlineData("电缆桥架200*100", "")]
         [InlineData("电缆桥架200*100", "2.1")]

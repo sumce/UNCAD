@@ -20,8 +20,10 @@ namespace UNCAD.Features.Fill
             {
                 if (id.IsNull || !id.IsValid || id.IsErased) continue;
                 Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
+                // 只在迁移结果仍能被统计读出时才改写图形文字；否则留着旧格数写法
+                // （统计照样认），不要把它改成读不出的样子。
                 if (entity is DBText text
-                    && BridgeLabelFormatter.TryMigrateLegacyGrid(text.TextString,
+                    && BridgeLabelFormatter.TryMigrateLegacyGridReadable(text.TextString,
                         mmPerGrid, out string dbTextValue))
                 {
                     text.UpgradeOpen();
@@ -29,7 +31,7 @@ namespace UNCAD.Features.Fill
                     changed++;
                 }
                 else if (entity is MText mtext
-                    && BridgeLabelFormatter.TryMigrateLegacyGrid(
+                    && BridgeLabelFormatter.TryMigrateLegacyGridReadable(
                         TextParser.CleanMText(mtext.Contents), mmPerGrid,
                         out string mTextValue))
                 {

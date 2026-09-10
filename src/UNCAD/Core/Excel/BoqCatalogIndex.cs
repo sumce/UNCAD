@@ -129,6 +129,17 @@ namespace UNCAD.Core.Excel
                 .Replace("×", "*").Replace("x", "*").Replace("X", "*")
                 .ToUpperInvariant();
 
+        /// <summary>
+        /// 桥架规格查清单用的键：图上写法带“桥架”前缀（桥架200*100），
+        /// 固定清单别名不带（200*100）。图上标注、统计与清单查询共用这一条规则。
+        /// </summary>
+        public static string NormalizeBridgeSpec(string value)
+        {
+            string text = value ?? "";
+            return text.StartsWith("桥架", StringComparison.Ordinal)
+                ? text.Substring(2) : text;
+        }
+
         public static string NormalizeCable(string cable)
         {
             string value = (cable ?? "").Trim();

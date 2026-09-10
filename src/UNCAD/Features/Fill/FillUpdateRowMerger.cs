@@ -61,11 +61,16 @@ namespace UNCAD.Features.Fill
                 if (current != null)
                 {
                     matchedPlanned.Add(current);
+                    // 没测到就沿用旧数量，这是这条分支存在的理由。
                     if (string.IsNullOrWhiteSpace(current.Quantity))
                         current.Quantity = old.Quantity;
-                    if (string.IsNullOrWhiteSpace(current.Code)) current.Code = old.Code;
-                    if (!current.CatalogMatched && old.CatalogMatched)
-                        current.CatalogMatched = true;
+                    // 清单身份不继承。能走到这里说明规划行还没有编码，匹配就只可能是
+                    // 靠名称（SameMaterial 在两边都有编码时比的是编码，那种情况
+                    // CatalogMatched 本来就是 true）。而名称相同——比如都叫“电缆”
+                    // ——证明不了两行是同一项材料，借编码等于给一个规格盖上另一个
+                    // 规格的编码；写出前的两道闸只看 CatalogMatched，会直接放行，
+                    // 于是错编码进 CAD 表格并导出到 BOQ（违反 D-016）。
+                    // 旧行本身仍由下面的 planned.Add(old) 原样保留。
                     continue;
                 }
                 planned.Add(old);

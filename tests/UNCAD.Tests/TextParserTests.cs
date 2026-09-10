@@ -28,6 +28,21 @@ namespace UNCAD.Tests
         }
 
         [Theory]
+        [InlineData("2000mm", true)]
+        [InlineData(" 2500mm ", true)]
+        [InlineData("2005mm", false)]      // 非 10 的倍数
+        [InlineData("2000m", false)]       // 必须 mm
+        [InlineData("长度 2000mm", false)] // 带前缀不算
+        [InlineData("梯形桥架200Wx100H", false)]
+        [InlineData("", false)]
+        [InlineData(null, false)]
+        public void IsBareLengthToken_OnlyAcceptsTheSharedLengthFormat(
+            string input, bool expected)
+        {
+            Assert.Equal(expected, TextParser.IsBareLengthToken(input));
+        }
+
+        [Theory]
         [InlineData("桥架200*100 10格", "桥架200*100")]
         [InlineData("桥架 300 x 150 5格", "桥架300*150")]
         [InlineData("桥架300X150 5格", "桥架300*150")]

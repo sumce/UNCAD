@@ -27,7 +27,8 @@ namespace UNCAD.Tests
                 Description = "CAD中的原描述",
                 Unit = "套",
                 Quantity = "2",
-                Code = "8.9",
+                // 8.2/8.3 才是插座编码；有编码时由编码说了算（见 IsOutlet）。
+                Code = "8.2",
                 CatalogMatched = false
             };
 
@@ -39,8 +40,47 @@ namespace UNCAD.Tests
             Assert.Equal("CAD中的原描述", outlet.Description);
             Assert.Equal("套", outlet.Unit);
             Assert.Equal("2", outlet.Quantity);
-            Assert.Equal("8.9", outlet.Code);
+            Assert.Equal("8.2", outlet.Code);
             Assert.True(outlet.CatalogMatched);
+        }
+
+        [Theory]
+        [InlineData("8.11", "插座漏电相序检测仪", false)]  // 名字带“插座”，但不是插座
+        [InlineData("8.9", "绝缘测试仪（数字式摇表）", false)]
+        [InlineData("8.2", "插座", true)]
+        [InlineData("8.3", "插座", true)]
+        [InlineData("", "插座", true)]                     // 老图行，无编码，靠名字
+        [InlineData("", "电缆", false)]
+        public void IsOutlet_LetsTheCatalogCodeDecideWhenTheRowHasOne(
+            string code, string name, bool expected)
+        {
+            var row = new TableFillRow
+            {
+                Category = TableFillCategory.Manual,
+                Name = name,
+                Code = code
+            };
+
+            Assert.Equal(expected, UpdateOutletPolicy.IsOutlet(row));
+        }
+
+        [Fact]
+        public void PreserveExisting_KeepsACatalogRowNamedLikeASocket()
+        {
+            // 用户在清单确认里加的 8.11「插座漏电相序检测仪」不能被当成插座删掉。
+            var added = new TableFillRow
+            {
+                Category = TableFillCategory.Manual,
+                Name = "插座漏电相序检测仪",
+                Code = "8.11",
+                Quantity = "1",
+                CatalogMatched = true
+            };
+
+            List<TableFillRow> result = UpdateOutletPolicy.PreserveExisting(
+                new[] { added }, new TableFillRow[0]);
+
+            Assert.Equal("8.11", Assert.Single(result).Code);
         }
 
         [Fact]

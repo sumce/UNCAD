@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace UNCAD.Core.Fill
 {
@@ -85,6 +86,16 @@ namespace UNCAD.Core.Fill
         private static readonly HashSet<string> OutletCodes =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "8.2", "8.3" };
 
+        private static readonly Regex CatalogCode = new Regex(@"^\d+\.\d+$",
+            RegexOptions.Compiled);
+
+        /// <summary>
+        /// 判定一行是不是受 Device 状态管控的 8.x 插座行。
+        ///
+        /// 有固定清单编码的行由编码说了算：只有 8.2/8.3 是插座。名字兜底只用于
+        /// 没有编码的老行——否则固定清单里的 8.11「插座漏电相序检测仪」会因为名字
+        /// 里带“插座”被当成插座行，用户在清单确认里加进来之后会被策略静默删掉。
+        /// </summary>
         public static bool IsOutlet(TableFillRow row)
         {
             if (row == null) return false;
@@ -93,10 +104,10 @@ namespace UNCAD.Core.Fill
             // U1U reapplies the device outlet policy.
             if (IsOutletPanel(row)) return false;
             if (row.Category == TableFillCategory.Outlet) return true;
-            string name = (row.Name ?? "").Trim();
             string code = (row.Code ?? "").Trim();
-            return name.IndexOf("插座", StringComparison.OrdinalIgnoreCase) >= 0
-                || OutletCodes.Contains(code);
+            if (CatalogCode.IsMatch(code)) return OutletCodes.Contains(code);
+            string name = (row.Name ?? "").Trim();
+            return name.IndexOf("插座", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         public static bool IsOutletPanel(TableFillRow row)
