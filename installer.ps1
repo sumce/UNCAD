@@ -123,7 +123,7 @@ function Get-PackageInfo {
     # keyboard compatibility commands may trigger package loading. Keep this list in exact
     # sync with CommandIds.Registered; BundleLoadingTests enforces that contract.
     $expectedCommands = @(
-        "U1L", "U1LX", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP",
+        "U1L", "U1LX", "U1D", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP",
         "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
@@ -144,6 +144,11 @@ function Get-PackageInfo {
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
+        "System.Text.Json.dll", "System.Text.Encodings.Web.dll",
+        "System.Buffers.dll", "System.Memory.dll",
+        "System.Numerics.Vectors.dll", "System.Runtime.CompilerServices.Unsafe.dll",
+        "Microsoft.Bcl.AsyncInterfaces.dll", "System.Threading.Tasks.Extensions.dll",
+        "System.ValueTuple.dll",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $payloadFiles) {
