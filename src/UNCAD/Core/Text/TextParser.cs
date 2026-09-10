@@ -23,8 +23,10 @@ namespace UNCAD.Core.Text
         private static readonly Regex BridgeLabelRegex = new Regex(
             @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*格$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        // 长度段要求结尾为 0（10 的倍数），与电缆、线管的长度格式约定一致；
+        // 宽/高是规格尺寸，不受该约束。
         private static readonly Regex BridgeMillimetreLabelRegex = new Regex(
-            @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s*mm$",
+            @"^桥架\s*([0-9]+(?:\.[0-9]+)?)\s*[\*xX×]\s*([0-9]+(?:\.[0-9]+)?)\s+([0-9]+0)\s*mm$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static string CleanMText(string s)
@@ -52,13 +54,14 @@ namespace UNCAD.Core.Text
         }
 
         /// <summary>
-        /// 电缆长度：单行文本整行匹配——纯数字 + 结尾 00 + mm（如 1200mm / 3000mm）。
+        /// 电缆长度：单行文本整行匹配——整数 + 结尾 0 + mm（10 的倍数，如 1200mm / 1250mm）。
         /// 除 mm 外必须全是数字："电缆 2000mm 长度"这类带前后缀的文字不算。
+        /// 末尾必须为 0 是三类长度（电缆/桥架/线管）统一的格式约定。
         /// </summary>
         public static double? ExtractCableLength(string s)
         {
             string t = (s ?? "").Trim();
-            var m = Regex.Match(t, @"^([0-9]+00)mm$", RegexOptions.IgnoreCase);
+            var m = Regex.Match(t, @"^([0-9]+0)mm$", RegexOptions.IgnoreCase);
             if (m.Success && m.Groups[1].Success)
                 return double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
             return null;
@@ -137,11 +140,15 @@ namespace UNCAD.Core.Text
             return "⌀" + diameter + "线管";
         }
 
-        /// <summary>线管长度：完整格式“⌀20线管 2000mm”，返回毫米数。</summary>
+        /// <summary>
+        /// 线管长度：完整格式“⌀20线管 2000mm”，返回毫米数。
+        /// 长度段要求结尾为 0（10 的倍数），与电缆、桥架的长度格式约定一致；
+        /// 管径不受该约束。
+        /// </summary>
         public static double? ExtractConduitLength(string s)
         {
             var m = Regex.Match((s ?? "").Trim(),
-                @"^(?:[⌀ØΦ]\s*[0-9]+(?:\.[0-9]+)?\s*线管|线管\s*[0-9]+(?:\.[0-9]+)?)\s*([0-9]+(?:\.[0-9]+)?)\s*mm$",
+                @"^(?:[⌀ØΦ]\s*[0-9]+(?:\.[0-9]+)?\s*线管|线管\s*[0-9]+(?:\.[0-9]+)?)\s*([0-9]+0)\s*mm$",
                 RegexOptions.IgnoreCase);
             if (m.Success)
                 return double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);

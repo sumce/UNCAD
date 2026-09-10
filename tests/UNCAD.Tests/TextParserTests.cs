@@ -16,7 +16,9 @@ namespace UNCAD.Tests
         [InlineData("100mm", 100.0)]
         [InlineData("电缆 2000mm 长度", null)]  // 带前后缀不算（必须纯数字+mm）
         [InlineData("1200mm 备注", null)]
-        [InlineData("1050mm", null)]            // 数字结尾必须 00
+        [InlineData("1050mm", 1050.0)]          // 结尾 0 即可（10 的倍数）
+        [InlineData("1250mm", 1250.0)]
+        [InlineData("2005mm", null)]            // 非 10 的倍数不算
         [InlineData("2000m", null)]             // 必须 mm
         [InlineData("无长度数据", null)]
         [InlineData(null, null)]
