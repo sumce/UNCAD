@@ -91,13 +91,17 @@ namespace UNCAD.Core.Fill
                 string formula = stat.CableFormatted.Count > 1
                     ? TextFormatter.Join(stat.CableFormatted, "+") + "=" + total + "M"
                     : total + "M";
+                // 图框显示带工程前缀的完整型号（ZB-YJV- / ZB-YJVR-，由型号是否含
+                // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目
+                // 特征继续使用不带前缀的清单别名，两者不得互相污染。
                 d[TagCable] = cable.Length > 0
-                    ? cable + "mm²: " + formula
+                    ? CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
                     : formula;
             }
             else
             {
-                if (!preserveCable) d[TagCable] = cable;
+                if (!preserveCable)
+                    d[TagCable] = CableModelDisplay.WithTypePrefix(cable);
             }
 
             if (stat != null && stat.Bridges.Count > 0)

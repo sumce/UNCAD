@@ -111,6 +111,32 @@ namespace UNCAD.Tests
                 v[FrameBlockFiller.TagCable]);
         }
 
+        [Theory]
+        // 工作簿只给芯数规格，图框负责补出工程前缀。
+        [InlineData("3*70+1*35", "ZB-YJV-3*70+1*35")]
+        [InlineData("3*2.5", "ZB-YJVR-3*2.5")]
+        [InlineData("1*16", "1*16")]                      // 接地线不补前缀
+        public void BuildValues_PrependsCableTypePrefix(string workbookCable, string expected)
+        {
+            var row = Row();
+            row.Cable = workbookCable;
+            var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
+            var v = FrameBlockFiller.BuildValues(row, "", stat);
+
+            Assert.Equal(expected + "mm²: 2M", v[FrameBlockFiller.TagCable]);
+        }
+
+        [Fact]
+        public void BuildValues_PrependsCableTypePrefixWithoutStatistics()
+        {
+            // 没有统计文字时图框只写型号，同样要带前缀，保持前后一致。
+            var row = Row();
+            row.Cable = "3*2.5";
+            var v = FrameBlockFiller.BuildValues(row, "", new CableStatResult());
+
+            Assert.Equal("ZB-YJVR-3*2.5", v[FrameBlockFiller.TagCable]);
+        }
+
         [Fact]
         public void BuildValues_WritesBridgeSpecAndTotalLength()
         {
