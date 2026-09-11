@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
@@ -50,6 +51,12 @@ namespace UNCAD.Tests
             Assert.Equal("梯形桥架200Wx100H\\P2500mm", label);
             Assert.Equal(new List<string> { "梯形桥架200Wx100H", "2500mm" },
                 TextParser.SplitMTextLines(label));
+        }
+
+        [Fact]
+        public void TwoLineLabelsUseCompactLineSpacing()
+        {
+            Assert.Equal(0.65, EntityFactory.LabelLineSpacingFactor, 2);
         }
 
         [Fact]

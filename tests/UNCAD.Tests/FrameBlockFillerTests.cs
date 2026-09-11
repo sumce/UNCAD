@@ -138,7 +138,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void BuildValues_WritesBridgeSpecAndTotalLength()
+        public void BuildValues_ResolvesBoqBridgeModelWithoutPlannerSideEffects()
         {
             var stat = StatCalculator.Calculate(new[]
             {
@@ -148,8 +148,21 @@ namespace UNCAD.Tests
             }, 250.0);
             var v = FrameBlockFiller.BuildValues(Row(), "手工桥架信息", stat);
 
-            Assert.Equal("桥架200*100 3M; 桥架400*100 1M",
+            Assert.Equal("梯形桥架200Wx100H 3M; 梯形桥架400Wx100H 1M",
                 v[FrameBlockFiller.TagBridge]);
+        }
+
+        [Fact]
+        public void BuildValues_UnknownBridgeSpecFallsBackToDrawingSpec()
+        {
+            var stat = new CableStatResult();
+            var bridge = new BridgeStat { Spec = "桥架250*80", MmPerGrid = 250.0 };
+            bridge.Grids.Add(10);
+            stat.Bridges.Add(bridge);
+
+            var values = FrameBlockFiller.BuildValues(Row(), "", stat);
+
+            Assert.Equal("桥架250*80 2.5M", values[FrameBlockFiller.TagBridge]);
         }
 
         [Fact]

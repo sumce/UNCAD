@@ -13,9 +13,9 @@ namespace UNCAD.Cad
     {
         /// <summary>
         /// 多行标注的行距系数。AutoCAD 的 MTEXT 单倍行距是字高的 1.66 倍，
-        /// 两行标注按 1.0 写出来太散；0.75 约为 1.25 倍字高，两行看着是一组。
+        /// 0.65 约为 1.08 倍字高，让型号和长度紧凑成组且不重叠。
         /// </summary>
-        public const double LabelLineSpacingFactor = 0.75;
+        public const double LabelLineSpacingFactor = 0.65;
 
         public static Line Line(CadContext ctx, Point3d p1, Point3d p2, short colorIndex = 0)
         {
