@@ -29,7 +29,8 @@ namespace UNCAD.Infra
 
     public static class StatisticsSettings
     {
-        internal const bool DefaultIncludeMText = false;
+        // U1Q/U1C 的两行标注是 MText；新安装默认读取，避免整批漏掉桥架/线管。
+        internal const bool DefaultIncludeMText = true;
         internal const bool DefaultIncludeDimension = true;
 
         public static StatisticsSettingsSnapshot Current()

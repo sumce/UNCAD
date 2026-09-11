@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
+using UNCAD.Features.Fill;
 using Xunit;
 
 namespace UNCAD.Tests
@@ -55,6 +56,68 @@ namespace UNCAD.Tests
             Assert.NotEqual("被调用方修改", output.CopyDefaultRows()[0].Name);
             Assert.Contains("3*2.5", output.CopyDefaultRows()[0].Description);
             Assert.Equal("1", output.DefaultCableMeters);
+        }
+
+        [Fact]
+        public void Request_ClonesBridgeCatalogModel()
+        {
+            var statistics = new CableStatResult();
+            statistics.Bridges.Add(new BridgeStat
+            {
+                Spec = "桥架200*100",
+                CatalogModel = "梯形桥架200Wx100H"
+            });
+
+            var request = new TableGenerationRequest(new MachineRow(),
+                new BoqCatalogIndex(null), statistics, FillPlanningOptions.Default);
+            statistics.Bridges[0].CatalogModel = "已修改";
+
+            Assert.Equal("梯形桥架200Wx100H",
+                request.Statistics.Bridges[0].CatalogModel);
+        }
+
+        [Fact]
+        public void FillTablePlan_PropagatesBridgeBoqModelToFrameStatistics()
+        {
+            CableStatResult statistics = StatCalculator.Calculate(
+                new[] { "桥架200*100 10格" }, 250.0);
+            var catalog = new BoqCatalogIndex(new[]
+            {
+                new ListItem
+                {
+                    Category = "桥架",
+                    Code = "2.6",
+                    Name = "桥架",
+                    Feature = "1.名称:梯形桥架200Wx100H\n2.材质:铝合金",
+                    Unit = "m",
+                    Spec = "200*100"
+                }
+            });
+
+            FillTableModule.Plan(new MachineRow(), catalog, statistics,
+                FillPlanningOptions.Default);
+            Dictionary<string, string> values = FrameBlockFiller.BuildValues(
+                new MachineRow(), "", statistics);
+
+            Assert.Equal("梯形桥架200Wx100H 2.5M",
+                values[FrameBlockFiller.TagBridge]);
+        }
+
+        [Fact]
+        public void Plan_CarriesAutoFillPolicyIntoReview()
+        {
+            FillAutoFillOptions autoFill = FillAutoFillOptions.Create(
+                false, false, false, false, false, false, false);
+            TableGenerationOutput output = TableGenerationModule.Plan(
+                new TableGenerationRequest(new MachineRow(),
+                    new BoqCatalogIndex(null), new CableStatResult(),
+                    FillPlanningOptions.Default, autoFill));
+
+            FillReviewData review = output.CreateReview(new MachineRow(),
+                FillPlanningOptions.Default);
+
+            Assert.Same(autoFill, output.AutoFill);
+            Assert.Same(autoFill, review.AutoFill);
         }
 
         private static ListItem Item(string code, string name, string spec)

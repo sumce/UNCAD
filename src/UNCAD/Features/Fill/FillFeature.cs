@@ -203,7 +203,7 @@ namespace UNCAD.Features.Fill
             // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
             FlexibleConduitCableMap.ApplyTo(picked);
             TableGenerationOutput tablePlan = FillTableModule.Plan(
-                picked, catalog, statistics, options.Planning);
+                picked, catalog, statistics, options.Planning, options.AutoFill);
             WriteCablePlanNote(ctx, picked, tablePlan);
             List<TableFillRow> plannedRows = tablePlan.CopyDefaultRows();
             if (updateMode)
@@ -235,7 +235,7 @@ namespace UNCAD.Features.Fill
                         deviceHasOutlet, deviceOutlet);
             }
             tablePlan = new TableGenerationOutput(socketAdjustedRows,
-                tablePlan.DefaultCableMeters);
+                tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] Device 状态: " + deviceState + "；插座清单: "
                 + (deviceHasOutlet ? "输出 " + (deviceOutlet.Code.Length > 0
@@ -562,6 +562,7 @@ namespace UNCAD.Features.Fill
             bool updateMode = false, Transaction transaction = null)
         {
             if (review == null) return true;
+            if (!review.AutoFill.FlexibleConduit) return true;
             options = options ?? FillPlanningOptions.Default;
             ObjectId[] blockIds = selection?.RuanguanBlockIds ?? Array.Empty<ObjectId>();
             string meters = blockIds.Length == 0 ? ""
@@ -627,6 +628,11 @@ namespace UNCAD.Features.Fill
         internal static void WriteCablePlanNote(CadContext ctx, MachineRow machine,
             TableGenerationOutput tablePlan)
         {
+            if (tablePlan?.AutoFill.Cable == false)
+            {
+                ctx.Write("\n[U1F/U1U] 电缆自动填充已在 U1SET 中关闭。");
+                return;
+            }
             string model = (machine?.Cable ?? "").Trim();
             if (model.Length == 0)
             {
@@ -955,7 +961,8 @@ namespace UNCAD.Features.Fill
                 + row.UpstreamAxis);
 
             List<TableFillRow> plannedRows = TableGenerationModule.Plan(
-                new TableGenerationRequest(row, catalog, statistics, options.Planning))
+                new TableGenerationRequest(row, catalog, statistics, options.Planning,
+                    options.AutoFill))
                 .CopyDefaultRows();
             CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
                 selection?.DeviceBlockIds, out bool previewHasOutlet,

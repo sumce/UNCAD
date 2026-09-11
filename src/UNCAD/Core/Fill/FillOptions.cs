@@ -36,6 +36,45 @@ namespace UNCAD.Core.Fill
             => value > 0 && !double.IsNaN(value) && !double.IsInfinity(value);
     }
 
+    /// <summary>
+    /// BOQ 自动填充类别开关。U1F/U1U 规划清单行时跳过关闭的类别，
+    /// 用户仍可在审阅窗口手动加入固定清单项目；所有最终行继续受 D-016 校验。
+    /// </summary>
+    public sealed class FillAutoFillOptions
+    {
+        private FillAutoFillOptions(bool cable, bool breaker, bool flexibleConduit,
+            bool rigidConduit, bool bridge, bool outletPanel, bool busPlugBox)
+        {
+            Cable = cable;
+            Breaker = breaker;
+            FlexibleConduit = flexibleConduit;
+            RigidConduit = rigidConduit;
+            Bridge = bridge;
+            OutletPanel = outletPanel;
+            BusPlugBox = busPlugBox;
+        }
+
+        /// <summary>默认：插座盘与电盘关闭，其余开启。</summary>
+        public static FillAutoFillOptions Default { get; } =
+            new FillAutoFillOptions(true, false, true, true, true, false, true);
+
+        public bool Cable { get; }
+        public bool Breaker { get; }
+        public bool FlexibleConduit { get; }
+        public bool RigidConduit { get; }
+        public bool Bridge { get; }
+        public bool OutletPanel { get; }
+        public bool BusPlugBox { get; }
+
+        public static FillAutoFillOptions Create(bool cable, bool breaker,
+            bool flexibleConduit, bool rigidConduit, bool bridge,
+            bool outletPanel, bool busPlugBox)
+        {
+            return new FillAutoFillOptions(cable, breaker, flexibleConduit,
+                rigidConduit, bridge, outletPanel, busPlugBox);
+        }
+    }
+
     public sealed class FillRuntimeOptions
     {
         public const int DefaultStartRow = 1;
@@ -47,7 +86,7 @@ namespace UNCAD.Core.Fill
         private FillRuntimeOptions(string machineWorkbookPath,
             int startRow, int clearRows,
             double textHeight, double mmPerGrid, string bridgeInfo,
-            FillPlanningOptions planning)
+            FillPlanningOptions planning, FillAutoFillOptions autoFill)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -56,6 +95,7 @@ namespace UNCAD.Core.Fill
             MmPerGrid = mmPerGrid;
             BridgeInfo = bridgeInfo;
             Planning = planning;
+            AutoFill = autoFill;
         }
 
         public string MachineWorkbookPath { get; }
@@ -65,10 +105,12 @@ namespace UNCAD.Core.Fill
         public double MmPerGrid { get; }
         public string BridgeInfo { get; }
         public FillPlanningOptions Planning { get; }
+        public FillAutoFillOptions AutoFill { get; }
 
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
-            string bridgeInfo, FillPlanningOptions planning)
+            string bridgeInfo, FillPlanningOptions planning,
+            FillAutoFillOptions autoFill = null)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -78,7 +120,8 @@ namespace UNCAD.Core.Fill
                     TableFillFormatter.DefaultTextHeight),
                 PositiveWithin(mmPerGrid, MaximumMmPerGrid, 250.0),
                 (bridgeInfo ?? "").Trim(),
-                planning ?? FillPlanningOptions.Default);
+                planning ?? FillPlanningOptions.Default,
+                autoFill ?? FillAutoFillOptions.Default);
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)

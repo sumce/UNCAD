@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.5 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
+Current 2.4.6 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,12 @@ Current 2.4.5 builds publish 25 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.6
+
+- `U1Q1/U1Q2/U1Q4` 与 `U1C` 使用“固定清单型号 + 长度”的两行 MTEXT，统计读取时严格配对还原。
+- 未匹配的桥架、线管和清单材料在 CAD/BOQ 写入前停止，避免无编码项目进入图纸。
+- 修复 U1U 清单编码继承、旧桥架格数迁移和固定编码插座判定问题。
 
 ## v2.4.5
 
@@ -296,9 +302,8 @@ Current 2.4.5 builds publish 25 commands and intentionally do not include the re
 | 新版命令 | 保留的传统命令 | 功能 |
 | --- | --- | --- |
 | `U1L` | `UNL` | 绘制带长度占位标注的线条 |
-| `U1LX` | `UNLX` | 选择已有 U1L 线段，在 3D 正交视图中编辑相连线路及毫米距离 |
+| `U1LX` | `UNLX` | 选择已有 U1L 线段，按端点连通顺序逐段填写毫米距离 |
 | `U1D` | — | 将对齐标注文字转换为单行文字，保留原尺寸线 |
-| `U1X` | - | 无需选择线段，直接进入东南等轴侧 3D 正交绘图器并写回 CAD |
 | `U1R` | `UNR` | 开拱桥并截断相交直线 |
 | `U1Q1` / `U1Q2` / `U1Q4` | `UNQ1` / `UNQ2` / `UNQ4` | 绘制 100 / 200 / 400 mm 桥架标注 |
 | `U1F` | — | 生成单图框清单和属性，完成后自动更新 XLSX |
@@ -315,7 +320,7 @@ Current 2.4.5 builds publish 25 commands and intentionally do not include the re
 
 ## 命令命名规范
 
-- 新版用户命令固定使用 `U1` 前缀和功能字母；已有线路编辑使用 `U1LX`，空白 3D 快速绘图使用 `U1X`，桥架规格在 `Q` 后追加 `1`、`2` 或 `4`。
+- 新版用户命令固定使用 `U1` 前缀和功能字母；已有线路编辑使用 `U1LX`，桥架规格在 `Q` 后追加 `1`、`2` 或 `4`。
 - 所有设置统一进入 `U1SET`，不再为各模块注册独立设置命令；`U1S` 专用于当前图框 BOQ 提交。
 - 兼容命令仅限 `UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`、`UNADD`，不得继续扩展。
 - 新增或修改命令必须同步 `CommandIds`、CommandMethod、Ribbon、bundle、安装验证和测试。

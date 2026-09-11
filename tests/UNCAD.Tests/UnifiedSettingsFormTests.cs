@@ -130,7 +130,23 @@ namespace UNCAD.Tests
                             label => label.Text == "每次清空数据行数:");
                         Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                             label => label.Text == "软管手动数量 (m):");
-                        Assert.DoesNotContain(FindAll<CheckBox>(tabs.SelectedTab),
+                        List<CheckBox> autoFill = FindAll<CheckBox>(tabs.SelectedTab);
+                        Assert.Equal(7, autoFill.Count);
+                        Assert.Equal(new[]
+                        {
+                            "电缆", "电盘（断路器）", "软管", "线管",
+                            "桥架", "插座盘", "插接箱"
+                        }, autoFill.Select(check => check.Text).ToArray());
+                        Assert.All(autoFill, check =>
+                        {
+                            Assert.True(check.Visible);
+                            Assert.True(check.Width > 0 && check.Height > 0);
+                        });
+                        GroupBox group = Assert.Single(
+                            FindAll<GroupBox>(tabs.SelectedTab));
+                        Assert.Equal("BOQ 自动填充类别", group.Text);
+                        Assert.True(group.Visible);
+                        Assert.DoesNotContain(autoFill,
                             check => check.Text.Contains("未匹配"));
                     }
                 }

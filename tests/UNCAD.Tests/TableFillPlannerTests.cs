@@ -168,7 +168,8 @@ namespace UNCAD.Tests
             });
 
             List<TableFillRow> rows = TableFillPlanner.Build(
-                machine, catalog, new CableStatResult(), FillPlanningOptions.Default);
+                machine, catalog, new CableStatResult(), FillPlanningOptions.Default,
+                AllAutoFill());
             TableFillRow panel = Assert.Single(rows,
                 row => row.Category == TableFillCategory.OutletPanel);
 
@@ -193,7 +194,8 @@ namespace UNCAD.Tests
             });
 
             TableFillRow panel = Assert.Single(TableFillPlanner.Build(
-                machine, catalog, new CableStatResult(), FillPlanningOptions.Default),
+                machine, catalog, new CableStatResult(), FillPlanningOptions.Default,
+                AllAutoFill()),
                 row => row.Category == TableFillCategory.OutletPanel);
 
             Assert.Equal("", panel.Code);
@@ -212,11 +214,72 @@ namespace UNCAD.Tests
             };
 
             TableFillRow breaker = TableFillPlanner.Build(
-                machine, Items(), new CableStatResult()).Single(row =>
+                machine, new BoqCatalogIndex(Items()), new CableStatResult(),
+                FillPlanningOptions.Default, AllAutoFill()).Single(row =>
                     row.Category == TableFillCategory.Breaker);
             Assert.Equal(TableFillCategory.Breaker, breaker.Category);
             Assert.Equal("6.5", breaker.Code);
             Assert.Equal("1", breaker.Quantity);
+        }
+
+        [Fact]
+        public void Build_DefaultAutoFillSkipsBreakerAndOutletPanel()
+        {
+            List<ListItem> items = Items();
+            items.Add(Panel("4.11", "100A+20A*40"));
+
+            List<TableFillRow> socketRows = TableFillPlanner.Build(new MachineRow
+            {
+                Next = "插座盘",
+                Detail = "U220 1P3W 1P20A"
+            }, items, new CableStatResult());
+            Assert.DoesNotContain(socketRows,
+                row => row.Category == TableFillCategory.OutletPanel);
+            Assert.Contains(socketRows,
+                row => row.Category == TableFillCategory.Outlet);
+
+            List<TableFillRow> breakerRows = TableFillPlanner.Build(new MachineRow
+            {
+                Next = "I-Line盘",
+                Detail = "N480 3P4W 3P250A"
+            }, items, new CableStatResult());
+            Assert.DoesNotContain(breakerRows,
+                row => row.Category == TableFillCategory.Breaker);
+
+            List<TableFillRow> allDisabledSocketRows = TableFillPlanner.Build(
+                new MachineRow
+                {
+                    Next = "插座盘",
+                    Detail = "U220 1P3W 1P20A"
+                }, new BoqCatalogIndex(items), new CableStatResult(),
+                FillPlanningOptions.Default,
+                FillAutoFillOptions.Create(false, false, false, false, false,
+                    false, false));
+            Assert.Contains(allDisabledSocketRows,
+                row => row.Category == TableFillCategory.Outlet);
+        }
+
+        [Fact]
+        public void Build_DisabledMaterialCategoriesProduceNoAutomaticRows()
+        {
+            var machine = new MachineRow
+            {
+                Cable = "ZB-YJVR-3*2.5",
+                Dia = "20"
+            };
+            CableStatResult stat = StatCalculator.Calculate(new[]
+            {
+                "2000mm",
+                "桥架200*100 2500mm",
+                "⌀20线管 2000mm"
+            }, 250.0);
+
+            List<TableFillRow> rows = TableFillPlanner.Build(machine,
+                new BoqCatalogIndex(Items()), stat, FillPlanningOptions.Default,
+                FillAutoFillOptions.Create(false, false, false, false, false,
+                    false, false));
+
+            Assert.Empty(rows);
         }
 
         [Fact]
@@ -359,6 +422,9 @@ namespace UNCAD.Tests
                 Spec = spec
             };
         }
+
+        private static FillAutoFillOptions AllAutoFill()
+            => FillAutoFillOptions.Create(true, true, true, true, true, true, true);
 
         private static string TestCategory(string code, string name)
         {

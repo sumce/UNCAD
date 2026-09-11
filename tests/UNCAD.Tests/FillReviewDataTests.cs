@@ -166,6 +166,43 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void CableReplacement_WithHoseAutoFillDisabledOnlyUpdatesDerivedDiameter()
+        {
+            var cable = new TableFillRow
+            {
+                Category = TableFillCategory.Cable,
+                Name = "未知电缆",
+                Quantity = "12",
+                CatalogMatched = false
+            };
+            FillReviewData data = FillReviewData.Create(
+                new MachineRow { Cable = "UNKNOWN" }, new[] { cable },
+                FillPlanningOptions.Default, null,
+                FillAutoFillOptions.Create(true, false, false, true, true,
+                    false, true));
+            var catalog = new BoqCatalogIndex(new[]
+            {
+                new ListItem
+                {
+                    Category = "电缆", Code = "1.1", Name = "多芯电缆",
+                    Feature = "1.名称:0.6/1kV-YJVR-2.5mm2*3C", Unit = "m",
+                    Alias = "3*2.5"
+                },
+                new ListItem
+                {
+                    Category = "软管", Code = "3.8", Name = "包塑金属软管",
+                    Feature = "1.名称:包塑金属软管\\P2.规格:20mm", Unit = "m",
+                    Alias = "20mm"
+                }
+            });
+
+            data.ReplaceWithCatalogItem(data.CableItem(), catalog.Cables[0], catalog);
+
+            Assert.Equal("20", data.Machine.Dia);
+            Assert.Null(data.FlexibleConduitItem());
+        }
+
+        [Fact]
         public void LegacyCableReplacement_WithoutCatalogDoesNotCreateUnmatchedHose()
         {
             FillReviewData data = FillReviewData.Create(

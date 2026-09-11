@@ -35,6 +35,30 @@ namespace UNCAD.Tests
             Assert.Equal(250, options.MmPerGrid);
             Assert.Equal("bridge", options.BridgeInfo);
             Assert.Same(FillPlanningOptions.Default, options.Planning);
+            Assert.Same(FillAutoFillOptions.Default, options.AutoFill);
+        }
+
+        [Fact]
+        public void AutoFillOptions_HaveSafeDefaultsAndKeepIndependentSwitches()
+        {
+            FillAutoFillOptions defaults = FillAutoFillOptions.Default;
+            Assert.True(defaults.Cable);
+            Assert.False(defaults.Breaker);
+            Assert.True(defaults.FlexibleConduit);
+            Assert.True(defaults.RigidConduit);
+            Assert.True(defaults.Bridge);
+            Assert.False(defaults.OutletPanel);
+            Assert.True(defaults.BusPlugBox);
+
+            FillAutoFillOptions disabled = FillAutoFillOptions.Create(
+                false, false, false, false, false, false, false);
+            Assert.False(disabled.Cable);
+            Assert.False(disabled.Breaker);
+            Assert.False(disabled.FlexibleConduit);
+            Assert.False(disabled.RigidConduit);
+            Assert.False(disabled.Bridge);
+            Assert.False(disabled.OutletPanel);
+            Assert.False(disabled.BusPlugBox);
         }
     }
 }

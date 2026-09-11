@@ -49,10 +49,16 @@ namespace UNCAD.Core.Fill
 
         public static List<TableFillRow> Build(
             MachineRow machine, List<ListItem> items, CableStatResult stat)
-            => Build(machine, new BoqCatalogIndex(items), stat, FillPlanningOptions.Default);
+            => Build(machine, new BoqCatalogIndex(items), stat,
+                FillPlanningOptions.Default, FillAutoFillOptions.Default);
 
         public static List<TableFillRow> Build(MachineRow machine,
             BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options)
+            => Build(machine, catalog, stat, options, FillAutoFillOptions.Default);
+
+        public static List<TableFillRow> Build(MachineRow machine,
+            BoqCatalogIndex catalog, CableStatResult stat, FillPlanningOptions options,
+            FillAutoFillOptions autoFill)
         {
             machine = machine ?? new MachineRow();
             // Keep every planner caller on the same cable-only hose diameter contract.
@@ -60,13 +66,15 @@ namespace UNCAD.Core.Fill
             catalog = catalog ?? new BoqCatalogIndex(null);
             stat = stat ?? new CableStatResult();
             options = options ?? FillPlanningOptions.Default;
+            autoFill = autoFill ?? FillAutoFillOptions.Default;
             var rows = new List<TableFillRow>();
 
-            AddCable(rows, machine, catalog, stat);
-            AddBridges(rows, catalog, stat);
-            AddRigidConduits(rows, catalog, stat);
-            AddFlexibleConduit(rows, machine, catalog, options);
-            AddNextEquipment(rows, machine, catalog);
+            if (autoFill.Cable) AddCable(rows, machine, catalog, stat);
+            if (autoFill.Bridge) AddBridges(rows, catalog, stat);
+            if (autoFill.RigidConduit) AddRigidConduits(rows, catalog, stat);
+            if (autoFill.FlexibleConduit) AddFlexibleConduit(rows, machine, catalog, options);
+            // 插座行由设备/上游状态决定，不属于可关闭的自动填充类别。
+            AddNextEquipment(rows, machine, catalog, autoFill);
 
             return rows.OrderBy(r => r.SortOrder)
                 .ThenBy(r => r.Code ?? "", StringComparer.Ordinal)
@@ -117,8 +125,7 @@ namespace UNCAD.Core.Fill
             int index = 0;
             foreach (BridgeStat bridge in stat.Bridges)
             {
-                string spec = NormalizeBridgeSpec(bridge.Spec);
-                ListItem item = catalog.FindBridge(spec);
+                ListItem item = ResolveBridgeCatalogItem(catalog, bridge);
                 // D-016：未匹配的桥架没有固定清单编码，不得写出一行无编码的清单。
                 // 在 CAD 事务之前失败，由调用方整体中止本次操作。
                 if (item == null)
@@ -127,12 +134,27 @@ namespace UNCAD.Core.Fill
                         "固定清单中没有桥架规格“" + bridge.Spec
                             + "”。请在固定清单中补充对应项目后重试。");
                 }
-                // 图框显示 BOQ 型号（梯形桥架200Wx100H）；型号存在项目特征的 1.名称 段。
-                bridge.CatalogModel = BoqFeatureName.Extract(item.Feature);
                 rows.Add(FromItem(TableFillCategory.Bridge, 200 + index++, item,
                     bridge.Spec, "1.名称:" + bridge.Spec, "M",
                     TextFormatter.FormatNum(bridge.TotalM)));
             }
+        }
+
+        internal static void ApplyBridgeCatalogModels(BoqCatalogIndex catalog,
+            CableStatResult stat)
+        {
+            if (stat == null) return;
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            foreach (BridgeStat bridge in stat.Bridges)
+                ResolveBridgeCatalogItem(catalog, bridge);
+        }
+
+        private static ListItem ResolveBridgeCatalogItem(BoqCatalogIndex catalog,
+            BridgeStat bridge)
+        {
+            ListItem item = catalog.FindBridge(NormalizeBridgeSpec(bridge.Spec));
+            bridge.CatalogModel = item == null ? "" : BoqFeatureName.Extract(item.Feature);
+            return item;
         }
 
         private static void AddRigidConduits(List<TableFillRow> rows,
@@ -183,13 +205,15 @@ namespace UNCAD.Core.Fill
         }
 
         private static void AddNextEquipment(List<TableFillRow> rows,
-            MachineRow machine, BoqCatalogIndex catalog)
+            MachineRow machine, BoqCatalogIndex catalog,
+            FillAutoFillOptions autoFill)
         {
             string next = (machine.Next ?? "").Trim();
             TryExtractRating(machine.Detail, out int poles, out int amps);
 
             if (string.Equals(next, "I-Line盘", StringComparison.OrdinalIgnoreCase))
             {
+                if (!autoFill.Breaker) return;
                 ListItem item = catalog.Breakers.FirstOrDefault(i =>
                     BreakerRangeContains(i.Spec, poles, amps));
                 string model = poles > 0 && amps > 0 ? poles + "P" + amps + "A" : "";
@@ -203,14 +227,18 @@ namespace UNCAD.Core.Fill
                 // NEXT identifies the upstream physical panel as well as the
                 // downstream outlet state.  Keep the two material rows separate:
                 // 4.11/4.12 is the panel, while 8.2/8.3 is the outlet itself.
-                TableFillRow panel = BuildOutletPanelRow(machine.Detail, catalog);
-                if (panel != null) rows.Add(panel);
+                if (autoFill.OutletPanel)
+                {
+                    TableFillRow panel = BuildOutletPanelRow(machine.Detail, catalog);
+                    if (panel != null) rows.Add(panel);
+                }
                 rows.Add(BuildOutletRow(machine.Detail, catalog));
                 return;
             }
 
             if (string.Equals(next, "母线插接口", StringComparison.OrdinalIgnoreCase))
             {
+                if (!autoFill.BusPlugBox) return;
                 string model = amps > 0 ? amps + "A" : "";
                 ListItem item = catalog.FindBusPlugBox(model);
                 string description = "1.名称:SQ-D PLUG-IN " + model + " 母线插接开关箱";

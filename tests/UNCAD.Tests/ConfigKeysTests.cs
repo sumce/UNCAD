@@ -86,6 +86,17 @@ namespace UNCAD.Tests
             Assert.Equal("UNC_FILL_UPSTREAM_COLOR_INDEX", ConfigKeys.FillUpstreamColorIndex);
             Assert.NotEqual(ConfigKeys.FillDeviceColorIndex,
                 ConfigKeys.FillUpstreamColorIndex);
+            Assert.Equal("UNC_FILL_AUTOFILL_CABLE", ConfigKeys.FillAutofillCable);
+            Assert.Equal("UNC_FILL_AUTOFILL_BREAKER", ConfigKeys.FillAutofillBreaker);
+            Assert.Equal("UNC_FILL_AUTOFILL_FLEXIBLE_CONDUIT",
+                ConfigKeys.FillAutofillFlexibleConduit);
+            Assert.Equal("UNC_FILL_AUTOFILL_RIGID_CONDUIT",
+                ConfigKeys.FillAutofillRigidConduit);
+            Assert.Equal("UNC_FILL_AUTOFILL_BRIDGE", ConfigKeys.FillAutofillBridge);
+            Assert.Equal("UNC_FILL_AUTOFILL_OUTLET_PANEL",
+                ConfigKeys.FillAutofillOutletPanel);
+            Assert.Equal("UNC_FILL_AUTOFILL_BUS_PLUG_BOX",
+                ConfigKeys.FillAutofillBusPlugBox);
         }
 
         [Fact]
@@ -97,7 +108,7 @@ namespace UNCAD.Tests
             Assert.Equal("UNADD_CABLE_ENABLED", ConfigKeys.UnaddCableEnabled);
             Assert.Equal("UNADD_BRIDGE_ENABLED", ConfigKeys.UnaddBridgeEnabled);
             Assert.Equal("UNADD_CONDUIT_ENABLED", ConfigKeys.UnaddConduitEnabled);
-            Assert.False(StatisticsSettings.DefaultIncludeMText);
+            Assert.True(StatisticsSettings.DefaultIncludeMText);
             Assert.True(StatisticsSettings.DefaultIncludeDimension);
         }
 

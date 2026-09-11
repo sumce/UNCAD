@@ -44,6 +44,8 @@ namespace UNCAD.Core.Fill
         public string OriginalCableModel { get; private set; } = "";
         public string BoqCableModel { get; private set; } = "";
         public string CableMeters { get; set; } = "";
+        public FillAutoFillOptions AutoFill { get; private set; } =
+            FillAutoFillOptions.Default;
         public List<FillReviewItem> Items { get; } = new List<FillReviewItem>();
 
         public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows)
@@ -64,6 +66,12 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows,
             FillPlanningOptions options, string originalCableModel)
+            => Create(source, rows, options, originalCableModel,
+                FillAutoFillOptions.Default);
+
+        public static FillReviewData Create(MachineRow source, IEnumerable<TableFillRow> rows,
+            FillPlanningOptions options, string originalCableModel,
+            FillAutoFillOptions autoFill)
         {
             options = options ?? FillPlanningOptions.Default;
             MachineRow machine = CloneMachine(source);
@@ -75,7 +83,8 @@ namespace UNCAD.Core.Fill
             {
                 Machine = machine,
                 OriginalCableModel = original,
-                BoqCableModel = boq
+                BoqCableModel = boq,
+                AutoFill = autoFill ?? FillAutoFillOptions.Default
             };
             foreach (TableFillRow row in rows ?? Enumerable.Empty<TableFillRow>())
             {
@@ -108,7 +117,8 @@ namespace UNCAD.Core.Fill
                 Machine = CloneMachine(Machine),
                 OriginalCableModel = OriginalCableModel,
                 BoqCableModel = BoqCableModel,
-                CableMeters = CableMeters
+                CableMeters = CableMeters,
+                AutoFill = AutoFill
             };
             foreach (FillReviewItem item in Items)
             {
@@ -277,8 +287,15 @@ namespace UNCAD.Core.Fill
             if (matched != null && FlexibleConduitCableMap.TryGetDiameter(
                     matched.Alias ?? value, out string diameter))
             {
-                SetFlexibleConduitDiameter(diameter, catalog,
-                    FillPlanningOptions.Default);
+                Machine.Dia = diameter;
+                if (AutoFill.FlexibleConduit)
+                    SetFlexibleConduitDiameter(diameter, catalog,
+                        FillPlanningOptions.Default);
+                else
+                {
+                    FillReviewItem flexible = FlexibleConduitItem();
+                    if (flexible != null) RemoveItem(flexible);
+                }
             }
         }
 

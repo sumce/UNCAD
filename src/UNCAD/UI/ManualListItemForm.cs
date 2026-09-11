@@ -296,7 +296,16 @@ namespace UNCAD.UI
             _recentCodes.Insert(0, code);
             if (_recentCodes.Count > MaxRecentItems)
                 _recentCodes.RemoveAt(_recentCodes.Count - 1);
-            Settings.Set(ConfigKeys.FillRecentCatalogItems, string.Join(",", _recentCodes));
+            try
+            {
+                Settings.Set(ConfigKeys.FillRecentCatalogItems,
+                    string.Join(",", _recentCodes));
+            }
+            catch (Exception ex)
+            {
+                // 最近使用只是 UI 便利功能，保存失败不能阻断本次清单选择。
+                Log.Warn("清单最近使用记录保存失败: " + ex.Message);
+            }
         }
 
         private static List<string> LoadRecentCodes()

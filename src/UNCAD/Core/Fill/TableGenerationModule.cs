@@ -11,18 +11,21 @@ namespace UNCAD.Core.Fill
     public sealed class TableGenerationRequest
     {
         public TableGenerationRequest(MachineRow machine, BoqCatalogIndex catalog,
-            CableStatResult statistics, FillPlanningOptions options)
+            CableStatResult statistics, FillPlanningOptions options,
+            FillAutoFillOptions autoFill = null)
         {
             Machine = CloneMachine(machine ?? new MachineRow());
             Catalog = catalog ?? new BoqCatalogIndex(null);
             Statistics = CloneStatistics(statistics ?? new CableStatResult());
             Options = options ?? FillPlanningOptions.Default;
+            AutoFill = autoFill ?? FillAutoFillOptions.Default;
         }
 
         public MachineRow Machine { get; }
         public BoqCatalogIndex Catalog { get; }
         public CableStatResult Statistics { get; }
         public FillPlanningOptions Options { get; }
+        public FillAutoFillOptions AutoFill { get; }
 
         private static CableStatResult CloneStatistics(CableStatResult source)
         {
@@ -42,6 +45,7 @@ namespace UNCAD.Core.Fill
                 var item = new BridgeStat
                 {
                     Spec = bridge.Spec,
+                    CatalogModel = bridge.CatalogModel,
                     MmPerGrid = bridge.MmPerGrid
                 };
                 item.Grids.AddRange(bridge.Grids);
@@ -83,16 +87,18 @@ namespace UNCAD.Core.Fill
         private readonly List<TableFillRow> _defaultRows;
 
         internal TableGenerationOutput(IEnumerable<TableFillRow> rows,
-            string defaultCableMeters)
+            string defaultCableMeters, FillAutoFillOptions autoFill = null)
         {
             _defaultRows = (rows ?? Enumerable.Empty<TableFillRow>())
                 .Select(CloneRow).ToList();
             DefaultCableMeters = defaultCableMeters ?? "";
+            AutoFill = autoFill ?? FillAutoFillOptions.Default;
         }
 
         public IReadOnlyList<TableFillRow> DefaultRows
             => _defaultRows.Select(CloneRow).ToList().AsReadOnly();
         public string DefaultCableMeters { get; }
+        public FillAutoFillOptions AutoFill { get; }
         public int RowCount => _defaultRows.Count;
         public int UnmatchedCatalogCount => _defaultRows.Count(row => !row.CatalogMatched);
 
@@ -109,7 +115,7 @@ namespace UNCAD.Core.Fill
             FillPlanningOptions options, string originalCableModel)
         {
             FillReviewData review = FillReviewData.Create(
-                machine, CopyDefaultRows(), options, originalCableModel);
+                machine, CopyDefaultRows(), options, originalCableModel, AutoFill);
             if (review.CableMeters.Length == 0)
                 review.CableMeters = DefaultCableMeters;
             return review;
@@ -140,12 +146,13 @@ namespace UNCAD.Core.Fill
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             List<TableFillRow> rows = TableFillPlanner.Build(request.Machine,
-                request.Catalog, request.Statistics, request.Options);
+                request.Catalog, request.Statistics, request.Options,
+                request.AutoFill);
             string cableMeters = rows.FirstOrDefault(row =>
                 row.Category == TableFillCategory.Cable)?.Quantity ?? "";
             if (cableMeters.Length == 0 && request.Statistics.CableSum > 0)
                 cableMeters = TextFormatter.FormatNum(request.Statistics.CableSum);
-            return new TableGenerationOutput(rows, cableMeters);
+            return new TableGenerationOutput(rows, cableMeters, request.AutoFill);
         }
     }
 }

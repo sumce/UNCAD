@@ -62,6 +62,19 @@ namespace UNCAD.Infra
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
+        // BOQ 自动填充类别开关（U1F/U1U 规划清单行时跳过关闭的类别）
+        public const string FillAutofillCable = "UNC_FILL_AUTOFILL_CABLE";       // 电缆
+        public const string FillAutofillBreaker = "UNC_FILL_AUTOFILL_BREAKER";   // 电盘（断路器）
+        public const string FillAutofillFlexibleConduit =
+            "UNC_FILL_AUTOFILL_FLEXIBLE_CONDUIT";                                 // 软管
+        public const string FillAutofillRigidConduit =
+            "UNC_FILL_AUTOFILL_RIGID_CONDUIT";                                    // 线管
+        public const string FillAutofillBridge = "UNC_FILL_AUTOFILL_BRIDGE";     // 桥架
+        public const string FillAutofillOutletPanel =
+            "UNC_FILL_AUTOFILL_OUTLET_PANEL";                                     // 插座盘
+        public const string FillAutofillBusPlugBox =
+            "UNC_FILL_AUTOFILL_BUS_PLUG_BOX";                                     // 插接箱
+
 
         // BOQ 与 DWG 自动输出目录；沿用旧键名以迁移已有用户设置。
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹

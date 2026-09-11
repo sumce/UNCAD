@@ -474,7 +474,7 @@ namespace UNCAD.Features.Fill
 
             FlexibleConduitCableMap.ApplyTo(machine);
             TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
-                workbook.Catalog, statistics, options.Planning);
+                workbook.Catalog, statistics, options.Planning, options.AutoFill);
             FillFeature.WriteCablePlanNote(ctx, machine, tablePlan);
             List<TableFillRow> plannedRows = FillUpdateRowMerger.Merge(
                 readTransaction, selection, tablePlan.CopyDefaultRows(), statistics);
@@ -505,7 +505,7 @@ namespace UNCAD.Features.Fill
                     deviceOutlet, existingOutlets)
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
             tablePlan = new TableGenerationOutput(socketRows,
-                tablePlan.DefaultCableMeters);
+                tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning,
                 originalCableModel);
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,

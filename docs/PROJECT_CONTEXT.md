@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.5`.
+- Current release: `2.4.6`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.

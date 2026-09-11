@@ -94,6 +94,20 @@ namespace UNCAD.UI
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
         private readonly ComboBox _fillDeviceColor = ColorBox();
         private readonly ComboBox _fillUpstreamColor = ColorBox();
+        private readonly CheckBox _autofillCable =
+            new CheckBox { Text = "电缆", AutoSize = true };
+        private readonly CheckBox _autofillBreaker =
+            new CheckBox { Text = "电盘（断路器）", AutoSize = true };
+        private readonly CheckBox _autofillFlexibleConduit =
+            new CheckBox { Text = "软管", AutoSize = true };
+        private readonly CheckBox _autofillRigidConduit =
+            new CheckBox { Text = "线管", AutoSize = true };
+        private readonly CheckBox _autofillBridge =
+            new CheckBox { Text = "桥架", AutoSize = true };
+        private readonly CheckBox _autofillOutletPanel =
+            new CheckBox { Text = "插座盘", AutoSize = true };
+        private readonly CheckBox _autofillBusPlugBox =
+            new CheckBox { Text = "插接箱", AutoSize = true };
         private bool _machineRefreshInProgress;
 
         public UnifiedSettingsForm(int tabIndex)
@@ -231,6 +245,21 @@ namespace UNCAD.UI
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
             SelectColor(_fillDeviceColor, FillColorSettings.DeviceColorIndex());
             SelectColor(_fillUpstreamColor, FillColorSettings.UpstreamColorIndex());
+            FillAutoFillOptions autoFill = FillAutoFillOptions.Default;
+            _autofillCable.Checked = Settings.GetBool(ConfigKeys.FillAutofillCable,
+                autoFill.Cable);
+            _autofillBreaker.Checked = Settings.GetBool(ConfigKeys.FillAutofillBreaker,
+                autoFill.Breaker);
+            _autofillFlexibleConduit.Checked = Settings.GetBool(
+                ConfigKeys.FillAutofillFlexibleConduit, autoFill.FlexibleConduit);
+            _autofillRigidConduit.Checked = Settings.GetBool(
+                ConfigKeys.FillAutofillRigidConduit, autoFill.RigidConduit);
+            _autofillBridge.Checked = Settings.GetBool(ConfigKeys.FillAutofillBridge,
+                autoFill.Bridge);
+            _autofillOutletPanel.Checked = Settings.GetBool(
+                ConfigKeys.FillAutofillOutletPanel, autoFill.OutletPanel);
+            _autofillBusPlugBox.Checked = Settings.GetBool(
+                ConfigKeys.FillAutofillBusPlugBox, autoFill.BusPlugBox);
         }
 
         // ---------- 保存（含数据校验） ----------
@@ -293,6 +322,17 @@ namespace UNCAD.UI
                 SelectedColorIndex(_fillUpstreamColor,
                     FillColorSettings.DefaultUpstreamColorIndex)
                 .ToString(CultureInfo.InvariantCulture));
+            Settings.SetBool(ConfigKeys.FillAutofillCable, _autofillCable.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillBreaker, _autofillBreaker.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillFlexibleConduit,
+                _autofillFlexibleConduit.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillRigidConduit,
+                _autofillRigidConduit.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillBridge, _autofillBridge.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillOutletPanel,
+                _autofillOutletPanel.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillBusPlugBox,
+                _autofillBusPlugBox.Checked);
         }
 
         private void ConfigureStatisticsToolTips()
@@ -301,7 +341,7 @@ namespace UNCAD.UI
             _toolTips.SetToolTip(_statText,
                 "读取AutoCAD单行文字实体，每个实体必须整行符合规则。");
             _toolTips.SetToolTip(_statMText,
-                "开启后，U1F/U1U/UNADD读取AutoCAD多行文字实体，按\\P拆分后每行独立严格匹配。");
+                "开启后读取 MTEXT；同一实体内的固定清单型号和长度会严格配对，其余行独立匹配。");
             _toolTips.SetToolTip(_statDim,
                 "开启后，U1F/U1U/UNADD 读取对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。");
             _toolTips.SetToolTip(_statCable, "严格格式示例：2000mm；不允许前后缀或备注。");
@@ -559,18 +599,50 @@ namespace UNCAD.UI
             g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
             g.Controls.Add(Lbl("设备端颜色:"), 0, 7); g.Controls.Add(_fillDeviceColor, 1, 7);
             g.Controls.Add(Lbl("上游端颜色:"), 0, 8); g.Controls.Add(_fillUpstreamColor, 1, 8);
-            var page = Page("Excel 数据", g);
-            page.Controls.Add(new Label
+
+            var autoFill = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = 2,
+                Margin = new Padding(0),
+                Padding = new Padding(8, 4, 8, 4)
+            };
+            for (int column = 0; column < autoFill.ColumnCount; column++)
+                autoFill.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+            autoFill.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            autoFill.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            autoFill.Controls.Add(_autofillCable, 0, 0);
+            autoFill.Controls.Add(_autofillBreaker, 1, 0);
+            autoFill.Controls.Add(_autofillFlexibleConduit, 2, 0);
+            autoFill.Controls.Add(_autofillRigidConduit, 3, 0);
+            autoFill.Controls.Add(_autofillBridge, 0, 1);
+            autoFill.Controls.Add(_autofillOutletPanel, 1, 1);
+            autoFill.Controls.Add(_autofillBusPlugBox, 2, 1);
+
+            var note = new Label
             {
                 Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",
-                Dock = DockStyle.Bottom,
-                Height = 30,
+                Dock = DockStyle.Fill,
                 ForeColor = UiTheme.Accent,
-                Padding = new Padding(
-                    14, 4,
-                    14, 4)
-            });
-            return page;
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(14, 0, 14, 0)
+            };
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                ColumnCount = 1,
+                RowCount = 3
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 390));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            layout.Controls.Add(g, 0, 0);
+            layout.Controls.Add(Group("BOQ 自动填充类别", autoFill), 0, 1);
+            layout.Controls.Add(note, 0, 2);
+            return Page("Excel 数据", layout);
         }
 
         private Control FolderPicker(TextBox target)

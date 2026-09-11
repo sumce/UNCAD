@@ -48,11 +48,14 @@ namespace UNCAD.Features.Fill
     {
         public static TableGenerationOutput Plan(MachineRow machine,
             BoqCatalogIndex catalog, CableStatResult statistics,
-            FillPlanningOptions options)
+            FillPlanningOptions options, FillAutoFillOptions autoFill = null)
         {
-            return ModuleRunner.Run(TableGenerationModule.Descriptor,
+            TableGenerationOutput output = ModuleRunner.Run(TableGenerationModule.Descriptor,
                 "规划清单行", () => TableGenerationModule.Plan(
-                    new TableGenerationRequest(machine, catalog, statistics, options)));
+                    new TableGenerationRequest(machine, catalog, statistics, options,
+                        autoFill)));
+            TableFillPlanner.ApplyBridgeCatalogModels(catalog, statistics);
+            return output;
         }
 
         public static int Write(CadContext ctx, Transaction transaction,
