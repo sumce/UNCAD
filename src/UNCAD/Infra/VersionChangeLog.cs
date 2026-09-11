@@ -31,6 +31,13 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.7", "2026-09-11",
+                    "新增：U1SET 的 BOQ 自动填充新增独立“电盘”开关；电盘、断路器与插座盘分别控制，默认开启电盘与断路器。",
+                    "修复：I-Line盘按固定清单分别生成电盘和断路器，不再用断路器开关代替电盘。",
+                    "修复：长两行线管 MTEXT 按文字插入或对齐点归属图框，U1U 可重新识别并自动更新线管数量。",
+                    "修复：U1F/U1U 自动把旧桥架标注升级为 BOQ 两行样式，并保留或修复标注角度。",
+                    "优化：U1SET、在线授权与关于窗口采用更清晰的现代 WinForms 布局。",
+                    "修正：构建时间统一按 UTC+8 显示。"),
                 new VersionChangeLogEntry("2.4.6", "2026-09-11",
                     "新增：U1Q*/U1C 标注改为两行 MTEXT：第一行写固定清单「1.名称」的完整型号，第二行写长度；对齐仍为中下，锚点与原单行 DBText 同点。",
                     "新增：统计引擎按 MTEXT 为单位把两行配对还原成单行写法（桥架200*100 2500mm / ⌀20线管 2000mm）；配对严格——第一行必须是清单里的桥架/线管型号、第二行必须是纯长度，孤立的 2000mm 与老单行标注照旧按电缆统计。",

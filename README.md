@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.6 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
+Current 2.4.7 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,14 @@ Current 2.4.6 builds publish 25 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.7
+
+- `U1SET` 的 BOQ 自动填充新增独立“电盘”开关；电盘、断路器与插座盘分别控制。
+- `I-Line盘` 按固定清单分别生成电盘和断路器，修复断路器开关代替电盘的问题。
+- 修复长两行线管 MTEXT 被分配到相邻图框后，`U1U` 无法自动更新线管数量的问题。
+- `U1F/U1U` 自动升级旧桥架标注为 BOQ 两行样式，并保留或修复标注角度。
+- 优化 `U1SET`、授权与关于窗口布局，构建时间统一显示为 UTC+8。
 
 ## v2.4.6
 
