@@ -12,21 +12,23 @@ namespace UNCAD.UI
     internal static class UiTheme
     {
         // ---- 中性面 ----
-        public static readonly Color WindowBg = Color.FromArgb(0xF7, 0xF8, 0xFA);
+        public static readonly Color WindowBg = Color.FromArgb(0xF6, 0xF6, 0xF6);
         public static readonly Color Surface = Color.White;
-        public static readonly Color SurfaceAlt = Color.FromArgb(0xF0, 0xF2, 0xF5);
-        public static readonly Color Border = Color.FromArgb(0xE1, 0xE4, 0xE8);
-        public static readonly Color BorderStrong = Color.FromArgb(0xC9, 0xCE, 0xD4);
+        public static readonly Color SurfaceAlt = Color.FromArgb(0xFA, 0xFA, 0xFA);
+        public static readonly Color Border = Color.FromArgb(0xE7, 0xE7, 0xE7);
+        public static readonly Color BorderStrong = Color.FromArgb(0xD4, 0xD4, 0xD4);
 
         // ---- 文本 ----
-        public static readonly Color TextPrimary = Color.FromArgb(0x23, 0x2B, 0x34);
-        public static readonly Color TextSecondary = Color.FromArgb(0x5F, 0x6B, 0x76);
-        public static readonly Color TextDisabled = Color.FromArgb(0x9A, 0xA3, 0xAC);
+        public static readonly Color TextPrimary = Color.FromArgb(0x17, 0x17, 0x17);
+        public static readonly Color TextSecondary = Color.FromArgb(0x66, 0x66, 0x66);
+        public static readonly Color TextDisabled = Color.FromArgb(0xA3, 0xA3, 0xA3);
 
         // ---- 强调色 ----
-        public static readonly Color Accent = Color.FromArgb(0x0E, 0x6F, 0xD1);
-        public static readonly Color AccentHover = Color.FromArgb(0x1B, 0x7E, 0xDD);
-        public static readonly Color AccentSoft = Color.FromArgb(0xE8, 0xF1, 0xFB);
+        public static readonly Color Accent = Color.FromArgb(0x25, 0x63, 0xEB);
+        public static readonly Color AccentHover = Color.FromArgb(0x1D, 0x4E, 0xD8);
+        public static readonly Color AccentSoft = Color.FromArgb(0xEF, 0xF6, 0xFF);
+        public static readonly Color Action = Color.FromArgb(0x17, 0x17, 0x17);
+        public static readonly Color ActionHover = Color.FromArgb(0x33, 0x33, 0x33);
         /// <summary>Accent 的深色变体，供 Ribbon 图标区分同色系命令。</summary>
         public static readonly Color AccentDark = Color.FromArgb(0x0B, 0x5A, 0xAB);
 
@@ -45,12 +47,13 @@ namespace UNCAD.UI
         private const string FontFamily = "微软雅黑";
         /// <summary>商标字标使用的西文字体：与中文正文分开，避免改变品牌外观。</summary>
         public const string BrandFontFamily = "Segoe UI";
-        public static Font FontBody => new Font(FontFamily, 9f);
-        public static Font FontBodyBold => new Font(FontFamily, 9f, FontStyle.Bold);
-        public static Font FontHeader => new Font(FontFamily, 11.5f, FontStyle.Bold);
+        public static Font FontBody => new Font(FontFamily, 9.25f);
+        public static Font FontBodyBold => new Font(FontFamily, 9.25f, FontStyle.Bold);
+        public static Font FontHeader => new Font(FontFamily, 12f, FontStyle.Bold);
         public static Font FontCaption => new Font(FontFamily, 8.25f);
         public static Font FontInput => new Font(FontFamily, 10.5f);
-        public static Font FontTitle => new Font(FontFamily, 13f, FontStyle.Bold);
+        public static Font FontTitle => new Font(FontFamily, 14f, FontStyle.Bold);
+        public static Font FontDisplay => new Font(FontFamily, 18f, FontStyle.Bold);
 
         // ---- 间距(4pt 基线)----
         public const int SpaceXS = 4;
@@ -58,7 +61,7 @@ namespace UNCAD.UI
         public const int SpaceM = 12;
         public const int SpaceL = 16;
         public const int SpaceXL = 24;
-        public static Padding CardPadding => new Padding(14, 12, 14, 12);
+        public static Padding CardPadding => new Padding(18, 16, 18, 16);
         public static Padding FormPadding => new Padding(SpaceM);
 
         // ---- DPI 缩放 ----
@@ -98,10 +101,11 @@ namespace UNCAD.UI
         public static Button PrimaryButton(string text, DialogResult result = DialogResult.None)
         {
             var button = FlatButton(text, result);
-            button.BackColor = Accent;
+            button.BackColor = Action;
             button.ForeColor = Surface;
-            button.FlatAppearance.MouseOverBackColor = AccentHover;
-            button.FlatAppearance.MouseDownBackColor = AccentHover;
+            button.FlatAppearance.BorderColor = Action;
+            button.FlatAppearance.MouseOverBackColor = ActionHover;
+            button.FlatAppearance.MouseDownBackColor = ActionHover;
             return button;
         }
 
@@ -150,7 +154,7 @@ namespace UNCAD.UI
                 Text = text,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                MinimumSize = new Size(92, 30),
+                MinimumSize = new Size(92, 34),
                 DialogResult = result,
                 FlatStyle = FlatStyle.Flat,
                 Font = FontBody,
@@ -164,10 +168,11 @@ namespace UNCAD.UI
         // ---- 容器 ----
 
         /// <summary>圆角白卡容器。</summary>
-        public static UiCard Card()
+        public static UiCard Card(int cornerRadius = 8)
         {
             return new UiCard
             {
+                CornerRadius = cornerRadius,
                 BackColor = Surface,
                 Padding = CardPadding,
                 Margin = new Padding(0, 0, 0, SpaceM)
@@ -240,6 +245,10 @@ namespace UNCAD.UI
             {
                 comboBox.FlatStyle = FlatStyle.Flat;
             }
+            else if (control is NumericUpDown number)
+            {
+                number.BorderStyle = BorderStyle.FixedSingle;
+            }
         }
 
         /// <summary>表单行布局:两/四列"标签:控件"网格。</summary>
@@ -293,16 +302,26 @@ namespace UNCAD.UI
                 AutoSize = true,
                 FlowDirection = FlowDirection.RightToLeft,
                 WrapContents = false,
-                Padding = new Padding(0, SpaceS, SpaceS, SpaceXS),
-                BackColor = WindowBg
+                Padding = new Padding(SpaceM, SpaceS, SpaceM, SpaceS),
+                BackColor = Surface
             };
         }
     }
 
-    /// <summary>圆角白卡 Panel:6px 圆角 + 软描边。</summary>
+    /// <summary>圆角白卡 Panel，负责统一背景与软描边。</summary>
     internal class UiCard : Panel
     {
-        private const int CornerRadius = 6;
+        private int _cornerRadius = 8;
+
+        public int CornerRadius
+        {
+            get => _cornerRadius;
+            set
+            {
+                _cornerRadius = Math.Max(0, value);
+                Invalidate();
+            }
+        }
 
         public UiCard()
         {
@@ -310,22 +329,36 @@ namespace UNCAD.UI
                 | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        protected override void OnPaintBackground(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            g.Clear(Parent?.BackColor ?? UiTheme.WindowBg);
             using var path = CreateRoundedPath(rect, CornerRadius);
             using var brush = new SolidBrush(BackColor);
             g.FillPath(brush, path);
-            using var pen = new Pen(UiTheme.Border);
-            g.DrawPath(pen, path);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
             base.OnPaint(e);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var path = CreateRoundedPath(rect, CornerRadius);
+            using var pen = new Pen(UiTheme.Border);
+            e.Graphics.DrawPath(pen, path);
         }
 
         private static GraphicsPath CreateRoundedPath(Rectangle rect, int radius)
         {
             var path = new GraphicsPath();
+            radius = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2);
+            if (radius <= 0)
+            {
+                path.AddRectangle(rect);
+                return path;
+            }
             var diameter = radius * 2;
             path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
             path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
@@ -333,6 +366,61 @@ namespace UNCAD.UI
             path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
             path.CloseFigure();
             return path;
+        }
+    }
+
+    /// <summary>保留 TabControl 索引契约的左侧文字导航。</summary>
+    internal sealed class UiNavigationTabControl : TabControl
+    {
+        private readonly Font _selectedFont = UiTheme.FontBodyBold;
+
+        public UiNavigationTabControl()
+        {
+            Alignment = TabAlignment.Left;
+            Appearance = TabAppearance.Normal;
+            DrawMode = TabDrawMode.OwnerDrawFixed;
+            ItemSize = new Size(44, 176);
+            Multiline = true;
+            SizeMode = TabSizeMode.Fixed;
+            Font = UiTheme.FontBody;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnDrawItem(DrawItemEventArgs e)
+        {
+            Rectangle bounds = GetTabRect(e.Index);
+            bool selected = e.Index == SelectedIndex;
+            using (var background = new SolidBrush(selected
+                ? UiTheme.Surface : UiTheme.WindowBg))
+                e.Graphics.FillRectangle(background, bounds);
+
+            var content = Rectangle.Inflate(bounds, -10, -5);
+            if (selected)
+            {
+                using var marker = new SolidBrush(UiTheme.Action);
+                e.Graphics.FillRectangle(marker, content.Left, content.Top + 7,
+                    3, Math.Max(8, content.Height - 14));
+            }
+
+            var textBounds = new Rectangle(content.Left + 14, content.Top,
+                Math.Max(0, content.Width - 18), content.Height);
+            TextRenderer.DrawText(e.Graphics, TabPages[e.Index].Text,
+                selected ? _selectedFont : Font, textBounds,
+                selected ? UiTheme.TextPrimary : UiTheme.TextSecondary,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                    | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+        }
+
+        protected override void OnSelectedIndexChanged(EventArgs e)
+        {
+            base.OnSelectedIndexChanged(e);
+            Invalidate();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) _selectedFont.Dispose();
+            base.Dispose(disposing);
         }
     }
 }

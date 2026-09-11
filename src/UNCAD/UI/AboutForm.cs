@@ -8,38 +8,27 @@ namespace UNCAD.UI
 {
     internal sealed class AboutForm : Form
     {
-        private static readonly Color Ink = UiTheme.TextPrimary;
-        private static readonly Color Muted = UiTheme.TextSecondary;
-        private static readonly Color Accent = UiTheme.BrandBlue;
-
         public AboutForm()
         {
             AboutInfo info = AboutInfo.Current();
             DialogLayout.Apply(this, ProductMetadata.ProductName + " · 关于与授权",
-                new Size(650, 520), new Size(580, 460));
-            BackColor = UiTheme.WindowBg;
+                new Size(780, 620), new Size(660, 520));
 
-            Panel header = BuildHeader(info);
-            TabControl tabs = new TabControl
+            var tabs = new UiNavigationTabControl
             {
-                Dock = DockStyle.Fill,
-                Padding = new Point(14, 7),
-                Appearance = TabAppearance.Normal,
-                Multiline = false
+                Name = "AboutNavigation",
+                Dock = DockStyle.Fill
             };
-            tabs.TabPages.Add(BuildProductTab(info));
-            tabs.TabPages.Add(BuildLicenseTab(info));
+            tabs.TabPages.Add(BuildOverviewTab(info));
             tabs.TabPages.Add(BuildTermsTab());
-            tabs.TabPages.Add(BuildCompanyTab(info));
 
             Button close = UiTheme.Button("关闭", DialogResult.Cancel);
             FlowLayoutPanel commands = UiTheme.CommandBar();
-            commands.Padding = new Padding(0, 7, 12, 2);
             commands.Controls.Add(close);
 
             Controls.Add(tabs);
             Controls.Add(commands);
-            Controls.Add(header);
+            Controls.Add(BuildHeader(info));
             AcceptButton = close;
             CancelButton = close;
             Shown += (sender, args) => close.Select();
@@ -50,11 +39,9 @@ namespace UNCAD.UI
             var header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 82,
+                Height = 88,
                 BackColor = UiTheme.Surface,
-                Padding = new Padding(
-                    18, 10,
-                    18, 8)
+                Padding = new Padding(20, 12, 20, 10)
             };
             var mark = new BrandMarkControl
             {
@@ -66,24 +53,24 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 2,
-                BackColor = UiTheme.Surface
+                BackColor = UiTheme.Surface,
+                Margin = new Padding(0)
             };
             copy.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
             copy.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
             copy.Controls.Add(new Label
             {
-                Text = info.ProductName + "  /  " + info.Subtitle,
+                Text = info.ProductName,
                 Dock = DockStyle.Fill,
                 Font = UiTheme.FontTitle,
-                ForeColor = Ink,
+                ForeColor = UiTheme.TextPrimary,
                 TextAlign = ContentAlignment.BottomLeft
             }, 0, 0);
             copy.Controls.Add(new Label
             {
-                Text = info.CompanyName + "  ·  " + info.Website,
+                Text = info.Subtitle + " · " + info.CompanyName,
                 Dock = DockStyle.Fill,
-                Font = UiTheme.FontBody,
-                ForeColor = Muted,
+                ForeColor = UiTheme.TextSecondary,
                 TextAlign = ContentAlignment.TopLeft
             }, 0, 1);
             header.Controls.Add(copy);
@@ -91,156 +78,333 @@ namespace UNCAD.UI
             return header;
         }
 
-        private static TabPage BuildProductTab(AboutInfo info)
+        private static TabPage BuildOverviewTab(AboutInfo info)
         {
-            var page = new TabPage("产品信息") { Padding = new Padding(18) };
-            var layout = DetailLayout(8); // product details
-            AddDetail(layout, 0, "产品", info.ProductName);
-            AddDetail(layout, 1, "版本", info.Version);
-            AddDetail(layout, 2, "构建时间", info.BuildTime);
-            AddDetail(layout, 3, "发行日期", info.UpdatedOn);
-            AddDetail(layout, 4, "开发者", info.CompanyName);
-            AddDetail(layout, 5, "官网", info.Website);
-            AddDetail(layout, 6, "版权", info.Copyright);
-            AddDetail(layout, 7, "客户代码", info.CustomerCode);
-            page.Controls.Add(layout);
+            var page = new TabPage("概览")
+            {
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(0),
+                UseVisualStyleBackColor = false
+            };
+            var scroll = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BackColor = UiTheme.WindowBg
+            };
+            var stack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(UiTheme.SpaceXL, UiTheme.SpaceL,
+                    UiTheme.SpaceXL, UiTheme.SpaceXL)
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            stack.Controls.Add(PageHeader("关于与授权", "产品、版本与当前设备授权"), 0, 0);
+            stack.Controls.Add(BuildLicenseCard(info), 0, 1);
+            stack.Controls.Add(BuildProductCard(info), 0, 2);
+            stack.Controls.Add(BuildCompanyCard(info), 0, 3);
+            scroll.Controls.Add(stack);
+            page.Controls.Add(scroll);
             return page;
         }
 
-        private static TabPage BuildLicenseTab(AboutInfo info)
+        private static UiCard BuildLicenseCard(AboutInfo info)
         {
             LicenseSnapshot license = info.License;
-            // Customer-specific builds expose the licensee information directly in the
-            // authorization page; perpetual and trial builds render a dash for these rows.
-            string licenseeCompany = string.IsNullOrWhiteSpace(info.LicenseeCompany)
-                ? "—" : info.LicenseeCompany;
-            string licenseeName = string.IsNullOrWhiteSpace(info.LicenseeName)
-                ? "—" : info.LicenseeName;
-            var page = new TabPage("授权状态") { Padding = new Padding(18) };
-            TableLayoutPanel layout = DetailLayout(ProductMetadata.RequiresOnlineLicense ? 9 : 8);
-            AddDetail(layout, 5, "授权公司", licenseeCompany);
-            AddDetail(layout, 6, "授权客户", licenseeName);
-            AddDetail(layout, 7, "预计授权时间", info.ExpectedAuthorizationYears.HasValue
-                ? info.ExpectedAuthorizationYears.Value + " 年" : "—");
-            AddDetail(layout, 0, "授权状态", license.StatusText, license.IsExpired);
-            AddDetail(layout, 1, "授权模式", ModeText(license.Mode));
-            AddDetail(layout, 2, "有效期至", license.ExpiryText);
-            AddDetail(layout, 3, "剩余天数", license.DaysRemaining.HasValue
-                ? license.DaysRemaining.Value + " 天" : "无期限");
-            AddDetail(layout, 4, "说明", license.IsExpired
-                ? "CAD 写入、BOQ 输出和 DWG 导出已停止。"
-                : license.Mode == LicenseMode.Perpetual
-                    ? "当前版本无到期限制。" : "请在授权有效期内使用本软件。");
+            var card = UiTheme.Card(16);
+            card.Name = "AuthorizationCard";
+            card.Dock = DockStyle.Top;
+            card.AutoSize = true;
+            card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            card.MinimumSize = new Size(0, 280);
+            card.Padding = new Padding(24, 20, 24, 20);
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            var heading = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 1,
+                Margin = new Padding(0, 0, 0, UiTheme.SpaceM)
+            };
+            heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var statusBlock = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0)
+            };
+            statusBlock.Controls.Add(new Label
+            {
+                Text = "授权信息",
+                AutoSize = true,
+                Font = UiTheme.FontBodyBold,
+                ForeColor = UiTheme.TextSecondary,
+                Margin = new Padding(0)
+            }, 0, 0);
+            statusBlock.Controls.Add(new Label
+            {
+                Name = "AuthorizationStatus",
+                Text = license.StatusText,
+                AutoSize = true,
+                Font = UiTheme.FontDisplay,
+                ForeColor = license.IsExpired ? UiTheme.DangerFg : UiTheme.SuccessFg,
+                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
+            }, 0, 1);
+            heading.Controls.Add(statusBlock, 0, 0);
+
+            var details = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                RowCount = 3,
+                Margin = new Padding(0)
+            };
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (int row = 0; row < 3; row++)
+                details.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            details.Controls.Add(Metric("授权模式", ModeText(license.Mode)), 0, 0);
+            details.Controls.Add(Metric("有效期至", license.ExpiryText), 1, 0);
+            details.Controls.Add(Metric("剩余天数", license.DaysRemaining.HasValue
+                ? license.DaysRemaining.Value + " 天" : "无期限"), 0, 1);
+            details.Controls.Add(Metric("授权公司", ValueOrDash(info.LicenseeCompany)), 1, 1);
+            details.Controls.Add(Metric("授权客户", ValueOrDash(info.LicenseeName)), 0, 2);
+            details.Controls.Add(Metric("预计授权时间", info.ExpectedAuthorizationYears.HasValue
+                ? info.ExpectedAuthorizationYears.Value + " 年" : "—"), 1, 2);
+
+            var footer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                RowCount = 1,
+                Margin = new Padding(0, UiTheme.SpaceS, 0, 0)
+            };
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            footer.Controls.Add(new Label
+            {
+                Text = license.IsExpired
+                    ? "CAD 写入、BOQ 输出和 DWG 导出已停止。"
+                    : license.Mode == LicenseMode.Perpetual
+                        ? "当前版本无到期限制。" : "当前授权在有效期内。",
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ForeColor = license.IsExpired ? UiTheme.DangerFg : UiTheme.TextSecondary,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0)
+            }, 0, 0);
             if (ProductMetadata.RequiresOnlineLicense)
             {
-                var update = UiTheme.Button("更新授权码");
-                update.Click += (sender, args) =>
-                {
-                    using (var form = new OnlineLicenseForm(
-                        OnlineLicenseMonitor.Current.FailureReason))
-                    {
-                        if (form.ShowDialog(page.FindForm()) == DialogResult.OK)
-                            page.FindForm()?.Close();
-                    }
-                };
-                layout.Controls.Add(new Label
-                {
-                    Text = "在线授权",
-                    Dock = DockStyle.Fill,
-                    ForeColor = Muted,
-                    TextAlign = ContentAlignment.MiddleRight,
-                    Margin = new Padding(0, 4, 12, 4)
-                }, 0, 8);
-                layout.Controls.Add(update, 1, 8);
+                Button update = UiTheme.Button("更新授权码");
+                update.Anchor = AnchorStyles.Right;
+                update.Click += (sender, args) => UpdateAuthorization(card);
+                footer.Controls.Add(update, 1, 0);
             }
-            page.Controls.Add(layout);
-            return page;
+
+            layout.Controls.Add(heading, 0, 0);
+            layout.Controls.Add(details, 0, 1);
+            layout.Controls.Add(footer, 0, 2);
+            card.Controls.Add(layout);
+            return card;
+        }
+
+        private static UiCard BuildProductCard(AboutInfo info)
+        {
+            var details = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                RowCount = 3,
+                Margin = new Padding(0)
+            };
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (int row = 0; row < 3; row++)
+                details.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            details.Controls.Add(Metric("产品", info.ProductName), 0, 0);
+            details.Controls.Add(Metric("版本", info.Version), 1, 0);
+            details.Controls.Add(Metric("构建时间", info.BuildTime), 0, 1);
+            details.Controls.Add(Metric("发行日期", info.UpdatedOn), 1, 1);
+            details.Controls.Add(Metric("客户代码", info.CustomerCode), 0, 2);
+            details.Controls.Add(Metric("开发者", info.CompanyName), 1, 2);
+            return SectionCard("产品信息", details);
+        }
+
+        private static UiCard BuildCompanyCard(AboutInfo info)
+        {
+            var details = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 2,
+                RowCount = 2,
+                Margin = new Padding(0)
+            };
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            details.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            details.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            details.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+            details.Controls.Add(Metric("公司", info.CompanyName), 0, 0);
+            details.Controls.Add(Metric("版权", info.Copyright), 1, 0);
+            details.Controls.Add(Metric("官网", info.Website), 0, 1);
+
+            var website = new LinkLabel
+            {
+                Text = info.WebsiteUrl,
+                Dock = DockStyle.Fill,
+                AutoEllipsis = true,
+                LinkColor = UiTheme.Accent,
+                ActiveLinkColor = UiTheme.AccentHover,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(8, 0, 0, 0)
+            };
+            website.Click += (sender, args) => OpenWebsite(info.WebsiteUrl);
+            details.Controls.Add(website, 1, 1);
+            return SectionCard("UNSIAO.Ltd", details);
         }
 
         private static TabPage BuildTermsTab()
         {
-            var page = new TabPage("使用条款") { Padding = new Padding(12) };
+            var page = new TabPage("使用条款")
+            {
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(UiTheme.SpaceXL),
+                UseVisualStyleBackColor = false
+            };
+            var card = UiTheme.Card();
+            card.Dock = DockStyle.Fill;
+            card.Padding = new Padding(UiTheme.SpaceL);
             var terms = new TextBox
             {
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                BorderStyle = BorderStyle.FixedSingle,
+                BorderStyle = BorderStyle.None,
                 BackColor = UiTheme.Surface,
-                ForeColor = Ink,
+                ForeColor = UiTheme.TextPrimary,
                 ScrollBars = ScrollBars.Vertical,
                 Text = LegalTerms.FullText,
                 TabStop = true
             };
-            page.Controls.Add(terms);
+            card.Controls.Add(terms);
+            page.Controls.Add(card);
+            page.Controls.Add(PageHeader("使用条款", "软件许可与使用约定"));
             return page;
         }
 
-        private static TabPage BuildCompanyTab(AboutInfo info)
+        private static Control PageHeader(string title, string subtitle)
         {
-            var page = new TabPage("关于 UNSIAO") { Padding = new Padding(18) };
-            var layout = DetailLayout(5);
-            AddDetail(layout, 0, "公司", info.CompanyName);
-            AddDetail(layout, 1, "产品", info.ProductName + " · " + info.Subtitle);
-            AddDetail(layout, 2, "官网", info.Website);
-            var link = new LinkLabel
+            var header = new TableLayoutPanel
             {
-                Text = info.WebsiteUrl,
+                Dock = DockStyle.Top,
                 AutoSize = true,
-                LinkColor = Accent,
-                Margin = new Padding(0, 6, 0, 4)
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, UiTheme.SpaceL)
             };
-            link.Click += (sender, args) => OpenWebsite(info.WebsiteUrl);
-            layout.Controls.Add(new Label { Text = "访问", AutoSize = true, ForeColor = Muted,
-                TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(0, 6, 8, 4) }, 0, 3);
-            layout.Controls.Add(link, 1, 3);
-            AddDetail(layout, 4, "版权", info.Copyright);
-            page.Controls.Add(layout);
-            return page;
+            header.Controls.Add(new Label
+            {
+                Text = title,
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Font = UiTheme.FontTitle,
+                ForeColor = UiTheme.TextPrimary,
+                Margin = new Padding(0)
+            }, 0, 0);
+            header.Controls.Add(new Label
+            {
+                Text = subtitle,
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ForeColor = UiTheme.TextSecondary,
+                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
+            }, 0, 1);
+            return header;
         }
 
-        private static TableLayoutPanel DetailLayout(int rows)
+        private static UiCard SectionCard(string title, Control content)
         {
+            var card = UiTheme.Card();
+            card.Dock = DockStyle.Top;
+            card.AutoSize = true;
+            card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
                 AutoSize = true,
-                ColumnCount = 2,
-                RowCount = rows,
-                Padding = new Padding(
-                    4, 8,
-                    4, 8)
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < rows; i++)
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            return layout;
+            Label heading = UiTheme.SectionHeader(title);
+            heading.Dock = DockStyle.Fill;
+            content.Dock = DockStyle.Top;
+            content.Margin = new Padding(0, UiTheme.SpaceXS, 0, 0);
+            layout.Controls.Add(heading, 0, 0);
+            layout.Controls.Add(content, 0, 1);
+            card.Controls.Add(layout);
+            return card;
         }
 
-        private static void AddDetail(TableLayoutPanel panel, int row, string label, string value,
-            bool warning = false)
+        private static Control Metric(string label, string value)
         {
-            panel.Controls.Add(new Label
+            var metric = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0, 0, UiTheme.SpaceM, 0)
+            };
+            metric.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            metric.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            metric.Controls.Add(new Label
             {
                 Text = label,
-                AutoSize = true,
-                ForeColor = Muted,
-                TextAlign = ContentAlignment.MiddleRight,
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 12, 4)
-            }, 0, row);
-            panel.Controls.Add(new Label
+                ForeColor = UiTheme.TextSecondary,
+                TextAlign = ContentAlignment.BottomLeft,
+                Margin = new Padding(0)
+            }, 0, 0);
+            metric.Controls.Add(new Label
             {
                 Text = value ?? "",
-                AutoSize = true,
-                ForeColor = warning ? UiTheme.WarningFg : Ink,
-                Font = warning ? UiTheme.FontBodyBold : UiTheme.FontBody,
-                TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, 4, 0, 4)
-            }, 1, row);
+                AutoEllipsis = true,
+                Font = UiTheme.FontBodyBold,
+                ForeColor = UiTheme.TextPrimary,
+                TextAlign = ContentAlignment.TopLeft,
+                Margin = new Padding(0, 2, 0, 0)
+            }, 0, 1);
+            return metric;
         }
+
+        private static string ValueOrDash(string value)
+            => string.IsNullOrWhiteSpace(value) ? "—" : value;
 
         private static string ModeText(LicenseMode mode)
         {
@@ -248,6 +412,16 @@ namespace UNCAD.UI
             {
                 case LicenseMode.Project: return "项目授权版";
                 default: return "正式版";
+            }
+        }
+
+        private static void UpdateAuthorization(Control owner)
+        {
+            using (var form = new OnlineLicenseForm(
+                OnlineLicenseMonitor.Current.FailureReason))
+            {
+                if (form.ShowDialog(owner.FindForm()) == DialogResult.OK)
+                    owner.FindForm()?.Close();
             }
         }
 

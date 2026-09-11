@@ -17,75 +17,106 @@ namespace UNCAD.UI
         internal OnlineLicenseForm(string reason)
         {
             DialogLayout.Apply(this, "UNCAD Pro 在线授权",
-                new Size(610, 260), new Size(540, 240), false);
+                new Size(660, 380), new Size(600, 350), false);
 
             _authorizationCode = new TextBox
             {
+                Name = "AuthorizationCode",
                 Dock = DockStyle.Fill,
                 Text = OnlineLicenseMonitor.StoredAuthorizationCode,
-                Font = UiTheme.FontInput
+                Font = UiTheme.FontInput,
+                Margin = new Padding(0)
             };
             UiTheme.StyleInput(_authorizationCode);
             _status = new Label
             {
+                Name = "AuthorizationStatus",
                 Dock = DockStyle.Fill,
                 AutoEllipsis = true,
                 ForeColor = UiTheme.WarningFg,
                 Text = string.IsNullOrWhiteSpace(reason) ? "请输入授权码。" : reason,
-                TextAlign = ContentAlignment.MiddleLeft
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0)
             };
-
-            var fields = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(
-                    8, 12,
-                    8, 8),
-                ColumnCount = 2,
-                RowCount = 3
-            };
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 82));
-            fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-            fields.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-            fields.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            fields.Controls.Add(new Label
-            {
-                Text = "授权状态",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = UiTheme.TextSecondary,
-                Margin = new Padding(0, 0, 12, 0)
-            }, 0, 0);
-            fields.Controls.Add(_status, 1, 0);
-            fields.Controls.Add(new Label
-            {
-                Text = "授权码",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = UiTheme.TextSecondary,
-                Margin = new Padding(0, 0, 12, 0)
-            }, 0, 1);
-            fields.Controls.Add(_authorizationCode, 1, 1);
-            fields.Controls.Add(new Label
-            {
-                Text = "客户与授权期限将从授权文件自动读取。",
-                Dock = DockStyle.Fill,
-                ForeColor = UiTheme.TextSecondary,
-                TextAlign = ContentAlignment.TopLeft,
-                Padding = new Padding(0, 8, 0, 0)
-            }, 1, 2);
 
             _save = UiTheme.PrimaryButton("验证并保存");
             _save.Click += ValidateAndSave;
             _cancel = UiTheme.Button("稍后处理", DialogResult.Cancel);
-            FlowLayoutPanel commands = UiTheme.CommandBar();
-            commands.Controls.Add(_cancel);
-            commands.Controls.Add(_save);
 
-            Controls.Add(fields);
-            Controls.Add(commands);
-            Controls.Add(UiTheme.Header("在线授权", "授权码验证成功后会保存在当前客户机，并每 5 分钟刷新状态。"));
+            var commands = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                FlowDirection = FlowDirection.RightToLeft,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, UiTheme.SpaceM, 0, 0)
+            };
+            commands.Controls.Add(_save);
+            commands.Controls.Add(_cancel);
+
+            var card = UiTheme.Card(16);
+            card.Name = "AuthorizationCard";
+            card.Dock = DockStyle.Fill;
+            card.Padding = new Padding(28, 24, 28, 22);
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 7,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            layout.Controls.Add(new Label
+            {
+                Text = "在线授权",
+                Dock = DockStyle.Fill,
+                Font = UiTheme.FontBodyBold,
+                ForeColor = UiTheme.TextSecondary,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0)
+            }, 0, 0);
+            layout.Controls.Add(new Label
+            {
+                Text = "验证此设备的授权",
+                Dock = DockStyle.Fill,
+                Font = UiTheme.FontDisplay,
+                ForeColor = UiTheme.TextPrimary,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0)
+            }, 0, 1);
+            layout.Controls.Add(_status, 0, 2);
+            layout.Controls.Add(new Label
+            {
+                Text = "授权码",
+                Dock = DockStyle.Fill,
+                Font = UiTheme.FontBodyBold,
+                ForeColor = UiTheme.TextPrimary,
+                TextAlign = ContentAlignment.BottomLeft,
+                Margin = new Padding(0)
+            }, 0, 3);
+            layout.Controls.Add(_authorizationCode, 0, 4);
+            layout.Controls.Add(new Label
+            {
+                Text = "客户信息和授权期限会从在线授权响应中读取。",
+                Dock = DockStyle.Fill,
+                ForeColor = UiTheme.TextSecondary,
+                TextAlign = ContentAlignment.TopLeft,
+                Padding = new Padding(0, UiTheme.SpaceM, 0, 0),
+                Margin = new Padding(0)
+            }, 0, 5);
+            layout.Controls.Add(commands, 0, 6);
+            card.Controls.Add(layout);
+            Controls.Add(card);
+
             AcceptButton = _save;
             CancelButton = _cancel;
             Shown += (sender, args) =>

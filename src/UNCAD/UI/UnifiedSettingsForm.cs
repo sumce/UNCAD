@@ -18,11 +18,10 @@ namespace UNCAD.UI
     /// </summary>
     public sealed class UnifiedSettingsForm : Form
     {
-        private readonly TabControl _tabs = new TabControl
+        private readonly UiNavigationTabControl _tabs = new UiNavigationTabControl
         {
-            Dock = DockStyle.Fill,
-            Appearance = TabAppearance.Normal,
-            Padding = new System.Drawing.Point(18, 8)
+            Name = "SettingsNavigation",
+            Dock = DockStyle.Fill
         };
 
         // 线段绘制
@@ -108,12 +107,19 @@ namespace UNCAD.UI
             new CheckBox { Text = "插座盘", AutoSize = true };
         private readonly CheckBox _autofillBusPlugBox =
             new CheckBox { Text = "插接箱", AutoSize = true };
+        private readonly Label _snapshotStatus = new Label
+        {
+            Name = "MachineSnapshotStatus",
+            AutoSize = true,
+            ForeColor = UiTheme.TextSecondary,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
         private bool _machineRefreshInProgress;
 
         public UnifiedSettingsForm(int tabIndex)
         {
             DialogLayout.Apply(this, ProductMetadata.ProductName + " · 配置中心",
-                new System.Drawing.Size(960, 650), new System.Drawing.Size(800, 540));
+                new System.Drawing.Size(1040, 700), new System.Drawing.Size(860, 580));
 
             _conduitDia.Items.AddRange(new object[]
                 { "20", "25", "32", "38", "51", "75", "100" });
@@ -128,6 +134,9 @@ namespace UNCAD.UI
             _tabs.TabPages.Add(BuildStyleTab());
             _tabs.TabPages.Add(BuildFillTab());
             _tabs.SelectedIndex = Math.Min(Math.Max(tabIndex, 0), _tabs.TabPages.Count - 1);
+            StyleInteractiveControls(_tabs);
+            _fillExcel.TextChanged += (sender, args) => UpdateMachineSnapshotStatus();
+            UpdateMachineSnapshotStatus();
 
             Button ok = UiTheme.PrimaryButton("保存");
             Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
@@ -146,8 +155,8 @@ namespace UNCAD.UI
         private Control BuildHeader()
         {
             return UiTheme.Header(
-                ProductMetadata.ProductName + "  /  " + ProductMetadata.ProductSubtitle,
-                ProductMetadata.CompanyName + "  ·  " + ProductMetadata.Website);
+                ProductMetadata.ProductName + " 设置",
+                "绘图、统计、清单与输出");
         }
 
         private void Confirm(object sender, EventArgs e)
@@ -471,57 +480,58 @@ namespace UNCAD.UI
         private TabPage BuildUnlTab()
         {
             var g = Grid(4);
-            g.Controls.Add(Lbl("占位文字:"), 0, 0); g.Controls.Add(_unlText, 1, 0);
-            g.Controls.Add(Lbl("文字高度:"), 0, 1); g.Controls.Add(_unlHgt, 1, 1);
-            g.Controls.Add(Lbl("文字位置:"), 0, 2);
+            AddField(g, 0, "占位文字", _unlText);
+            AddField(g, 1, "文字高度", _unlHgt);
             var posPanel = new FlowLayoutPanel { AutoSize = true };
             posPanel.Controls.Add(_unlCenter);
             posPanel.Controls.Add(_unlBelow);
             posPanel.Controls.Add(_unlAbove);
-            g.Controls.Add(posPanel, 1, 2);
-            g.Controls.Add(Lbl("偏移距离(0=贴线):"), 0, 3); g.Controls.Add(_unlOff, 1, 3);
-            return Page("线段绘制", g);
+            AddField(g, 2, "文字位置", posPanel);
+            AddField(g, 3, "偏移距离（0 = 贴线）", _unlOff);
+            return Page("线段绘制", "U1L 默认标注参数",
+                Section("线段文字", null, g));
         }
 
         private TabPage BuildUnqTab()
         {
             var g = Grid(5);
-            g.Controls.Add(Lbl("规格文字:"), 0, 0); g.Controls.Add(_unqText, 1, 0);
-            g.Controls.Add(Lbl("文字高度:"), 0, 1); g.Controls.Add(_unqHgt, 1, 1);
-            g.Controls.Add(Lbl("红线距基线(0=默认15):"), 0, 2); g.Controls.Add(_unqLoff, 1, 2);
-            g.Controls.Add(Lbl("文字距红线(0=贴线):"), 0, 3); g.Controls.Add(_unqToff, 1, 3);
-            g.Controls.Add(Lbl("标注侧:"), 0, 4);
+            AddField(g, 0, "默认规格", _unqText);
+            AddField(g, 1, "文字高度", _unqHgt);
+            AddField(g, 2, "红线距基线（0 = 15）", _unqLoff);
+            AddField(g, 3, "文字距红线（0 = 贴线）", _unqToff);
             var sidePanel = new FlowLayoutPanel { AutoSize = true };
             sidePanel.Controls.Add(_unqAbove);
             sidePanel.Controls.Add(_unqBelow);
-            g.Controls.Add(sidePanel, 1, 4);
-            return Page("桥架标注", g);
+            AddField(g, 4, "标注侧", sidePanel);
+            return Page("桥架标注", "U1Q1 / U1Q2 / U1Q4 标注参数",
+                Section("桥架文字与位置", "成图文字使用固定 BOQ 清单中的桥架型号。", g));
         }
 
         private TabPage BuildConduitTab()
         {
             var g = Grid(1);
-            g.Controls.Add(Lbl("默认管径:"), 0, 0); g.Controls.Add(_conduitDia, 1, 0);
-            return Page("线管标注", g);
+            AddField(g, 0, "默认管径", _conduitDia);
+            return Page("线管标注", "U1C 默认规格",
+                Section("线管规格", "文字高度、偏移距离和标注侧与桥架标注共用。", g));
         }
 
         private TabPage BuildUnrTab()
         {
             var g = Grid(1);
-            g.Controls.Add(Lbl("拱桥直径:"), 0, 0); g.Controls.Add(_unrDia, 1, 0);
-            return Page("拱桥开洞", g);
+            AddField(g, 0, "拱桥直径", _unrDia);
+            return Page("拱桥开洞", "U1R 几何参数",
+                Section("开洞尺寸", null, g));
         }
 
         private TabPage BuildStatTab()
         {
             var source = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Padding = new Padding(
-                    8, 8,
-                    8, 4)
+                WrapContents = true,
+                Margin = new Padding(0)
             };
             source.Controls.Add(_statText);
             source.Controls.Add(_statMText);
@@ -529,89 +539,75 @@ namespace UNCAD.UI
 
             var categories = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Padding = new Padding(
-                    8, 8,
-                    8, 4)
+                WrapContents = true,
+                Margin = new Padding(0)
             };
             categories.Controls.Add(_statCable);
             categories.Controls.Add(_statBridge);
             categories.Controls.Add(_statConduit);
 
             var output = Grid(2);
-            output.AutoSize = false;
-            output.Dock = DockStyle.Fill;
-            output.Padding = new Padding(
-                    8, 4,
-                    8, 4);
-            output.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-            output.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            output.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            output.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            output.Controls.Add(Lbl("输出文字高度:"), 0, 0);
-            output.Controls.Add(_statHgt, 1, 0);
-            output.Controls.Add(Lbl("桥架每格长度 (mm):"), 0, 1);
-            output.Controls.Add(_statMm, 1, 1);
+            AddField(output, 0, "输出文字高度", _statHgt);
+            AddField(output, 1, "桥架每格长度（mm）", _statMm);
 
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 4,
-                Padding = new Padding(
-                    12, 10,
-                    12, 10)
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 108));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            layout.Controls.Add(Group("文字来源", source), 0, 0);
-            layout.Controls.Add(Group("统计类别", categories), 0, 1);
-            layout.Controls.Add(Group("换算与输出", output), 0, 2);
-            return Page("统计汇总", layout);
+            return Page("统计汇总", "UNADD 与 U1F / U1U 的文字统计范围",
+                Section("文字来源", null, source),
+                Section("统计类别", null, categories),
+                Section("换算与输出", null, output));
         }
 
         private TabPage BuildStyleTab()
         {
-            var g = Grid(5);
-            g.Controls.Add(Lbl("样式名:"), 0, 0); g.Controls.Add(_styleName, 1, 0);
-            g.Controls.Add(Lbl("字体文件(如 msyh.ttf):"), 0, 1); g.Controls.Add(_styleFont, 1, 1);
-            g.Controls.Add(Lbl("大字体文件(空=TTF):"), 0, 2); g.Controls.Add(_styleBigFont, 1, 2);
-            g.Controls.Add(Lbl("宽高比:"), 0, 3); g.Controls.Add(_styleWidth, 1, 3);
-            g.Controls.Add(Lbl("启动界面:"), 0, 4); g.Controls.Add(_splashEnabled, 1, 4);
-            return Page("文字样式", g);
+            var style = Grid(4);
+            AddField(style, 0, "样式名", _styleName);
+            AddField(style, 1, "字体文件（如 msyh.ttf）", _styleFont);
+            AddField(style, 2, "大字体文件（空 = TTF）", _styleBigFont);
+            AddField(style, 3, "宽高比", _styleWidth);
+
+            var startup = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                Margin = new Padding(0)
+            };
+            startup.Controls.Add(_splashEnabled);
+            return Page("文字样式", "所有生成文字的公共样式",
+                Section("文字样式", null, style),
+                Section("启动", null, startup));
         }
 
         private TabPage BuildFillTab()
         {
-            var g = Grid(9);
+            var source = Grid(2);
             // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
-            g.Controls.Add(Lbl("机台数据 Excel:"), 0, 0); g.Controls.Add(PathPicker(_fillExcel), 1, 0);
-            g.Controls.Add(Lbl("起始数据行(1=No.1):"), 0, 1); g.Controls.Add(_fillTblRow, 1, 1);
-            g.Controls.Add(Lbl("每次清空数据行数:"), 0, 2); g.Controls.Add(_fillClearRows, 1, 2);
-            g.Controls.Add(Lbl("表格文字高度:"), 0, 3); g.Controls.Add(_fillTextHeight, 1, 3);
-            g.Controls.Add(Lbl("软管手动数量 (m):"), 0, 4); g.Controls.Add(_fillFlexibleMeters, 1, 4);
-            g.Controls.Add(Lbl("桥架信息(块属性):"), 0, 5); g.Controls.Add(_fillBridge, 1, 5);
-            g.Controls.Add(Lbl("自动输出文件夹:"), 0, 6); g.Controls.Add(FolderPicker(_submitFolder), 1, 6);
-            g.Controls.Add(Lbl("设备端颜色:"), 0, 7); g.Controls.Add(_fillDeviceColor, 1, 7);
-            g.Controls.Add(Lbl("上游端颜色:"), 0, 8); g.Controls.Add(_fillUpstreamColor, 1, 8);
+            AddField(source, 0, "机台数据 Excel", PathPicker(_fillExcel));
+            AddField(source, 1, "快照状态", _snapshotStatus);
+
+            var table = Grid(7);
+            AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
+            AddField(table, 1, "每次清空数据行数", _fillClearRows);
+            AddField(table, 2, "表格文字高度", _fillTextHeight);
+            AddField(table, 3, "软管手动数量（m）", _fillFlexibleMeters);
+            AddField(table, 4, "桥架信息（块属性）", _fillBridge);
+            AddField(table, 5, "设备端颜色", _fillDeviceColor);
+            AddField(table, 6, "上游端颜色", _fillUpstreamColor);
 
             var autoFill = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                AutoSize = true,
                 ColumnCount = 4,
                 RowCount = 2,
                 Margin = new Padding(0),
-                Padding = new Padding(8, 4, 8, 4)
+                Padding = new Padding(0, 4, 0, 0)
             };
             for (int column = 0; column < autoFill.ColumnCount; column++)
                 autoFill.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-            autoFill.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-            autoFill.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            autoFill.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            autoFill.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             autoFill.Controls.Add(_autofillCable, 0, 0);
             autoFill.Controls.Add(_autofillBreaker, 1, 0);
             autoFill.Controls.Add(_autofillFlexibleConduit, 2, 0);
@@ -620,29 +616,14 @@ namespace UNCAD.UI
             autoFill.Controls.Add(_autofillOutletPanel, 1, 1);
             autoFill.Controls.Add(_autofillBusPlugBox, 2, 1);
 
-            var note = new Label
-            {
-                Text = "提示：软管直径由电缆型号决定，软管长度由 Ruanguan 动态块读取。",
-                Dock = DockStyle.Fill,
-                ForeColor = UiTheme.Accent,
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(14, 0, 14, 0)
-            };
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoScroll = true,
-                ColumnCount = 1,
-                RowCount = 3
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 390));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.Controls.Add(g, 0, 0);
-            layout.Controls.Add(Group("BOQ 自动填充类别", autoFill), 0, 1);
-            layout.Controls.Add(note, 0, 2);
-            return Page("Excel 数据", layout);
+            var output = Grid(1);
+            AddField(output, 0, "自动输出文件夹", FolderPicker(_submitFolder));
+
+            return Page("Excel 数据", "机台快照、BOQ 图框与自动输出",
+                Section("机台数据源", "数据只在点击刷新后写入 SQLite 快照。", source),
+                Section("图框与表格", null, table),
+                Section("BOQ 自动填充类别", "断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
+                Section("自动输出", null, output));
         }
 
         private Control FolderPicker(TextBox target)
@@ -683,8 +664,8 @@ namespace UNCAD.UI
             refresh.Click += (sender, args) => RefreshMachineWorkbook(target, refresh);
             var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = new Padding(0) };
             row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
-            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
             row.Controls.Add(target, 0, 0);
             row.Controls.Add(button, 1, 0);
             row.Controls.Add(refresh, 2, 0);
@@ -724,6 +705,7 @@ namespace UNCAD.UI
                 if (!string.IsNullOrWhiteSpace(result.Warning))
                     message += "\n" + result.Warning;
                 if (IsDisposed || Disposing) return;
+                UpdateMachineSnapshotStatus();
                 MessageBox.Show(this, message, "U1SET", MessageBoxButtons.OK,
                     result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
                         ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
@@ -746,6 +728,33 @@ namespace UNCAD.UI
             }
         }
 
+        private void UpdateMachineSnapshotStatus()
+        {
+            string source = _fillExcel.Text.Trim();
+            if (source.Length == 0)
+            {
+                _snapshotStatus.Text = "未选择数据源";
+                _snapshotStatus.ForeColor = UiTheme.TextSecondary;
+                return;
+            }
+            if (!MachineWorkbookSource.TryGetSnapshot(source,
+                out MachineWorkbookSnapshotInfo snapshot))
+            {
+                _snapshotStatus.Text = "尚未刷新";
+                _snapshotStatus.ForeColor = UiTheme.WarningFg;
+                return;
+            }
+
+            string refreshed = snapshot.RefreshedUtc;
+            if (DateTime.TryParse(snapshot.RefreshedUtc, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out DateTime utc))
+                refreshed = utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm",
+                    CultureInfo.InvariantCulture);
+            _snapshotStatus.Text = "已刷新 · " + snapshot.RowCount
+                + " 个有效回路 · " + refreshed;
+            _snapshotStatus.ForeColor = UiTheme.SuccessFg;
+        }
+
         private static Control PickerPanel(TextBox target, Button button)
         {
             target.Dock = DockStyle.Fill;
@@ -759,7 +768,7 @@ namespace UNCAD.UI
                 Margin = new Padding(0)
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 74));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
             layout.Controls.Add(target, 0, 0);
             layout.Controls.Add(button, 1, 0);
             return layout;
@@ -771,52 +780,168 @@ namespace UNCAD.UI
             base.Dispose(disposing);
         }
 
-        private static GroupBox Group(string title, Control content)
+        private static void StyleInteractiveControls(Control root)
         {
-            var group = new GroupBox
+            foreach (Control child in root.Controls)
             {
-                Text = title,
-                Dock = DockStyle.Fill,
-                ForeColor = UiTheme.TextSecondary,
-                Margin = new Padding(0, 0, 0, UiTheme.SpaceS),
-                Padding = new Padding(UiTheme.SpaceS)
-            };
-            content.Dock = DockStyle.Fill;
-            group.Controls.Add(content);
-            return group;
+                if (child is TextBox || child is ComboBox || child is NumericUpDown)
+                    UiTheme.StyleInput(child);
+                else if (child is CheckBox || child is RadioButton)
+                {
+                    child.Font = UiTheme.FontBody;
+                    child.ForeColor = UiTheme.TextPrimary;
+                }
+                StyleInteractiveControls(child);
+            }
         }
 
         private static Label Lbl(string text) => new Label
         {
             Text = text,
             ForeColor = UiTheme.TextSecondary,
-            TextAlign = System.Drawing.ContentAlignment.MiddleRight,
+            TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
             Dock = DockStyle.Fill,
             AutoSize = false,
-            Padding = new Padding(0, 0, 8, 0)
+            Padding = new Padding(0, 0, 12, 0),
+            Margin = new Padding(0)
         };
+
+        private static void AddField(TableLayoutPanel grid, int row, string label,
+            Control control)
+        {
+            control.Margin = new Padding(0, 5, 0, 5);
+            if (control is TextBox || control is TableLayoutPanel)
+                control.Dock = DockStyle.Fill;
+            else
+                control.Anchor = AnchorStyles.Left;
+            grid.Controls.Add(Lbl(label), 0, row);
+            grid.Controls.Add(control, 1, row);
+        }
 
         private static TableLayoutPanel Grid(int rows)
         {
             var layout = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                AutoSize = false,
-                AutoScroll = true,
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
                 RowCount = rows,
-                Padding = new Padding(14)
+                BackColor = Color.Transparent,
+                Margin = new Padding(0),
+                Padding = new Padding(0)
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int row = 0; row < rows; row++)
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             return layout;
         }
-        private static TabPage Page(string title, Control content)
+
+        private static UiCard Section(string title, string subtitle, Control content)
         {
-            var page = new TabPage(title) { Padding = new Padding(4) };
-            page.Controls.Add(content);
+            var card = UiTheme.Card();
+            card.Dock = DockStyle.Top;
+            card.AutoSize = true;
+            card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+            int rows = string.IsNullOrWhiteSpace(subtitle) ? 2 : 3;
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = rows,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var header = UiTheme.SectionHeader(title);
+            header.Dock = DockStyle.Fill;
+            layout.Controls.Add(header, 0, 0);
+            int contentRow = 1;
+            if (!string.IsNullOrWhiteSpace(subtitle))
+            {
+                layout.Controls.Add(new Label
+                {
+                    Text = subtitle,
+                    Dock = DockStyle.Fill,
+                    AutoSize = true,
+                    ForeColor = UiTheme.TextSecondary,
+                    Margin = new Padding(0, 0, 0, UiTheme.SpaceS)
+                }, 0, 1);
+                contentRow = 2;
+            }
+            content.Dock = DockStyle.Top;
+            content.Margin = new Padding(0, UiTheme.SpaceXS, 0, 0);
+            layout.Controls.Add(content, 0, contentRow);
+            card.Controls.Add(layout);
+            return card;
+        }
+
+        private static TabPage Page(string title, string subtitle,
+            params UiCard[] sections)
+        {
+            var page = new TabPage(title)
+            {
+                Padding = new Padding(0),
+                BackColor = UiTheme.WindowBg,
+                UseVisualStyleBackColor = false
+            };
+            var scroll = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BackColor = UiTheme.WindowBg
+            };
+            var stack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = sections.Length + 1,
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(UiTheme.SpaceXL, UiTheme.SpaceL,
+                    UiTheme.SpaceXL, UiTheme.SpaceXL),
+                Margin = new Padding(0)
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            var pageHeader = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, 0, 0, UiTheme.SpaceL)
+            };
+            pageHeader.Controls.Add(new Label
+            {
+                Text = title,
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Font = UiTheme.FontTitle,
+                ForeColor = UiTheme.TextPrimary,
+                Margin = new Padding(0)
+            }, 0, 0);
+            pageHeader.Controls.Add(new Label
+            {
+                Text = subtitle,
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                ForeColor = UiTheme.TextSecondary,
+                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
+            }, 0, 1);
+            stack.Controls.Add(pageHeader, 0, 0);
+            for (int index = 0; index < sections.Length; index++)
+            {
+                sections[index].Dock = DockStyle.Top;
+                stack.Controls.Add(sections[index], 0, index + 1);
+            }
+            scroll.Controls.Add(stack);
+            page.Controls.Add(scroll);
             return page;
         }
     }
