@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Autodesk.AutoCAD.DatabaseServices;
+using Autodesk.AutoCAD.Geometry;
 
 namespace UNCAD.Cad
 {
@@ -121,6 +122,75 @@ namespace UNCAD.Cad
                 sourceHandle = "";
             }
             return kind.Length > 0 && sourceHandle.Length > 0;
+        }
+
+        /// <summary>Uses same-source U1Q geometry to restore a migrated label's angle.</summary>
+        public static bool TryReadCurveRotation(Transaction transaction, Entity annotation,
+            string expectedKind, Point3d anchor, out double rotation)
+        {
+            rotation = 0;
+            if (transaction == null || annotation == null
+                || !TryRead(annotation, out string kind, out string sourceHandle)
+                || !string.Equals(kind, expectedKind,
+                    StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (long.TryParse(sourceHandle, NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out long raw))
+            {
+                try
+                {
+                    ObjectId sourceId = annotation.Database.GetObjectId(false,
+                        new Handle(raw), 0);
+                    Curve source = transaction.GetObject(sourceId, OpenMode.ForRead, true)
+                        as Curve;
+                    if (source != null && TryCurveRotation(source, anchor, out rotation))
+                        return true;
+                }
+                catch { }
+            }
+
+            Curve best = null;
+            double bestDistance = double.MaxValue;
+            var owner = transaction.GetObject(annotation.OwnerId, OpenMode.ForRead, false)
+                as BlockTableRecord;
+            if (owner == null) return false;
+            foreach (ObjectId id in owner)
+            {
+                Curve curve = transaction.GetObject(id, OpenMode.ForRead, true) as Curve;
+                if (curve == null || !TryRead(curve,
+                        out string curveKind, out string curveSource)
+                    || !string.Equals(curveKind, expectedKind,
+                        StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(curveSource, sourceHandle,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    double distance = curve.GetClosestPointTo(anchor, false)
+                        .DistanceTo(anchor);
+                    if (distance < bestDistance)
+                    {
+                        best = curve;
+                        bestDistance = distance;
+                    }
+                }
+                catch { }
+            }
+            return best != null && TryCurveRotation(best, anchor, out rotation);
+        }
+
+        private static bool TryCurveRotation(Curve curve, Point3d anchor,
+            out double rotation)
+        {
+            rotation = 0;
+            try
+            {
+                Point3d point = curve.GetClosestPointTo(anchor, false);
+                Vector3d tangent = curve.GetFirstDerivative(point);
+                if (tangent.Length < 1e-9) return false;
+                rotation = GeoMath.ReadableAngle(point, point + tangent);
+                return true;
+            }
+            catch { return false; }
         }
     }
 }

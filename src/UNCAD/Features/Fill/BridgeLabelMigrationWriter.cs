@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Features.Fill
 {
@@ -25,7 +26,13 @@ namespace UNCAD.Features.Fill
                 string value = entity is DBText text ? text.TextString
                     : entity is MText mtext ? mtext.Contents : "";
                 if (!AnnotationLabelPair.TryUpgradeBridgeLabel(value, mmPerGrid,
-                        out string upgraded)) continue;
+                        out string upgraded))
+                {
+                    if (entity is MText migrated
+                        && RepairMigratedRotation(transaction, migrated, mmPerGrid))
+                        changed++;
+                    continue;
+                }
 
                 if (entity is MText existing)
                 {
@@ -43,6 +50,29 @@ namespace UNCAD.Features.Fill
                 }
             }
             return changed;
+        }
+
+        private static bool RepairMigratedRotation(Transaction transaction, MText text,
+            double mmPerGrid)
+        {
+            string raw = (text.Contents ?? "").Trim();
+            if (TextParser.SplitMTextLines(raw).Count < 2) return false;
+            string collapsed = AnnotationLabelPair.CollapseText(raw);
+            if (string.Equals(collapsed, raw, StringComparison.Ordinal)
+                || !TextParser.TryExtractBridgeLabel(collapsed, mmPerGrid,
+                    out _, out _)
+                || !ParallelAnnotationMetadata.TryReadCurveRotation(transaction, text,
+                    "U1Q", text.Location, out double rotation)
+                || AngleDifference(text.Rotation, rotation) <= 1e-6) return false;
+            text.UpgradeOpen();
+            text.Rotation = rotation;
+            return true;
+        }
+
+        private static double AngleDifference(double first, double second)
+        {
+            double difference = Math.Abs(first - second) % (Math.PI * 2.0);
+            return difference > Math.PI ? Math.PI * 2.0 - difference : difference;
         }
 
         private static bool ReplaceDbText(Transaction transaction, DBText source,

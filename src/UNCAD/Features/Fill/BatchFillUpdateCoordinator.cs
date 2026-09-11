@@ -393,7 +393,7 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count
                 + " 个，表格写入 " + tableRows + " 行，块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性。"
-                + (migratedBridgeLabels > 0 ? " 旧桥架标注升级为 BOQ 两行标注 "
+                + (migratedBridgeLabels > 0 ? " 旧桥架标注升级/角度修复 "
                     + migratedBridgeLabels + " 个（"
                     + UNCAD.Core.Text.TextFormatter.FormatNum(options.MmPerGrid)
                     + " mm/格）。" : "")

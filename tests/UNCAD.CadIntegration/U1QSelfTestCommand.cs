@@ -53,6 +53,25 @@ namespace UNCAD.CadIntegration
                 Require(generatedIds.Count >= 2, "initial generated entities");
                 Require(Math.Abs(ReadMTextRotation(document.Database, generatedIds)
                     - Math.PI / 4.0) <= 1e-6, "two-line MText rotation");
+                ObjectId generatedText = FindMText(document.Database, generatedIds);
+                using (Transaction transaction = document.Database.TransactionManager
+                    .StartTransaction())
+                {
+                    MText broken = (MText)transaction.GetObject(generatedText,
+                        OpenMode.ForWrite);
+                    broken.Rotation = 0;
+                    transaction.Commit();
+                }
+                using (Transaction transaction = document.Database.TransactionManager
+                    .StartTransaction())
+                {
+                    Require(BridgeLabelMigrationWriter.Migrate(transaction,
+                        new[] { generatedText }, 250.0) == 1,
+                        "already-migrated rotation repair");
+                    transaction.Commit();
+                }
+                Require(Math.Abs(ReadMTextRotation(document.Database, generatedIds)
+                    - Math.PI / 4.0) <= 1e-6, "repaired MText rotation");
 
                 // Selecting the visible generated red line must resolve to the source
                 // line and replace the old output rather than silently doing nothing.
@@ -153,6 +172,17 @@ namespace UNCAD.CadIntegration
                         return text.Rotation;
                 }
                 return double.NaN;
+            }
+        }
+
+        private static ObjectId FindMText(Database database, IEnumerable<ObjectId> ids)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in ids)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is MText)
+                        return id;
+                return ObjectId.Null;
             }
         }
 
