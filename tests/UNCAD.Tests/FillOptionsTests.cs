@@ -43,7 +43,7 @@ namespace UNCAD.Tests
         {
             FillAutoFillOptions defaults = FillAutoFillOptions.Default;
             Assert.True(defaults.Cable);
-            Assert.False(defaults.Breaker);
+            Assert.True(defaults.Breaker);
             Assert.True(defaults.FlexibleConduit);
             Assert.True(defaults.RigidConduit);
             Assert.True(defaults.Bridge);

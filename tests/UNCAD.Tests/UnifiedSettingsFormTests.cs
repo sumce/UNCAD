@@ -134,7 +134,7 @@ namespace UNCAD.Tests
                         Assert.Equal(7, autoFill.Count);
                         Assert.Equal(new[]
                         {
-                            "电缆", "电盘（断路器）", "软管", "线管",
+                            "电缆", "断路器", "软管", "线管",
                             "桥架", "插座盘", "插接箱"
                         }, autoFill.Select(check => check.Text).ToArray());
                         Assert.All(autoFill, check =>

@@ -54,9 +54,9 @@ namespace UNCAD.Core.Fill
             BusPlugBox = busPlugBox;
         }
 
-        /// <summary>默认：插座盘与电盘关闭，其余开启。</summary>
+        /// <summary>默认：插座盘关闭，其余自动填充类别开启。</summary>
         public static FillAutoFillOptions Default { get; } =
-            new FillAutoFillOptions(true, false, true, true, true, false, true);
+            new FillAutoFillOptions(true, true, true, true, true, false, true);
 
         public bool Cable { get; }
         public bool Breaker { get; }

@@ -97,7 +97,7 @@ namespace UNCAD.UI
         private readonly CheckBox _autofillCable =
             new CheckBox { Text = "电缆", AutoSize = true };
         private readonly CheckBox _autofillBreaker =
-            new CheckBox { Text = "电盘（断路器）", AutoSize = true };
+            new CheckBox { Text = "断路器", AutoSize = true };
         private readonly CheckBox _autofillFlexibleConduit =
             new CheckBox { Text = "软管", AutoSize = true };
         private readonly CheckBox _autofillRigidConduit =

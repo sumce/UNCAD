@@ -223,7 +223,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void Build_DefaultAutoFillSkipsBreakerAndOutletPanel()
+        public void Build_DefaultAutoFillKeepsBreakerAndSkipsOutletPanel()
         {
             List<ListItem> items = Items();
             items.Add(Panel("4.11", "100A+20A*40"));
@@ -243,8 +243,9 @@ namespace UNCAD.Tests
                 Next = "I-Line盘",
                 Detail = "N480 3P4W 3P250A"
             }, items, new CableStatResult());
-            Assert.DoesNotContain(breakerRows,
-                row => row.Category == TableFillCategory.Breaker);
+            Assert.Contains(breakerRows,
+                row => row.Category == TableFillCategory.Breaker
+                    && row.Code == "6.5");
 
             List<TableFillRow> allDisabledSocketRows = TableFillPlanner.Build(
                 new MachineRow
