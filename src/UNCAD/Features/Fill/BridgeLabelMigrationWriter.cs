@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
-using UNCAD.Core.Text;
+using Autodesk.AutoCAD.Geometry;
+using UNCAD.Cad;
+using UNCAD.Core.Fill;
 
 namespace UNCAD.Features.Fill
 {
-    /// <summary>Migrates selected legacy U1Q grid labels inside the caller's transaction.</summary>
+    /// <summary>Upgrades selected legacy U1Q labels inside the caller's transaction.</summary>
     internal static class BridgeLabelMigrationWriter
     {
         public static int Migrate(Transaction transaction,
@@ -20,27 +22,78 @@ namespace UNCAD.Features.Fill
             {
                 if (id.IsNull || !id.IsValid || id.IsErased) continue;
                 Entity entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
-                // 只在迁移结果仍能被统计读出时才改写图形文字；否则留着旧格数写法
-                // （统计照样认），不要把它改成读不出的样子。
-                if (entity is DBText text
-                    && BridgeLabelFormatter.TryMigrateLegacyGridReadable(text.TextString,
-                        mmPerGrid, out string dbTextValue))
+                string value = entity is DBText text ? text.TextString
+                    : entity is MText mtext ? mtext.Contents : "";
+                if (!AnnotationLabelPair.TryUpgradeBridgeLabel(value, mmPerGrid,
+                        out string upgraded)) continue;
+
+                if (entity is MText existing)
                 {
-                    text.UpgradeOpen();
-                    text.TextString = dbTextValue;
+                    existing.UpgradeOpen();
+                    existing.Contents = upgraded;
+                    existing.Width = 0.0;
+                    existing.LineSpacingStyle = LineSpacingStyle.Exactly;
+                    existing.LineSpacingFactor = EntityFactory.LabelLineSpacingFactor;
                     changed++;
                 }
-                else if (entity is MText mtext
-                    && BridgeLabelFormatter.TryMigrateLegacyGridReadable(
-                        TextParser.CleanMText(mtext.Contents), mmPerGrid,
-                        out string mTextValue))
+                else if (entity is DBText legacy
+                    && ReplaceDbText(transaction, legacy, upgraded))
                 {
-                    mtext.UpgradeOpen();
-                    mtext.Contents = mTextValue;
                     changed++;
                 }
             }
             return changed;
+        }
+
+        private static bool ReplaceDbText(Transaction transaction, DBText source,
+            string contents)
+        {
+            var owner = transaction.GetObject(source.OwnerId, OpenMode.ForWrite, false)
+                as BlockTableRecord;
+            if (owner == null) return false;
+
+            var replacement = new MText();
+            replacement.SetDatabaseDefaults(source.Database);
+            replacement.SetPropertiesFrom(source);
+            replacement.Contents = contents;
+            replacement.TextHeight = source.Height;
+            replacement.TextStyleId = source.TextStyleId;
+            replacement.Rotation = source.Rotation;
+            replacement.Normal = source.Normal;
+            replacement.Attachment = ToMTextAttachment(source.Justify);
+            replacement.Location = source.Justify == AttachmentPoint.BaseLeft
+                ? source.Position : source.AlignmentPoint;
+            replacement.Width = 0.0;
+            replacement.LineSpacingStyle = LineSpacingStyle.Exactly;
+            replacement.LineSpacingFactor = EntityFactory.LabelLineSpacingFactor;
+
+            owner.AppendEntity(replacement);
+            transaction.AddNewlyCreatedDBObject(replacement, true);
+            if (ParallelAnnotationMetadata.TryRead(source,
+                    out string kind, out string sourceHandle))
+                ParallelAnnotationMetadata.Set(replacement, kind, sourceHandle);
+            source.UpgradeOpen();
+            source.Erase();
+            return true;
+        }
+
+        private static AttachmentPoint ToMTextAttachment(AttachmentPoint value)
+        {
+            switch (value)
+            {
+                case AttachmentPoint.TopLeft:
+                case AttachmentPoint.TopCenter:
+                case AttachmentPoint.TopRight:
+                case AttachmentPoint.MiddleLeft:
+                case AttachmentPoint.MiddleCenter:
+                case AttachmentPoint.MiddleRight:
+                case AttachmentPoint.BottomLeft:
+                case AttachmentPoint.BottomCenter:
+                case AttachmentPoint.BottomRight:
+                    return value;
+                default:
+                    return AttachmentPoint.BottomLeft;
+            }
         }
     }
 }

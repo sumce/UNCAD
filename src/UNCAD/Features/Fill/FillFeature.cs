@@ -509,8 +509,8 @@ namespace UNCAD.Features.Fill
             if (migratedBridgeLabels > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 已将 " + migratedBridgeLabels
-                    + " 个旧桥架格数标注转换为毫米标注（"
-                    + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格）。");
+                    + " 个旧桥架标注升级为 BOQ 两行标注；格数按 "
+                    + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格换算。");
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 颜色已校正：设备端 " + deviceColorBlocks

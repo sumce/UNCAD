@@ -7,6 +7,8 @@ namespace UNCAD.Infra
 {
     public sealed class AboutInfo
     {
+        private static readonly TimeSpan BuildDisplayOffset = TimeSpan.FromHours(8);
+
         public string ProductName { get; set; }
         public string Subtitle { get; set; }
         public string CompanyName { get; set; }
@@ -48,7 +50,7 @@ namespace UNCAD.Infra
             };
         }
 
-        /// <summary>更新日期跟随实际构建时间(UTC 日期),不再依赖手工常量。</summary>
+        /// <summary>更新日期跟随实际构建时间的 UTC+8 日期,不再依赖手工常量。</summary>
         internal static string BuildDateOrFallback(string productVersion)
         {
             const string marker = "+build.";
@@ -59,7 +61,8 @@ namespace UNCAD.Infra
                     "yyyyMMddHHmmss", CultureInfo.InvariantCulture,
                     DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
                     out DateTime utc))
-                return utc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return utc.Add(BuildDisplayOffset).ToString("yyyy-MM-dd",
+                    CultureInfo.InvariantCulture);
             return ProductMetadata.ReleaseDateUtc;
         }
 
@@ -72,7 +75,8 @@ namespace UNCAD.Infra
             if (!DateTime.TryParseExact(value, "yyyyMMddHHmmss", CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime utc))
                 return "未知";
-            return utc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+            return utc.Add(BuildDisplayOffset).ToString(
+                "yyyy-MM-dd HH:mm:ss 'UTC+8'", CultureInfo.InvariantCulture);
         }
     }
 }

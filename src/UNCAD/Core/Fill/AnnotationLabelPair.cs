@@ -29,6 +29,35 @@ namespace UNCAD.Core.Fill
         public static string Build(string model, string lengthText)
             => (model ?? "").Trim() + Separator + (lengthText ?? "").Trim();
 
+        /// <summary>
+        /// 把旧桥架单行/格数标注升级为固定清单型号 + 长度的两行 MTEXT 内容。
+        /// 只有升级后的文字仍能还原成同一条可统计桥架记录时才返回 true。
+        /// </summary>
+        public static bool TryUpgradeBridgeLabel(string text, double mmPerGrid,
+            out string upgraded)
+        {
+            upgraded = "";
+            string raw = TextParser.CleanMText(text ?? "").Trim();
+            if (!BridgeLabelFormatter.TryNormalize(raw, mmPerGrid,
+                    out string normalized)
+                || !BridgeLabelFormatter.TryParseMillimetreLabel(normalized,
+                    out string spec, out double millimetres)) return false;
+
+            string length = BridgeLabelFormatter.FormatLengthText(millimetres);
+            if (!TextParser.IsBareLengthToken(length)) return false;
+
+            ListItem item = ListItemReader.EmbeddedCatalogIndex.FindBridge(
+                BoqCatalogIndex.NormalizeBridgeSpec(spec));
+            string model = BoqFeatureName.Extract(item?.Feature);
+            if (model.Length == 0) return false;
+
+            string candidate = Build(model, length);
+            if (!string.Equals(CollapseText(candidate), normalized,
+                    StringComparison.Ordinal)) return false;
+            upgraded = candidate;
+            return true;
+        }
+
         /// <summary>用插件内嵌固定清单还原一个 MTEXT 的各行。</summary>
         public static List<string> CollapseLines(IReadOnlyList<string> lines)
             => CollapseLines(lines, Embedded.Value);

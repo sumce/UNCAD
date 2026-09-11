@@ -20,7 +20,7 @@ namespace UNCAD.Tests
                     System.Globalization.DateTimeStyles.AssumeUniversal
                     | System.Globalization.DateTimeStyles.AdjustToUniversal,
                     out System.DateTime utc))
-                return utc.ToString("yyyy-MM-dd");
+                return utc.AddHours(8).ToString("yyyy-MM-dd");
             return ProductMetadata.ReleaseDateUtc;
         }
 
@@ -42,6 +42,16 @@ namespace UNCAD.Tests
             Assert.Equal("—", info.CustomerCode);
             Assert.Contains("在线", info.Authorization);
             Assert.Equal("UNSIAO.Ltd", Branding.Developer);
+        }
+
+        [Fact]
+        public void AboutInfo_DisplaysBuildTimestampInUtcPlusEight()
+        {
+            const string version = "2.4.6+build.20260910180000";
+
+            Assert.Equal("2026-09-11 02:00:00 UTC+8",
+                AboutInfo.ParseBuildTime(version));
+            Assert.Equal("2026-09-11", AboutInfo.BuildDateOrFallback(version));
         }
 
         [Fact]

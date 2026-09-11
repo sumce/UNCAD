@@ -7,6 +7,17 @@ namespace UNCAD.Tests
     public class BridgeLabelMigrationContractTests
     {
         [Fact]
+        public void MigrationWriterReplacesLegacyDbTextWithBoqMText()
+        {
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "BridgeLabelMigrationWriter.cs"));
+
+            Assert.Contains("AnnotationLabelPair.TryUpgradeBridgeLabel", source);
+            Assert.Contains("var replacement = new MText()", source);
+            Assert.Contains("source.Erase()", source);
+        }
+
+        [Fact]
         public void U1FAndSingleU1U_MigrateInsideFinalCadTransaction()
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",

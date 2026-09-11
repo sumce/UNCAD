@@ -53,6 +53,25 @@ namespace UNCAD.Tests
                 TextParser.SplitMTextLines(label));
         }
 
+        [Theory]
+        [InlineData("桥架200*100 2500mm")]
+        [InlineData("桥架200*100 10格")]
+        public void UpgradeBridgeLabel_UsesEmbeddedBoqModel(string legacy)
+        {
+            Assert.True(AnnotationLabelPair.TryUpgradeBridgeLabel(
+                legacy, 250.0, out string upgraded));
+            Assert.Equal("梯形桥架200Wx100H\\P2500mm", upgraded);
+        }
+
+        [Fact]
+        public void UpgradeBridgeLabel_LeavesUnreadableOrAlreadyUpgradedTextAlone()
+        {
+            Assert.False(AnnotationLabelPair.TryUpgradeBridgeLabel(
+                "桥架200*100 12.5格", 250.0, out _));
+            Assert.False(AnnotationLabelPair.TryUpgradeBridgeLabel(
+                "梯形桥架200Wx100H\\P2500mm", 250.0, out _));
+        }
+
         [Fact]
         public void TwoLineLabelsUseCompactLineSpacing()
         {

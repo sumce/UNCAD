@@ -154,7 +154,7 @@ rewrite an existing entry.
 
 ## D-018: U1Q/U1C Labels Are Two-Line MTEXT Carrying The Catalog Name (2026-09-10)
 
-- Status: accepted
+- Status: accepted; automatic migration scope amended by D-019
 - Decision: bridge (`U1Q1/U1Q2/U1Q4`) and conduit (`U1C`) annotations are
   written as a two-line MTEXT — line 1 is the full fixed-catalog `1.名称`
   value for the selected specification, line 2 is the length. Alignment stays
@@ -172,3 +172,15 @@ rewrite an existing entry.
   automatically. `Φ32` resolves through the catalog `别名1` to the `38mm`
   row, so a `U1C` run at diameter 32 labels the drawing with that row's name
   and the statistics report the matching `⌀38线管`.
+
+## D-019: U1F/U1U Upgrade Legacy Bridge Labels (2026-09-11)
+
+- Status: accepted
+- Decision: during the final CAD transaction, U1F/U1U automatically replace a
+  selected/frame-contained legacy bridge label such as `桥架200*100 2500mm`
+  (or its readable grid-count form) with the two-line fixed-catalog annotation
+  `梯形桥架200Wx100H` + `2500mm`.
+- Consequence: this supersedes D-018's "nothing else is migrated
+  automatically" clause for bridge labels only. Migration occurs only when
+  the catalog model exists and the resulting two-line label collapses back to
+  the same statistics input; otherwise the original text is preserved.
