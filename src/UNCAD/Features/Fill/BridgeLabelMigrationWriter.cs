@@ -58,7 +58,6 @@ namespace UNCAD.Features.Fill
             replacement.Contents = contents;
             replacement.TextHeight = source.Height;
             replacement.TextStyleId = source.TextStyleId;
-            replacement.Rotation = source.Rotation;
             replacement.Normal = source.Normal;
             replacement.Attachment = ToMTextAttachment(source.Justify);
             replacement.Location = source.Justify == AttachmentPoint.BaseLeft
@@ -66,6 +65,8 @@ namespace UNCAD.Features.Fill
             replacement.Width = 0.0;
             replacement.LineSpacingStyle = LineSpacingStyle.Exactly;
             replacement.LineSpacingFactor = EntityFactory.LabelLineSpacingFactor;
+            // MText 的 Normal/Attachment setter 会重建文字坐标系，旋转角必须最后写。
+            replacement.Rotation = source.Rotation;
 
             owner.AppendEntity(replacement);
             transaction.AddNewlyCreatedDBObject(replacement, true);

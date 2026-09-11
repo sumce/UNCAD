@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Features.Fill;
 
 namespace UNCAD.CadIntegration
 {
@@ -27,7 +28,7 @@ namespace UNCAD.CadIntegration
                 {
                     sourceId = context.AddToCurrentSpace(transaction,
                         new Line(new Point3d(90000000, 90000000, 0),
-                            new Point3d(90001000, 90000000, 0)));
+                            new Point3d(90001000, 90001000, 0)));
                     textId = context.AddToCurrentSpace(transaction, new DBText
                     {
                         Position = new Point3d(90000000, 90000020, 0),
@@ -50,6 +51,8 @@ namespace UNCAD.CadIntegration
                 Require(first == 1, "initial U1Q generation");
                 generatedIds.AddRange(ReadGenerated(document.Database, sourceId));
                 Require(generatedIds.Count >= 2, "initial generated entities");
+                Require(Math.Abs(ReadMTextRotation(document.Database, generatedIds)
+                    - Math.PI / 4.0) <= 1e-6, "two-line MText rotation");
 
                 // Selecting the visible generated red line must resolve to the source
                 // line and replace the old output rather than silently doing nothing.
@@ -65,6 +68,8 @@ namespace UNCAD.CadIntegration
                 Require(second == 1, "generated-line source resolution");
                 Require(ReadGenerated(document.Database, sourceId).Count >= 2,
                     "replacement output");
+
+                VerifyLegacyBridgeRotation(context);
 
                 Pass(document);
             }
@@ -84,8 +89,72 @@ namespace UNCAD.CadIntegration
                 Above = true,
                 ColorIndex = 1,
                 AnnotationKind = "U1Q",
-                LabelFactory = _ => "桥架200*100 " + suffix + "mm"
+                LabelFactory = _ => "梯形桥架200Wx100H\\P"
+                    + (suffix == "first" ? "2500mm" : "3000mm")
             };
+
+        private static void VerifyLegacyBridgeRotation(CadContext context)
+        {
+            ObjectId legacyId = ObjectId.Null;
+            ObjectId migratedId = ObjectId.Null;
+            double expected = Math.PI / 6.0;
+            Point3d anchor = new Point3d(90002000, 90002000, 0);
+            try
+            {
+                using (Transaction transaction = context.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    legacyId = context.AddToCurrentSpace(transaction,
+                        EntityFactory.DBText(context, "桥架200*100 2500mm", anchor,
+                            5, expected, AttachmentPoint.BottomCenter, 1));
+                    transaction.Commit();
+                }
+                using (Transaction transaction = context.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    Require(BridgeLabelMigrationWriter.Migrate(transaction,
+                        new[] { legacyId }, 250.0) == 1, "legacy bridge migration");
+                    transaction.Commit();
+                }
+                using (Transaction transaction = context.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    BlockTableRecord space = (BlockTableRecord)transaction.GetObject(
+                        context.Db.CurrentSpaceId, OpenMode.ForRead);
+                    foreach (ObjectId id in space)
+                    {
+                        MText text = transaction.GetObject(id, OpenMode.ForRead, true)
+                            as MText;
+                        if (text == null || text.Location.DistanceTo(anchor) > 1e-6
+                            || text.Contents != "梯形桥架200Wx100H\\P2500mm") continue;
+                        migratedId = id;
+                        Require(Math.Abs(text.Rotation - expected) <= 1e-6,
+                            "migrated MText rotation");
+                        break;
+                    }
+                    Require(!migratedId.IsNull, "migrated MText exists");
+                }
+            }
+            finally
+            {
+                Cleanup(context.Db, legacyId, ObjectId.Null,
+                    migratedId.IsNull ? new ObjectId[0] : new[] { migratedId });
+            }
+        }
+
+        private static double ReadMTextRotation(Database database,
+            IEnumerable<ObjectId> ids)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in ids)
+                {
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is MText text)
+                        return text.Rotation;
+                }
+                return double.NaN;
+            }
+        }
 
         private static List<ObjectId> ReadGenerated(Database database, ObjectId sourceId)
         {
@@ -144,7 +213,12 @@ namespace UNCAD.CadIntegration
 
         private static void Require(bool condition, string message)
         {
-            if (!condition) throw new InvalidOperationException("U1Q self-test: " + message);
+            if (condition) return;
+            string resultPath = Environment.GetEnvironmentVariable(
+                "UNCAD_CAD_INTEGRATION_RESULT");
+            if (!string.IsNullOrWhiteSpace(resultPath))
+                System.IO.File.WriteAllText(resultPath, "FAIL: " + message);
+            throw new InvalidOperationException("U1Q self-test: " + message);
         }
 
         private static void Pass(Document document)
