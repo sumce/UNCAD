@@ -102,6 +102,21 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ElectricalPanelMatching_IsExactAndSeparateFromOutletPanels()
+        {
+            var index = new BoqCatalogIndex(new[]
+            {
+                Item("4.8", "电盘", "200A", "电盘"),
+                Item("4.11", "插座盘", "100A+20A*40", "插座盘")
+            });
+
+            Assert.Equal("4.8", index.FindPanel(200)?.Code);
+            Assert.Null(index.FindPanel(250));
+            Assert.Single(index.Panels);
+            Assert.Single(index.OutletPanels);
+        }
+
+        [Fact]
         public void CableFeatureMatching_UsesProjectFeatureAndReturnsCanonicalAlias()
         {
             ListItem item = new ListItem

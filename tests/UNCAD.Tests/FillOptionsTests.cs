@@ -44,6 +44,7 @@ namespace UNCAD.Tests
             FillAutoFillOptions defaults = FillAutoFillOptions.Default;
             Assert.True(defaults.Cable);
             Assert.True(defaults.Breaker);
+            Assert.True(defaults.Panel);
             Assert.True(defaults.FlexibleConduit);
             Assert.True(defaults.RigidConduit);
             Assert.True(defaults.Bridge);
@@ -51,9 +52,10 @@ namespace UNCAD.Tests
             Assert.True(defaults.BusPlugBox);
 
             FillAutoFillOptions disabled = FillAutoFillOptions.Create(
-                false, false, false, false, false, false, false);
+                false, false, false, false, false, false, false, false);
             Assert.False(disabled.Cable);
             Assert.False(disabled.Breaker);
+            Assert.False(disabled.Panel);
             Assert.False(disabled.FlexibleConduit);
             Assert.False(disabled.RigidConduit);
             Assert.False(disabled.Bridge);

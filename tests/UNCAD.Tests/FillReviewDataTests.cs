@@ -178,8 +178,8 @@ namespace UNCAD.Tests
             FillReviewData data = FillReviewData.Create(
                 new MachineRow { Cable = "UNKNOWN" }, new[] { cable },
                 FillPlanningOptions.Default, null,
-                FillAutoFillOptions.Create(true, false, false, true, true,
-                    false, true));
+                FillAutoFillOptions.Create(true, false, false, false, true,
+                    true, false, true));
             var catalog = new BoqCatalogIndex(new[]
             {
                 new ListItem

@@ -97,6 +97,8 @@ namespace UNCAD.UI
             new CheckBox { Text = "电缆", AutoSize = true };
         private readonly CheckBox _autofillBreaker =
             new CheckBox { Text = "断路器", AutoSize = true };
+        private readonly CheckBox _autofillPanel =
+            new CheckBox { Text = "电盘", AutoSize = true };
         private readonly CheckBox _autofillFlexibleConduit =
             new CheckBox { Text = "软管", AutoSize = true };
         private readonly CheckBox _autofillRigidConduit =
@@ -259,6 +261,8 @@ namespace UNCAD.UI
                 autoFill.Cable);
             _autofillBreaker.Checked = Settings.GetBool(ConfigKeys.FillAutofillBreaker,
                 autoFill.Breaker);
+            _autofillPanel.Checked = Settings.GetBool(ConfigKeys.FillAutofillPanel,
+                autoFill.Panel);
             _autofillFlexibleConduit.Checked = Settings.GetBool(
                 ConfigKeys.FillAutofillFlexibleConduit, autoFill.FlexibleConduit);
             _autofillRigidConduit.Checked = Settings.GetBool(
@@ -333,6 +337,7 @@ namespace UNCAD.UI
                 .ToString(CultureInfo.InvariantCulture));
             Settings.SetBool(ConfigKeys.FillAutofillCable, _autofillCable.Checked);
             Settings.SetBool(ConfigKeys.FillAutofillBreaker, _autofillBreaker.Checked);
+            Settings.SetBool(ConfigKeys.FillAutofillPanel, _autofillPanel.Checked);
             Settings.SetBool(ConfigKeys.FillAutofillFlexibleConduit,
                 _autofillFlexibleConduit.Checked);
             Settings.SetBool(ConfigKeys.FillAutofillRigidConduit,
@@ -610,11 +615,12 @@ namespace UNCAD.UI
             autoFill.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             autoFill.Controls.Add(_autofillCable, 0, 0);
             autoFill.Controls.Add(_autofillBreaker, 1, 0);
-            autoFill.Controls.Add(_autofillFlexibleConduit, 2, 0);
-            autoFill.Controls.Add(_autofillRigidConduit, 3, 0);
-            autoFill.Controls.Add(_autofillBridge, 0, 1);
-            autoFill.Controls.Add(_autofillOutletPanel, 1, 1);
-            autoFill.Controls.Add(_autofillBusPlugBox, 2, 1);
+            autoFill.Controls.Add(_autofillPanel, 2, 0);
+            autoFill.Controls.Add(_autofillFlexibleConduit, 3, 0);
+            autoFill.Controls.Add(_autofillRigidConduit, 0, 1);
+            autoFill.Controls.Add(_autofillBridge, 1, 1);
+            autoFill.Controls.Add(_autofillOutletPanel, 2, 1);
+            autoFill.Controls.Add(_autofillBusPlugBox, 3, 1);
 
             var output = Grid(1);
             AddField(output, 0, "自动输出文件夹", FolderPicker(_submitFolder));
@@ -622,7 +628,7 @@ namespace UNCAD.UI
             return Page("Excel 数据", "机台快照、BOQ 图框与自动输出",
                 Section("机台数据源", "数据只在点击刷新后写入 SQLite 快照。", source),
                 Section("图框与表格", null, table),
-                Section("BOQ 自动填充类别", "断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
+                Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
                 Section("自动输出", null, output));
         }
 

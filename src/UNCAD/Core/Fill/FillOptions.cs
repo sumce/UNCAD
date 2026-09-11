@@ -42,11 +42,13 @@ namespace UNCAD.Core.Fill
     /// </summary>
     public sealed class FillAutoFillOptions
     {
-        private FillAutoFillOptions(bool cable, bool breaker, bool flexibleConduit,
-            bool rigidConduit, bool bridge, bool outletPanel, bool busPlugBox)
+        private FillAutoFillOptions(bool cable, bool breaker, bool panel,
+            bool flexibleConduit, bool rigidConduit, bool bridge,
+            bool outletPanel, bool busPlugBox)
         {
             Cable = cable;
             Breaker = breaker;
+            Panel = panel;
             FlexibleConduit = flexibleConduit;
             RigidConduit = rigidConduit;
             Bridge = bridge;
@@ -56,22 +58,23 @@ namespace UNCAD.Core.Fill
 
         /// <summary>默认：插座盘关闭，其余自动填充类别开启。</summary>
         public static FillAutoFillOptions Default { get; } =
-            new FillAutoFillOptions(true, true, true, true, true, false, true);
+            new FillAutoFillOptions(true, true, true, true, true, true, false, true);
 
         public bool Cable { get; }
         public bool Breaker { get; }
+        public bool Panel { get; }
         public bool FlexibleConduit { get; }
         public bool RigidConduit { get; }
         public bool Bridge { get; }
         public bool OutletPanel { get; }
         public bool BusPlugBox { get; }
 
-        public static FillAutoFillOptions Create(bool cable, bool breaker,
+        public static FillAutoFillOptions Create(bool cable, bool breaker, bool panel,
             bool flexibleConduit, bool rigidConduit, bool bridge,
             bool outletPanel, bool busPlugBox)
         {
-            return new FillAutoFillOptions(cable, breaker, flexibleConduit,
-                rigidConduit, bridge, outletPanel, busPlugBox);
+            return new FillAutoFillOptions(cable, breaker, panel,
+                flexibleConduit, rigidConduit, bridge, outletPanel, busPlugBox);
         }
     }
 

@@ -88,6 +88,7 @@ namespace UNCAD.CadIntegration
                 Require(ReadGenerated(document.Database, sourceId).Count >= 2,
                     "replacement output");
 
+                VerifyLongAnnotationAnchor();
                 VerifyLegacyBridgeRotation(context);
 
                 Pass(document);
@@ -158,6 +159,21 @@ namespace UNCAD.CadIntegration
             {
                 Cleanup(context.Db, legacyId, ObjectId.Null,
                     migratedId.IsNull ? new ObjectId[0] : new[] { migratedId });
+            }
+        }
+
+        private static void VerifyLongAnnotationAnchor()
+        {
+            using (var text = new MText
+            {
+                Location = new Point3d(90003000, 90003000, 0),
+                Contents = "镀锌穿线管EMT PIPE 20mm(3/4\")\\P2000mm",
+                TextHeight = 5
+            })
+            {
+                Require(FrameRegionCollector.TryAnnotationAnchor(text,
+                    out Point3d anchor) && anchor == text.Location,
+                    "long annotation uses authored frame anchor");
             }
         }
 

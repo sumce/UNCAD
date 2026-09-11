@@ -368,6 +368,7 @@ namespace UNCAD.Core.Fill
                 case TableFillCategory.FlexibleConduit: return "软管";
                 case TableFillCategory.BusPlugBox: return "母线插接箱";
                 case TableFillCategory.Breaker: return "断路器";
+                case TableFillCategory.Panel: return "电盘";
                 case TableFillCategory.OutletPanel: return "插座盘";
                 case TableFillCategory.Outlet: return "插座";
                 case TableFillCategory.Manual: return "手动添加";

@@ -42,6 +42,40 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void MergeRows_MeasuredConduitUsesTheFreshPlannedQuantity()
+        {
+            var statistics = new CableStatResult
+            {
+                CableState = MeasurementState.Unknown,
+                BridgeState = MeasurementState.ConfirmedEmpty,
+                ConduitState = MeasurementState.Measured
+            };
+
+            List<TableFillRow> result = FillUpdateRowMerger.MergeRows(
+                new List<TableFillRow> { Conduit("5") },
+                new[] { Conduit("2") }, statistics);
+
+            Assert.Equal("5", Assert.Single(result).Quantity);
+        }
+
+        [Fact]
+        public void MergeRows_UnknownConduitPreservesTheExistingQuantity()
+        {
+            var statistics = new CableStatResult
+            {
+                CableState = MeasurementState.ConfirmedEmpty,
+                BridgeState = MeasurementState.ConfirmedEmpty,
+                ConduitState = MeasurementState.Unknown
+            };
+
+            List<TableFillRow> result = FillUpdateRowMerger.MergeRows(
+                new List<TableFillRow> { Conduit("") },
+                new[] { Conduit("2") }, statistics);
+
+            Assert.Equal("2", Assert.Single(result).Quantity);
+        }
+
+        [Fact]
         public void MergeRows_DisplayOrdinalIsNotCatalogCode()
         {
             var statistics = new CableStatResult
@@ -184,6 +218,16 @@ namespace UNCAD.Tests
             SortOrder = 200,
             Name = "桥架200*100",
             Code = "2.1",
+            Quantity = quantity,
+            CatalogMatched = true
+        };
+
+        private static TableFillRow Conduit(string quantity) => new TableFillRow
+        {
+            Category = TableFillCategory.RigidConduit,
+            SortOrder = 300,
+            Name = "镀锌穿线管",
+            Code = "3.1",
             Quantity = quantity,
             CatalogMatched = true
         };

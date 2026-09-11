@@ -1125,7 +1125,29 @@ namespace UNCAD.Cad
             }
             if (!includeAllEntities && !(entity is Table)
                 && !StatisticsTextReader.IsSupported(entity)) return false;
+            if (TryAnnotationAnchor(entity, out anchor)) return true;
             return TryExtentsCenter(entity, out anchor);
+        }
+
+        /// <summary>
+        /// Long BOQ-model labels can extend beyond their owning frame. Their authored
+        /// insertion/alignment point is the ownership contract; geometric centre can
+        /// land in an adjacent frame and make U1U miss the conduit or bridge entirely.
+        /// </summary>
+        internal static bool TryAnnotationAnchor(Entity entity, out Point3d anchor)
+        {
+            anchor = Point3d.Origin;
+            if (entity is MText mtext && IsFinite(mtext.Location))
+            {
+                anchor = mtext.Location;
+                return true;
+            }
+            if (!(entity is DBText text)) return false;
+            Point3d textAnchor = text.Justify == AttachmentPoint.BaseLeft
+                ? text.Position : text.AlignmentPoint;
+            if (!IsFinite(textAnchor)) return false;
+            anchor = textAnchor;
+            return true;
         }
 
         private static bool TryExtentsCenter(Entity entity, out Point3d center)

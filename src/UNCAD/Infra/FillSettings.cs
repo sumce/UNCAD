@@ -13,6 +13,7 @@ namespace UNCAD.Infra
             FillAutoFillOptions autoFill = FillAutoFillOptions.Create(
                 Settings.GetBool(ConfigKeys.FillAutofillCable, defaults.Cable),
                 Settings.GetBool(ConfigKeys.FillAutofillBreaker, defaults.Breaker),
+                Settings.GetBool(ConfigKeys.FillAutofillPanel, defaults.Panel),
                 Settings.GetBool(ConfigKeys.FillAutofillFlexibleConduit,
                     defaults.FlexibleConduit),
                 Settings.GetBool(ConfigKeys.FillAutofillRigidConduit,

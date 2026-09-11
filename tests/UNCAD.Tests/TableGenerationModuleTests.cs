@@ -107,7 +107,7 @@ namespace UNCAD.Tests
         public void Plan_CarriesAutoFillPolicyIntoReview()
         {
             FillAutoFillOptions autoFill = FillAutoFillOptions.Create(
-                false, false, false, false, false, false, false);
+                false, false, false, false, false, false, false, false);
             TableGenerationOutput output = TableGenerationModule.Plan(
                 new TableGenerationRequest(new MachineRow(),
                     new BoqCatalogIndex(null), new CableStatResult(),

@@ -17,6 +17,7 @@ namespace UNCAD.Tests
             Item("3.8", "包塑金属软管(波纹管)", "软管描述", "m", "20mm"),
             Item("5.8", "母线插接箱", "SQ-D PLUG-IN 250A 母线插接开关箱", "个", "250A"),
             Item("6.5", "断路器", "断路器 3P 225A~250A(I-LINE)", "个", "3P225~250A"),
+            Item("6.6", "断路器", "断路器 3P 125A~200A(I-LINE)", "个", "3P125~200A"),
             Item("8.2", "插座", "10~16A插座描述", "个", "10~16A"),
             Item("8.3", "插座", "20~30A插座描述", "个", "20~30A")
         };
@@ -223,6 +224,62 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_AddsElectricalPanelAndBreakerAsIndependentMaterials()
+        {
+            var machine = new MachineRow
+            {
+                Next = "I-Line盘",
+                Detail = "N480 3P4W 3P200A"
+            };
+            List<ListItem> items = Items();
+            items.Add(ElectricalPanel("4.8", "200A"));
+
+            List<TableFillRow> rows = TableFillPlanner.Build(machine,
+                new BoqCatalogIndex(items), new CableStatResult(),
+                FillPlanningOptions.Default, AllAutoFill());
+
+            TableFillRow panel = Assert.Single(rows,
+                row => row.Category == TableFillCategory.Panel);
+            TableFillRow breaker = Assert.Single(rows,
+                row => row.Category == TableFillCategory.Breaker);
+            Assert.Equal("4.8", panel.Code);
+            Assert.Equal("6.6", breaker.Code);
+            Assert.Equal("电盘", panel.Name);
+            Assert.Equal("断路器", breaker.Name);
+        }
+
+        [Fact]
+        public void Build_ElectricalPanelAndBreakerSwitchesAreIndependent()
+        {
+            var machine = new MachineRow
+            {
+                Next = "I-Line盘",
+                Detail = "N480 3P4W 3P200A"
+            };
+            List<ListItem> items = Items();
+            items.Add(ElectricalPanel("4.8", "200A"));
+            var catalog = new BoqCatalogIndex(items);
+
+            List<TableFillRow> panelOnly = TableFillPlanner.Build(machine, catalog,
+                new CableStatResult(), FillPlanningOptions.Default,
+                FillAutoFillOptions.Create(false, false, true, false, false,
+                    false, false, false));
+            Assert.Single(panelOnly,
+                row => row.Category == TableFillCategory.Panel);
+            Assert.DoesNotContain(panelOnly,
+                row => row.Category == TableFillCategory.Breaker);
+
+            List<TableFillRow> breakerOnly = TableFillPlanner.Build(machine, catalog,
+                new CableStatResult(), FillPlanningOptions.Default,
+                FillAutoFillOptions.Create(false, true, false, false, false,
+                    false, false, false));
+            Assert.Single(breakerOnly,
+                row => row.Category == TableFillCategory.Breaker);
+            Assert.DoesNotContain(breakerOnly,
+                row => row.Category == TableFillCategory.Panel);
+        }
+
+        [Fact]
         public void Build_DefaultAutoFillKeepsBreakerAndSkipsOutletPanel()
         {
             List<ListItem> items = Items();
@@ -255,7 +312,7 @@ namespace UNCAD.Tests
                 }, new BoqCatalogIndex(items), new CableStatResult(),
                 FillPlanningOptions.Default,
                 FillAutoFillOptions.Create(false, false, false, false, false,
-                    false, false));
+                    false, false, false));
             Assert.Contains(allDisabledSocketRows,
                 row => row.Category == TableFillCategory.Outlet);
         }
@@ -278,7 +335,7 @@ namespace UNCAD.Tests
             List<TableFillRow> rows = TableFillPlanner.Build(machine,
                 new BoqCatalogIndex(Items()), stat, FillPlanningOptions.Default,
                 FillAutoFillOptions.Create(false, false, false, false, false,
-                    false, false));
+                    false, false, false));
 
             Assert.Empty(rows);
         }
@@ -424,8 +481,22 @@ namespace UNCAD.Tests
             };
         }
 
+        private static ListItem ElectricalPanel(string code, string spec)
+        {
+            return new ListItem
+            {
+                Category = "电盘",
+                Code = code,
+                Name = "电盘",
+                Feature = "1.名称:电盘PANEL-" + spec + "(I-LINE)",
+                Unit = "个",
+                Alias = spec,
+                Spec = spec
+            };
+        }
+
         private static FillAutoFillOptions AllAutoFill()
-            => FillAutoFillOptions.Create(true, true, true, true, true, true, true);
+            => FillAutoFillOptions.Create(true, true, true, true, true, true, true, true);
 
         private static string TestCategory(string code, string name)
         {

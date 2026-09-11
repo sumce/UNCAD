@@ -65,6 +65,7 @@ namespace UNCAD.Infra
         // BOQ 自动填充类别开关（U1F/U1U 规划清单行时跳过关闭的类别）
         public const string FillAutofillCable = "UNC_FILL_AUTOFILL_CABLE";       // 电缆
         public const string FillAutofillBreaker = "UNC_FILL_AUTOFILL_BREAKER";   // 断路器
+        public const string FillAutofillPanel = "UNC_FILL_AUTOFILL_PANEL";       // 电盘
         public const string FillAutofillFlexibleConduit =
             "UNC_FILL_AUTOFILL_FLEXIBLE_CONDUIT";                                 // 软管
         public const string FillAutofillRigidConduit =

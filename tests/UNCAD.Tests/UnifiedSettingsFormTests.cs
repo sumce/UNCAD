@@ -147,11 +147,11 @@ namespace UNCAD.Tests
                     List<CheckBox> autoFill = FindAll<CheckBox>(tabs.SelectedTab);
                     Assert.Equal(new[]
                     {
-                        "电缆", "断路器", "软管", "线管",
-                        "桥架", "插座盘", "插接箱"
+                        "电缆", "断路器", "电盘", "软管",
+                        "线管", "桥架", "插座盘", "插接箱"
                     }, autoFill.Select(check => check.Text).ToArray());
                     Assert.DoesNotContain(autoFill,
-                        check => check.Text.Contains("电盘") || check.Text.Contains("未匹配"));
+                        check => check.Text.Contains("未匹配"));
                 }
             });
         }

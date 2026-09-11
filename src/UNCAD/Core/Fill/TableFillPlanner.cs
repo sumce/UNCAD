@@ -19,7 +19,8 @@ namespace UNCAD.Core.Fill
         Outlet,
         Manual,
         // Appended to preserve the numeric values of the existing public categories.
-        OutletPanel
+        OutletPanel,
+        Panel
     }
 
     public sealed class TableFillRow
@@ -213,12 +214,19 @@ namespace UNCAD.Core.Fill
 
             if (string.Equals(next, "I-Line盘", StringComparison.OrdinalIgnoreCase))
             {
-                if (!autoFill.Breaker) return;
-                ListItem item = catalog.Breakers.FirstOrDefault(i =>
-                    BreakerRangeContains(i.Spec, poles, amps));
-                string model = poles > 0 && amps > 0 ? poles + "P" + amps + "A" : "";
-                rows.Add(FromItem(TableFillCategory.Breaker, 600, item,
-                    "断路器", "1.名称:断路器 " + model + "(I-LINE)", "个", "1"));
+                if (autoFill.Panel)
+                {
+                    TableFillRow panel = BuildPanelRow(machine.Detail, catalog);
+                    if (panel != null) rows.Add(panel);
+                }
+                if (autoFill.Breaker)
+                {
+                    ListItem item = catalog.Breakers.FirstOrDefault(i =>
+                        BreakerRangeContains(i.Spec, poles, amps));
+                    string model = poles > 0 && amps > 0 ? poles + "P" + amps + "A" : "";
+                    rows.Add(FromItem(TableFillCategory.Breaker, 600, item,
+                        "断路器", "1.名称:断路器 " + model + "(I-LINE)", "个", "1"));
+                }
                 return;
             }
 
@@ -257,6 +265,19 @@ namespace UNCAD.Core.Fill
                 + (amps > 0 ? @"\P2.额定电流:" + amps + "A" : "");
             return FromItem(TableFillCategory.Outlet, 800, item,
                 "插座", description, "个", "1");
+        }
+
+        /// <summary>Builds the I-Line electrical-panel row independently from its breaker.</summary>
+        public static TableFillRow BuildPanelRow(string detail, BoqCatalogIndex catalog)
+        {
+            catalog = catalog ?? new BoqCatalogIndex(null);
+            if (catalog.Panels.Count == 0) return null;
+
+            TryExtractRating(detail, out _, out int amps);
+            ListItem item = catalog.FindPanel(amps);
+            string model = amps > 0 ? amps + "A" : "";
+            return FromItem(TableFillCategory.Panel, 450, item,
+                "电盘", "1.名称:电盘PANEL-" + model + "(I-LINE)", "个", "1");
         }
 
         /// <summary>

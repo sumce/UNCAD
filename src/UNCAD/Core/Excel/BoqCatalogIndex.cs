@@ -20,6 +20,7 @@ namespace UNCAD.Core.Excel
         private readonly List<ListItem> _breakers;
         private readonly List<ListItem> _outlets;
         private readonly List<ListItem> _outletPanels;
+        private readonly Dictionary<string, ListItem> _panels;
 
         // Socket-panel rows are deliberately mapped by the approved BOQ code.  The
         // catalog contains two other panel shapes that mention 16A/30A, so a broad
@@ -47,6 +48,7 @@ namespace UNCAD.Core.Excel
             _breakers = CategoryItems("断路器").ToList();
             _outlets = CategoryItems("插座").ToList();
             _outletPanels = CategoryItems("插座盘").ToList();
+            _panels = AliasIndex(CategoryItems("电盘"), "电盘");
         }
 
         public List<ListItem> Items { get; }
@@ -59,6 +61,8 @@ namespace UNCAD.Core.Excel
         public IReadOnlyList<ListItem> BusPlugBoxes => _busPlugBoxes.Values.ToList();
         public IReadOnlyList<ListItem> Outlets => _outlets;
         public IReadOnlyList<ListItem> OutletPanels => _outletPanels;
+        public IReadOnlyList<ListItem> Panels => _panels.Values
+            .OrderBy(item => item.Code ?? "", StringComparer.Ordinal).ToList();
 
         public ListItem FindCable(string cableModel)
             => FindWithMigration(_cables, NormalizeCable(cableModel));
@@ -100,6 +104,11 @@ namespace UNCAD.Core.Excel
 
         public ListItem FindBusPlugBox(string rating)
             => FindWithMigration(_busPlugBoxes, NormalizeSpec(rating));
+
+        public ListItem FindPanel(int amps)
+            => amps > 0
+                ? FindWithMigration(_panels, NormalizeSpec(amps + "A"))
+                : null;
 
         /// <summary>
         /// Finds the fixed socket-panel row for a feeder rating.  Only the two

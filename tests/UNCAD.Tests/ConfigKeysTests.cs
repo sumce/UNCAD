@@ -98,6 +98,7 @@ namespace UNCAD.Tests
                 ConfigKeys.FillUpstreamColorIndex);
             Assert.Equal("UNC_FILL_AUTOFILL_CABLE", ConfigKeys.FillAutofillCable);
             Assert.Equal("UNC_FILL_AUTOFILL_BREAKER", ConfigKeys.FillAutofillBreaker);
+            Assert.Equal("UNC_FILL_AUTOFILL_PANEL", ConfigKeys.FillAutofillPanel);
             Assert.Equal("UNC_FILL_AUTOFILL_FLEXIBLE_CONDUIT",
                 ConfigKeys.FillAutofillFlexibleConduit);
             Assert.Equal("UNC_FILL_AUTOFILL_RIGID_CONDUIT",
