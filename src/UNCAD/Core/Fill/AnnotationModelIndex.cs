@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Text;
 
@@ -34,13 +35,16 @@ namespace UNCAD.Core.Fill
 
         public static AnnotationModelIndex Build(IEnumerable<ListItem> items)
         {
-            var bridges = new Dictionary<string, ListItem>(StringComparer.Ordinal);
-            var conduits = new Dictionary<string, ListItem>(StringComparer.Ordinal);
+            var bridges = new Dictionary<string, ListItem>(
+                StringComparer.OrdinalIgnoreCase);
+            var conduits = new Dictionary<string, ListItem>(
+                StringComparer.OrdinalIgnoreCase);
             foreach (ListItem item in items ?? Enumerable.Empty<ListItem>())
             {
                 if (item == null) continue;
                 string model = BoqFeatureName.Extract(item.Feature);
-                if (model.Length == 0) continue;
+                string modelKey = NormalizeModel(model);
+                if (modelKey.Length == 0) continue;
                 string category = (item.Category ?? "").Trim();
                 Dictionary<string, ListItem> target;
                 if (string.Equals(category, BridgeCategory, StringComparison.Ordinal))
@@ -49,11 +53,11 @@ namespace UNCAD.Core.Fill
                     target = conduits;
                 else
                     continue;
-                if (target.TryGetValue(model, out ListItem existing))
+                if (target.TryGetValue(modelKey, out ListItem existing))
                     throw new InvalidDataException("固定清单中“" + model
                         + "”重复，无法唯一识别图上标注（" + existing.Code + " 与 "
                         + item.Code + "）。");
-                target[model] = item;
+                target[modelKey] = item;
             }
             return new AnnotationModelIndex(bridges, conduits);
         }
@@ -71,6 +75,7 @@ namespace UNCAD.Core.Fill
             string lengthText = (length ?? "").Trim();
             if (modelText.Length == 0 || !TextParser.IsBareLengthToken(lengthText))
                 return false;
+            string modelKey = NormalizeModel(modelText);
 
             // 还原出来的行必须与图上单行写法逐字一致，否则统计引擎认不出来：
             // 桥架 “桥架200*100 2500mm”（BridgeLabelFormatter 的毫米写法）、
@@ -79,14 +84,14 @@ namespace UNCAD.Core.Fill
             // 刻意不暴露“带实测长度”的重载（防止再次接入曲线实测距离），
             // 这里要的却是把已有的长度文字拼回去，语义不同。
             // AnnotationLabelPairTests 用内嵌清单把两处格式锁在一起。
-            if (_bridges.TryGetValue(modelText, out ListItem bridge))
+            if (_bridges.TryGetValue(modelKey, out ListItem bridge))
             {
                 string spec = BoqCatalogIndex.NormalizeSpec(bridge.Alias);
                 if (spec.Length == 0) return false;
                 collapsed = BridgeSpecPrefix + spec + " " + lengthText;
                 return true;
             }
-            if (_conduits.TryGetValue(modelText, out ListItem conduit))
+            if (_conduits.TryGetValue(modelKey, out ListItem conduit))
             {
                 string diameter = ConduitDiameter.NormalizeOrEmpty(conduit.Alias);
                 if (diameter.Length == 0) return false;
@@ -94,6 +99,13 @@ namespace UNCAD.Core.Fill
                 return true;
             }
             return false;
+        }
+
+        private static string NormalizeModel(string value)
+        {
+            string text = TextParser.CleanMText(value ?? "")
+                .Normalize(NormalizationForm.FormKC);
+            return new string(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
         }
     }
 }

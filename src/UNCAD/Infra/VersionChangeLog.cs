@@ -31,7 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
-                new VersionChangeLogEntry("2.4.7", "2026-09-11",
+                new VersionChangeLogEntry("2.4.7", "2026-09-12",
+                    "修复：桥架 BOQ 两行标注可识别 MTEXT 格式码及常见空白差异，长度不再误计为电缆。",
+                    "修复：U1Q 在大坐标、多角度斜线批量标注时改用稳定的直线端点计算，避免部分线段因 eInvalidInput 无法生成。",
                     "新增：U1SET 的 BOQ 自动填充新增独立“电盘”开关；电盘、断路器与插座盘分别控制，默认开启电盘与断路器。",
                     "修复：I-Line盘按固定清单分别生成电盘和断路器，不再用断路器开关代替电盘。",
                     "修复：长两行线管 MTEXT 按文字插入或对齐点归属图框，U1U 可重新识别并自动更新线管数量。",

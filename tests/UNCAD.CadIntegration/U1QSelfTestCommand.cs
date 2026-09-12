@@ -90,6 +90,7 @@ namespace UNCAD.CadIntegration
 
                 VerifyLongAnnotationAnchor();
                 VerifyLegacyBridgeRotation(context);
+                VerifyBatchDiagonalLines(context);
 
                 Pass(document);
             }
@@ -177,6 +178,50 @@ namespace UNCAD.CadIntegration
             }
         }
 
+        private static void VerifyBatchDiagonalLines(CadContext context)
+        {
+            var sourceIds = new List<ObjectId>();
+            var cleanupIds = new List<ObjectId>();
+            try
+            {
+                using (Transaction transaction = context.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    for (int i = 0; i < 72; i++)
+                    {
+                        double angle = (i + 1) * Math.PI / 74.0;
+                        Point3d start = new Point3d(90100000 + i * 2000,
+                            90100000, 0);
+                        Point3d end = start + new Vector3d(Math.Cos(angle) * 1000,
+                            Math.Sin(angle) * 1000, 0);
+                        ObjectId id = context.AddToCurrentSpace(transaction,
+                            new Line(i % 2 == 0 ? start : end,
+                                i % 2 == 0 ? end : start));
+                        sourceIds.Add(id);
+                        cleanupIds.Add(id);
+                    }
+                    transaction.Commit();
+                }
+
+                int count = ParallelCurveAnnotator.Add(context, sourceIds.ToArray(),
+                    Options("batch"));
+                var missing = new List<int>();
+                for (int i = 0; i < sourceIds.Count; i++)
+                {
+                    List<ObjectId> generated = ReadGenerated(context.Db, sourceIds[i]);
+                    cleanupIds.AddRange(generated);
+                    if (generated.Count == 0) missing.Add(i + 1);
+                }
+                Require(count == sourceIds.Count, "batch diagonal U1Q generation: "
+                    + count + "/" + sourceIds.Count + "; missing="
+                    + string.Join(",", missing));
+            }
+            finally
+            {
+                CleanupIds(context.Db, cleanupIds);
+            }
+        }
+
         private static double ReadMTextRotation(Database database,
             IEnumerable<ObjectId> ids)
         {
@@ -244,6 +289,24 @@ namespace UNCAD.CadIntegration
             using (Transaction transaction = database.TransactionManager.StartTransaction())
             {
                 foreach (ObjectId id in ids)
+                {
+                    try
+                    {
+                        Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true)
+                            as Entity;
+                        if (entity != null && !entity.IsErased) entity.Erase();
+                    }
+                    catch { }
+                }
+                transaction.Commit();
+            }
+        }
+
+        private static void CleanupIds(Database database, IEnumerable<ObjectId> ids)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in ids ?? Enumerable.Empty<ObjectId>())
                 {
                     try
                     {

@@ -115,26 +115,42 @@ namespace UNCAD.Cad
                 double length;
                 Point3d sourceMid;
                 double sourceAngle;
+                Vector3d tangent;
                 Vector3d desired;
                 try
                 {
-                    length = GetLength(source);
+                    // AutoCAD 2022 can reject derivative-at-point calls for ordinary
+                    // lines at large drawing coordinates. A line already carries all
+                    // required geometry in its endpoints, so avoid that kernel path.
+                    if (source is Line sourceLine)
+                    {
+                        Vector3d direction = sourceLine.StartPoint
+                            .GetVectorTo(sourceLine.EndPoint);
+                        length = direction.Length;
+                        sourceMid = sourceLine.StartPoint + direction / 2.0;
+                        sourceAngle = ReadableLineAngle(direction);
+                        tangent = direction;
+                    }
+                    else
+                    {
+                        length = GetLength(source);
+                        sourceMid = source.GetPointAtDist(length / 2.0);
+                        tangent = source.GetFirstDerivative(sourceMid);
+                        sourceAngle = GeoMath.ReadableAngle(sourceMid,
+                            sourceMid + tangent);
+                    }
                     if (length <= 0)
                     {
                         skipped++;
                         skippedGeometry++;
                         continue;
                     }
-                    sourceMid = source.GetPointAtDist(length / 2.0);
-                    Vector3d tangent = source.GetFirstDerivative(sourceMid);
                     if (tangent.Length < 1e-9)
                     {
                         skipped++;
                         skippedGeometry++;
                         continue;
                     }
-                    sourceAngle = GeoMath.ReadableAngle(sourceMid,
-                        sourceMid + tangent);
                     double sideAngle = GeoMath.SideDirection(sourceAngle, options.Above);
                     desired = new Vector3d(Math.Cos(sideAngle), Math.Sin(sideAngle), 0);
                 }
@@ -166,12 +182,25 @@ namespace UNCAD.Cad
                 try
                 {
                     Curve labelCurve = selected.LabelCurve;
-                    Point3d curvePoint = labelCurve.GetClosestPointTo(sourceMid, false);
-                    Vector3d labelTangent = labelCurve.GetFirstDerivative(curvePoint);
+                    Point3d curvePoint;
+                    Vector3d labelTangent;
+                    if (labelCurve is Line labelLine)
+                    {
+                        labelTangent = labelLine.StartPoint
+                            .GetVectorTo(labelLine.EndPoint);
+                        curvePoint = labelLine.StartPoint + labelTangent / 2.0;
+                    }
+                    else
+                    {
+                        curvePoint = labelCurve.GetClosestPointTo(sourceMid, false);
+                        labelTangent = labelCurve.GetFirstDerivative(curvePoint);
+                    }
                     double textAngle = labelTangent.Length < 1e-9
                         ? sourceAngle
-                        : GeoMath.ReadableAngle(curvePoint,
-                            curvePoint + labelTangent);
+                        : labelCurve is Line
+                            ? ReadableLineAngle(labelTangent)
+                            : GeoMath.ReadableAngle(curvePoint,
+                                curvePoint + labelTangent);
                     Point3d textPoint = GeoMath.Polar(curvePoint,
                         GeoMath.SideDirection(textAngle, options.Above),
                         options.TextOffset);
@@ -534,6 +563,9 @@ namespace UNCAD.Cad
         private static OffsetCandidate CreateCandidate(Curve source, double distance,
             Point3d sourceMid, Vector3d desired)
         {
+            if (source is Line line)
+                return CreateLineCandidate(line, distance, desired);
+
             DBObjectCollection objects = null;
             try
             {
@@ -571,6 +603,30 @@ namespace UNCAD.Cad
                     foreach (DBObject obj in objects) obj.Dispose();
                 return null;
             }
+        }
+
+        private static OffsetCandidate CreateLineCandidate(Line source, double distance,
+            Vector3d desired)
+        {
+            Vector3d direction = source.StartPoint.GetVectorTo(source.EndPoint);
+            double planarLength = Math.Sqrt(direction.X * direction.X
+                + direction.Y * direction.Y);
+            if (planarLength < 1e-9) return null;
+
+            Vector3d offset = new Vector3d(-direction.Y / planarLength * distance,
+                direction.X / planarLength * distance, 0);
+            var line = new Line(source.StartPoint + offset, source.EndPoint + offset);
+            return new OffsetCandidate(new List<Entity> { line }, line,
+                offset.DotProduct(desired));
+        }
+
+        private static double ReadableLineAngle(Vector3d direction)
+        {
+            double angle = Math.Atan2(direction.Y, direction.X);
+            if (angle < 0) angle += Math.PI * 2;
+            if (angle > Math.PI * 0.5 && angle <= Math.PI * 1.5)
+                angle += Math.PI;
+            return angle;
         }
 
         private static OffsetCandidate SelectCandidate(OffsetCandidate first,

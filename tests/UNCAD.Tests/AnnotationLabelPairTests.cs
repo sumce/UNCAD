@@ -88,6 +88,22 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void FormattedSpacedBridgeModel_StillFeedsBridgeStatistics()
+        {
+            List<string> source = TextParser.SplitMTextLines(
+                @"{\fArial|b0|i0;梯形桥架 200W x 100H}\P{\H0.8x;2500mm}")
+                .ConvertAll(TextParser.CleanMText);
+            List<string> lines = AnnotationLabelPair.CollapseLines(source, Index());
+
+            CableStatResult stat = StatCalculator.Calculate(lines, 250.0);
+
+            BridgeStat bridge = Assert.Single(stat.Bridges);
+            Assert.Equal("桥架200*100", bridge.Spec);
+            Assert.Equal(2500.0, bridge.TotalMm);
+            Assert.Empty(stat.CableFormatted);
+        }
+
+        [Fact]
         public void CollapseLines_RestoresConduitSingleLineForm()
         {
             List<string> collapsed = AnnotationLabelPair.CollapseLines(
