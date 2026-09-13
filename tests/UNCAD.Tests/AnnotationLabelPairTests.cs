@@ -123,6 +123,32 @@ namespace UNCAD.Tests
             Assert.Equal(new List<string> { "说明", "2000mm" }, collapsed);
         }
 
+        [Theory]
+        [InlineData("(共用)梯形桥架200Wx100H", "2500mm")]
+        [InlineData("（共用）梯形桥架200Wx100H", "2500mm")]
+        public void CollapseLines_RejectsBridgeModelWithPrefix(string model, string length)
+        {
+            List<string> collapsed = AnnotationLabelPair.CollapseLines(
+                new List<string> { model, length }, Index());
+
+            Assert.Equal(new List<string> { model, length }, collapsed);
+            Assert.Empty(StatCalculator.Calculate(collapsed, 250.0).Bridges);
+        }
+
+        [Fact]
+        public void CollapseLines_RejectsExtraLineBeforeBridgePair()
+        {
+            var source = new List<string>
+            {
+                "(共用)", "梯形桥架200Wx100H", "2500mm"
+            };
+
+            List<string> collapsed = AnnotationLabelPair.CollapseLines(source, Index());
+
+            Assert.Equal(source, collapsed);
+            Assert.Empty(StatCalculator.Calculate(collapsed, 250.0).Bridges);
+        }
+
         [Fact]
         public void CollapseLines_LeavesKnownModelAloneWhenSecondLineIsNotALength()
         {
@@ -133,15 +159,13 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void CollapseLines_NeverPairsAcrossEntities_OnlyAdjacentLines()
+        public void CollapseLines_RejectsMultiplePairsInOneMText()
         {
-            // 同一 MTEXT 内三行：只有紧邻的型号+长度配对。
-            List<string> collapsed = AnnotationLabelPair.CollapseLines(
-                new List<string> { "梯形桥架200Wx100H", "2500mm",
-                    "镀锌穿线管EMT PIPE 38mm(1-1/2\")", "2000mm" }, Index());
+            var source = new List<string> { "梯形桥架200Wx100H", "2500mm",
+                "镀锌穿线管EMT PIPE 38mm(1-1/2\")", "2000mm" };
+            List<string> collapsed = AnnotationLabelPair.CollapseLines(source, Index());
 
-            Assert.Equal(new List<string> { "桥架200*100 2500mm", "⌀38线管 2000mm" },
-                collapsed);
+            Assert.Equal(source, collapsed);
         }
 
         [Fact]

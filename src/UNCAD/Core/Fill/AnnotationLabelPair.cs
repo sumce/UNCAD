@@ -63,24 +63,18 @@ namespace UNCAD.Core.Fill
             => CollapseLines(lines, Embedded.Value);
 
         /// <summary>
-        /// 还原一个 MTEXT 的各行：相邻的「清单型号 + 纯长度」合并成一行，
-        /// 其余行原样保留（顺序不变）。
+        /// 还原一个 MTEXT 的两行：完整「清单型号 + 纯长度」合并成一行。
+        /// 多一行说明、前缀或后缀都不是 U1Q/U1C 标注，必须原样保留。
         /// </summary>
         public static List<string> CollapseLines(IReadOnlyList<string> lines,
             AnnotationModelIndex index)
         {
-            var result = new List<string>();
-            if (lines == null) return result;
-            for (int i = 0; i < lines.Count; i++)
+            var result = lines == null ? new List<string>() : new List<string>(lines);
+            if (index != null && result.Count == 2
+                && index.TryCollapse(result[0], result[1], out string collapsed))
             {
-                if (index != null && i + 1 < lines.Count
-                    && index.TryCollapse(lines[i], lines[i + 1], out string collapsed))
-                {
-                    result.Add(collapsed);
-                    i++;
-                    continue;
-                }
-                result.Add(lines[i]);
+                result.Clear();
+                result.Add(collapsed);
             }
             return result;
         }
