@@ -62,11 +62,6 @@ if (-not $SkipBundle) {
         "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
-        "System.Text.Json.dll", "System.Text.Encodings.Web.dll",
-        "System.Buffers.dll", "System.Memory.dll",
-        "System.Numerics.Vectors.dll", "System.Runtime.CompilerServices.Unsafe.dll",
-        "Microsoft.Bcl.AsyncInterfaces.dll", "System.Threading.Tasks.Extensions.dll",
-        "System.ValueTuple.dll",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"
