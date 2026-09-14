@@ -111,6 +111,35 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ReadAll_BindsUnifiedHeaderOnSecondPhysicalRow()
+        {
+            var workbook = new XSSFWorkbook();
+            var sheet = workbook.CreateSheet("机台数据");
+            sheet.CreateRow(0).CreateCell(0).SetCellValue("机台数据（标题）");
+            string[] headers = { "U_区域", "U_机台ID", "U_设备楼层", "U_设备轴位",
+                "U_上游编号", "U_上游楼层", "U_上游轴位", "U_配电信息",
+                "U_电缆型号", "U_上游类型", "回路名称" };
+            string[] values = { "ETCH", "M02", "2F", "54/W", "UP-02", "1F",
+                "54/X", "N208V 3P4W 3P400A", "3*2.5", "母线插接口", "回路二" };
+            var header = sheet.CreateRow(1);
+            var row = sheet.CreateRow(2);
+            for (int column = 0; column < headers.Length; column++)
+            {
+                header.CreateCell(column).SetCellValue(headers[column]);
+                row.CreateCell(column).SetCellValue(values[column]);
+            }
+
+            try
+            {
+                MachineRow result = Assert.Single(ExcelMachineReader.ReadAll(workbook));
+                Assert.Equal("M02", result.MachineId);
+                Assert.Equal("回路二", result.CircuitName);
+                Assert.Equal("3*2.5", result.Cable);
+            }
+            finally { workbook.Close(); }
+        }
+
+        [Fact]
         public void FindRows_ReportsMissingRequiredHeader()
         {
             string path = CreateBoundHeaderWorkbook(false);

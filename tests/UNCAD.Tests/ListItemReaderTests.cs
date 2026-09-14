@@ -85,6 +85,36 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ReadList_BindsHeaderOnSecondPhysicalRow()
+        {
+            string path = Path.Combine(Path.GetTempPath(),
+                "uncad_list_second_header_" + Guid.NewGuid().ToString("N") + ".xlsx");
+            var wb = new XSSFWorkbook();
+            var sheet = wb.CreateSheet("固定清单");
+            sheet.CreateRow(0).CreateCell(0).SetCellValue("固定清单（标题）");
+            string[] headers = { "编号", "项目名称", "项目特征", "单位", "类", "别名" };
+            string[] values = { "3.8", "包塑金属软管(波纹管)", "1.名称:38mm软管", "m", "软管", "38mm" };
+            var header = sheet.CreateRow(1);
+            var row = sheet.CreateRow(2);
+            for (int column = 0; column < headers.Length; column++)
+            {
+                header.CreateCell(column).SetCellValue(headers[column]);
+                row.CreateCell(column).SetCellValue(values[column]);
+            }
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+                wb.Write(stream);
+            wb.Close();
+            try
+            {
+                ListItem item = Assert.Single(ListItemReader.ReadList(path));
+                Assert.Equal("3.8", item.Code);
+                Assert.Equal("软管", item.Category);
+                Assert.Equal("38mm", item.Alias);
+            }
+            finally { if (File.Exists(path)) File.Delete(path); }
+        }
+
+        [Fact]
         public void ReadList_SkipsCategoryAndSummaryRows()
         {
             string path = CreateTempWorkbook();

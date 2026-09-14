@@ -28,11 +28,12 @@ namespace UNCAD.Core.Excel
     }
 
     /// <summary>
-    /// 读取工程量清单（自动定位表头含"项目特征"的工作表）。
+    /// 读取工程量清单（在前 51 个物理行中自动定位含"项目特征"的表头）。
     /// 自动匹配严格使用“类”划定范围，再与“别名”精确比较；空类不参与判定。
     /// </summary>
     public static class ListItemReader
     {
+        private const int HeaderScanRowLimit = 50;
         private const string EmbeddedCatalogResourceName =
             "UNCAD.Resources.embedded_catalog.tsv";
         private static readonly Lazy<List<ListItem>> EmbeddedCatalog =
@@ -151,10 +152,11 @@ namespace UNCAD.Core.Excel
         internal static List<ListItem> ReadList(IWorkbook wb)
         {
             var result = new List<ListItem>();
-            var sheet = FindListSheet(wb);
-            ListColumns columns = BindColumns(sheet);
+            int headerRow;
+            var sheet = FindListSheet(wb, out headerRow);
+            ListColumns columns = BindColumns(sheet, headerRow);
 
-            for (int r = 1; r <= sheet.LastRowNum; r++)
+            for (int r = headerRow + 1; r <= sheet.LastRowNum; r++)
             {
                 var row = sheet.GetRow(r);
                 if (row == null) continue;
@@ -179,24 +181,31 @@ namespace UNCAD.Core.Excel
             return result;
         }
 
-        private static ISheet FindListSheet(IWorkbook wb)
+        private static ISheet FindListSheet(IWorkbook wb, out int headerRow)
         {
+            headerRow = -1;
             for (int i = 0; i < wb.NumberOfSheets; i++)
             {
                 var sh = wb.GetSheetAt(i);
-                var hdr = sh.GetRow(0);
-                if (hdr == null) continue;
-                for (int c = 0; c < hdr.LastCellNum; c++)
+                int maxRow = Math.Min(HeaderScanRowLimit, sh.LastRowNum);
+                for (int rowIndex = 0; rowIndex <= maxRow; rowIndex++)
                 {
-                    if (ExcelHeaderBinder.Equals(hdr.GetCell(c), "项目特征")) return sh;
+                    var hdr = sh.GetRow(rowIndex);
+                    if (hdr == null) continue;
+                    for (int c = 0; c < hdr.LastCellNum; c++)
+                    {
+                        if (!ExcelHeaderBinder.Equals(hdr.GetCell(c), "项目特征")) continue;
+                        headerRow = rowIndex;
+                        return sh;
+                    }
                 }
             }
             throw new InvalidDataException("未找到包含“项目特征”表头的固定清单工作表。");
         }
 
-        private static ListColumns BindColumns(ISheet sheet)
+        private static ListColumns BindColumns(ISheet sheet, int headerRow)
         {
-            IRow header = sheet.GetRow(0);
+            IRow header = sheet.GetRow(headerRow);
             if (header == null)
                 throw new InvalidDataException("固定清单工作表“" + sheet.SheetName + "”缺少表头行。");
             int alias = ExcelHeaderBinder.Optional(header, sheet.SheetName,

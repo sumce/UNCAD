@@ -91,12 +91,21 @@ $fs = [IO.FileStream]::new($CatalogPath, [IO.FileMode]::Open, [IO.FileAccess]::R
 $wb = [NPOI.XSSF.UserModel.XSSFWorkbook]::new($fs)
 try {
     $sheet = $null
+    $headerRowIndex = -1
     for ($i = 0; $i -lt $wb.NumberOfSheets; $i++) {
         $sh = $wb.GetSheetAt($i)
-        $hdr = $sh.GetRow(0)
-        if ($null -eq $hdr) { continue }
-        for ($c = 0; $c -lt $hdr.LastCellNum; $c++) {
-            if ((Get-CellText $hdr.GetCell($c)) -eq "项目特征") { $sheet = $sh; break }
+        $maxRow = [Math]::Min(50, $sh.LastRowNum)
+        for ($r = 0; $r -le $maxRow; $r++) {
+            $hdr = $sh.GetRow($r)
+            if ($null -eq $hdr) { continue }
+            for ($c = 0; $c -lt $hdr.LastCellNum; $c++) {
+                if ((Get-CellText $hdr.GetCell($c)) -eq "项目特征") {
+                    $sheet = $sh
+                    $headerRowIndex = $r
+                    break
+                }
+            }
+            if ($null -ne $sheet) { break }
         }
         if ($null -ne $sheet) { break }
     }
@@ -104,7 +113,7 @@ try {
 
     $colCategory = -1; $colCode = -1; $colName = -1
     $colFeature = -1; $colUnit = -1; $colAlias = -1; $colAlias1 = -1
-    $hdr = $sheet.GetRow(0)
+    $hdr = $sheet.GetRow($headerRowIndex)
     for ($c = 0; $c -lt $hdr.LastCellNum; $c++) {
         $text = (Get-CellText $hdr.GetCell($c)).Trim()
         switch -Regex ($text) {
@@ -123,7 +132,7 @@ try {
     if ($colAlias -lt 0) { $colAlias = 5 }
 
     $lines = New-Object System.Collections.Generic.List[string]
-    for ($r = 1; $r -le $sheet.LastRowNum; $r++) {
+    for ($r = $headerRowIndex + 1; $r -le $sheet.LastRowNum; $r++) {
         $row = $sheet.GetRow($r)
         if ($null -eq $row) { continue }
         $code = Get-RowText $row $colCode
