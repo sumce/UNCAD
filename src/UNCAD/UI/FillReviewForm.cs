@@ -11,7 +11,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
-    public sealed class FillReviewForm : Form
+    public sealed class FillReviewForm : DpiAwareForm
     {
         private readonly FillReviewData _defaults;
         private readonly DataGridView _grid;
@@ -231,13 +231,13 @@ namespace UNCAD.UI
             grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
             grid.AlternatingRowsDefaultCellStyle.BackColor = UiTheme.WindowBg;
             grid.RowTemplate.Height = UiTheme.NotAutoScaled(44);
-            grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = 52 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = 80, ReadOnly = true });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", Width = 150, ReadOnly = true });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Description", HeaderText = "特征 / 型号", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = 260, ReadOnly = true });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "单位", Width = 58, ReadOnly = true });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Quantity", HeaderText = "数量 / 长度", Width = 92 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Code", HeaderText = "项目编码", Width = 90, ReadOnly = true });
+            grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Included", HeaderText = "生成", Width = UiTheme.NotAutoScaled(52) });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Category", HeaderText = "类别", Width = UiTheme.NotAutoScaled(80), ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "名称", Width = UiTheme.NotAutoScaled(150), ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Description", HeaderText = "特征 / 型号", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, MinimumWidth = UiTheme.NotAutoScaled(260), ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Unit", HeaderText = "单位", Width = UiTheme.NotAutoScaled(58), ReadOnly = true });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Quantity", HeaderText = "数量 / 长度", Width = UiTheme.NotAutoScaled(92) });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Code", HeaderText = "项目编码", Width = UiTheme.NotAutoScaled(90), ReadOnly = true });
             return grid;
         }
 

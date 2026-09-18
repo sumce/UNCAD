@@ -9,7 +9,7 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>Lets the user explicitly choose a fixed-catalog cable replacement.</summary>
-    public sealed class CableCatalogSelectionForm : Form
+    public sealed class CableCatalogSelectionForm : DpiAwareForm
     {
         private readonly List<ListItem> _candidates;
         private readonly TextBox _search = new TextBox
@@ -59,10 +59,10 @@ namespace UNCAD.UI
             };
             searchPanel.Controls.Add(_search);
             UiTheme.StyleInput(_search);
-            _list.Columns.Add("项目编码", 90);
-            _list.Columns.Add("规格", 180);
-            _list.Columns.Add("名称", 180);
-            _list.Columns.Add("特征", 320);
+            _list.Columns.Add("项目编码", UiTheme.NotAutoScaled(90));
+            _list.Columns.Add("规格", UiTheme.NotAutoScaled(180));
+            _list.Columns.Add("名称", UiTheme.NotAutoScaled(180));
+            _list.Columns.Add("特征", UiTheme.NotAutoScaled(320));
 
             _confirm = UiTheme.PrimaryButton("使用所选型号");
             Button cancel = UiTheme.Button("保持原型号", DialogResult.Cancel);

@@ -10,7 +10,7 @@ using UNCAD.Core.Dwg;
 namespace UNCAD.UI
 {
     /// <summary>Drag-and-drop file picker used by Xmerge.</summary>
-    public sealed class XmergeForm : Form
+    public sealed class XmergeForm : DpiAwareForm
     {
         private readonly ListBox _files;
         private readonly Label _hint;

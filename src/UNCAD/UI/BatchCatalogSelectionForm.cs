@@ -35,7 +35,7 @@ namespace UNCAD.UI
     }
 
     /// <summary>Collects explicit catalog selections from passed-in requests before batch writes.</summary>
-    internal sealed class BatchCatalogSelectionForm : Form
+    internal sealed class BatchCatalogSelectionForm : DpiAwareForm
     {
         private readonly IReadOnlyList<BatchCatalogRequest> _requests;
         private readonly DataGridView _grid;
@@ -74,20 +74,23 @@ namespace UNCAD.UI
             };
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "Frame", HeaderText = "机台 / 回路", Width = 250, ReadOnly = true
+                Name = "Frame", HeaderText = "机台 / 回路",
+                Width = UiTheme.NotAutoScaled(250), ReadOnly = true
             });
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "Category", HeaderText = "项目", Width = 110, ReadOnly = true
+                Name = "Category", HeaderText = "项目",
+                Width = UiTheme.NotAutoScaled(110), ReadOnly = true
             });
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "Original", HeaderText = "原型号 / 配电信息", Width = 220, ReadOnly = true
+                Name = "Original", HeaderText = "原型号 / 配电信息",
+                Width = UiTheme.NotAutoScaled(220), ReadOnly = true
             });
             _grid.Columns.Add(new DataGridViewComboBoxColumn
             {
                 Name = "Catalog", HeaderText = "替代固定清单规格", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                MinimumWidth = 150,
+                MinimumWidth = UiTheme.NotAutoScaled(150),
                 DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton,
                 FlatStyle = FlatStyle.Flat,
                 DisplayMember = nameof(ListItem.Alias),

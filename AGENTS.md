@@ -32,7 +32,7 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`, version `2.4.7`.
+- Product: `UNCAD Pro`, version `2.4.8`.
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from

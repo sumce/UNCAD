@@ -46,6 +46,19 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Theory]
+        [InlineData(150)]
+        [InlineData(200)]
+        public void DialogLayout_FitsScaledDialogInsideWorkingArea(int percent)
+        {
+            float scale = percent / 100f;
+            Size desired = new Size((int)(1040 * scale), (int)(700 * scale));
+            Size minimum = new Size((int)(860 * scale), (int)(580 * scale));
+            Size fitted = DialogLayout.FitSize(desired, minimum, new Size(1366, 768));
+
+            Assert.Equal(new Size(1350, 752), fitted);
+        }
+
         /// <summary>
         /// 实测自动缩放的覆盖面。用 AutoScaleDimensions=(64,64) 在 96-DPI 机器上
         /// 造出 1.5 倍比例（真实 DPI / 设计基准 = 96/64），等价于 150% 屏幕。
@@ -142,6 +155,32 @@ namespace UNCAD.Tests
                         Assert.Equal(28, grid.RowTemplate.Height);
                         Assert.Equal(120, grid.Columns[0].Width);
                         Assert.Equal(120, list.Columns[0].Width);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void WinFormsAutoScaling_DoesNotCoverTabItemSize()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new Form())
+                    {
+                        var tabs = new TabControl { ItemSize = new Size(44, 176) };
+                        form.Controls.Add(tabs);
+                        form.AutoScaleMode = AutoScaleMode.Dpi;
+                        form.AutoScaleDimensions = new SizeF(64F, 64F);
+                        form.PerformAutoScale();
+                        Assert.Equal(new Size(44, 176), tabs.ItemSize);
                     }
                 }
                 catch (Exception ex) { failure = ex; }

@@ -23,7 +23,7 @@ namespace UNCAD.UI
             : IsComplete ? "完整" : "缺少回路";
     }
 
-    internal sealed class XLayoutSummaryForm : Form
+    internal sealed class XLayoutSummaryForm : DpiAwareForm
     {
         public XLayoutSummaryForm(IReadOnlyList<XLayoutMachineSummary> summaries,
             int frameCount)

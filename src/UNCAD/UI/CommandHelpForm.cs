@@ -8,7 +8,7 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>Read-only command reference rendered from the help catalog.</summary>
-    internal sealed class CommandHelpForm : Form
+    internal sealed class CommandHelpForm : DpiAwareForm
     {
         public CommandHelpForm(IReadOnlyList<CommandHelpEntry> entries)
         {
@@ -64,7 +64,7 @@ namespace UNCAD.UI
                 HeaderText = header,
                 DataPropertyName = property,
                 FillWeight = weight,
-                MinimumWidth = 90,
+                MinimumWidth = UiTheme.NotAutoScaled(90),
                 SortMode = DataGridViewColumnSortMode.NotSortable
             });
         }

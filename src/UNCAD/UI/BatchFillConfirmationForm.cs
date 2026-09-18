@@ -27,7 +27,7 @@ namespace UNCAD.UI
     }
 
     /// <summary>Scrollable confirmation window for the complete multi-frame U1U plan.</summary>
-    public sealed class BatchFillConfirmationForm : Form
+    public sealed class BatchFillConfirmationForm : DpiAwareForm
     {
         public BatchFillConfirmationForm(IReadOnlyList<BatchFillConfirmationRow> rows)
         {

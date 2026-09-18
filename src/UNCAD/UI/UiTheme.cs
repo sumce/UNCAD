@@ -74,13 +74,33 @@ namespace UNCAD.UI
         /// <summary>
         /// 仅用于 WinForms 自动缩放**不覆盖**的尺寸属性。实测确认这类属性只有：
         /// <c>ComboBox.ItemHeight</c>、<c>DataGridView.RowTemplate.Height</c>、
-        /// <c>DataGridViewColumn.Width</c>、<c>ListView</c> 的 <c>ColumnHeader.Width</c>。
+        /// <c>DataGridViewColumn.Width</c>、<c>ListView</c> 的 <c>ColumnHeader.Width</c>、
+        /// 以及自绘 <c>TabControl.ItemSize</c>。
         /// 它们不随 AutoScaleDimensions 缩放，写死设计值会让高 DPI 下行高/列宽偏小，
         /// 因此必须在此手工换算。其余控件属性一律直接写设计值，不要调用本方法。
         /// 局限：取主显示器 DPI，多显示器混合 DPI 场景下不精确。
         /// </summary>
         public static int NotAutoScaled(int designValue)
-            => (int)Math.Round(designValue * SystemDpiScale);
+            => ScaleForDpi(designValue, SystemDpiScale);
+
+        /// <summary>
+        /// 对 WinForms 不自动缩放的属性使用控件当前所在显示器 DPI；用于窗口句柄
+        /// 已创建后的列表列宽、表格行高等动态布局。
+        /// </summary>
+        public static int NotAutoScaled(Control control, int designValue)
+        {
+            float scale = SystemDpiScale;
+            try
+            {
+                if (control != null && control.IsHandleCreated && control.DeviceDpi > 0)
+                    scale = control.DeviceDpi / 96f;
+            }
+            catch { }
+            return ScaleForDpi(designValue, scale);
+        }
+
+        private static int ScaleForDpi(int designValue, float scale)
+            => (int)Math.Round(designValue * scale);
 
         private static float SystemDpiScale
         {
@@ -379,11 +399,26 @@ namespace UNCAD.UI
             Alignment = TabAlignment.Left;
             Appearance = TabAppearance.Normal;
             DrawMode = TabDrawMode.OwnerDrawFixed;
-            ItemSize = new Size(44, 176);
+            ItemSize = new Size(UiTheme.NotAutoScaled(44), UiTheme.NotAutoScaled(176));
             Multiline = true;
             SizeMode = TabSizeMode.Fixed;
             Font = UiTheme.FontBody;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ItemSize = new Size(UiTheme.NotAutoScaled(this, 44),
+                UiTheme.NotAutoScaled(this, 176));
+        }
+
+        protected override void OnDpiChangedAfterParent(EventArgs e)
+        {
+            base.OnDpiChangedAfterParent(e);
+            ItemSize = new Size(UiTheme.NotAutoScaled(this, 44),
+                UiTheme.NotAutoScaled(this, 176));
+            Invalidate();
         }
 
         protected override void OnDrawItem(DrawItemEventArgs e)

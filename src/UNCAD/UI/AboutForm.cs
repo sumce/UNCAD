@@ -6,7 +6,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
-    internal sealed class AboutForm : Form
+    internal sealed class AboutForm : DpiAwareForm
     {
         public AboutForm()
         {

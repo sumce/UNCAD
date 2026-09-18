@@ -15,7 +15,7 @@ namespace UNCAD.UI
     /// 交互按用户习惯设计：分词搜索、类别筛选、最近使用置顶、双击连续添加、
     /// 表头排序、悬停显示完整特征。
     /// </summary>
-    public sealed class ManualListItemForm : Form
+    public sealed class ManualListItemForm : DpiAwareForm
     {
         private const int MaxRecentItems = 10;
 
@@ -104,13 +104,13 @@ namespace UNCAD.UI
             filters.Controls.Add(LabelFor("搜索:"), 0, 0);
             filters.Controls.Add(_search, 1, 0);
 
-            _list.Columns.Add("类别", 90);
-            _list.Columns.Add("项目编码", 90);
-            _list.Columns.Add("项目名称", 190);
-            _list.Columns.Add("别名", 130);
-            _list.Columns.Add("别名1", 110);
-            _list.Columns.Add("单位", 60);
-            _list.Columns.Add("项目特征", 300);
+            _list.Columns.Add("类别", UiTheme.NotAutoScaled(90));
+            _list.Columns.Add("项目编码", UiTheme.NotAutoScaled(90));
+            _list.Columns.Add("项目名称", UiTheme.NotAutoScaled(190));
+            _list.Columns.Add("别名", UiTheme.NotAutoScaled(130));
+            _list.Columns.Add("别名1", UiTheme.NotAutoScaled(110));
+            _list.Columns.Add("单位", UiTheme.NotAutoScaled(60));
+            _list.Columns.Add("项目特征", UiTheme.NotAutoScaled(300));
             _list.ColumnClick += OnColumnClick;
             _list.BorderStyle = BorderStyle.None;
             _list.BackColor = UiTheme.Surface;

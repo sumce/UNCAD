@@ -6,7 +6,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
-    internal sealed class OnlineLicenseForm : Form
+    internal sealed class OnlineLicenseForm : DpiAwareForm
     {
         private readonly TextBox _authorizationCode;
         private readonly Label _status;

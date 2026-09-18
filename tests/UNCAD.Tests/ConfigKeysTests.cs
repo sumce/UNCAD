@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.4.7", info.Version);
+            Assert.Equal("2.4.8", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);
@@ -47,11 +47,11 @@ namespace UNCAD.Tests
         [Fact]
         public void AboutInfo_DisplaysBuildTimestampInUtcPlusEight()
         {
-            const string version = "2.4.7+build.20260910180000";
+            const string version = "2.4.8+build.20260917180000";
 
-            Assert.Equal("2026-09-11 02:00:00 UTC+8",
+            Assert.Equal("2026-09-18 02:00:00 UTC+8",
                 AboutInfo.ParseBuildTime(version));
-            Assert.Equal("2026-09-11", AboutInfo.BuildDateOrFallback(version));
+            Assert.Equal("2026-09-18", AboutInfo.BuildDateOrFallback(version));
         }
 
         [Fact]

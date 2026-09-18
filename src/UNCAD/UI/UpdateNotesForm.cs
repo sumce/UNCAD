@@ -7,7 +7,7 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>Shows update notes after upgrading to a newer UNCAD version.</summary>
-    internal sealed class UpdateNotesForm : Form
+    internal sealed class UpdateNotesForm : DpiAwareForm
     {
         public UpdateNotesForm(IReadOnlyList<VersionChangeLogEntry> entries)
         {

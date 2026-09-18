@@ -32,7 +32,7 @@ namespace UNCAD.UI
     /// 单位/数量/项次编码),变化行着色。仅展示有上次更新
     /// 信息的图框;多框时左侧列表选择。
     /// </summary>
-    public sealed class FillUpdateCompareForm : Form
+    public sealed class FillUpdateCompareForm : DpiAwareForm
     {
         private readonly ListBox _itemList;
         private readonly Label _title;
@@ -188,11 +188,11 @@ namespace UNCAD.UI
                 ForeColor = UiTheme.TextPrimary,
                 Font = UiTheme.FontCaption
             };
-            list.Columns.Add("序号", 44);
-            list.Columns.Add("项目名称", 170);
-            list.Columns.Add("单位", 44);
-            list.Columns.Add("数量", 76);
-            list.Columns.Add("项次编码", 70);
+            list.Columns.Add("序号", UiTheme.NotAutoScaled(44));
+            list.Columns.Add("项目名称", UiTheme.NotAutoScaled(170));
+            list.Columns.Add("单位", UiTheme.NotAutoScaled(44));
+            list.Columns.Add("数量", UiTheme.NotAutoScaled(76));
+            list.Columns.Add("项次编码", UiTheme.NotAutoScaled(70));
             return list;
         }
 
@@ -269,15 +269,15 @@ namespace UNCAD.UI
             {
                 // 列宽不在 WinForms 自动缩放覆盖范围内：ClientSize 已缩放，
                 // 这里的固定列宽与内缩量需手工换算。
-                int width = Math.Max(UiTheme.NotAutoScaled(360),
-                    list.ClientSize.Width - UiTheme.NotAutoScaled(8));
+                int width = Math.Max(UiTheme.NotAutoScaled(list, 360),
+                    list.ClientSize.Width - UiTheme.NotAutoScaled(list, 8));
                 int[] fixedWidths =
                 {
-                    UiTheme.NotAutoScaled(44), 0, UiTheme.NotAutoScaled(44),
-                    UiTheme.NotAutoScaled(76), UiTheme.NotAutoScaled(70)
+                    UiTheme.NotAutoScaled(list, 44), 0, UiTheme.NotAutoScaled(list, 44),
+                    UiTheme.NotAutoScaled(list, 76), UiTheme.NotAutoScaled(list, 70)
                 };
                 int fixedTotal = fixedWidths.Sum();
-                int nameWidth = Math.Max(UiTheme.NotAutoScaled(120), width - fixedTotal);
+                int nameWidth = Math.Max(UiTheme.NotAutoScaled(list, 120), width - fixedTotal);
                 list.Columns[0].Width = fixedWidths[0];
                 list.Columns[1].Width = nameWidth;
                 for (int i = 2; i < fixedWidths.Length; i++)

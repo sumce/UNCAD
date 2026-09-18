@@ -8,7 +8,7 @@ using UNCAD.Core.Stat;
 namespace UNCAD.UI
 {
     /// <summary>Review window for XSTS circuit coverage before/after Excel export.</summary>
-    public sealed class XstsForm : Form
+    public sealed class XstsForm : DpiAwareForm
     {
         public XstsForm(XstsReport report, string outputPath)
         {

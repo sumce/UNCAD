@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.7 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
+Current 2.4.8 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,14 @@ Current 2.4.7 builds publish 25 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.8
+
+- 修复桥架 BOQ 两行 MTEXT 在格式码、额外空白和大小写差异下的识别与求和；严格按“固定清单型号 + 纯长度”配对，避免孤立长度或带前缀文本误加入清单。
+- 修复 `U1Q*` 在大坐标、多角度斜线下的端点、中点和偏移计算，批量标注可稳定生成。
+- 统一机台表在前 51 个物理行内自动识别表头，兼容第二行表头；固定清单生成脚本使用同一规则。
+- 移除未使用的 JSON 依赖，缩小发行包并减少宿主加载冲突。
+- 修复 Windows 150%/200% 缩放及多显示器切换下窗口超出屏幕、导航和列表尺寸未跟随 DPI 的问题。
 
 ## v2.4.7
 

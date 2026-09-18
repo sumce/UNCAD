@@ -15,7 +15,7 @@ namespace UNCAD.UI
     ///      中间列表显示全部回路（设备名称）及 电缆型号/软管Φ/详情/序号
     ///   ③ 底部实时预览：本次将写入表格与块属性的内容（单击回路即更新）
     /// </summary>
-    public sealed class MachinePickerForm : Form
+    public sealed class MachinePickerForm : DpiAwareForm
     {
         private readonly TextBox _machineInput;
         private readonly ListBox _machineSuggest;
@@ -101,9 +101,9 @@ namespace UNCAD.UI
                 BackColor = UiTheme.Surface,
                 ForeColor = UiTheme.TextPrimary
             };
-            _circuit.Columns.Add("设备 / 回路", 215);
-            _circuit.Columns.Add("盘柜类型", 110);
-            _circuit.Columns.Add("配电详情", 330);
+            _circuit.Columns.Add("设备 / 回路", UiTheme.NotAutoScaled(215));
+            _circuit.Columns.Add("盘柜类型", UiTheme.NotAutoScaled(110));
+            _circuit.Columns.Add("配电详情", UiTheme.NotAutoScaled(330));
             cBox.Controls.Add(_circuit);
 
             _circuitDetail = new TextBox
@@ -317,13 +317,15 @@ namespace UNCAD.UI
         {
             // ClientSize 已被自动缩放，但列宽不在自动缩放覆盖范围内，
             // 因此固定下限与内缩量需手工换算（比例部分 width * N 已随之缩放）。
-            int width = Math.Max(UiTheme.NotAutoScaled(480),
-                _circuit.ClientSize.Width - UiTheme.NotAutoScaled(6));
-            int nameWidth = Math.Max(UiTheme.NotAutoScaled(180), (int)(width * 0.32));
-            int panelWidth = Math.Max(UiTheme.NotAutoScaled(110), (int)(width * 0.18));
+            int width = Math.Max(UiTheme.NotAutoScaled(_circuit, 480),
+                _circuit.ClientSize.Width - UiTheme.NotAutoScaled(_circuit, 6));
+            int nameWidth = Math.Max(UiTheme.NotAutoScaled(_circuit, 180),
+                (int)(width * 0.32));
+            int panelWidth = Math.Max(UiTheme.NotAutoScaled(_circuit, 110),
+                (int)(width * 0.18));
             _circuit.Columns[0].Width = nameWidth;
             _circuit.Columns[1].Width = panelWidth;
-            _circuit.Columns[2].Width = Math.Max(UiTheme.NotAutoScaled(180),
+            _circuit.Columns[2].Width = Math.Max(UiTheme.NotAutoScaled(_circuit, 180),
                 width - nameWidth - panelWidth);
         }
 

@@ -16,7 +16,7 @@ namespace UNCAD.UI
     /// 页签：线段绘制 / 桥架标注 / 线管标注 / 拱桥开洞 / 统计汇总 / 文字样式 / Excel 数据。
     /// 确定时一次性写回全部配置键（Features 只读，这里统一写）。
     /// </summary>
-    public sealed class UnifiedSettingsForm : Form
+    public sealed class UnifiedSettingsForm : DpiAwareForm
     {
         private readonly UiNavigationTabControl _tabs = new UiNavigationTabControl
         {
