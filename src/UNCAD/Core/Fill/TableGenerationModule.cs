@@ -67,6 +67,7 @@ namespace UNCAD.Core.Fill
                 Region = source.Region,
                 MachineId = source.MachineId,
                 CircuitName = source.CircuitName,
+                Batch = source.Batch,
                 Cable = source.Cable,
                 Fr = source.Fr,
                 Detail = source.Detail,

@@ -140,6 +140,33 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ReadAll_ReadsOptionalBatchAndSequenceFields()
+        {
+            var workbook = new XSSFWorkbook();
+            var sheet = workbook.CreateSheet("机台数据");
+            string[] headers = { "U_区域", "U_机台ID", "U_设备楼层", "U_设备轴位",
+                "U_上游编号", "U_上游楼层", "U_上游轴位", "U_配电信息",
+                "U_电缆型号", "U_上游类型", "回路名称", "U_批次", "U_序号" };
+            string[] values = { "ETCH", "M-BATCH", "2F", "2/T", "FR-01", "1F",
+                "1/X", "N220 1P3W 1P20A", "3*2.5", "插座盘", "回路A", "B-2026-09", "17" };
+            IRow header = sheet.CreateRow(0);
+            IRow row = sheet.CreateRow(1);
+            for (int index = 0; index < headers.Length; index++)
+            {
+                header.CreateCell(index).SetCellValue(headers[index]);
+                row.CreateCell(index).SetCellValue(values[index]);
+            }
+
+            try
+            {
+                MachineRow result = Assert.Single(ExcelMachineReader.ReadAll(workbook));
+                Assert.Equal("B-2026-09", result.Batch);
+                Assert.Equal("17", result.Seq);
+            }
+            finally { workbook.Close(); }
+        }
+
+        [Fact]
         public void FindRows_ReportsMissingRequiredHeader()
         {
             string path = CreateBoundHeaderWorkbook(false);

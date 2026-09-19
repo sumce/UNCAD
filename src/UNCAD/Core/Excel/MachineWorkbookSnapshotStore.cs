@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS machine_rows (
     cable TEXT NOT NULL,
     fr TEXT NOT NULL,
     detail TEXT NOT NULL,
+    batch TEXT NOT NULL,
     seq TEXT NOT NULL,
     dia TEXT NOT NULL,
     upstream_type TEXT NOT NULL,
@@ -61,7 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_machine_rows_identity
 ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
 
         private const string SelectColumns =
-            "source_row, machine_id, circuit_name, region, cable, fr, detail, seq, dia, "
+            "source_row, machine_id, circuit_name, region, cable, fr, detail, batch, seq, dia, "
             + "upstream_type, downstream_axis, upstream_axis, device_floor, panel_floor, facility_switch";
 
         private readonly string _databasePath;
@@ -349,9 +350,9 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
 
                     using (WindowsSqliteStatement insert = connection.Prepare(
                         "INSERT INTO machine_rows(source_key, source_row, machine_id, "
-                        + "circuit_name, region, cable, fr, detail, seq, dia, upstream_type, "
+                        + "circuit_name, region, cable, fr, detail, batch, seq, dia, upstream_type, "
                         + "downstream_axis, upstream_axis, device_floor, panel_floor, facility_switch) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))
                     {
                         for (int index = 0; index < (rows?.Count ?? 0); index++)
                         {
@@ -364,14 +365,15 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                             insert.Bind(6, row.Cable);
                             insert.Bind(7, row.Fr);
                             insert.Bind(8, row.Detail);
-                            insert.Bind(9, row.Seq);
-                            insert.Bind(10, row.Dia);
-                            insert.Bind(11, row.Next);
-                            insert.Bind(12, row.DownstreamAxis);
-                            insert.Bind(13, row.UpstreamAxis);
-                            insert.Bind(14, row.DeviceFloor);
-                            insert.Bind(15, row.PanelFloor);
-                            insert.Bind(16, row.FacilitySwitch);
+                            insert.Bind(9, row.Batch);
+                            insert.Bind(10, row.Seq);
+                            insert.Bind(11, row.Dia);
+                            insert.Bind(12, row.Next);
+                            insert.Bind(13, row.DownstreamAxis);
+                            insert.Bind(14, row.UpstreamAxis);
+                            insert.Bind(15, row.DeviceFloor);
+                            insert.Bind(16, row.PanelFloor);
+                            insert.Bind(17, row.FacilitySwitch);
                             StepDone(insert);
                             insert.Reset();
                         }
@@ -413,9 +415,40 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                 if (_schemaReady) return;
                 connection.Execute(CreateSourcesSql);
                 connection.Execute(CreateRowsSql);
+                // Existing users may have a SQLite snapshot from an earlier
+                // release. CREATE TABLE IF NOT EXISTS does not alter that table,
+                // so add the new optional metadata column in place and preserve
+                // all previously refreshed rows.
+                EnsureColumn(connection, "machine_rows", "batch",
+                    "TEXT NOT NULL DEFAULT ''");
                 connection.Execute(CreateIdentityIndexSql);
                 _schemaReady = true;
             }
+        }
+
+        private static void EnsureColumn(WindowsSqliteConnection connection,
+            string table, string column, string definition)
+        {
+            bool found = false;
+            using (WindowsSqliteStatement statement = connection.Prepare(
+                "PRAGMA table_info(" + table + ")"))
+            {
+                while (true)
+                {
+                    int result = statement.Step();
+                    if (result == WindowsSqliteConnection.SqliteDone) break;
+                    statement.CheckStep(result);
+                    if (string.Equals(statement.Text(1), column,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found)
+                connection.Execute("ALTER TABLE " + table + " ADD COLUMN "
+                    + column + " " + definition);
         }
 
         private static List<MachineRow> QueryRows(WindowsSqliteConnection connection,
@@ -446,14 +479,15 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                     Cable = statement.Text(4),
                     Fr = statement.Text(5),
                     Detail = statement.Text(6),
-                    Seq = statement.Text(7),
-                    Dia = statement.Text(8),
-                    Next = statement.Text(9),
-                    DownstreamAxis = statement.Text(10),
-                    UpstreamAxis = statement.Text(11),
-                    DeviceFloor = statement.Text(12),
-                    PanelFloor = statement.Text(13),
-                    FacilitySwitch = statement.Text(14)
+                    Batch = statement.Text(7),
+                    Seq = statement.Text(8),
+                    Dia = statement.Text(9),
+                    Next = statement.Text(10),
+                    DownstreamAxis = statement.Text(11),
+                    UpstreamAxis = statement.Text(12),
+                    DeviceFloor = statement.Text(13),
+                    PanelFloor = statement.Text(14),
+                    FacilitySwitch = statement.Text(15)
                 });
             }
             return result;
@@ -505,6 +539,7 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                 Region = source?.Region ?? "",
                 MachineId = source?.MachineId ?? "",
                 CircuitName = source?.CircuitName ?? "",
+                Batch = source?.Batch ?? "",
                 Cable = source?.Cable ?? "",
                 Fr = source?.Fr ?? "",
                 Detail = source?.Detail ?? "",

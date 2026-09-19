@@ -43,6 +43,8 @@ namespace UNCAD.UI
                 MultiSelect = false
             };
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "机台 ID", DataPropertyName = nameof(XstsMachineSummary.MachineId), FillWeight = 25 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "批次", DataPropertyName = nameof(XstsMachineSummary.Batch), FillWeight = 14 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "序号", DataPropertyName = nameof(XstsMachineSummary.Seq), FillWeight = 14 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "已选回路", DataPropertyName = nameof(XstsMachineSummary.SelectedCircuitCount), FillWeight = 15 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "应有回路", DataPropertyName = nameof(XstsMachineSummary.ExpectedCircuitText), FillWeight = 15 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "缺少回路", DataPropertyName = nameof(XstsMachineSummary.MissingText), FillWeight = 45 });

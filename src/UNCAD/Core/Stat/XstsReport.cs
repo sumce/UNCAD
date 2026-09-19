@@ -21,6 +21,10 @@ namespace UNCAD.Core.Stat
         }
 
         public string MachineId { get; }
+        /// <summary>机台级元数据；同一机台在报表中只占一个批次字段。</summary>
+        public string Batch { get; set; } = "";
+        /// <summary>机台级元数据；同一机台在报表中只占一个序号字段。</summary>
+        public string Seq { get; set; } = "";
         public int SelectedCircuitCount { get; set; }
         public int ExpectedCircuitCount { get; set; }
         public bool ExpectedDataAvailable { get; set; }
@@ -99,6 +103,7 @@ namespace UNCAD.Core.Stat
             string expectedDataDetail = null)
         {
             var selectedRows = (selected ?? Enumerable.Empty<XstsCircuitRecord>()).ToList();
+            var expectedRows = (expected ?? Enumerable.Empty<XstsCircuitRecord>()).ToList();
             var report = new XstsReport
             {
                 FrameCount = selectedRows.Count,
@@ -107,7 +112,7 @@ namespace UNCAD.Core.Stat
             };
             AddFrameIssues(selectedRows, report);
             var selectedGroups = Group(selectedRows);
-            var expectedGroups = Group(expected);
+            var expectedGroups = Group(expectedRows);
             // The report is selection-scoped: expected-only machines are deliberately
             // omitted. XSTS answers which circuits are missing from the machines the
             // user framed, not which circuits are missing from the whole workbook.
@@ -115,6 +120,17 @@ namespace UNCAD.Core.Stat
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
             {
                 var row = new XstsMachineSummary(machineId);
+                List<XstsCircuitRecord> metadataRows = expectedRows
+                    .Where(item => string.Equals((item?.MachineId ?? "").Trim(),
+                        machineId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (metadataRows.Count == 0)
+                    metadataRows = selectedRows
+                        .Where(item => string.Equals((item?.MachineId ?? "").Trim(),
+                            machineId, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                row.Batch = CollapseField(metadataRows.Select(item => item.Batch));
+                row.Seq = CollapseField(metadataRows.Select(item => item.Seq));
                 // A globally readable workbook still cannot provide a baseline for a
                 // machine ID that is absent from it. Keep that row explicitly unknown
                 // instead of presenting an empty expected set as "0 missing".
@@ -199,24 +215,53 @@ namespace UNCAD.Core.Stat
             }
             return result;
         }
+
+        private static string CollapseField(IEnumerable<string> values)
+        {
+            List<string> distinct = (values ?? Enumerable.Empty<string>())
+                .Select(value => (value ?? "").Trim())
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            // The workbook contract is one batch/sequence per machine. If a
+            // damaged workbook disagrees across circuits, keep one cell and
+            // expose every distinct value instead of silently discarding data.
+            return string.Join("、", distinct);
+        }
     }
 
     public sealed class XstsCircuitRecord
     {
         public XstsCircuitRecord(string machineId, string circuitName)
-            : this(machineId, circuitName, null)
+            : this(machineId, circuitName, null, "", "")
         {
         }
 
         public XstsCircuitRecord(string machineId, string circuitName, string error)
+            : this(machineId, circuitName, error, "", "")
+        {
+        }
+
+        public XstsCircuitRecord(string machineId, string circuitName,
+            string batch, string seq)
+            : this(machineId, circuitName, null, batch, seq)
+        {
+        }
+
+        public XstsCircuitRecord(string machineId, string circuitName, string error,
+            string batch, string seq)
         {
             MachineId = machineId ?? "";
             CircuitName = circuitName ?? "";
             Error = error ?? "";
+            Batch = batch ?? "";
+            Seq = seq ?? "";
         }
 
         public string MachineId { get; }
         public string CircuitName { get; }
         public string Error { get; }
+        public string Batch { get; }
+        public string Seq { get; }
     }
 }

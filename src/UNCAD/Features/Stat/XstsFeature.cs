@@ -107,7 +107,7 @@ namespace UNCAD.Features.Stat
                         {
                             if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
                             expectedRows.Add(new XstsCircuitRecord(row.MachineId,
-                                row.CircuitName));
+                                row.CircuitName, row.Batch, row.Seq));
                         }
                         expectedStatus = XstsExpectedDataStatus.Available;
                         expectedDetail = "SQLite 快照（手动刷新时间 "

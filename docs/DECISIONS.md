@@ -184,3 +184,14 @@ rewrite an existing entry.
   automatically" clause for bridge labels only. Migration occurs only when
   the catalog model exists and the resulting two-line label collapses back to
   the same statistics input; otherwise the original text is preserved.
+
+## D-020: Machine Batch And Sequence Metadata (2026-09-18)
+
+- Status: accepted
+- Decision: the unified machine workbook may provide optional `U_批次` and
+  `U_序号` columns. XSTS reads these values from the refreshed SQLite snapshot
+  and reports one batch cell and one sequence cell per machine, not one row per
+  circuit.
+- Consequence: repeated values across a machine's circuit rows are collapsed
+  into the machine summary; old snapshots without the batch column are migrated
+  in place with an empty value and remain readable.

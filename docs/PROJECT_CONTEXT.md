@@ -58,6 +58,8 @@ XLAYOUT/XSTS
 
 - Only the unified `U_` columns and ordinary `回路名称` are input fields. A
   circuit row with strikethrough on `回路名称` is excluded.
+- Optional `U_批次` and `U_序号` values are retained in the workbook snapshot;
+  XSTS presents one batch and one sequence field per machine.
 - Workbook refresh is explicit in `U1SET`; commands do not silently download a
   network workbook.
 - Parsed machine rows and refresh metadata live in the per-user SQLite snapshot;

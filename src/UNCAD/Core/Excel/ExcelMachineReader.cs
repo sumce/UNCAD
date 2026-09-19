@@ -17,6 +17,7 @@ namespace UNCAD.Core.Excel
         public string Region { get; set; }
         public string MachineId { get; set; }
         public string CircuitName { get; set; }
+        public string Batch { get; set; }
         public string Cable { get; set; }
         public string Fr { get; set; }
         public string Detail { get; set; }
@@ -31,8 +32,8 @@ namespace UNCAD.Core.Excel
 
         public override string ToString()
         {
-            return MachineId + " | " + CircuitName + " | 电缆:" + Cable
-                + " | " + Detail + " | 序号:" + Seq + " | 软管" + Dia
+            return MachineId + " | " + CircuitName + " | 批次:" + Batch
+                + " | 电缆:" + Cable + " | " + Detail + " | 序号:" + Seq + " | 软管" + Dia
                 + " | NEXT:" + Next + " | 下游轴位:" + DownstreamAxis
                 + " | 上游轴位:" + UpstreamAxis;
         }
@@ -49,6 +50,7 @@ namespace UNCAD.Core.Excel
             public int Region = -1;
             public int MachineId = -1;
             public int CircuitName = -1;
+            public int Batch = -1;
             public int Cable = -1;
             public int Fr = -1;
             public int Detail = -1;
@@ -110,7 +112,7 @@ namespace UNCAD.Core.Excel
                     + "不支持旧字段、备用字段或自动猜测其它工作表。"
                     + "必需字段：U_区域、U_机台ID、U_设备楼层、U_设备轴位、"
                     + "U_上游编号、U_上游楼层、U_上游轴位、U_配电信息、U_电缆型号、"
-                    + "U_上游类型、回路名称；可选字段：U_厂务开关、U_序号、U_软管直径。");
+                    + "U_上游类型、回路名称；可选字段：U_厂务开关、U_批次、U_序号、U_软管直径。");
 
             return ReadBoundRows(workbook, sheet, columns);
         }
@@ -213,6 +215,7 @@ namespace UNCAD.Core.Excel
 
                 // Current ledgers derive these elsewhere. If present, read only
                 // exact U_ names; no old “序号”/“DIA” aliases are accepted.
+                int batch = FindUnique(header, "U_批次");
                 int seq = FindUnique(header, "U_序号");
                 int dia = FindUnique(header, "U_软管直径");
 
@@ -227,6 +230,7 @@ namespace UNCAD.Core.Excel
                     Region = region,
                     MachineId = machineId,
                     CircuitName = circuit,
+                    Batch = batch,
                     Cable = cable,
                     Fr = upstreamId,
                     Detail = detail,
@@ -276,6 +280,7 @@ namespace UNCAD.Core.Excel
                 Region = Text(GetCell(row, columns.Region)),
                 MachineId = Text(GetCell(row, columns.MachineId)),
                 CircuitName = Text(GetCell(row, columns.CircuitName)),
+                Batch = Text(GetCell(row, columns.Batch)),
                 Cable = Text(GetCell(row, columns.Cable)),
                 Fr = Text(GetCell(row, columns.Fr)),
                 Detail = Text(GetCell(row, columns.Detail)),

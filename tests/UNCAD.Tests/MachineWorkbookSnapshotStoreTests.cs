@@ -28,6 +28,7 @@ namespace UNCAD.Tests
                     Cable = "Cable" + index,
                     Fr = "FR" + index,
                     Detail = "D" + index,
+                    Batch = "BATCH-" + (index / 10),
                     Seq = index.ToString(),
                     Dia = "20",
                     Next = "插座盘",
@@ -51,6 +52,7 @@ namespace UNCAD.Tests
                 Assert.Equal("C537", sample.CircuitName);
                 Assert.Equal("Cable537", sample.Cable);
                 Assert.Equal("D-A537", sample.DownstreamAxis);
+                Assert.Equal("BATCH-53", sample.Batch);
                 Assert.Equal("U-A537", sample.UpstreamAxis);
                 Assert.Equal("1P20A", sample.FacilitySwitch);
             }
@@ -81,6 +83,66 @@ namespace UNCAD.Tests
                 Assert.NotEqual(first.RefreshedUtc, second.RefreshedUtc);
                 Assert.True(store.TryGetSnapshot(source, out MachineWorkbookSnapshotInfo current));
                 Assert.Equal(second.RefreshedUtc, current.RefreshedUtc);
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        [Fact]
+        public void RefreshRows_MigratesLegacySnapshotWithoutBatchColumn()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_sqlite_migrate_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string source = Path.Combine(root, "machine.xlsx");
+            string database = Path.Combine(root, "machine.db");
+            try
+            {
+                using (var connection = new WindowsSqliteConnection(database))
+                {
+                    connection.Execute(@"
+CREATE TABLE machine_sources (
+    source_key TEXT NOT NULL PRIMARY KEY,
+    source_display TEXT NOT NULL,
+    workbook_hash TEXT NOT NULL,
+    refreshed_utc TEXT NOT NULL,
+    row_count INTEGER NOT NULL
+)" );
+                    connection.Execute(@"
+CREATE TABLE machine_rows (
+    source_key TEXT NOT NULL,
+    source_row INTEGER NOT NULL,
+    machine_id TEXT NOT NULL,
+    circuit_name TEXT NOT NULL,
+    region TEXT NOT NULL,
+    cable TEXT NOT NULL,
+    fr TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    seq TEXT NOT NULL,
+    dia TEXT NOT NULL,
+    upstream_type TEXT NOT NULL,
+    downstream_axis TEXT NOT NULL,
+    upstream_axis TEXT NOT NULL,
+    device_floor TEXT NOT NULL,
+    panel_floor TEXT NOT NULL,
+    facility_switch TEXT NOT NULL,
+    PRIMARY KEY (source_key, source_row)
+)" );
+                }
+
+                var store = new MachineWorkbookSnapshotStore(database);
+                store.RefreshRows(source, new[]
+                {
+                    new MachineRow { MachineId = "M1", CircuitName = "C1",
+                        Batch = "B-01", Seq = "7" }
+                }, "legacy-migrated");
+
+                MachineRow result = Assert.Single(store.ReadAllRows(source));
+                Assert.Equal("B-01", result.Batch);
+                Assert.Equal("7", result.Seq);
             }
             finally
             {

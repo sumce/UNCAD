@@ -42,27 +42,31 @@ namespace UNCAD.Core.Report
             Set(sheet.GetRow(row - 1), 1, ExpectedStatusText(report));
             Set(sheet.GetRow(row - 1), 2, report.ExpectedDataDetail);
             Set(sheet.CreateRow(row++), 0, "机台 ID", workbook, true);
-            Set(sheet.GetRow(row - 1), 1, "已选回路", workbook, true);
-            Set(sheet.GetRow(row - 1), 2, "应有回路", workbook, true);
-            Set(sheet.GetRow(row - 1), 3, "缺少回路", workbook, true);
-            Set(sheet.GetRow(row - 1), 4, "多出回路", workbook, true);
+            Set(sheet.GetRow(row - 1), 1, "批次", workbook, true);
+            Set(sheet.GetRow(row - 1), 2, "序号", workbook, true);
+            Set(sheet.GetRow(row - 1), 3, "已选回路", workbook, true);
+            Set(sheet.GetRow(row - 1), 4, "应有回路", workbook, true);
+            Set(sheet.GetRow(row - 1), 5, "缺少回路", workbook, true);
+            Set(sheet.GetRow(row - 1), 6, "多出回路", workbook, true);
             foreach (XstsMachineSummary item in report.Machines)
             {
                 IRow current = sheet.CreateRow(row++);
                 Set(current, 0, item.MachineId);
-                Set(current, 1, item.SelectedCircuitCount);
-                if (item.ExpectedDataAvailable) Set(current, 2, item.ExpectedCircuitCount);
-                else Set(current, 2, item.ExpectedCircuitText);
-                Set(current, 3, item.MissingText);
-                Set(current, 4, item.UnexpectedText);
+                Set(current, 1, item.Batch);
+                Set(current, 2, item.Seq);
+                Set(current, 3, item.SelectedCircuitCount);
+                if (item.ExpectedDataAvailable) Set(current, 4, item.ExpectedCircuitCount);
+                else Set(current, 4, item.ExpectedCircuitText);
+                Set(current, 5, item.MissingText);
+                Set(current, 6, item.UnexpectedText);
             }
             Set(sheet.CreateRow(row++), 0, "合计", workbook, true);
-            Set(sheet.GetRow(row - 1), 1, report.SelectedCircuitCount);
+            Set(sheet.GetRow(row - 1), 3, report.SelectedCircuitCount);
             if (report.ExpectedDataAvailable && !report.HasUnknownMachineBaseline)
-                Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitCount);
-            else Set(sheet.GetRow(row - 1), 2, report.ExpectedCircuitText);
-            Set(sheet.GetRow(row - 1), 3, report.MissingCircuitText);
-            Set(sheet.GetRow(row - 1), 4, report.UnexpectedCircuitText);
+                Set(sheet.GetRow(row - 1), 4, report.ExpectedCircuitCount);
+            else Set(sheet.GetRow(row - 1), 4, report.ExpectedCircuitText);
+            Set(sheet.GetRow(row - 1), 5, report.MissingCircuitText);
+            Set(sheet.GetRow(row - 1), 6, report.UnexpectedCircuitText);
 
             ISheet issues = workbook.CreateSheet("异常图框");
             IRow issueHeader = issues.CreateRow(0);
@@ -80,7 +84,8 @@ namespace UNCAD.Core.Report
                 Set(issueRow, 2, issue.CircuitName);
                 Set(issueRow, 3, issue.Description);
             }
-            for (int i = 0; i < 5; i++) sheet.SetColumnWidth(i, (i >= 3 ? 38 : 18) * 256);
+            for (int i = 0; i < 7; i++)
+                sheet.SetColumnWidth(i, (i >= 5 ? 38 : i == 0 ? 18 : 14) * 256);
             for (int i = 0; i < 4; i++) issues.SetColumnWidth(i, (i == 3 ? 42 : 18) * 256);
             return workbook;
         }

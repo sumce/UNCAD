@@ -31,6 +31,26 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_ReportsOneBatchAndSequencePerMachine()
+        {
+            XstsReport report = XstsReportBuilder.Build(
+                new[]
+                {
+                    new XstsCircuitRecord("M1", "A"),
+                    new XstsCircuitRecord("M1", "B")
+                },
+                new[]
+                {
+                    new XstsCircuitRecord("M1", "A", "B-2026-09", "17"),
+                    new XstsCircuitRecord("M1", "B", "B-2026-09", "17")
+                });
+
+            XstsMachineSummary machine = Assert.Single(report.Machines);
+            Assert.Equal("B-2026-09", machine.Batch);
+            Assert.Equal("17", machine.Seq);
+        }
+
+        [Fact]
         public void Build_IsCaseInsensitiveAndIgnoresIncompleteRows()
         {
             XstsReport report = XstsReportBuilder.Build(
