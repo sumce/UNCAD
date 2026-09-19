@@ -82,11 +82,13 @@ namespace UNCAD.UI
             Size available = new Size(Math.Max(1, area.Width - 16),
                 Math.Max(1, area.Height - 16));
             Size minimum = form.MinimumSize;
-            Size fitted = FitSize(form.Size, minimum, new Size(area.Width, area.Height));
 
             // MinimumSize 是窗口外框尺寸，不能让它把 200% 窗口锁在屏幕之外。
-            form.MinimumSize = new Size(Math.Min(minimum.Width, available.Width),
+            Size boundedMinimum = new Size(Math.Min(minimum.Width, available.Width),
                 Math.Min(minimum.Height, available.Height));
+            form.MinimumSize = boundedMinimum;
+            Size fitted = FitSize(form.Size, boundedMinimum,
+                new Size(area.Width, area.Height));
             if (form.Size != fitted) form.Size = fitted;
 
             if (reposition)

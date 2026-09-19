@@ -9,6 +9,17 @@ namespace UNCAD.UI
     /// </summary>
     public abstract class DpiAwareForm : Form
     {
+        private DpiAwarenessScope _lifetimeDpiScope;
+
+        protected DpiAwareForm()
+        {
+            // AutoCAD can enter a system-aware thread before constructing a
+            // plugin dialog. Keep the dialog's construction, layout, modal
+            // loop, and disposal in one per-monitor context so fonts, bounds,
+            // and Screen.WorkingArea use the same coordinate space.
+            _lifetimeDpiScope = DpiAwarenessScope.Enter();
+        }
+
         protected override void CreateHandle()
         {
             using (DpiAwarenessScope.Enter())
@@ -19,6 +30,19 @@ namespace UNCAD.UI
         {
             using (DpiAwarenessScope.Enter())
                 base.SetVisibleCore(value);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            try { base.Dispose(disposing); }
+            finally
+            {
+                if (disposing && _lifetimeDpiScope != null)
+                {
+                    _lifetimeDpiScope.Dispose();
+                    _lifetimeDpiScope = null;
+                }
+            }
         }
 
         private sealed class DpiAwarenessScope : IDisposable

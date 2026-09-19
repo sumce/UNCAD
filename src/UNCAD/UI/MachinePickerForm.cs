@@ -41,53 +41,75 @@ namespace UNCAD.UI
                 new Size(820, 620), new Size(700, 520));
 
             // ① 机台ID 输入
-            var mBox = new GroupBox
+            var machineInputPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 2,
+                Padding = new Padding(8, 4, 8, 8),
+                Margin = Padding.Empty
+            };
+            machineInputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            machineInputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            machineInputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var machineInputLabel = new Label
             {
                 Text = "机台 ID",
-                Dock = DockStyle.Top,
-                Height = 54,
-                Padding = new Padding(
-                    8, 21,
-                    8, 6)
+                AutoSize = true,
+                Font = UiTheme.FontBody,
+                Margin = new Padding(0, 0, 0, 4)
             };
-            _machineInput = new TextBox { Dock = DockStyle.Fill, Font = UiTheme.FontInput };
+            _machineInput = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty
+            };
             UiTheme.StyleInput(_machineInput);
-            mBox.Controls.Add(_machineInput);
+            _machineInput.Font = UiTheme.FontInput;
+            machineInputPanel.Controls.Add(machineInputLabel, 0, 0);
+            machineInputPanel.Controls.Add(_machineInput, 0, 1);
 
             // 相似机台建议
             _machineSuggest = new ListBox
             {
-                Dock = DockStyle.Top,
-                Height = 72,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right,
                 Visible = false,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = UiTheme.Surface,
                 ForeColor = UiTheme.TextPrimary,
-                IntegralHeight = false
+                IntegralHeight = false,
+                Margin = new Padding(8, 0, 8, 8)
             };
 
             // 机台摘要
             _machineSummary = new Label
             {
-                Dock = DockStyle.Top,
-                Height = 24,
+                Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                AutoSize = true,
                 ForeColor = UiTheme.Accent,
                 Font = UiTheme.FontBodyBold,
-                Padding = new Padding(
-                    6, 4,
-                    4, 0),
+                Margin = new Padding(8, 0, 8, 8),
                 Text = "请输入机台 ID"
             };
 
             // ② 回路列表
-            var cBox = new GroupBox
+            var circuitPanel = new TableLayoutPanel
             {
-                Text = "设备 / 回路",
                 Dock = DockStyle.Fill,
-                Padding = new Padding(
-                    8, 26,
-                    8, 6)
+                ColumnCount = 1,
+                RowCount = 2,
+                Padding = new Padding(8, 4, 8, 6),
+                Margin = Padding.Empty,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = UiTheme.Surface
             };
+            circuitPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            circuitPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            circuitPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            var circuitLabel = UiTheme.SectionHeader("设备 / 回路");
+            circuitLabel.Margin = new Padding(0, 0, 0, 4);
             _circuit = new ListView
             {
                 Dock = DockStyle.Fill,
@@ -104,7 +126,8 @@ namespace UNCAD.UI
             _circuit.Columns.Add("设备 / 回路", UiTheme.NotAutoScaled(215));
             _circuit.Columns.Add("盘柜类型", UiTheme.NotAutoScaled(110));
             _circuit.Columns.Add("配电详情", UiTheme.NotAutoScaled(330));
-            cBox.Controls.Add(_circuit);
+            circuitPanel.Controls.Add(circuitLabel, 0, 0);
+            circuitPanel.Controls.Add(_circuit, 0, 1);
 
             _circuitDetail = new TextBox
             {
@@ -135,9 +158,9 @@ namespace UNCAD.UI
             previewTab.Controls.Add(_preview);
             var lowerTabs = new TabControl
             {
-                Dock = DockStyle.Bottom,
-                Height = 126,
-                Font = UiTheme.FontBody
+                Dock = DockStyle.Fill,
+                Font = UiTheme.FontBody,
+                Margin = new Padding(0, 8, 0, 0)
             };
             lowerTabs.TabPages.Add(detailTab);
             lowerTabs.TabPages.Add(previewTab);
@@ -147,22 +170,42 @@ namespace UNCAD.UI
             _ok.Enabled = false;
             Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             FlowLayoutPanel btnRow = UiTheme.CommandBar();
+            btnRow.Dock = DockStyle.Fill;
+            btnRow.Margin = Padding.Empty;
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(_ok);
 
-            // 布局：Dock 按加入顺序的逆序生效，最后加入的 Top 在最上方
-            Controls.Add(cBox);
-            Controls.Add(lowerTabs);
-            Controls.Add(btnRow);
-            Controls.Add(_machineSummary);
-            Controls.Add(_machineSuggest);
-            Controls.Add(mBox);
+            // 内容行按实际尺寸展开，列表和详情共享全部剩余空间。
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 6,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                BackColor = Color.Transparent
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 68f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 32f));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(machineInputPanel, 0, 0);
+            layout.Controls.Add(_machineSuggest, 0, 1);
+            layout.Controls.Add(_machineSummary, 0, 2);
+            layout.Controls.Add(circuitPanel, 0, 3);
+            layout.Controls.Add(lowerTabs, 0, 4);
+            layout.Controls.Add(btnRow, 0, 5);
+            Controls.Add(layout);
             AcceptButton = _ok;
             CancelButton = cancel;
 
             // 事件
             _machineInput.TextChanged += (s, e) => UpdateSuggestions();
             _machineInput.KeyDown += OnMachineInputKeyDown;
+            _machineSuggest.FontChanged += (s, e) => ResizeSuggestionList();
             _machineSuggest.MouseClick += (s, e) => CommitMachine();
             _machineSuggest.KeyDown += (s, e) =>
             {
@@ -180,6 +223,7 @@ namespace UNCAD.UI
             };
             _circuit.SelectedIndexChanged += (s, e) => UpdatePreview();
             _circuit.Resize += (s, e) => ResizeCircuitColumns();
+            Shown += (s, e) => ResizeCircuitColumns();
             _circuit.DoubleClick += (s, e) => Confirm();
             _ok.Click += (s, e) => Confirm();
         }
@@ -232,6 +276,17 @@ namespace UNCAD.UI
                 return;
             }
             _machineSuggest.Visible = list.Count > 0;
+            ResizeSuggestionList();
+        }
+
+        private void ResizeSuggestionList()
+        {
+            if (_machineSuggest.Items.Count > 0)
+            {
+                int preferredHeight = _machineSuggest.PreferredHeight;
+                _machineSuggest.MinimumSize = new Size(0, preferredHeight);
+                _machineSuggest.Height = preferredHeight;
+            }
         }
 
         /// <summary>选定机台后按需查询该机台的 SQLite 快照回路。</summary>
@@ -315,18 +370,54 @@ namespace UNCAD.UI
 
         private void ResizeCircuitColumns()
         {
-            // ClientSize 已被自动缩放，但列宽不在自动缩放覆盖范围内，
-            // 因此固定下限与内缩量需手工换算（比例部分 width * N 已随之缩放）。
-            int width = Math.Max(UiTheme.NotAutoScaled(_circuit, 480),
-                _circuit.ClientSize.Width - UiTheme.NotAutoScaled(_circuit, 6));
-            int nameWidth = Math.Max(UiTheme.NotAutoScaled(_circuit, 180),
-                (int)(width * 0.32));
-            int panelWidth = Math.Max(UiTheme.NotAutoScaled(_circuit, 110),
-                (int)(width * 0.18));
-            _circuit.Columns[0].Width = nameWidth;
-            _circuit.Columns[1].Width = panelWidth;
-            _circuit.Columns[2].Width = Math.Max(UiTheme.NotAutoScaled(_circuit, 180),
-                width - nameWidth - panelWidth);
+            // ListView 列宽不随容器自动布局；按当前字体/DPI 计算优选宽度，
+            // 空间不足时再严格按实际可用宽度重新分配，不依赖特定窗口比例。
+            int width = Math.Max(3, _circuit.ClientSize.Width
+                - UiTheme.NotAutoScaled(_circuit, 6));
+            int[] widths = CalculateCircuitColumnWidths(width, GetDpiScale(_circuit));
+            for (int i = 0; i < widths.Length; i++)
+                _circuit.Columns[i].Width = widths[i];
+        }
+
+        internal static int[] CalculateCircuitColumnWidths(int availableWidth,
+            float dpiScale)
+        {
+            int width = Math.Max(3, availableWidth);
+            int preferredName = ScaleColumn(180, dpiScale);
+            int preferredPanel = ScaleColumn(110, dpiScale);
+            int preferredDetail = ScaleColumn(180, dpiScale);
+            int preferredTotal = preferredName + preferredPanel + preferredDetail;
+
+            if (width < preferredTotal)
+            {
+                int name = Math.Max(1, (int)Math.Round(width * 0.32));
+                int panel = Math.Max(1, (int)Math.Round(width * 0.18));
+                return new[] { name, panel, Math.Max(1, width - name - panel) };
+            }
+
+            int extra = width - preferredTotal;
+            int expandedName = preferredName + (int)Math.Round(extra * 0.32);
+            int expandedPanel = preferredPanel + (int)Math.Round(extra * 0.18);
+            return new[]
+            {
+                expandedName,
+                expandedPanel,
+                Math.Max(1, width - expandedName - expandedPanel)
+            };
+        }
+
+        private static int ScaleColumn(int designValue, float dpiScale)
+            => Math.Max(1, (int)Math.Round(designValue * Math.Max(1f, dpiScale)));
+
+        private static float GetDpiScale(Control control)
+        {
+            try
+            {
+                if (control != null && control.DeviceDpi > 0)
+                    return control.DeviceDpi / 96f;
+            }
+            catch { }
+            return 1f;
         }
 
         private static string BuildCircuitDetail(MachineRow row)

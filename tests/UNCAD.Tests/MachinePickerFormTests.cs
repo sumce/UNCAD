@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
@@ -11,8 +12,149 @@ namespace UNCAD.Tests
 {
     public class MachinePickerFormTests
     {
+        [Theory]
+        [InlineData(96)]  // 100%
+        [InlineData(77)]  // 125%
+        [InlineData(64)] // 150%
+        [InlineData(55)] // 175%
+        [InlineData(48)] // 200%
+        public void Dialog_AllSectionsAdaptWithoutOverlap(int designDpi)
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new MachinePickerForm(new[] { "M100" },
+                        id => new List<MachineRow>()))
+                    {
+                        form.AutoScaleDimensions = new SizeF(designDpi, designDpi);
+                        form.Show();
+                        Application.DoEvents();
+
+                        Label machineLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "机台 ID");
+                        TableLayoutPanel machinePanel = Assert.IsType<TableLayoutPanel>(
+                            machineLabel.Parent);
+                        Label circuitLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "设备 / 回路");
+                        TableLayoutPanel circuitPanel = Assert.IsType<TableLayoutPanel>(
+                            circuitLabel.Parent);
+                        Label summary = FindAll<Label>(form)
+                            .Single(label => label.Text == "请输入机台 ID");
+                        TextBox machine = Find<TextBox>(machinePanel);
+                        TabControl tabs = Find<TabControl>(form);
+                        FlowLayoutPanel commandBar = Find<FlowLayoutPanel>(form);
+                        ListView circuits = Find<ListView>(form);
+
+                        Assert.True(machinePanel.AutoSize);
+                        Assert.True(machinePanel.Bottom <= summary.Top);
+                        Assert.True(machineLabel.Bottom <= machine.Top);
+                        Assert.True(machine.Height >= machine.PreferredHeight);
+                        Assert.InRange(machine.Top, 0, machinePanel.ClientSize.Height);
+                        Assert.InRange(machine.Bottom, 0, machinePanel.ClientSize.Height);
+                        Assert.True(summary.Height >= summary.PreferredSize.Height);
+                        Assert.True(summary.Bottom <= circuitPanel.Top);
+                        Assert.True(circuitPanel.Bottom <= tabs.Top);
+                        Assert.True(tabs.Bottom <= commandBar.Top);
+                        Assert.True(commandBar.Bottom <= form.ClientSize.Height);
+                        Assert.True(circuits.ClientSize.Height > 0);
+                        Assert.True(tabs.ClientSize.Height > 0);
+
+                        int circuitHeight = circuitPanel.Height;
+                        int detailHeight = tabs.Height;
+                        form.ClientSize = new Size(form.ClientSize.Width + 160,
+                            form.ClientSize.Height + 160);
+                        Application.DoEvents();
+
+                        Assert.True(circuitPanel.Height > circuitHeight);
+                        Assert.True(tabs.Height > detailHeight);
+                        Assert.True(circuitPanel.Bottom <= tabs.Top);
+                        Assert.True(tabs.Bottom <= commandBar.Top);
+
+                        form.MinimumSize = Size.Empty;
+                        form.ClientSize = new Size(720, 520);
+                        Application.DoEvents();
+
+                        Assert.True(machine.Height >= machine.PreferredHeight);
+                        Assert.True(machine.Bottom <= machinePanel.ClientSize.Height);
+                        Assert.True(summary.Bottom <= circuitPanel.Top);
+                        Assert.True(circuitPanel.Bottom <= tabs.Top);
+                        Assert.True(tabs.Bottom <= commandBar.Top);
+                        Assert.True(circuits.ClientSize.Height > 0);
+                        Assert.True(tabs.ClientSize.Height > 0);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
         [Fact]
-        public void Dialog_UsesDpiLayoutResponsiveColumnsAndContinuousSelectionFlow()
+        public void Suggestions_UseTheirContentHeightAndReleaseSpaceWhenHidden()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    using (var form = new MachinePickerForm(
+                        new[] { "M100", "M101", "M102" },
+                        id => new List<MachineRow>()))
+                    {
+                        form.Show();
+                        Application.DoEvents();
+
+                        Label machineLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "机台 ID");
+                        TextBox machine = Find<TextBox>(machineLabel.Parent);
+                        ListBox suggestions = Find<ListBox>(form);
+                        Label circuitLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "设备 / 回路");
+                        Control circuitPanel = circuitLabel.Parent;
+
+                        int circuitTopWithoutSuggestions = circuitPanel.Top;
+                        machine.Text = "M";
+                        Application.DoEvents();
+
+                        Assert.True(suggestions.Visible);
+                        Assert.Equal(3, suggestions.Items.Count);
+                        Assert.Equal(suggestions.PreferredHeight, suggestions.Height);
+                        Assert.True(circuitPanel.Top > circuitTopWithoutSuggestions);
+
+                        machine.Clear();
+                        Application.DoEvents();
+
+                        Assert.False(suggestions.Visible);
+                        Assert.Equal(circuitTopWithoutSuggestions, circuitPanel.Top);
+                    }
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Theory]
+        [InlineData(780, 2f)]
+        [InlineData(460, 1.5f)]
+        public void CircuitColumns_FitEveryAvailableWidth(int availableWidth,
+            float dpiScale)
+        {
+            int[] widths = MachinePickerForm.CalculateCircuitColumnWidths(
+                availableWidth, dpiScale);
+
+            Assert.Equal(availableWidth, widths.Sum());
+            Assert.All(widths, width => Assert.True(width > 0));
+        }
+
+        [Fact]
+        public void Dialog_UsesAdaptiveLayoutAndContinuousSelectionFlow()
         {
             Exception failure = null;
             var thread = new Thread(() =>
@@ -45,9 +187,25 @@ namespace UNCAD.Tests
 
                         Assert.Equal(AutoScaleMode.Dpi, form.AutoScaleMode);
                         Assert.Equal(FormBorderStyle.Sizable, form.FormBorderStyle);
-                        GroupBox machineGroup = FindAll<GroupBox>(form)
-                            .Single(group => group.Text == "机台 ID");
-                        TextBox machine = Find<TextBox>(machineGroup);
+                        Label machineLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "机台 ID");
+                        TableLayoutPanel machinePanel = Assert.IsType<TableLayoutPanel>(
+                            machineLabel.Parent);
+                        Label circuitLabel = FindAll<Label>(form)
+                            .Single(label => label.Text == "设备 / 回路");
+                        TableLayoutPanel circuitPanel = Assert.IsType<TableLayoutPanel>(
+                            circuitLabel.Parent);
+                        Label summary = FindAll<Label>(form)
+                            .Single(label => label.Text == "请输入机台 ID");
+                        TextBox machine = Find<TextBox>(machinePanel);
+                        Button confirm = FindAll<Button>(form)
+                            .Single(button => button.Text == "确定");
+                        Assert.False(confirm.Enabled);
+                        Assert.Equal(UiTheme.SurfaceAlt, confirm.BackColor);
+                        Assert.Equal(UiTheme.TextDisabled, confirm.ForeColor);
+                        Assert.True(summary.Bottom <= circuitPanel.Top);
+                        Assert.True(machinePanel.Bottom <= summary.Top);
+                        Assert.True(machine.Height >= machine.PreferredHeight);
                         machine.Text = "M100";
                         Application.DoEvents();
 
@@ -60,6 +218,9 @@ namespace UNCAD.Tests
                         circuits.Items[1].Selected = true;
                         Application.DoEvents();
                         Assert.Equal("设备B", form.Selected.CircuitName);
+                        Assert.True(confirm.Enabled);
+                        Assert.Equal(UiTheme.Action, confirm.BackColor);
+                        Assert.Equal(UiTheme.Surface, confirm.ForeColor);
 
                         foreach (Button button in FindAll<Button>(form).Where(b => b.Visible))
                             Assert.True(TextRenderer.MeasureText(button.Text, button.Font).Width

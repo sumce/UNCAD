@@ -121,11 +121,30 @@ namespace UNCAD.UI
         public static Button PrimaryButton(string text, DialogResult result = DialogResult.None)
         {
             var button = FlatButton(text, result);
-            button.BackColor = Action;
-            button.ForeColor = Surface;
-            button.FlatAppearance.BorderColor = Action;
-            button.FlatAppearance.MouseOverBackColor = ActionHover;
-            button.FlatAppearance.MouseDownBackColor = ActionHover;
+            Action applyState = () =>
+            {
+                if (button.Enabled)
+                {
+                    button.BackColor = Action;
+                    button.ForeColor = Surface;
+                    button.FlatAppearance.BorderColor = Action;
+                    button.FlatAppearance.MouseOverBackColor = ActionHover;
+                    button.FlatAppearance.MouseDownBackColor = ActionHover;
+                }
+                else
+                {
+                    // WinForms only dims the text by default. Keep a disabled
+                    // primary button readable instead of leaving dark text on
+                    // the dark action background.
+                    button.BackColor = SurfaceAlt;
+                    button.ForeColor = TextDisabled;
+                    button.FlatAppearance.BorderColor = BorderStrong;
+                    button.FlatAppearance.MouseOverBackColor = SurfaceAlt;
+                    button.FlatAppearance.MouseDownBackColor = SurfaceAlt;
+                }
+            };
+            button.EnabledChanged += (sender, args) => applyState();
+            applyState();
             return button;
         }
 
