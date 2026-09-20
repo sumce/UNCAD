@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using UNCAD.Core.IO;
+using UNCAD.Core.Text;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -83,7 +84,7 @@ namespace UNCAD.Core.Submission
                 .ToList();
             if (records.Count == 0) throw new ArgumentException("没有可提交的图框记录。", nameof(sourceRecords));
 
-            var inputKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var inputKeys = new HashSet<string>(IdentityTextNormalizer.Comparer);
             foreach (SubmissionRecord record in records)
             {
                 if (record == null) throw new ArgumentException("提交记录不能为空。", nameof(sourceRecords));
@@ -495,8 +496,10 @@ namespace UNCAD.Core.Submission
 
         private static bool SameKey(IRow row, Dictionary<string, int> columns, SubmissionRecord record)
             => row != null
-                && string.Equals(CellText(row.GetCell(columns["机台ID"])), record.MachineId.Trim(), StringComparison.OrdinalIgnoreCase)
-                && string.Equals(CellText(row.GetCell(columns["设备名称"])), record.DeviceName.Trim(), StringComparison.OrdinalIgnoreCase);
+                && IdentityTextNormalizer.Equals(
+                    CellText(row.GetCell(columns["机台ID"])), record.MachineId)
+                && IdentityTextNormalizer.Equals(
+                    CellText(row.GetCell(columns["设备名称"])), record.DeviceName);
 
         /// <summary>
         /// Rewrites data rows in a stable machine-ID order. Rows for one machine become contiguous,

@@ -50,6 +50,19 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Arrange_GroupsMachineIdsIgnoringInternalWhitespace()
+        {
+            IReadOnlyList<XLayoutPlacement> result = XLayoutLayout.Arrange(new[]
+            {
+                new XLayoutFrameItem("M Q-01", "A", new FrameRectangle("a", 0, 0, 100, 100), "a"),
+                new XLayoutFrameItem("MQ-01", "B", new FrameRectangle("b", 0, 0, 100, 100), "b")
+            });
+
+            Assert.Equal(2, result.Count);
+            Assert.All(result, item => Assert.Equal(0, item.RowIndex));
+        }
+
+        [Fact]
         public void Arrange_Uses10000HorizontalGapAndExactVerticalGapWithDifferentHeights()
         {
             var items = new[]

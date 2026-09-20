@@ -195,3 +195,14 @@ rewrite an existing entry.
 - Consequence: repeated values across a machine's circuit rows are collapsed
   into the machine summary; old snapshots without the batch column are migrated
   in place with an empty value and remain readable.
+
+## D-021: Identity Matching Ignores Internal Whitespace (2026-09-20)
+
+- Status: accepted
+- Decision: machine IDs and device names are compared case-insensitively after
+  removing Unicode whitespace, including spaces inside the value. The original
+  source text remains the display and persisted value.
+- Consequence: values such as `M Q-01`/`MQ-01` and `设备 A`/`设备A` identify
+  the same machine or circuit across frame identity, workbook snapshots,
+  statistics, submission records, and BOQ grouping; matching never rewrites
+  the user's visible text merely to remove whitespace.

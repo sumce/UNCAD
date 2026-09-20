@@ -92,6 +92,32 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void FindRows_IgnoresInternalWhitespaceInMachineAndCircuitNames()
+        {
+            string root = Path.Combine(Path.GetTempPath(), "uncad_sqlite_identity_"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string source = Path.Combine(root, "machine.xlsx");
+            var store = new MachineWorkbookSnapshotStore(Path.Combine(root, "machine.db"));
+            try
+            {
+                store.RefreshRows(source, new[]
+                {
+                    new MachineRow { MachineId = "MQ-01", CircuitName = "设备A" }
+                }, "identity-test");
+
+                Assert.Single(store.FindRows(source, "M Q-01"));
+                Assert.Single(store.FindRows(source, "设备 A"));
+                Assert.Single(store.ReadRowsForMachines(source, new[] { "M Q-01" }));
+            }
+            finally
+            {
+                try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+                catch { }
+            }
+        }
+
+        [Fact]
         public void RefreshRows_MigratesLegacySnapshotWithoutBatchColumn()
         {
             string root = Path.Combine(Path.GetTempPath(), "uncad_sqlite_migrate_"

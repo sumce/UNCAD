@@ -565,5 +565,17 @@ namespace UNCAD.Tests
             finally { workbook.Close(); }
         }
 
+        [Fact]
+        public void FindRows_IgnoresInternalWhitespaceInMachineAndCircuitNames()
+        {
+            var rows = new[]
+            {
+                new MachineRow { MachineId = "MQ-01", CircuitName = "设备A" },
+                new MachineRow { MachineId = "MQ-02", CircuitName = "其他" }
+            };
+
+            Assert.Single(ExcelMachineReader.FindRows(rows, "M Q-01"));
+            Assert.Single(ExcelMachineReader.FindRows(rows, "设备 A"));
+        }
     }
 }

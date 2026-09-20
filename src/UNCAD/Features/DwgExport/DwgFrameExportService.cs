@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.Submission;
+using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 
@@ -70,7 +71,7 @@ namespace UNCAD.Features.DwgExport
 
             string outputRoot = ResolveOutputRoot();
             var machineGroups = frames.GroupBy(frame => frame.MachineId,
-                StringComparer.OrdinalIgnoreCase).ToList();
+                IdentityTextNormalizer.Comparer).ToList();
             var paths = machineGroups.Select(machine => Path.Combine(outputRoot, machine.Key,
                 machine.Key + ".dwg")).ToList();
             // FileBatchRollback also protects first-time outputs that do not exist yet. Ensure

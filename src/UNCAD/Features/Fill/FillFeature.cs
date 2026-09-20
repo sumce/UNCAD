@@ -266,10 +266,10 @@ namespace UNCAD.Features.Fill
                 review = form.Data;
             }
             Log.Info("U1F 审阅窗后清单: " + Describe(review));
-            if (updateMode && (!string.Equals(updateMachineId,
-                    review.Machine?.MachineId, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(updateDeviceName, review.Machine?.CircuitName,
-                    StringComparison.OrdinalIgnoreCase)))
+            if (updateMode && (!IdentityTextNormalizer.Equals(updateMachineId,
+                    review.Machine?.MachineId)
+                || !IdentityTextNormalizer.Equals(updateDeviceName,
+                    review.Machine?.CircuitName)))
             {
                 MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),

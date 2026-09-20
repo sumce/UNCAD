@@ -42,6 +42,29 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void TryResolve_RejectsFrameAndDeviceBlockNameMismatch()
+        {
+            Assert.False(ExistingFillIdentityResolver.TryResolve(
+                new[] { "M01-POWER" }, new[] { "M01-设备A" }, new[] { "设备B" },
+                out _, out string error));
+            Assert.Contains("M01-设备A", error);
+            Assert.Contains("DEVICENAME", error);
+            Assert.Contains("不一致", error);
+        }
+
+        [Fact]
+        public void TryResolve_IgnoresInternalWhitespaceButKeepsSourceText()
+        {
+            bool ok = ExistingFillIdentityResolver.TryResolve(
+                new[] { "M Q-01-POWER" }, new[] { "M Q-01-设备 A" },
+                new[] { "设备A" }, out ExistingFillIdentity identity, out string error);
+
+            Assert.True(ok, error);
+            Assert.Equal("M Q-01", identity.MachineId);
+            Assert.Equal("设备A", identity.DeviceName);
+        }
+
+        [Fact]
         public void TryResolve_RejectsMultipleDifferentDevices()
         {
             Assert.False(ExistingFillIdentityResolver.TryResolve(
@@ -64,6 +87,22 @@ namespace UNCAD.Tests
             Assert.Equal("", error);
             Assert.Equal("设备B", match.CircuitName);
             Assert.Equal("C-B", match.Cable);
+        }
+
+        [Fact]
+        public void MatchMachine_IgnoresInternalWhitespaceInMachineAndDevice()
+        {
+            var identity = new ExistingFillIdentity { MachineId = "M Q-01", DeviceName = "设备 A" };
+            MachineRow match = ExistingFillIdentityResolver.MatchMachine(identity, new[]
+            {
+                new MachineRow { MachineId = "MQ-01", CircuitName = "设备A", Cable = "C-A" }
+            }, out string error);
+
+            Assert.NotNull(match);
+            Assert.Equal("", error);
+            Assert.Equal("M Q-01", match.MachineId);
+            Assert.Equal("设备 A", match.CircuitName);
+            Assert.Equal("C-A", match.Cable);
         }
 
         [Fact]

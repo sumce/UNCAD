@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Stat
 {
@@ -121,13 +122,13 @@ namespace UNCAD.Core.Stat
             {
                 var row = new XstsMachineSummary(machineId);
                 List<XstsCircuitRecord> metadataRows = expectedRows
-                    .Where(item => string.Equals((item?.MachineId ?? "").Trim(),
-                        machineId, StringComparison.OrdinalIgnoreCase))
+                    .Where(item => IdentityTextNormalizer.Equals(item?.MachineId,
+                        machineId))
                     .ToList();
                 if (metadataRows.Count == 0)
                     metadataRows = selectedRows
-                        .Where(item => string.Equals((item?.MachineId ?? "").Trim(),
-                            machineId, StringComparison.OrdinalIgnoreCase))
+                        .Where(item => IdentityTextNormalizer.Equals(item?.MachineId,
+                            machineId))
                         .ToList();
                 row.Batch = CollapseField(metadataRows.Select(item => item.Batch));
                 row.Seq = CollapseField(metadataRows.Select(item => item.Seq));
@@ -137,9 +138,9 @@ namespace UNCAD.Core.Stat
                 row.ExpectedDataAvailable = report.ExpectedDataAvailable
                     && expectedGroups.ContainsKey(machineId);
                 HashSet<string> selectedNames = selectedGroups.TryGetValue(machineId,
-                    out HashSet<string> selectedSet) ? selectedSet : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    out HashSet<string> selectedSet) ? selectedSet : new HashSet<string>(IdentityTextNormalizer.Comparer);
                 HashSet<string> expectedNames = expectedGroups.TryGetValue(machineId,
-                    out HashSet<string> expectedSet) ? expectedSet : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    out HashSet<string> expectedSet) ? expectedSet : new HashSet<string>(IdentityTextNormalizer.Comparer);
                 row.SelectedCircuitCount = selectedNames.Count;
                 row.SelectedCircuits.AddRange(selectedNames.OrderBy(value => value,
                     StringComparer.OrdinalIgnoreCase));
@@ -147,10 +148,10 @@ namespace UNCAD.Core.Stat
                 {
                     row.ExpectedCircuitCount = expectedNames.Count;
                     row.MissingCircuits.AddRange(expectedNames.Except(selectedNames,
-                        StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
+                        IdentityTextNormalizer.Comparer).OrderBy(value => value,
                         StringComparer.OrdinalIgnoreCase));
                     row.UnexpectedCircuits.AddRange(selectedNames.Except(expectedNames,
-                        StringComparer.OrdinalIgnoreCase).OrderBy(value => value,
+                        IdentityTextNormalizer.Comparer).OrderBy(value => value,
                         StringComparer.OrdinalIgnoreCase));
                 }
                 if (report.ExpectedDataAvailable && !expectedGroups.ContainsKey(machineId))
@@ -169,7 +170,7 @@ namespace UNCAD.Core.Stat
         private static void AddFrameIssues(IReadOnlyList<XstsCircuitRecord> selected,
             XstsReport report)
         {
-            var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var identities = new HashSet<string>(IdentityTextNormalizer.Comparer);
             for (int index = 0; index < selected.Count; index++)
             {
                 XstsCircuitRecord item = selected[index];
@@ -200,7 +201,7 @@ namespace UNCAD.Core.Stat
             IEnumerable<XstsCircuitRecord> source)
         {
             var result = new Dictionary<string, HashSet<string>>(
-                StringComparer.OrdinalIgnoreCase);
+                IdentityTextNormalizer.Comparer);
             foreach (XstsCircuitRecord item in source ?? Enumerable.Empty<XstsCircuitRecord>())
             {
                 string machine = (item?.MachineId ?? "").Trim();
@@ -208,7 +209,7 @@ namespace UNCAD.Core.Stat
                 if (machine.Length == 0 || circuit.Length == 0) continue;
                 if (!result.TryGetValue(machine, out HashSet<string> names))
                 {
-                    names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    names = new HashSet<string>(IdentityTextNormalizer.Comparer);
                     result[machine] = names;
                 }
                 names.Add(circuit);

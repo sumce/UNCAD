@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Excel
 {
@@ -167,7 +168,11 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                     }
                 }
             }
-            return result;
+            return result
+                .GroupBy(IdentityTextNormalizer.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         internal List<MachineRow> FindRows(string source, string keyword)
@@ -187,14 +192,32 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                     key, value);
                 if (exact.Count > 0) return exact;
 
+                // SQLite's NOCASE collation does not ignore whitespace inside an
+                // identity. Read this source only on an exact miss, then apply the
+                // shared Core key so M Q-01 and MQ-01 address the same rows.
+                // ponytail: keep the fallback scan on rare normalized-key misses;
+                // add a persisted compact identity column only if snapshots grow large.
+                List<MachineRow> normalized = QueryRows(connection,
+                    "SELECT " + SelectColumns + " FROM machine_rows "
+                    + "WHERE source_key = ? ORDER BY source_row", key)
+                    .Where(row => IdentityTextNormalizer.Equals(row.MachineId, value))
+                    .ToList();
+                if (normalized.Count > 0) return normalized;
+
                 // Preserve the old picker fallback: when no machine ID matches,
                 // search the circuit-name column.  Escape wildcard characters so
                 // user input is a literal substring, not a SQL pattern.
                 string pattern = "%" + EscapeLike(value) + "%";
-                return QueryRows(connection,
+                List<MachineRow> byCircuit = QueryRows(connection,
                     "SELECT " + SelectColumns + " FROM machine_rows "
                     + "WHERE source_key = ? AND circuit_name LIKE ? ESCAPE '\\' "
                     + "ORDER BY source_row", key, pattern);
+                if (byCircuit.Count > 0) return byCircuit;
+                return QueryRows(connection,
+                    "SELECT " + SelectColumns + " FROM machine_rows "
+                    + "WHERE source_key = ? ORDER BY source_row", key)
+                    .Where(row => IdentityTextNormalizer.Contains(row.CircuitName, value))
+                    .ToList();
             }
         }
 
@@ -205,7 +228,8 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
             List<string> ids = (machineIds ?? Enumerable.Empty<string>())
                 .Select(id => (id ?? "").Trim())
                 .Where(id => id.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                .GroupBy(IdentityTextNormalizer.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First()).ToList();
             if (!File.Exists(_databasePath) || ids.Count == 0)
                 return new List<MachineRow>();
 
@@ -227,6 +251,20 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
                             statement.Bind(index + 2, batch[index]);
                         result.AddRange(ReadRows(statement));
                     }
+                }
+                HashSet<string> found = new HashSet<string>(
+                    result.Select(row => IdentityTextNormalizer.Key(row.MachineId)),
+                    StringComparer.OrdinalIgnoreCase);
+                HashSet<string> missing = new HashSet<string>(
+                    ids.Select(IdentityTextNormalizer.Key), StringComparer.OrdinalIgnoreCase);
+                missing.ExceptWith(found);
+                if (missing.Count > 0)
+                {
+                    result.AddRange(QueryRows(connection,
+                        "SELECT " + SelectColumns + " FROM machine_rows "
+                        + "WHERE source_key = ? ORDER BY source_row", key)
+                        .Where(row => missing.Contains(
+                            IdentityTextNormalizer.Key(row.MachineId))));
                 }
                 return result.OrderBy(row => row.SourceRow).ToList();
             }

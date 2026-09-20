@@ -57,5 +57,18 @@ namespace UNCAD.Tests
             Assert.Equal("208AE", result.MachineId);
             Assert.Equal("设备回路A", result.DeviceName);
         }
+
+        [Fact]
+        public void Extract_IgnoresInternalWhitespaceAndPreservesFirstSourceText()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute("MACHINEID-DEVICE", "M Q-01-设备 A");
+            source.AddAttribute("DEVICENAME", "设备A");
+
+            SubmissionRecord result = SubmissionRecordExtractor.Extract(source, false);
+
+            Assert.Equal("M Q-01", result.MachineId);
+            Assert.Equal("设备A", result.DeviceName);
+        }
     }
 }

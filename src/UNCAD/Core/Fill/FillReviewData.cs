@@ -166,8 +166,8 @@ namespace UNCAD.Core.Fill
             FillReviewItem item = BusPlugBoxItem();
             if (previous == null || item == null
                 || string.IsNullOrWhiteSpace(previous.BoqBusPlugBoxCode)
-                || !string.Equals(previous.MachineId, Machine.MachineId, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(previous.DeviceName, Machine.CircuitName, StringComparison.OrdinalIgnoreCase)
+                || !IdentityTextNormalizer.Equals(previous.MachineId, Machine.MachineId)
+                || !IdentityTextNormalizer.Equals(previous.DeviceName, Machine.CircuitName)
                 || !string.Equals(previous.Next, Machine.Next, StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(previous.Detail, Machine.Detail, StringComparison.OrdinalIgnoreCase))
                 return;

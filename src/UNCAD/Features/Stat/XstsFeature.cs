@@ -13,6 +13,7 @@ using UNCAD.Core.Fill;
 using UNCAD.Core.Report;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Submission;
+using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 using UNCAD.UI;
@@ -101,7 +102,7 @@ namespace UNCAD.Features.Stat
                         var selectedMachines = new HashSet<string>(selectedRows
                             .Select(item => item.MachineId.Trim())
                             .Where(value => value.Length > 0),
-                            StringComparer.OrdinalIgnoreCase);
+                            IdentityTextNormalizer.Comparer);
                         foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
                             .ReadRowsForMachines(configuredPath, selectedMachines))
                         {

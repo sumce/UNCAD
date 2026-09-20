@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using UNCAD.Core.IO;
+using UNCAD.Core.Text;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 
@@ -211,7 +212,7 @@ namespace UNCAD.Core.Submission
                 .Where(record => record != null).ToList();
             string[] machineIds = sourceRecords.Select(record => (record.MachineId ?? "").Trim())
                 .Where(value => value.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                .Distinct(IdentityTextNormalizer.Comparer).ToArray();
             if (machineIds.Length > 1)
                 throw new InvalidDataException("One BOQ workbook cannot mix multiple machine IDs.");
             if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.MachineId)))
@@ -251,11 +252,11 @@ namespace UNCAD.Core.Submission
                 Dictionary<string, int> rows = FindItemRows(sheet);
                 Dictionary<string, int> deviceColumns = FindDeviceColumns(sheet);
                 var expected = new Dictionary<string, Dictionary<string, decimal>>(
-                    StringComparer.OrdinalIgnoreCase);
+                    IdentityTextNormalizer.Comparer);
                 foreach (IGrouping<string, SubmissionRecord> deviceGroup in sourceRecords
                     .Where(record => record != null)
                     .GroupBy(record => (record.DeviceName ?? "").Trim(),
-                        StringComparer.OrdinalIgnoreCase))
+                        IdentityTextNormalizer.Comparer))
                 {
                     if (deviceGroup.Key.Length == 0)
                         throw new InvalidDataException("BOQ 设备名称不能为空，不能创建设备列。");
@@ -424,7 +425,7 @@ namespace UNCAD.Core.Submission
 
         private static Dictionary<string, int> FindDeviceColumns(ISheet sheet)
         {
-            var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
             IRow header = GetOrCreateRow(sheet, DeviceHeaderNamesRow);
             int lastCell = Math.Max(FirstDeviceColumn, (int)header.LastCellNum);
             for (int column = FirstDeviceColumn; column < lastCell; column++)

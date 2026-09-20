@@ -5,6 +5,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Submission;
+using UNCAD.Core.Text;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.Submit
@@ -82,8 +83,11 @@ namespace UNCAD.Features.Submit
         public static IReadOnlyList<string> TargetPaths(string outputRoot,
             IEnumerable<string> machineIds)
             => (machineIds ?? Enumerable.Empty<string>())
-                .Select(machineId => BoqWorkbookWriter.BuildTargetPath(outputRoot, machineId))
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                .GroupBy(machineId => (machineId ?? "").Trim(),
+                    IdentityTextNormalizer.Comparer)
+                .Select(group => BoqWorkbookWriter.BuildTargetPath(outputRoot,
+                    group.First()))
+                .ToList();
 
         public static IReadOnlyList<BoqWorkbookRevision> CaptureTargetRevisions(
             string outputRoot, IEnumerable<string> machineIds)
@@ -131,9 +135,12 @@ namespace UNCAD.Features.Submit
             // PrepareTargetPath returns the selected root directory, not a file path.
             string outputRoot = Path.GetFullPath(filePath);
             string template = null;
-            var outputPaths = records.Select(record =>
-                BoqWorkbookWriter.BuildTargetPath(outputRoot, record.MachineId))
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var outputPaths = records
+                .GroupBy(record => record.MachineId.Trim(),
+                    IdentityTextNormalizer.Comparer)
+                .Select(group => BoqWorkbookWriter.BuildTargetPath(outputRoot,
+                    group.First().MachineId))
+                .ToList();
             if (outputPaths.Any(path => !File.Exists(path)))
                 template = BoqWorkbookWriter.ResolveTemplatePath();
             var result = new AutomaticSubmissionWriteResult
@@ -157,7 +164,8 @@ namespace UNCAD.Features.Submit
             Action<FileBatchRollback> writeRecords = batch =>
             {
                 foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsToWrite
-                    .GroupBy(record => record.MachineId.Trim(), StringComparer.OrdinalIgnoreCase))
+                    .GroupBy(record => record.MachineId.Trim(),
+                        IdentityTextNormalizer.Comparer))
                 {
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
                     bool existed = File.Exists(target);

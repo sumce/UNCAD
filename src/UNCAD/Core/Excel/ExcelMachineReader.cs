@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Excel
 {
@@ -150,11 +151,11 @@ namespace UNCAD.Core.Excel
         {
             string key = (keyword ?? "").Trim();
             var all = rows ?? Enumerable.Empty<MachineRow>();
-            var exact = all.Where(row => string.Equals((row.MachineId ?? "").Trim(), key,
-                StringComparison.OrdinalIgnoreCase)).ToList();
+            var exact = all.Where(row => IdentityTextNormalizer.Equals(row.MachineId, key))
+                .ToList();
             if (exact.Count > 0 || key.Length == 0) return exact;
-            return all.Where(row => (row.CircuitName ?? "").IndexOf(key,
-                StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            return all.Where(row => IdentityTextNormalizer.Contains(row.CircuitName, key))
+                .ToList();
         }
 
         internal static List<string> DistinctMachineIds(IEnumerable<MachineRow> rows)
@@ -162,7 +163,8 @@ namespace UNCAD.Core.Excel
             return (rows ?? Enumerable.Empty<MachineRow>())
                 .Select(row => (row.MachineId ?? "").Trim())
                 .Where(id => id.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .GroupBy(IdentityTextNormalizer.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
                 .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }

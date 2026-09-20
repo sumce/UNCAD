@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.8 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
+Current 2.4.9 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,12 @@ Current 2.4.8 builds publish 25 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.9
+
+- 优化机台 ID 与设备名称匹配：忽略大小写、普通空格、Tab、换行、全角空格及文本内部空白，`M Q-01` 与 `MQ-01`、`设备 A` 与 `设备A` 可正确对应。
+- 统一图框、Excel 快照、XSTS、XLAYOUT、DWG 导出、U1S/自动提交和 BOQ 分组的身份匹配规则；显示、写回和持久化仍保留原始文本。
+- 修复图框属性中的机台/设备身份与设备块属性不一致时静默采用块名称的问题，现在会停止并提示不一致，避免错误填充。
 
 ## v2.4.8
 

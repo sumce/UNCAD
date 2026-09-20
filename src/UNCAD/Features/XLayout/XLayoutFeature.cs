@@ -13,6 +13,7 @@ using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Submission;
+using UNCAD.Core.Text;
 using UNCAD.Cad.QuickLine;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
@@ -64,7 +65,7 @@ namespace UNCAD.Features.XLayout
             var items = new List<XLayoutFrameItem>();
             var groupsByItem = new Dictionary<XLayoutFrameItem, FrameRegionGroup>();
             var summaries = new Dictionary<string, XLayoutMachineSummary>(
-                StringComparer.OrdinalIgnoreCase);
+                IdentityTextNormalizer.Comparer);
             var identityErrors = new List<string>();
             FrameRegionGroup firstIdentityError = null;
             int index = 0;
@@ -241,7 +242,7 @@ namespace UNCAD.Features.XLayout
             foreach (IGrouping<string, XLayoutFrameItem> duplicate in (items ??
                 Array.Empty<XLayoutFrameItem>()).Where(item => item != null)
                 .GroupBy(item => (item.MachineId ?? "").Trim() + "\u001f"
-                    + (item.DeviceName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)
+                    + (item.DeviceName ?? "").Trim(), IdentityTextNormalizer.Comparer)
                 .Where(group => group.Count() > 1))
             {
                 foreach (XLayoutFrameItem item in duplicate)
@@ -253,13 +254,14 @@ namespace UNCAD.Features.XLayout
 
             foreach (IGrouping<string, XLayoutFrameItem> machine in (items ??
                 Array.Empty<XLayoutFrameItem>()).Where(item => item != null)
-                .GroupBy(item => (item.MachineId ?? "").Trim(), StringComparer.OrdinalIgnoreCase))
+                .GroupBy(item => (item.MachineId ?? "").Trim(),
+                    IdentityTextNormalizer.Comparer))
             {
                 if (summaries == null || !summaries.TryGetValue(machine.Key,
                     out XLayoutMachineSummary summary)) continue;
                 var selected = new HashSet<string>(machine.Select(item =>
                     (item.DeviceName ?? "").Trim()).Where(value => value.Length > 0),
-                    StringComparer.OrdinalIgnoreCase);
+                    IdentityTextNormalizer.Comparer);
                 if (expectedCircuits != null && expectedCircuits.TryGetValue(machine.Key,
                     out HashSet<string> expected))
                 {
@@ -282,7 +284,7 @@ namespace UNCAD.Features.XLayout
                 if (!MachineWorkbookSource.TryGetSnapshot(configured,
                     out MachineWorkbookSnapshotInfo snapshot)) return null;
                 var result = new Dictionary<string, HashSet<string>>(
-                    StringComparer.OrdinalIgnoreCase);
+                    IdentityTextNormalizer.Comparer);
                 foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
                     .ReadRowsForMachines(configured, selectedMachineIds))
                 {
@@ -291,7 +293,7 @@ namespace UNCAD.Features.XLayout
                     if (machineId.Length == 0 || circuit.Length == 0) continue;
                     if (!result.TryGetValue(machineId, out HashSet<string> values))
                     {
-                        values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        values = new HashSet<string>(IdentityTextNormalizer.Comparer);
                         result.Add(machineId, values);
                     }
                     values.Add(circuit);

@@ -64,6 +64,21 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_IgnoresInternalWhitespaceInMachineAndCircuitNames()
+        {
+            XstsReport report = XstsReportBuilder.Build(
+                new[] { new XstsCircuitRecord("M Q-01", "设备 A") },
+                new[] { new XstsCircuitRecord("MQ-01", "设备A") });
+
+            XstsMachineSummary machine = Assert.Single(report.Machines);
+            Assert.Equal("M Q-01", machine.MachineId);
+            Assert.Equal(1, machine.SelectedCircuitCount);
+            Assert.Equal(1, machine.ExpectedCircuitCount);
+            Assert.Empty(machine.MissingCircuits);
+            Assert.Empty(machine.UnexpectedCircuits);
+        }
+
+        [Fact]
         public void Build_DoesNotAddMachinesThatWereNotSelected()
         {
             XstsReport report = XstsReportBuilder.Build(

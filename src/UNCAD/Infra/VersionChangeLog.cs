@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.9", "2026-09-20",
+                    "优化：机台 ID 与设备名称匹配忽略大小写、Unicode 空白及文本内部空格，M Q-01 与 MQ-01、设备 A 与设备A 可正确对应。",
+                    "修复：统一图框、Excel 快照、XSTS、XLAYOUT、DWG 导出、U1S/自动提交和 BOQ 分组的身份匹配规则，同时保留用户原始显示文本。",
+                    "修复：图框属性中的机台/设备身份与设备块属性不一致时不再静默采用设备块名称，改为停止并提示不一致，避免错误填充。"),
                 new VersionChangeLogEntry("2.4.8", "2026-09-18",
                     "修复：桥架 BOQ 两行标注可识别 MTEXT 格式码及常见空白差异，长度不再误计为电缆，并恢复正常求和。",
                     "修复：两行标注严格按固定清单型号与纯长度配对，孤立长度或带前缀文本不会误加入桥架清单。",

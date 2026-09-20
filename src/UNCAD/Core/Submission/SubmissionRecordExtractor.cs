@@ -74,7 +74,7 @@ namespace UNCAD.Core.Submission
                 ? NormalizeIdentity(Unique(source, DeviceBlockFiller.TagDeviceName)) : "";
 
             if (machineId.Length == 0 && deviceComposite.Length > 0)
-                machineId = NormalizeIdentity(MachineFromComposite(deviceComposite));
+                machineId = NormalizeIdentity(MachineFromComposite(deviceComposite, deviceName));
             if (deviceName.Length == 0 && deviceComposite.Length > 0)
                 deviceName = NormalizeIdentity(DeviceFromComposite(deviceComposite, machineId));
 
@@ -463,7 +463,9 @@ namespace UNCAD.Core.Submission
         {
             if (!source.Attributes.TryGetValue(tag, out List<string> values)) return "";
             List<string> distinct = values.Select(v => (v ?? "").Trim())
-                .Where(v => v.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                .Where(v => v.Length > 0)
+                .GroupBy(IdentityTextNormalizer.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First()).ToList();
             if (distinct.Count > 1)
                 throw new InvalidDataException("框选内容中存在多个不同的 " + tag + " 值，请每次只提交一台设备。");
             return distinct.Count == 1 ? distinct[0] : "";
@@ -478,13 +480,15 @@ namespace UNCAD.Core.Submission
         private static string MachineFromPower(string value)
         {
             string text = (value ?? "").Trim();
-            return text.EndsWith("-POWER", StringComparison.OrdinalIgnoreCase)
-                ? text.Substring(0, text.Length - 6).TrimEnd('-').Trim() : "";
+            return IdentityTextNormalizer.TryGetPrefixBeforeSuffix(text, "POWER",
+                out string machine) ? machine : "";
         }
 
-        private static string MachineFromComposite(string value)
+        private static string MachineFromComposite(string value, string deviceName)
         {
             string text = (value ?? "").Trim();
+            if (IdentityTextNormalizer.TryGetPrefixBeforeSuffix(text, deviceName,
+                out string prefix)) return prefix;
             int dash = text.IndexOf('-');
             return dash > 0 ? text.Substring(0, dash).Trim() : "";
         }
@@ -492,9 +496,8 @@ namespace UNCAD.Core.Submission
         private static string DeviceFromComposite(string value, string machineId)
         {
             string text = (value ?? "").Trim();
-            string prefix = (machineId ?? "").Trim() + "-";
-            return prefix.Length > 1 && text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                ? text.Substring(prefix.Length).Trim() : "";
+            return IdentityTextNormalizer.TryGetSuffixAfterPrefix(text, machineId,
+                out string suffix) ? suffix : "";
         }
 
         private static string ExtractDiameter(string conduitInfo)

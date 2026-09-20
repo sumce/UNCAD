@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Excel
 {
@@ -32,7 +33,8 @@ namespace UNCAD.Core.Excel
             SnapshotRowCount = snapshot.RowCount;
             // Machine IDs are a small picker list; circuit rows remain query-on-demand.
             _machineIds = _store.ReadMachineIds(_source);
-            _machineIdSet = new HashSet<string>(_machineIds,
+            _machineIdSet = new HashSet<string>(_machineIds
+                .Select(IdentityTextNormalizer.Key),
                 StringComparer.OrdinalIgnoreCase);
         }
 
@@ -71,7 +73,8 @@ namespace UNCAD.Core.Excel
         public List<MachineRow> FindRows(string keyword)
         {
             string key = (keyword ?? "").Trim();
-            if (key.Length == 0 || !_machineIdSet.Contains(key))
+            if (key.Length == 0 || !_machineIdSet.Contains(
+                IdentityTextNormalizer.Key(key)))
                 return _store.FindRows(_source, key);
 
             lock (_queryGate)

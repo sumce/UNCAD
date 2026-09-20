@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UNCAD.Core.Geometry;
+using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Dwg
 {
@@ -46,7 +47,7 @@ namespace UNCAD.Core.Dwg
             if (spacing < 0) throw new ArgumentOutOfRangeException(nameof(spacing));
             var machineRows = (items ?? Enumerable.Empty<XLayoutFrameItem>())
                 .Where(item => item != null)
-                .GroupBy(item => item.MachineId ?? "", StringComparer.OrdinalIgnoreCase)
+                .GroupBy(item => item.MachineId ?? "", IdentityTextNormalizer.Comparer)
                 .ToList();
             var result = new List<XLayoutPlacement>();
             double nextRowTop = 0d;
