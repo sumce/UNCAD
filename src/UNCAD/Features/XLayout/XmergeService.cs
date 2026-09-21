@@ -76,30 +76,7 @@ namespace UNCAD.Features.XLayout
                     XLayoutLayout.Arrange(items).ToDictionary(placement => placement.Item);
                 prepared = BuildInMemory(sources, itemByFrame, placements);
 
-                using (Transaction transaction = database.TransactionManager.StartTransaction())
-                {
-                    BlockTableRecord target = transaction.GetObject(database.CurrentSpaceId,
-                        OpenMode.ForWrite) as BlockTableRecord;
-                    if (target == null) throw new InvalidOperationException("无法打开当前图纸空间。");
-
-                    // Replacing defaults is safe in an empty space and keeps source appearance.
-                    // In an existing drawing, reuse same-name symbols and reject incompatible
-                    // definitions below; MangleName would create a $N$ block family every run.
-                    bool targetHasEntities = target.Cast<ObjectId>().Any();
-                    DuplicateRecordCloning policy = targetHasEntities
-                        ? DuplicateRecordCloning.Ignore
-                        : DuplicateRecordCloning.Replace;
-                    if (!targetHasEntities)
-                        StyleManager.CopyStandardTextStyle(prepared.Database,
-                            database, transaction);
-                    var mapping = new IdMapping();
-                    prepared.Database.WblockCloneObjects(prepared.EntityIds, target.ObjectId,
-                        mapping, policy, false);
-                    ValidateClones(prepared.Snapshots, mapping, transaction,
-                        "写入当前图纸", true);
-                    RecomputeClonedTables(prepared.EntityIds, mapping, transaction);
-                    transaction.Commit();
-                }
+                CommitPrepared(database, prepared);
 
                 int unplaced = sources.Sum(source => source.UnplacedEntityCount);
                 if (unplaced > 0)
@@ -117,6 +94,12 @@ namespace UNCAD.Features.XLayout
                     Files = files
                 };
             }
+            catch (IncompatibleCloneException ex)
+            {
+                // Keep the public command contract stable while allowing the retry path
+                // to distinguish a recoverable same-name conflict from other bad data.
+                throw new InvalidDataException(ex.Message, ex);
+            }
             finally
             {
                 prepared?.Dispose();
@@ -124,9 +107,84 @@ namespace UNCAD.Features.XLayout
             }
         }
 
+        private static void CommitPrepared(Database database, PreparedDrawing prepared)
+        {
+            bool targetHasEntities;
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord target = transaction.GetObject(database.CurrentSpaceId,
+                    OpenMode.ForRead) as BlockTableRecord;
+                if (target == null) throw new InvalidOperationException("无法打开当前图纸空间。");
+                targetHasEntities = target.Cast<ObjectId>().Any();
+                transaction.Commit();
+            }
+
+            DuplicateRecordCloning policy = targetHasEntities
+                ? DuplicateRecordCloning.Ignore
+                : DuplicateRecordCloning.Replace;
+            try
+            {
+                CommitPreparedOnce(database, prepared, targetHasEntities, policy);
+            }
+            catch (IncompatibleCloneException) when (targetHasEntities
+                && policy == DuplicateRecordCloning.Ignore)
+            {
+                // The first attempt is deliberately conservative. If an existing drawing
+                // has a same-name block with different geometry, retry the whole transaction
+                // with AutoCAD's reference-safe name mangling so source geometry is retained.
+                Log.Warn("Xmerge 检测到当前图纸存在不兼容的同名块定义，"
+                    + "本次来源将使用独立块名称重新导入。");
+                CommitPreparedOnce(database, prepared, true,
+                    DuplicateRecordCloning.MangleName);
+            }
+        }
+
+        private static void CommitPreparedOnce(Database database, PreparedDrawing prepared,
+            bool targetHasEntities, DuplicateRecordCloning policy)
+        {
+            using (Transaction transaction = database.TransactionManager.StartTransaction())
+            {
+                BlockTableRecord target = transaction.GetObject(database.CurrentSpaceId,
+                    OpenMode.ForWrite) as BlockTableRecord;
+                if (target == null) throw new InvalidOperationException("无法打开当前图纸空间。");
+                if (!targetHasEntities)
+                    StyleManager.CopyStandardTextStyle(prepared.Database,
+                        database, transaction);
+                var mapping = new IdMapping();
+                prepared.Database.WblockCloneObjects(prepared.EntityIds, target.ObjectId,
+                    mapping, policy, false);
+                ValidateClones(prepared.Snapshots, mapping, transaction,
+                    "写入当前图纸", true);
+                RecomputeClonedTables(prepared.EntityIds, mapping, transaction);
+                transaction.Commit();
+            }
+        }
+
         private static PreparedDrawing BuildInMemory(IReadOnlyList<ImportedDrawing> sources,
             IDictionary<ImportedFrame, XLayoutFrameItem> itemByFrame,
             IDictionary<XLayoutFrameItem, XLayoutPlacement> placements)
+        {
+            var mangleSources = new HashSet<int>();
+            while (true)
+            {
+                try
+                {
+                    return BuildInMemoryOnce(sources, itemByFrame, placements, mangleSources);
+                }
+                catch (SourceCloneConflictException conflict)
+                {
+                    if (!mangleSources.Add(conflict.SourceIndex)) throw;
+                    Log.Warn("Xmerge 合并 " + Path.GetFileName(conflict.SourcePath)
+                        + " 时发现不兼容的同名块定义，已改用独立块名称重试。");
+                }
+            }
+        }
+
+        private static PreparedDrawing BuildInMemoryOnce(
+            IReadOnlyList<ImportedDrawing> sources,
+            IDictionary<ImportedFrame, XLayoutFrameItem> itemByFrame,
+            IDictionary<XLayoutFrameItem, XLayoutPlacement> placements,
+            ISet<int> mangleSources)
         {
             var database = new Database(true, true);
             try
@@ -140,17 +198,31 @@ namespace UNCAD.Features.XLayout
 
                     bool first = true;
                     var moved = new HashSet<ObjectId>();
-                    foreach (ImportedDrawing source in sources)
+                    for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
                     {
+                        ImportedDrawing source = sources[sourceIndex];
                         if (first)
                             StyleManager.CopyStandardTextStyle(source.Database, database,
                                 transaction);
+                        DuplicateRecordCloning policy = first
+                            ? DuplicateRecordCloning.Replace
+                            : mangleSources.Contains(sourceIndex)
+                                ? DuplicateRecordCloning.MangleName
+                                : DuplicateRecordCloning.Ignore;
                         var mapping = new IdMapping();
-                        source.Database.WblockCloneObjects(source.EntityIds, target.ObjectId,
-                            mapping, first ? DuplicateRecordCloning.Replace
-                                : DuplicateRecordCloning.Ignore, false);
-                        ValidateClones(source.Snapshots, mapping, transaction,
-                            "合并 " + Path.GetFileName(source.Path), true);
+                        try
+                        {
+                            source.Database.WblockCloneObjects(source.EntityIds, target.ObjectId,
+                                mapping, policy, false);
+                            ValidateClones(source.Snapshots, mapping, transaction,
+                                "合并 " + Path.GetFileName(source.Path), true);
+                        }
+                        catch (IncompatibleCloneException) when (
+                            policy == DuplicateRecordCloning.Ignore)
+                        {
+                            throw new SourceCloneConflictException(sourceIndex,
+                                source.Path);
+                        }
 
                         foreach (ImportedFrame frame in source.Frames)
                         {
@@ -385,7 +457,7 @@ namespace UNCAD.Features.XLayout
                         + " 未完整复制。");
                 EntitySnapshot actual = EntitySnapshot.Capture(transaction, clone);
                 if (!snapshot.Matches(actual, compareEntityBounds, out string reason))
-                    throw new InvalidDataException(stage + " 时实体 " + snapshot.Handle
+                    throw new IncompatibleCloneException(stage + " 时实体 " + snapshot.Handle
                         + " 的同名定义不兼容（" + reason
                         + "）。操作已停止，请使用空白图纸或统一源块版本。");
             }
@@ -498,6 +570,24 @@ namespace UNCAD.Features.XLayout
             if (value is IFormattable formattable)
                 return formattable.ToString(null, CultureInfo.InvariantCulture) ?? "";
             return Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
+        }
+
+        private sealed class IncompatibleCloneException : Exception
+        {
+            public IncompatibleCloneException(string message) : base(message) { }
+        }
+
+        private sealed class SourceCloneConflictException : Exception
+        {
+            public SourceCloneConflictException(int sourceIndex, string sourcePath)
+                : base("Xmerge source clone conflict: " + sourcePath)
+            {
+                SourceIndex = sourceIndex;
+                SourcePath = sourcePath ?? "";
+            }
+
+            public int SourceIndex { get; }
+            public string SourcePath { get; }
         }
 
         private sealed class EntitySnapshot

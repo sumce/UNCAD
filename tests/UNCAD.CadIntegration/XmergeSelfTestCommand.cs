@@ -133,26 +133,26 @@ namespace UNCAD.CadIntegration
 
                 string incompatible = Path.Combine(tempRoot, "incompatible-xframe.dwg");
                 CreateSource(incompatible, "xframe", "M05", "DEV05", 120d);
-                int beforeRejectedMerge = CurrentEntityCount(document.Database);
-                bool rejected = false;
-                try
-                {
-                    XmergeService.Merge(ctx, new[] { sources[2], incompatible });
-                }
-                catch (InvalidDataException)
-                {
-                    rejected = true;
-                }
-                Require(rejected, "incompatible same-name definitions were accepted");
-                Require(CurrentEntityCount(document.Database) == beforeRejectedMerge,
-                    "rejected merge changed the target drawing");
+                int beforeConflictMerge = CurrentEntityCount(document.Database);
+                HashSet<string> mangledBeforeConflict = MangledBlockNames(document.Database);
+                XmergeResult conflictResult = XmergeService.Merge(ctx,
+                    new[] { sources[2], incompatible });
+                Require(conflictResult.FrameCount == 2,
+                    "incompatible same-name definitions were not isolated");
+                Require(conflictResult.EntityCount == 10,
+                    "isolated conflict source entity count");
+                Require(CurrentEntityCount(document.Database) == beforeConflictMerge + 10,
+                    "isolated conflict merge did not commit both sources");
+                Require(MangledBlockNames(document.Database).Except(mangledBeforeConflict,
+                    StringComparer.OrdinalIgnoreCase).Any(),
+                    "incompatible same-name definition was not given a unique name");
 
                 // ---- Replace (empty target) branch ----
-                // Every merge above ran against a target that already contained entities,
-                // so they all took the Ignore path. Clear the space completely and merge once
-                // more: with zero existing entities the service must use
+                // Clear the space completely and merge once more: with zero existing
+                // entities the service must use
                 // DuplicateRecordCloning.Replace, copy the source Standard text style into
-                // the empty drawing, and never mangle block names.
+                // the empty drawing, and must not add another mangled frame definition.
+                HashSet<string> mangledBeforeReplace = MangledBlockNames(document.Database);
                 ClearCurrentSpace(document.Database);
                 SetStandardTextXScale(document.Database, 1.0d);
                 string replaceSource = Path.Combine(tempRoot, "replace-source.dwg");
@@ -163,8 +163,9 @@ namespace UNCAD.CadIntegration
                     new[] { replaceSource });
                 Require(replaceResult.FrameCount == 1, "replace branch frame count");
                 Require(replaceResult.EntityCount == 5, "replace branch entity count");
-                Require(!FrameDefinitionIsMangled(document.Database),
-                    "replace branch mangled the frame definition name");
+                Require(!MangledBlockNames(document.Database).Except(mangledBeforeReplace,
+                    StringComparer.OrdinalIgnoreCase).Any(),
+                    "replace branch added a mangled frame definition");
                 Require(Math.Abs(StandardTextXScale(document.Database) - 0.85d) < 1e-9,
                     "replace branch did not copy the source Standard text style");
                 // A source whose same-name text style differs from the target must be
@@ -387,7 +388,10 @@ namespace UNCAD.CadIntegration
                         as BlockTableRecord;
                     if (existing == null || existing.IsLayout) continue;
                     if (FrameRegionCollector.IsSupportedFrameName(existing.Name))
+                    {
+                        existing.UpgradeOpen();
                         existing.Erase();
+                    }
                 }
                 var frame = new BlockTableRecord { Name = "frame" };
                 ObjectId frameId = blocks.Add(frame);
@@ -463,25 +467,6 @@ namespace UNCAD.CadIntegration
                 var standard = (TextStyleTableRecord)transaction.GetObject(styles["Standard"],
                     OpenMode.ForRead);
                 return standard.XScale;
-            }
-        }
-
-        private static bool FrameDefinitionIsMangled(Database database)
-        {
-            using (Transaction transaction = database.TransactionManager.StartTransaction())
-            {
-                var blocks = (BlockTable)transaction.GetObject(database.BlockTableId,
-                    OpenMode.ForRead);
-                foreach (ObjectId id in blocks.Cast<ObjectId>().ToArray())
-                {
-                    var definition = transaction.GetObject(id, OpenMode.ForRead, true)
-                        as BlockTableRecord;
-                    if (definition == null || definition.IsLayout) continue;
-                    if (FrameRegionCollector.IsSupportedFrameName(definition.Name)
-                        && definition.Name.StartsWith("$", StringComparison.Ordinal))
-                        return true;
-                }
-                return false;
             }
         }
 

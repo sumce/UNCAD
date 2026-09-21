@@ -206,3 +206,16 @@ rewrite an existing entry.
   the same machine or circuit across frame identity, workbook snapshots,
   statistics, submission records, and BOQ grouping; matching never rewrites
   the user's visible text merely to remove whitespace.
+
+## D-022: Xmerge Isolates Incompatible Same-Name Blocks (2026-09-21)
+
+- Status: accepted
+- Decision: Xmerge first reuses same-name block definitions when clone
+  validation confirms that their geometry, dynamic state, attributes, and
+  styles are compatible. If a source definition is incompatible, the failed
+  transaction is discarded and that source is retried with AutoCAD's
+  `MangleName` policy so its block references keep their own geometry.
+- Consequence: merging sources with different versions of `xframe`, device, or
+  other named blocks no longer stops the whole operation or silently changes a
+  source block to the target version. Compatible duplicates remain shared;
+  only conflicting definitions receive AutoCAD-generated `$N$` names.

@@ -43,7 +43,7 @@ namespace UNCAD.Tests
             Assert.Contains("FrameIdentityReader.Read(transaction, group", service);
             Assert.Contains("DuplicateRecordCloning.Ignore", service);
             Assert.Contains("DuplicateRecordCloning.Replace", service);
-            Assert.DoesNotContain("DuplicateRecordCloning.MangleName", service);
+            Assert.Contains("DuplicateRecordCloning.MangleName", service);
             // The service exposes a Database entry point so the Replace/Ignore branch can
             // be exercised without a running AutoCAD Document, and the CadContext overload
             // delegates to it instead of duplicating the merge logic.
