@@ -32,7 +32,7 @@ namespace UNCAD.Infra
             {
                 E(CommandIds.Line, "带标注线段", "U1L", "连续绘制独立 Line 并生成长度文字", "正式命令；长度设置必须为正数毫米，非法值回退 2000mm。"),
                 E(CommandIds.LineQuick, "快速标注距离", "U1LX", "点选一根 LINE 线段,从点击端起沿连通路线逐段填写毫米标注", "输入距离回车即写入并自动跳到下一段;直接回车保留原值,Esc 结束;点击在段中部时会询问向哪端走。"),
-                E(CommandIds.DimensionText, "对齐标注转文字", "U1D", "将选中的对齐标注文字转换为可编辑单行文字", "文字高度使用 U1SET 的电缆文字高度，位置和角度跟随原标注；原尺寸线保留。"),
+                E(CommandIds.DimensionText, "对齐标注转文字", "U1DT", "将选中的对齐标注文字转换为可编辑单行文字", "文字高度使用 U1SET 的电缆文字高度，位置和角度跟随原标注；原尺寸线保留。"),
                 E(CommandIds.LegacyLineQuick, "快速标注距离", "UNLX", "调用 U1LX 的快速标注功能", "兼容旧键盘命令名。"),
                 E(CommandIds.LegacyLine, "带标注线段", "UNL", "调用 U1L 的连续线段绘制功能", "兼容旧命令名。"),
                 E(CommandIds.Arch, "拱桥开洞", "U1R", "在线段交叉位置生成拱桥开洞", "生成后将两侧直线和半圆弧合并为一条 Polyline；直径使用 U1SET 设置。"),
@@ -49,6 +49,8 @@ namespace UNCAD.Infra
                 E(CommandIds.Conduit, "线管标注", "U1C", "为选中曲线生成线管平行标注", "使用设置中的固定 2000mm 占位文字；预选 Ruanguan/图框时同步写入软管型号和长度。"),
                 E(CommandIds.About, "关于与授权", "U1A", "查看版本、授权、开发者和使用条款", "只读操作。"),
                 E(CommandIds.Settings, "配置中心", "U1SET", "集中设置绘图、统计、清单和输出参数", "保存前验证路径和数值范围。"),
+                E(CommandIds.DataRefresh, "刷新机台数据", "U1DATA", "在后台刷新 U1SET 配置的本地或远程机台工作簿", "刷新完成前各命令继续读取上一次成功的 SQLite 快照；失败不会替换旧数据。"),
+                E(CommandIds.DwgExportShort, "DWG 自动导出快捷命令", "U1D", "调用 U1DWG 导出选中的图框", "与 U1DWG 功能完全相同。"),
                 E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe 图框", "同机台图框在独立 DWG 中横向排列。"),
                 E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "直接回车使用原点；每行首框左侧生成高度 25000 的机台 ID 文字。"),
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路优先读取 U1SET 配置的机台 Excel。"),

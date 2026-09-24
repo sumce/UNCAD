@@ -7,7 +7,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Dimension
 {
-    /// <summary>U1D converts selected aligned-dimension labels into editable single-line text.</summary>
+    /// <summary>U1DT converts selected aligned-dimension labels into editable single-line text.</summary>
     [Feature("dimension-text", "对齐标注转文字",
         Commands = CommandIds.DimensionTextFeatureCommands,
         Description = "将对齐标注文字转换为单行文字，保留原尺寸线")]
@@ -33,7 +33,7 @@ namespace UNCAD.Features.Dimension
                 transaction.Commit();
             }
 
-            ctx.Write("\n[U1D] 已将 " + result.ConvertedCount
+            ctx.Write("\n[U1DT] 已将 " + result.ConvertedCount
                 + " 个对齐标注转换为单行文字，文字高度 "
                 + TextFormatter.FormatNum(textHeight) + "；原尺寸线已保留。");
             if (result.AlreadyConvertedCount > 0 || result.SkippedCount > 0)

@@ -70,6 +70,8 @@ namespace UNCAD.Tests
                     store, cacheDirectory);
                 Assert.True(fallback.UsedCachedFallback);
                 Assert.Equal(downloaded.LocalPath, fallback.LocalPath);
+                Assert.Equal("设备A", Assert.Single(
+                    store.FindRows(url, "NET01")).CircuitName);
             }
             finally
             {

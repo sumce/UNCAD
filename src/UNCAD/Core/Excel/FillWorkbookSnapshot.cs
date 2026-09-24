@@ -51,8 +51,9 @@ namespace UNCAD.Core.Excel
         public int CatalogItemCount => ListItems.Count;
 
         /// <summary>
-        /// 加载上次由 U1SET“刷新”写入的 SQLite 快照并合并内嵌固定清单。
-        /// 不检查源 Excel 当前内容，因此源文件的修改不会绕过手动刷新策略。
+        /// 加载上次成功写入的 SQLite 快照并合并内嵌固定清单。
+        /// 命令不检查源 Excel 当前内容；远程源由启动刷新或 U1DATA 更新，
+        /// 本地源由 U1DATA/U1SET 手动刷新。
         /// </summary>
         public static FillWorkbookSnapshot Load(string machineSource)
             => Load(machineSource, MachineWorkbookSnapshotStore.Default);
@@ -63,7 +64,7 @@ namespace UNCAD.Core.Excel
             if (store == null) throw new ArgumentNullException(nameof(store));
             if (!store.TryGetSnapshot(machineSource,
                 out MachineWorkbookSnapshotInfo snapshot))
-                throw new InvalidDataException("机台数据尚未刷新到 SQLite。请在 U1SET 中选择数据源并点击“刷新”。");
+                throw new InvalidDataException("机台数据尚未刷新到 SQLite。请执行 U1DATA，或在 U1SET 中选择数据源并点击“刷新”。");
             List<ListItem> listItems = ListItemReader.ReadEmbedded();
             return new FillWorkbookSnapshot(store,
                 MachineWorkbookSnapshotStore.NormalizeSource(machineSource), snapshot,

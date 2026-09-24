@@ -26,7 +26,7 @@ namespace UNCAD.Tests
                 Assert.Contains(first.ListItems,
                     item => item.Code == "3.3" && item.Alias1 == "32mm");
 
-                // 修改源文件不会绕过“仅手动刷新”策略。
+                // 修改本地源文件不会绕过显式刷新策略。
                 WriteMachine(machinePath, "设备B");
                 FillWorkbookSnapshot unchanged = FillWorkbookSnapshot.Load(machinePath, store);
                 Assert.Equal("设备A", Assert.Single(unchanged.FindRows("CACHE01")).CircuitName);

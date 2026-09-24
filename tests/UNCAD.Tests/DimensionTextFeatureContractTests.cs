@@ -7,7 +7,7 @@ namespace UNCAD.Tests
     public class DimensionTextFeatureContractTests
     {
         [Fact]
-        public void U1D_UsesCableHeightAndOriginalPlacementWithoutErasingGeometry()
+        public void U1DT_UsesCableHeightAndOriginalPlacementWithoutErasingGeometry()
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
                 "..", "..", "..", "..", ".."));

@@ -95,7 +95,7 @@ namespace UNCAD.Features.Stat
                         out MachineWorkbookSnapshotInfo snapshot))
                     {
                         expectedStatus = XstsExpectedDataStatus.FileNotFound;
-                        expectedDetail = "机台数据尚未刷新到 SQLite，请在 U1SET 中点击“刷新”";
+                        expectedDetail = "机台数据尚未刷新到 SQLite，请执行 U1DATA 或在 U1SET 中点击“刷新”";
                     }
                     else
                     {
@@ -111,7 +111,7 @@ namespace UNCAD.Features.Stat
                                 row.CircuitName, row.Batch, row.Seq));
                         }
                         expectedStatus = XstsExpectedDataStatus.Available;
-                        expectedDetail = "SQLite 快照（手动刷新时间 "
+                        expectedDetail = "SQLite 快照（最后成功刷新时间 "
                             + (snapshot?.RefreshedUtc ?? "未知") + "）";
                     }
                 }

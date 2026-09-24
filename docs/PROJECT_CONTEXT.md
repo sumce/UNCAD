@@ -31,8 +31,8 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 
 | Command family | Commands |
 | --- | --- |
-| Fill and output | `U1F`, `U1U`, `U1S`, `U1DWG`, `U1SET` |
-| Drawing helpers | `U1L`, `U1LX`, `U1D`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
+| Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1SET`, `U1DATA` |
+| Drawing helpers | `U1L`, `U1LX`, `U1DT`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 
@@ -43,9 +43,13 @@ U1F/U1U
   select frames -> read CAD facts -> query manually refreshed SQLite snapshot
   -> plan BOQ rows -> user review/compare -> one transaction -> verify output
 
-U1SET refresh
+U1SET / U1DATA refresh
   selected local/remote workbook -> parse unified U_ rows -> SQLite snapshot
   (commands query this snapshot; they do not re-read the source workbook)
+
+AutoCAD startup (remote source only)
+  queue one background refresh -> keep prior snapshot live -> atomically replace
+  after download and parsing succeed
 
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels
@@ -60,10 +64,11 @@ XLAYOUT/XSTS
   circuit row with strikethrough on `回路名称` is excluded.
 - Optional `U_批次` and `U_序号` values are retained in the workbook snapshot;
   XSTS presents one batch and one sequence field per machine.
-- Workbook refresh is explicit in `U1SET`; commands do not silently download a
-  network workbook.
+- Local workbook refresh is explicit in `U1SET` or `U1DATA`. A configured
+  HTTP/HTTPS workbook refreshes once in the background at CAD startup; drawing
+  commands never download it themselves.
 - Parsed machine rows and refresh metadata live in the per-user SQLite snapshot;
-  source-file changes are ignored until the next explicit refresh.
+  the last successful snapshot remains live until a later refresh succeeds.
 - `frameinfo_json` stores machine ID, device/upstream identity, last update,
   and replacement/change history. It is preferred over guessing from labels.
 - Old frame layouts and `xframe` are supported. Migration adds the new frame

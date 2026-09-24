@@ -19,6 +19,7 @@
         <Command Global="U1L" />
         <Command Global="U1LX" />
         <Command Global="U1D" />
+        <Command Global="U1DT" />
         <Command Global="U1R" />
         <Command Global="U1Q1" />
         <Command Global="U1Q2" />
@@ -29,6 +30,7 @@
         <Command Global="U1A" />
         <Command Global="U1S" />
         <Command Global="U1SET" />
+        <Command Global="U1DATA" />
         <Command Global="U1DWG" />
         <Command Global="XLAYOUT" />
         <Command Global="XSTS" />

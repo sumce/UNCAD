@@ -66,7 +66,8 @@ namespace UNCAD.UI
                 || string.Equals(command, CommandIds.FillUpdate, StringComparison.OrdinalIgnoreCase))
                 return "fill";
             if (string.Equals(command, CommandIds.Submit, StringComparison.OrdinalIgnoreCase)) return "submit";
-            if (string.Equals(command, CommandIds.Settings, StringComparison.OrdinalIgnoreCase)) return "settings";
+            if (string.Equals(command, CommandIds.Settings, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.DataRefresh, StringComparison.OrdinalIgnoreCase)) return "settings";
             if (string.Equals(command, CommandIds.About, StringComparison.OrdinalIgnoreCase)) return "about";
             if (string.Equals(command, CommandIds.Conduit, StringComparison.OrdinalIgnoreCase)) return "conduit";
             if (string.Equals(command, CommandIds.Tray100, StringComparison.OrdinalIgnoreCase)

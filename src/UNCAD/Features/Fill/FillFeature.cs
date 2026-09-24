@@ -907,15 +907,15 @@ namespace UNCAD.Features.Fill
                     && MachineWorkbookSource.TryGetSnapshot(path,
                         out MachineWorkbookSnapshotInfo snapshot))
                 {
-                    ctx.Write("\n[U1F/U1U] 使用上次手动刷新后的 SQLite 机台快照: "
+                    ctx.Write("\n[U1F/U1U] 使用上次成功刷新的 SQLite 机台快照: "
                         + (snapshot?.SourceDisplay ?? path)
-                        + "（不会自动读取源 Excel）");
+                        + "（本命令不会读取源 Excel）");
                     return path;
                 }
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[U1F/U1U] SQLite 机台快照不可用，请在 U1SET 重新刷新: "
+                ctx.Write("\n[U1F/U1U] SQLite 机台快照不可用，请执行 U1DATA 或在 U1SET 重新刷新: "
                     + ex.Message);
                 Log.Warn("U1F/U1U machine SQLite snapshot check failed: " + ex.Message);
                 return null;
@@ -923,7 +923,7 @@ namespace UNCAD.Features.Fill
 
             if (!string.IsNullOrEmpty(path))
             {
-                ctx.Write("\n[U1F/U1U] 机台数据尚未导入 SQLite，请在 U1SET 点击“刷新”后再执行命令。");
+                ctx.Write("\n[U1F/U1U] 机台数据尚未导入 SQLite，请执行 U1DATA 或在 U1SET 点击“刷新”。");
                 Log.Warn("机台数据 SQLite 快照不存在，U1F/U1U 未读取源 Excel。源: " + path);
                 return null;
             }
@@ -941,7 +941,7 @@ namespace UNCAD.Features.Fill
             }
             Settings.Set(ConfigKeys.FillExcelPath, path);
             ctx.Write("\n[U1F/U1U] 已记住 Excel: " + path
-                + "；请先在 U1SET 点击“刷新”导入 SQLite，再执行命令。");
+                + "；请执行 U1DATA，或在 U1SET 点击“刷新”导入 SQLite。");
             return null;
         }
 

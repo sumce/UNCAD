@@ -21,8 +21,8 @@ namespace UNCAD.Core.Excel
 
     /// <summary>
     /// Persists the parsed machine workbook in SQLite.  The XLSX is an input to
-    /// an explicit refresh only; command paths query this store and never inspect
-    /// the source file or its current timestamp.
+    /// a refresh only; command paths query this store and never inspect the source
+    /// file or its current timestamp.
     /// </summary>
     internal sealed class MachineWorkbookSnapshotStore
     {

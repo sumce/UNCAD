@@ -219,3 +219,15 @@ rewrite an existing entry.
   other named blocks no longer stops the whole operation or silently changes a
   source block to the target version. Compatible duplicates remain shared;
   only conflicting definitions receive AutoCAD-generated `$N$` names.
+
+## D-023: Remote Workbook Startup Refresh (2026-09-22)
+
+- Status: accepted
+- Decision: this supersedes D-003 and D-012 only for a configured HTTP/HTTPS
+  machine-workbook source. UNCAD queues one asynchronous refresh when AutoCAD
+  loads; a local workbook remains manual. `U1DATA` explicitly refreshes either
+  source type.
+- Consequence: drawing commands keep reading the last successful SQLite
+  snapshot while a refresh runs and never access the workbook or network
+  themselves. Parsing or refresh failure leaves the previous snapshot intact.
+  `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion uses `U1DT`.

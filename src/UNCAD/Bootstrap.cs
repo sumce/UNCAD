@@ -26,6 +26,8 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
+            AttachMachineDataRefreshIdle();
+            StartRemoteMachineDataRefresh();
             if (SupportsStartupUi())
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnStartupSplashIdle;
@@ -42,6 +44,47 @@ namespace UNCAD
 
         private static bool _startupSplashIdleAttached;
         private static bool _startupSplashShown;
+        private static bool _machineDataRefreshIdleAttached;
+
+        private static void StartRemoteMachineDataRefresh()
+        {
+            try
+            {
+                string source = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+                MachineDataRefreshStartStatus status = MachineDataRefreshCoordinator.Default
+                    .TryStartStartupRefresh(source);
+                if (status == MachineDataRefreshStartStatus.Started)
+                    Log.Info("已排队启动远程机台数据后台刷新");
+            }
+            catch (System.Exception ex)
+            {
+                // Startup refresh is optional; loading the CAD commands must never depend on it.
+                Log.Warn("启动远程机台数据刷新失败: " + ex.Message);
+            }
+        }
+
+        private static void AttachMachineDataRefreshIdle()
+        {
+            if (_machineDataRefreshIdleAttached) return;
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnMachineDataRefreshIdle;
+            _machineDataRefreshIdleAttached = true;
+        }
+
+        private static void OnMachineDataRefreshIdle(object sender, EventArgs args)
+        {
+            var document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
+                ?.MdiActiveDocument;
+            if (document == null) return;
+            while (MachineDataRefreshCoordinator.Default.TryTakeNotice(out string message))
+                document.Editor.WriteMessage("\n[U1DATA] " + message);
+        }
+
+        private static void DetachMachineDataRefreshIdle()
+        {
+            if (!_machineDataRefreshIdleAttached) return;
+            Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnMachineDataRefreshIdle;
+            _machineDataRefreshIdleAttached = false;
+        }
 
         /// <summary>
         /// CAD 界面就绪后(Idle)展示一次全屏品牌动画。U1SET 可关闭;Core Console、
@@ -243,6 +286,7 @@ namespace UNCAD
             }
             DetachStartupSplashIdle();
             DetachUpdateNotesIdle();
+            DetachMachineDataRefreshIdle();
             OnlineLicenseMonitor.Stop();
         }
     }

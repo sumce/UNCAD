@@ -40,7 +40,8 @@ when their version numbers or counts are stale.
 
 ## Hard Constraints
 
-- Machine workbooks are selected by the user and refreshed manually.
+- Machine workbooks are selected by the user. Local sources refresh manually;
+  configured HTTP/HTTPS sources refresh once in the background at CAD startup.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

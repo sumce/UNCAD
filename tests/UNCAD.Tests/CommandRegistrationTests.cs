@@ -15,14 +15,16 @@ namespace UNCAD.Tests
         {
             Assert.Equal(new[]
             {
-                "U1L", "U1LX", "U1D", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
-                "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP"
+                "U1L", "U1LX", "U1DT", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
+                "U1S", "U1C", "U1A", "U1SET", "U1DATA", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP"
             }, CommandIds.Canonical);
+            Assert.Equal(new[] { "U1D" }, CommandIds.Aliases);
             Assert.Equal(new[] { "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD" },
                 CommandIds.Legacy);
             Assert.Equal("U1LX;UNLX", CommandIds.QuickLineFeatureCommands);
-            Assert.Equal(25, CommandIds.Registered.Count);
-            Assert.Equal(25, CommandIds.Registered.Distinct(
+            Assert.Equal("U1DWG;U1D", CommandIds.DwgExportFeatureCommands);
+            Assert.Equal(27, CommandIds.Registered.Count);
+            Assert.Equal(27, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
             Assert.DoesNotContain(CommandIds.Registered, command =>
                 command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));
@@ -39,6 +41,20 @@ namespace UNCAD.Tests
 
             Assert.Contains("[CommandMethod(CommandIds.LegacyLineQuick)]", source);
             Assert.Contains("new QuickLineFeature().QuickLine()", source);
+        }
+
+        [Fact]
+        public void U1D_IsRegisteredOnlyAsTheU1DwgShortcut()
+        {
+            string export = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "DwgExport", "DwgExportFeature.cs"));
+            string dimension = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Dimension", "DimensionTextFeature.cs"));
+
+            Assert.Contains("[CommandMethod(CommandIds.DwgExportShort", export);
+            Assert.Contains("public void ExportDwgShort() => Run()", export);
+            Assert.Contains("[CommandMethod(CommandIds.DimensionText", dimension);
+            Assert.DoesNotContain("CommandIds.DwgExportShort", dimension);
         }
 
         [Fact]
@@ -61,8 +77,8 @@ namespace UNCAD.Tests
             string[] registeredConstants =
             {
                 "Line", "LineQuick", "DimensionText", "Arch", "Tray100", "Tray200", "Tray400",
-                "Fill", "FillUpdate", "Submit", "Conduit", "About", "Settings",
-                "DwgExport", "XLayout", "Statistics", "Merge", "Help", "LegacyLine", "LegacyLineQuick",
+                "Fill", "FillUpdate", "Submit", "Conduit", "About", "Settings", "DataRefresh",
+                "DwgExport", "DwgExportShort", "XLayout", "Statistics", "Merge", "Help", "LegacyLine", "LegacyLineQuick",
                 "LegacyArch", "LegacyTray100", "LegacyTray200", "LegacyTray400",
                 "LegacyStatistics"
             };

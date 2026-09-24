@@ -18,8 +18,8 @@ namespace UNCAD.Core.Excel
     }
 
     /// <summary>
-    /// Handles the explicit U1SET refresh operation. Commands do not call this
-    /// class; they read the SQLite snapshot through MachineWorkbookSnapshotStore.
+    /// Refreshes the configured workbook for U1SET, U1DATA, or remote startup.
+    /// Drawing commands do not call this class; they read the SQLite snapshot.
     /// </summary>
     internal static class MachineWorkbookSource
     {
@@ -63,9 +63,9 @@ namespace UNCAD.Core.Excel
         }
 
         /// <summary>
-        /// Imports a local or remote workbook only when U1SET explicitly invokes
-        /// refresh. A successful refresh always replaces the SQLite snapshot,
-        /// even when the XLSX bytes are unchanged.
+        /// Imports a local or remote workbook for an explicit or startup refresh.
+        /// A successful refresh always replaces the SQLite snapshot, even when
+        /// the XLSX bytes are unchanged.
         /// </summary>
         internal static MachineWorkbookSourceResult Refresh(string source)
             => Refresh(source, MachineWorkbookSnapshotStore.Default, null);

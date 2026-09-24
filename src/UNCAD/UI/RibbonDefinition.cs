@@ -93,6 +93,8 @@ namespace UNCAD.UI
                 new RibbonPanelDefinition("系统",
                     RibbonItemDefinition.Button("U1SET 设置", CommandIds.Settings,
                         "集中设置数据源、文字、绘图和输出参数"),
+                    RibbonItemDefinition.Button("U1DATA 刷新", CommandIds.DataRefresh,
+                        "后台刷新配置的机台数据；完成前继续使用上一次成功快照"),
                     RibbonItemDefinition.Button("关于与授权", CommandIds.About,
                         "查看版本、授权状态、使用条款和 UNSIAO.Ltd 信息"),
                     RibbonItemDefinition.Button("U1HELP 命令帮助", CommandIds.Help,

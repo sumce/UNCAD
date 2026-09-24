@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.9 builds publish 25 commands and intentionally do not include the removed `U1X` 3D editor. Use `U1LX` (or legacy `UNLX`) for quick line annotation; `U1D` converts aligned-dimension labels to editable single-line text. Older `U1X` references below are historical release notes.
+Current 2.4.9 builds publish 27 commands and intentionally do not include the removed `U1X` 3D editor. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -13,6 +13,8 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 
 ## v2.4.9
 
+- 远程机台工作簿在 AutoCAD 启动时异步刷新一次；刷新完成前继续使用上次成功的 SQLite 快照，失败不替换旧数据，并新增手动后台刷新命令 `U1DATA`。
+- 恢复 `U1D` 为 `U1DWG` 的快捷命令；对齐标注转文字调整为 `U1DT`，避免命令冲突。
 - 优化机台 ID 与设备名称匹配：忽略大小写、普通空格、Tab、换行、全角空格及文本内部空白，`M Q-01` 与 `MQ-01`、`设备 A` 与 `设备A` 可正确对应。
 - 统一图框、Excel 快照、XSTS、XLAYOUT、DWG 导出、U1S/自动提交和 BOQ 分组的身份匹配规则；显示、写回和持久化仍保留原始文本。
 - 修复图框属性中的机台/设备身份与设备块属性不一致时静默采用块名称的问题，现在会停止并提示不一致，避免错误填充。
@@ -42,7 +44,7 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 ## v2.4.5
 
 - `U1F/U1U/UNADD` 统计支持识别对齐/转角标注中人工输入的文字（如 `2000mm`）；自动测量的标注不参与统计，可在 `U1SET` 独立开关（默认开启）。
-- 新增 `U1D` 对齐标注转文字：将标注文字转换为可编辑单行文字并保留原尺寸线。
+- 新增对齐标注转文字（当时命令为 `U1D`，当前为 `U1DT`）：将标注文字转换为可编辑单行文字并保留原尺寸线。
 - 修复 150% 及以上屏幕缩放下 U1SET 等窗口输入框和页面显示不全的问题。
 - U1Q/U1LX 标注重跑不再重复生成，跳过原因逐项提示；Xmerge 保持块样式并增强批量导入。
 
@@ -60,8 +62,8 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 
 ## v2.4.1
 
-- U1SET 只有在用户点击“刷新”时才解析本地或网络机台工作簿，并将结果写入本机 SQLite 快照。
-- U1F/U1U/XSTS/XLAYOUT 只按需查询上次成功的 SQLite 快照；源 Excel 修改后必须再次手动刷新才会生效。
+- 当时 U1SET 只有在用户点击“刷新”时才解析本地或网络机台工作簿，并将结果写入本机 SQLite 快照；当前远程源已由 D-023 增加启动后台刷新。
+- U1F/U1U/XSTS/XLAYOUT 始终只按需查询上次成功的 SQLite 快照，不在命令内读取源 Excel。
 - 刷新失败保留上一次有效快照；统一程序集、产品元数据和 Bundle 版本为 `2.4.1` / `2.4.1.0`。
 
 ## v2.4.0
@@ -314,7 +316,7 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 - 新代码强制注释模块责任、状态分离、回滚和异常分支的原因。
 - 明确拆分 `SUM-STAT/求和统计` 与 `BOQ-TABLE/清单表格` 模块；日志和错误均显示模块ID、阶段及耗时。
 - 填充配置改为单次不可变快照；未匹配项目固定禁止生成，旧版“未匹配管材默认选择”配置不再生效。
-- BOQ分类规格建立一次索引；机台数据只在用户点击“刷新”时解析并写入 SQLite，命令按需查询快照。
+- BOQ分类规格建立一次索引；机台数据刷新后写入 SQLite，业务命令只按需查询快照。
 - 清单表和全部属性块共享一个AutoCAD事务，避免部分写入。
 - 统一管径输入与严格型号匹配；`UNC_CONDUIT`标注使用固定 `2000mm` 占位。
 - 配置中心、机台选择和填充确认统一DPI/Layout、范围校验和错误定位。
@@ -325,16 +327,17 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 | --- | --- | --- |
 | `U1L` | `UNL` | 绘制带长度占位标注的线条 |
 | `U1LX` | `UNLX` | 选择已有 U1L 线段，按端点连通顺序逐段填写毫米距离 |
-| `U1D` | — | 将对齐标注文字转换为单行文字，保留原尺寸线 |
+| `U1D` / `U1DWG` | — | 框选多个图框，按机台ID分组并横向导出 DWG |
+| `U1DT` | — | 将对齐标注文字转换为单行文字，保留原尺寸线 |
 | `U1R` | `UNR` | 开拱桥并截断相交直线 |
 | `U1Q1` / `U1Q2` / `U1Q4` | `UNQ1` / `UNQ2` / `UNQ4` | 绘制 100 / 200 / 400 mm 桥架标注 |
 | `U1F` | — | 生成单图框清单和属性，完成后自动更新 XLSX |
 | `U1U` | — | 单框或多图框批量更新，完成后自动更新 XLSX |
-| `U1DWG` | — | 框选多个图框，按机台ID分组并横向导出 DWG |
 | `U1C` | — | 按统一设置中的管径绘制线管标注（同时更新图框内 Ruanguan 软管块长度） |
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
 | `U1SET` | — | 打开全部功能的统一设置中心 |
+| `U1DATA` | — | 后台刷新配置的本地或远程机台工作簿 |
 | — | `UNADD` | 统计汇总并在图纸中生成 MTEXT |
 
 > Ribbon 只显示新版任务入口；传统命令仅作为键盘兼容入口。统计没有新增 U1 别名，继续使用 `UNADD`。
@@ -344,7 +347,7 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 
 - 新版用户命令固定使用 `U1` 前缀和功能字母；已有线路编辑使用 `U1LX`，桥架规格在 `Q` 后追加 `1`、`2` 或 `4`。
 - 所有设置统一进入 `U1SET`，不再为各模块注册独立设置命令；`U1S` 专用于当前图框 BOQ 提交。
-- 兼容命令仅限 `UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`、`UNADD`，不得继续扩展。
+- `U1D` 是 `U1DWG` 的正式快捷命令；传统兼容命令仍仅限 `UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`、`UNADD`。
 - 新增或修改命令必须同步 `CommandIds`、CommandMethod、Ribbon、bundle、安装验证和测试。
 
 ## 构建
@@ -393,8 +396,8 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 
 `U1F` 和 `U1U` 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 
-- **机台数据 Excel**：用户在 `U1SET` 选择本地或 HTTP/HTTPS 工作簿并点击“刷新”后，程序解析结果写入本机 SQLite 快照；`U1F/U1U/XSTS/XLAYOUT` 只按需查询快照，不检查源文件时间戳、不自动下载或重新解析。源文件的修改会在下一次手动刷新后生效。
-- 快照默认保存在 `%LOCALAPPDATA%\UNCAD\cache\machine-data.db`；删除快照不会删除源 Excel，但需要在 `U1SET` 再次点击“刷新”后才能执行依赖机台数据的命令。
+- **机台数据 Excel**：用户在 `U1SET` 选择本地或 HTTP/HTTPS 工作簿。本地源通过 `U1DATA` 或设置页“刷新”导入；远程源还会在每次 AutoCAD 启动时异步刷新一次。`U1F/U1U/XSTS/XLAYOUT` 始终只查询 SQLite 快照，刷新完成前继续使用上次成功数据。
+- 快照默认保存在 `%LOCALAPPDATA%\UNCAD\cache\machine-data.db`；下载、解析或写入失败不会替换旧快照。删除快照不会删除源 Excel，需要执行 `U1DATA`、在 `U1SET` 点击“刷新”，或重新启动以刷新远程源。
 - 机台数据只按表头绑定的 `U_` 列和 `回路名称` 列逐行读取；不展开、不继承合并单元格内容，空单元格保持为空。
 - 统一数据表中“回路名称”带删除线的行视为已作废，不进入 `U1F/U1U/XSTS` 的机台和回路数据。
 - 固定 BOQ 清单随插件程序集内嵌，启动填充时建立一次索引；用户不提供也不能配置外部清单文件。
@@ -441,7 +444,7 @@ Current 2.4.9 builds publish 25 commands and intentionally do not include the re
 | `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |
 | `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` / `UNADD_DIMENSION_ENABLED` | 单行文字 / 多行文字 / 对齐·转角标注文字参与统计（标注只读人工输入的文字覆盖，自动测量不计） | 1 / 0 / 1 |
 | `UNADD_CABLE_ENABLED` / `UNADD_BRIDGE_ENABLED` / `UNADD_CONDUIT_ENABLED` | 电缆 / 桥架 / 线管参与统计 | 1 / 1 / 1 |
-| `UNC_FILL_EXCEL` | 用户选择的机台数据源（内容由 U1SET“刷新”导入 SQLite） | 空 |
+| `UNC_FILL_EXCEL` | 用户选择的机台数据源（由 U1DATA/U1SET 刷新；远程源启动时自动刷新） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_CLEAR_ROWS` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 每次清空行数 / 表格文字高度 | 1 / 11 / 500 |
 | `UNC_SUBMIT_FOLDER` | `U1F` / `U1U` 自动记录文件夹（保留旧键名兼容已有设置） | 空（默认“文档”目录） |
 

@@ -11,7 +11,7 @@ namespace UNCAD.CadIntegration
 {
     public sealed class DimensionTextSelfTestCommand
     {
-        [CommandMethod("UNCAD_U1D_SELFTEST")]
+        [CommandMethod("UNCAD_U1DT_SELFTEST")]
         public void Run()
         {
             Document document = Application.DocumentManager.MdiActiveDocument;
@@ -37,23 +37,23 @@ namespace UNCAD.CadIntegration
                         new[] { dimensionId }, 222.0);
                 if (result.ConvertedCount != 1 || dimension.IsErased
                     || dimension.DimensionText != DimensionTextFormatter.SuppressedDimensionText)
-                    throw new InvalidOperationException("U1D did not preserve and suppress the source dimension.");
+                    throw new InvalidOperationException("U1DT did not preserve and suppress the source dimension.");
 
                 var text = transaction.GetObject(result.TextIds[0], OpenMode.ForRead) as DBText;
                 if (text == null || text.TextString != "3000mm"
                     || Math.Abs(text.Height - 222.0) > 0.0001
                     || Math.Abs(text.Rotation - Math.PI / 6.0) > 0.0001
                     || text.AlignmentPoint.DistanceTo(new Point3d(1500, 500, 0)) > 0.0001)
-                    throw new InvalidOperationException("U1D text value, height, angle or position is incorrect.");
+                    throw new InvalidOperationException("U1DT text value, height, angle or position is incorrect.");
 
                 DimensionTextConversionResult repeated =
                     AlignedDimensionTextConverter.Convert(context, transaction,
                         new[] { dimensionId }, 222.0);
                 if (repeated.ConvertedCount != 0 || repeated.AlreadyConvertedCount != 1)
-                    throw new InvalidOperationException("Repeated U1D created duplicate text.");
+                    throw new InvalidOperationException("Repeated U1DT created duplicate text.");
             }
 
-            document.Editor.WriteMessage("\nUNCAD_U1D_SELFTEST:PASS\n");
+            document.Editor.WriteMessage("\nUNCAD_U1DT_SELFTEST:PASS\n");
             string resultPath = Environment.GetEnvironmentVariable(
                 "UNCAD_CAD_INTEGRATION_RESULT");
             if (!string.IsNullOrWhiteSpace(resultPath))

@@ -123,7 +123,7 @@ function Get-PackageInfo {
     # keyboard compatibility commands may trigger package loading. Keep this list in exact
     # sync with CommandIds.Registered; BundleLoadingTests enforces that contract.
     $expectedCommands = @(
-        "U1L", "U1LX", "U1D", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP",
+        "U1L", "U1LX", "U1D", "U1DT", "U1R", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1A", "U1SET", "U1DATA", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "U1HELP",
         "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {

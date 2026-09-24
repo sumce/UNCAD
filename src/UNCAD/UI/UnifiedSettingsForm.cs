@@ -626,7 +626,7 @@ namespace UNCAD.UI
             AddField(output, 0, "自动输出文件夹", FolderPicker(_submitFolder));
 
             return Page("Excel 数据", "机台快照、BOQ 图框与自动输出",
-                Section("机台数据源", "数据只在点击刷新后写入 SQLite 快照。", source),
+                Section("机台数据源", "本地源手动刷新；远程链接在 CAD 启动时后台刷新。", source),
                 Section("图框与表格", null, table),
                 Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
                 Section("自动输出", null, output));

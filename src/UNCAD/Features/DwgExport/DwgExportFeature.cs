@@ -8,12 +8,15 @@ using UNCAD.Infra;
 namespace UNCAD.Features.DwgExport
 {
     /// <summary>Exports selected frame contents into one horizontal DWG per machine.</summary>
-    [Feature("dwg-export", "DWG 自动导出", Commands = CommandIds.DwgExport,
+    [Feature("dwg-export", "DWG 自动导出", Commands = CommandIds.DwgExportFeatureCommands,
         Description = "按机台ID分组导出图框内容，并按设备横向排列")]
     public sealed class DwgExportFeature : CommandBase
     {
         [CommandMethod(CommandIds.DwgExport, CommandFlags.UsePickSet)]
         public void ExportDwg() => Run();
+
+        [CommandMethod(CommandIds.DwgExportShort, CommandFlags.UsePickSet)]
+        public void ExportDwgShort() => Run();
 
         protected override void Execute(CadContext ctx)
         {

@@ -9,7 +9,9 @@ namespace UNCAD.Infra
         public const string FillUpdate = "U1U";
         public const string Submit = "U1S";
         public const string Settings = "U1SET";
+        public const string DataRefresh = "U1DATA";
         public const string DwgExport = "U1DWG";
+        public const string DwgExportShort = "U1D";
         public const string XLayout = "XLAYOUT";
         public const string Statistics = "XSTS";
         public const string Merge = "Xmerge";
@@ -21,7 +23,7 @@ namespace UNCAD.Infra
         public const string Tray400 = "U1Q4";
         public const string Line = "U1L";
         public const string LineQuick = "U1LX";
-        public const string DimensionText = "U1D";
+        public const string DimensionText = "U1DT";
         public const string Arch = "U1R";
 
         public const string LegacyLine = "UNL";
@@ -40,6 +42,8 @@ namespace UNCAD.Infra
         public const string LineFeatureCommands = Line;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
         public const string DimensionTextFeatureCommands = DimensionText;
+        public const string DataRefreshFeatureCommands = DataRefresh;
+        public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
@@ -50,7 +54,12 @@ namespace UNCAD.Infra
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
             Line, LineQuick, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help
+            Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help
+        };
+
+        public static IReadOnlyList<string> Aliases { get; } = new[]
+        {
+            DwgExportShort
         };
 
         public static IReadOnlyList<string> Legacy { get; } = new[]
@@ -62,7 +71,8 @@ namespace UNCAD.Infra
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
             Line, LineQuick, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DwgExport, XLayout, Statistics, Merge, Help,
+            Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
+            DwgExportShort,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics
         };
