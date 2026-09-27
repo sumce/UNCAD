@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using UNCAD.Infra;
 
@@ -18,17 +19,27 @@ namespace UNCAD.UI
                 new Size(560, 460), new Size(460, 320));
             BackColor = UiTheme.WindowBg;
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 74, BackColor = UiTheme.Surface,
-                Padding = new Padding(18, 12, 18, 8) };
-            header.Controls.Add(new Label
+            var header = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 30,
+                Height = 74,
+                BackColor = UiTheme.Surface,
+                Padding = new Padding(18, 10, 18, 8),
+                ColumnCount = 1,
+                RowCount = 2,
+                Margin = new Padding(0)
+            };
+            header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            header.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
+            header.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            header.Controls.Add(new Label
+            {
+                Dock = DockStyle.Fill,
                 Text = "已更新到 " + ProductMetadata.VersionText,
                 Font = UiTheme.FontTitle,
                 ForeColor = UiTheme.TextPrimary,
                 TextAlign = ContentAlignment.MiddleLeft
-            });
+            }, 0, 0);
             header.Controls.Add(new Label
             {
                 Dock = DockStyle.Fill,
@@ -37,64 +48,47 @@ namespace UNCAD.UI
                 ForeColor = UiTheme.TextSecondary,
                 TextAlign = ContentAlignment.BottomLeft,
                 Padding = new Padding(0, 4, 0, 0)
-            });
+            }, 0, 1);
 
-            var list = new FlowLayoutPanel
+            var notes = new RichTextBox
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.TopDown,
-                WrapContents = false,
-                AutoScroll = true,
-                Padding = new Padding(16, 10, 10, 6)
+                ReadOnly = true,
+                DetectUrls = false,
+                BorderStyle = BorderStyle.None,
+                BackColor = UiTheme.WindowBg,
+                ForeColor = UiTheme.TextPrimary,
+                Font = UiTheme.FontBody,
+                WordWrap = true,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
+                TabStop = false,
+                Text = FormatEntries(entries)
             };
-            foreach (VersionChangeLogEntry entry in entries)
-            {
-                list.Controls.Add(BuildEntry(entry));
-                list.Controls.Add(new Panel { Dock = DockStyle.Top, Width = 8,
-                    Height = 8, Margin = new Padding(0) });
-            }
 
             Button close = UiTheme.PrimaryButton("知道了", DialogResult.Cancel);
             var commands = UiTheme.CommandBar();
             commands.Padding = new Padding(0, 7, 12, 2);
             commands.Controls.Add(close);
 
-            Controls.Add(list);
+            Controls.Add(notes);
             Controls.Add(commands);
             Controls.Add(header);
             AcceptButton = close;
             CancelButton = close;
-            Shown += (sender, args) => close.Select();
+            Shown += (sender, args) =>
+            {
+                notes.SelectionStart = 0;
+                notes.ScrollToCaret();
+                close.Select();
+            };
         }
 
-        private static Control BuildEntry(VersionChangeLogEntry entry)
+        internal static string FormatEntries(IReadOnlyList<VersionChangeLogEntry> entries)
         {
-            var block = new Panel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Width = 480, Padding = new Padding(0), Margin = new Padding(0, 0, 6, 0) };
-            var title = new Label
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Text = entry.Version + "（" + entry.DateUtc + "）",
-                Font = UiTheme.FontBodyBold,
-                ForeColor = UiTheme.BrandBlue,
-                Margin = new Padding(0, 0, 0, 4)
-            };
-            block.Controls.Add(title);
-            for (int index = entry.Changes.Length - 1; index >= 0; index--)
-            {
-                var line = new Label
-                {
-                    Dock = DockStyle.Top,
-                    AutoSize = true,
-                    Text = "· " + entry.Changes[index],
-                    Font = UiTheme.FontBody,
-                    ForeColor = UiTheme.TextPrimary,
-                    Margin = new Padding(8, 0, 0, 3)
-                };
-                block.Controls.Add(line);
-            }
-            return block;
+            return string.Join(Environment.NewLine + Environment.NewLine,
+                entries.Select(entry => entry.Version + "（" + entry.DateUtc + "）"
+                    + Environment.NewLine + string.Join(Environment.NewLine,
+                        entry.Changes.Select(change => "· " + change))));
         }
     }
 }

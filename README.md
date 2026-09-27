@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The published 2.4.10 package has 28 commands and does not include the removed `U1X` editor. `U1L3D` provides a read-only frame preview. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The published 2.4.11 package has 28 commands and does not include the removed `U1X` editor. `U1L3D` provides a read-only frame preview. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,10 @@ The published 2.4.10 package has 28 commands and does not include the removed `U
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.11
+
+- 修复版本更新记录窗口正文宽度被布局为 0、打开后页面空白的问题；更新内容现在可正常换行和滚动。
 
 ## v2.4.10
 
