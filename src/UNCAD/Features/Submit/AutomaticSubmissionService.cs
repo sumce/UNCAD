@@ -10,6 +10,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Submit
 {
+#pragma warning disable 618 // AutoCAD 2022 direct table reads avoid stale Cell wrappers.
     /// <summary>Result printed after U1F/U1U automatic sync or explicit U1S submission.</summary>
     internal sealed class AutomaticSubmissionWriteResult
     {
@@ -344,7 +345,7 @@ namespace UNCAD.Features.Submit
                 var values = new string[table.Columns.Count];
                 for (int column = 0; column < table.Columns.Count; column++)
                 {
-                    try { values[column] = table.Cells[row, column].TextString ?? ""; }
+                    try { values[column] = table.TextString(row, column) ?? ""; }
                     catch (System.Exception ex)
                     {
                         values[column] = "";
@@ -355,4 +356,5 @@ namespace UNCAD.Features.Submit
             }
         }
     }
+#pragma warning restore 618
 }

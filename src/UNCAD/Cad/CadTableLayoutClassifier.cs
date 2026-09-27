@@ -4,6 +4,7 @@ using UNCAD.Core.Fill;
 
 namespace UNCAD.Cad
 {
+#pragma warning disable 618 // AutoCAD 2022 direct table reads avoid stale Cell wrappers.
     internal static class CadTableLayoutClassifier
     {
         internal static bool IsDrawingInfoTable(Table table)
@@ -28,12 +29,12 @@ namespace UNCAD.Cad
             int columnCount = Math.Min(table.Columns.Count, 7);
             for (int row = 0; row < rowCount; row++)
             {
-                string first = table.Cells[row, 0].TextString ?? "";
+                string first = ReadCellText(table, row, 0);
                 if (!TableLayoutClassifier.IsDrawingInfoHeaderStart(first)) continue;
                 var cells = new string[columnCount];
                 cells[0] = first;
                 for (int column = 1; column < cells.Length; column++)
-                    cells[column] = table.Cells[row, column].TextString ?? "";
+                    cells[column] = ReadCellText(table, row, column);
                 bool matches = currentOnly
                     ? TableLayoutClassifier.IsCurrentDrawingInfoHeader(cells)
                     : TableLayoutClassifier.IsDrawingInfoHeader(cells);
@@ -43,5 +44,21 @@ namespace UNCAD.Cad
             }
             return false;
         }
+
+        // Cell is a short-lived managed wrapper around native table content.
+        // Reading through Table keeps classification safe after another writer
+        // has changed text in the same transaction.
+        private static string ReadCellText(Table table, int row, int column)
+        {
+            try
+            {
+                return table.TextString(row, column) ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
     }
+#pragma warning restore 618
 }

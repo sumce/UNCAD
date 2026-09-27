@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>U1L3D 三维预览</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><strong>U1L3D</strong><span>U1L 等测路由预览</span></div>
+      <div class="toolbar" role="toolbar" aria-label="三维视图工具">
+        <button id="fitButton" type="button" title="适应全部路线">适应视图</button>
+        <button id="gridButton" type="button" title="显示或隐藏轴网">轴网</button>
+        <button id="labelsButton" type="button" title="显示或隐藏距离标签">标签</button>
+      </div>
+      <div id="status" class="status">正在载入...</div>
+    </header>
+    <main class="workspace">
+      <section id="viewport" aria-label="U1L 三维预览">
+        <div id="canvasHost"></div>
+        <div id="loading">正在启动三维渲染器...</div>
+        <div id="axisLegend"><span class="x">X</span><span class="y">Y</span><span class="z">Z</span></div>
+        <div id="routeLabels" aria-hidden="true"></div>
+      </section>
+      <aside class="inspector">
+        <section>
+          <h2>图框信息</h2>
+          <dl class="meta">
+            <dt>机台</dt><dd id="machine">-</dd>
+            <dt>设备</dt><dd id="device">-</dd>
+            <dt>设备楼层</dt><dd id="deviceFloor">-</dd>
+            <dt>上游楼层</dt><dd id="panelFloor">-</dd>
+            <dt>投影</dt><dd id="projection">-</dd>
+          </dl>
+        </section>
+        <section>
+          <h2>上下游轴位</h2>
+          <div class="axis-card"><span>下游</span><strong id="downstream">-</strong></div>
+          <div class="axis-card"><span>上游</span><strong id="upstream">-</strong></div>
+          <div id="spacing" class="muted">相邻轴位 4800 mm</div>
+          <div id="axisMarks" class="axis-marks"></div>
+        </section>
+        <section>
+          <h2>路线</h2>
+          <div class="route-summary"><strong id="segmentCount">0</strong><span>段</span><strong id="routeLength">0</strong><span>mm</span></div>
+          <div id="routeList" class="route-list"></div>
+        </section>
+        <section id="diagnosticsSection" hidden>
+          <h2>诊断</h2>
+          <ul id="diagnostics"></ul>
+        </section>
+      </aside>
+    </main>
+    <footer class="footer"><span>只读预览，不修改图纸</span><button id="closeButton" type="button">关闭</button></footer>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

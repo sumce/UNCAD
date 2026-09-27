@@ -48,6 +48,17 @@ if (-not $SkipBundle) {
     New-Item (Split-Path -Parent $bundleWebViewLoader) -ItemType Directory -Force | Out-Null
     Copy-Item -LiteralPath $webViewLoader -Destination $bundleWebViewLoader -Force
 
+    $webSource = Join-Path $root "src\UNCAD\Web\QuickLine3D"
+    if (-not (Test-Path -LiteralPath $webSource -PathType Container)) {
+        throw "U1L3D web source is missing: $webSource"
+    }
+    $bundleWebRoot = Join-Path $bundleDir "Web"
+    if (Test-Path -LiteralPath $bundleWebRoot) {
+        Remove-Item -LiteralPath $bundleWebRoot -Recurse -Force
+    }
+    New-Item -Path $bundleWebRoot -ItemType Directory -Force | Out-Null
+    Copy-Item -LiteralPath $webSource -Destination $bundleWebRoot -Recurse -Force
+
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
     Copy-Item -LiteralPath $template -Destination (Join-Path $bundleDir "BOQ_Template.xlsx") -Force
@@ -62,6 +73,11 @@ if (-not $SkipBundle) {
         "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
+        "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
+        "Web\QuickLine3D\styles.css", "Web\QuickLine3D\vendor\three\OrbitControls.js",
+        "Web\QuickLine3D\vendor\three\three.core.min.js",
+        "Web\QuickLine3D\vendor\three\three.module.min.js",
+        "Web\QuickLine3D\vendor\three\LICENSE.txt",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"

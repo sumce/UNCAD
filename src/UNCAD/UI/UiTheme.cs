@@ -332,6 +332,27 @@ namespace UNCAD.UI
             grid.DefaultCellStyle.SelectionForeColor = TextPrimary;
         }
 
+        /// <summary>
+        /// Locks every existing data row to one DPI-aware height.  RowTemplate
+        /// only affects rows created later, and DataGridView can otherwise keep a
+        /// previously auto-sized height after a cell value changes.
+        /// </summary>
+        public static void FixGridRows(DataGridView grid, int designHeight)
+        {
+            if (grid == null) return;
+            grid.AllowUserToResizeRows = false;
+            grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None;
+            int height = NotAutoScaled(grid, designHeight);
+            grid.RowTemplate.Height = height;
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                if (row.IsNewRow) continue;
+                row.Resizable = DataGridViewTriState.False;
+                row.MinimumHeight = height;
+                row.Height = height;
+            }
+        }
+
         /// <summary>底部右对齐命令栏。</summary>
         public static FlowLayoutPanel CommandBar()
         {

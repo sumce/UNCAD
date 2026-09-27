@@ -32,6 +32,7 @@ namespace UNCAD.Infra
             {
                 E(CommandIds.Line, "带标注线段", "U1L", "连续绘制独立 Line 并生成长度文字", "正式命令；长度设置必须为正数毫米，非法值回退 2000mm。"),
                 E(CommandIds.LineQuick, "快速标注距离", "U1LX", "点选一根 LINE 线段,从点击端起沿连通路线逐段填写毫米标注", "输入距离回车即写入并自动跳到下一段;直接回车保留原值,Esc 结束;点击在段中部时会询问向哪端走。"),
+                E(CommandIds.Line3dPreview, "U1L 三维预览", "U1L3D", "框选完整图框，将其中的等测 U1L 路由转换为只读三维预览并显示上下游轴位", "不修改图纸、不刷新 Excel；轴位来自最后一次成功的 SQLite 机台快照，相邻轴位按 4800mm 展示。"),
                 E(CommandIds.DimensionText, "对齐标注转文字", "U1DT", "将选中的对齐标注文字转换为可编辑单行文字", "文字高度使用 U1SET 的电缆文字高度，位置和角度跟随原标注；原尺寸线保留。"),
                 E(CommandIds.LegacyLineQuick, "快速标注距离", "UNLX", "调用 U1LX 的快速标注功能", "兼容旧键盘命令名。"),
                 E(CommandIds.LegacyLine, "带标注线段", "UNL", "调用 U1L 的连续线段绘制功能", "兼容旧命令名。"),

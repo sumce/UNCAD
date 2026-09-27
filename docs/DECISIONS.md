@@ -231,3 +231,15 @@ rewrite an existing entry.
   snapshot while a refresh runs and never access the workbook or network
   themselves. Parsing or refresh failure leaves the previous snapshot intact.
   `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion uses `U1DT`.
+
+## D-024: U1L3D Read-Only WebView Preview (2026-09-24)
+
+- Status: accepted
+- Decision: `U1L3D` may host a dedicated read-only WebView2/Three.js preview.
+  It accepts one complete frame selection, reconstructs the contained U1L route
+  in 3D from its isometric directions and millimetre labels, and displays the
+  machine workbook's upstream/downstream axes from the last successful SQLite
+  snapshot. Adjacent grid axes are 4800 mm apart.
+- Consequence: the preview never writes CAD entities, never refreshes a
+  workbook or accesses the network, and does not restore the removed generic
+  HTML dialog framework. Other user dialogs remain native WinForms.

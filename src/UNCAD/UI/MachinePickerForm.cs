@@ -24,6 +24,11 @@ namespace UNCAD.UI
         private readonly TextBox _circuitDetail;
         private readonly TextBox _preview;
         private readonly Button _ok;
+        private readonly TableLayoutPanel _layout;
+        private readonly TableLayoutPanel _machineInputPanel;
+        private readonly TableLayoutPanel _circuitPanel;
+        private readonly TabControl _lowerTabs;
+        private bool _applyingLayout;
         private readonly List<string> _machineIds;
         private readonly Func<string, List<MachineRow>> _lookup;
         private readonly Func<MachineRow, string> _previewBuilder;
@@ -41,61 +46,69 @@ namespace UNCAD.UI
                 new Size(820, 620), new Size(700, 520));
 
             // ① 机台ID 输入
-            var machineInputPanel = new TableLayoutPanel
+            _machineInputPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                AutoSize = false,
                 ColumnCount = 1,
                 RowCount = 2,
-                Padding = new Padding(8, 4, 8, 8),
-                Margin = Padding.Empty
+                Padding = new Padding(8, 4, 8, 6),
+                Margin = Padding.Empty,
+                MinimumSize = new Size(0, 70)
             };
-            machineInputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            machineInputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            machineInputPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _machineInputPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            _machineInputPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 24f));
+            _machineInputPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             var machineInputLabel = new Label
             {
                 Text = "机台 ID",
-                AutoSize = true,
+                Dock = DockStyle.Fill,
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleLeft,
                 Font = UiTheme.FontBody,
-                Margin = new Padding(0, 0, 0, 4)
+                Margin = Padding.Empty
             };
             _machineInput = new TextBox
             {
                 Dock = DockStyle.Fill,
-                Margin = Padding.Empty
+                Margin = Padding.Empty,
+                MinimumSize = new Size(0, 32)
             };
             UiTheme.StyleInput(_machineInput);
             _machineInput.Font = UiTheme.FontInput;
-            machineInputPanel.Controls.Add(machineInputLabel, 0, 0);
-            machineInputPanel.Controls.Add(_machineInput, 0, 1);
+            _machineInputPanel.Controls.Add(machineInputLabel, 0, 0);
+            _machineInputPanel.Controls.Add(_machineInput, 0, 1);
 
             // 相似机台建议
             _machineSuggest = new ListBox
             {
-                Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                Dock = DockStyle.Fill,
+                AutoSize = false,
                 Visible = false,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = UiTheme.Surface,
                 ForeColor = UiTheme.TextPrimary,
                 IntegralHeight = false,
-                Margin = new Padding(8, 0, 8, 8)
+                Margin = new Padding(8, 0, 8, 6),
+                MinimumSize = Size.Empty
             };
 
             // 机台摘要
             _machineSummary = new Label
             {
-                Anchor = AnchorStyles.Left | AnchorStyles.Right,
-                AutoSize = true,
+                Dock = DockStyle.Fill,
+                AutoSize = false,
                 ForeColor = UiTheme.Accent,
                 Font = UiTheme.FontBodyBold,
-                Margin = new Padding(8, 0, 8, 8),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 0, 8, 0),
+                Margin = new Padding(0, 0, 0, 4),
+                MinimumSize = new Size(0, 30),
                 Text = "请输入机台 ID"
             };
 
             // ② 回路列表
-            var circuitPanel = new TableLayoutPanel
+            _circuitPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
@@ -103,13 +116,17 @@ namespace UNCAD.UI
                 Padding = new Padding(8, 4, 8, 6),
                 Margin = Padding.Empty,
                 BorderStyle = BorderStyle.FixedSingle,
-                BackColor = UiTheme.Surface
+                BackColor = UiTheme.Surface,
+                MinimumSize = new Size(0, 160)
             };
-            circuitPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            circuitPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            circuitPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            _circuitPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            _circuitPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));
+            _circuitPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
             var circuitLabel = UiTheme.SectionHeader("设备 / 回路");
-            circuitLabel.Margin = new Padding(0, 0, 0, 4);
+            circuitLabel.Dock = DockStyle.Fill;
+            circuitLabel.AutoSize = false;
+            circuitLabel.TextAlign = ContentAlignment.MiddleLeft;
+            circuitLabel.Margin = Padding.Empty;
             _circuit = new ListView
             {
                 Dock = DockStyle.Fill,
@@ -126,8 +143,8 @@ namespace UNCAD.UI
             _circuit.Columns.Add("设备 / 回路", UiTheme.NotAutoScaled(215));
             _circuit.Columns.Add("盘柜类型", UiTheme.NotAutoScaled(110));
             _circuit.Columns.Add("配电详情", UiTheme.NotAutoScaled(330));
-            circuitPanel.Controls.Add(circuitLabel, 0, 0);
-            circuitPanel.Controls.Add(_circuit, 0, 1);
+            _circuitPanel.Controls.Add(circuitLabel, 0, 0);
+            _circuitPanel.Controls.Add(_circuit, 0, 1);
 
             _circuitDetail = new TextBox
             {
@@ -156,14 +173,15 @@ namespace UNCAD.UI
             detailTab.Controls.Add(_circuitDetail);
             var previewTab = new TabPage("写入预览") { Padding = new Padding(4) };
             previewTab.Controls.Add(_preview);
-            var lowerTabs = new TabControl
+            _lowerTabs = new TabControl
             {
                 Dock = DockStyle.Fill,
                 Font = UiTheme.FontBody,
-                Margin = new Padding(0, 8, 0, 0)
+                Margin = Padding.Empty,
+                MinimumSize = new Size(0, 150)
             };
-            lowerTabs.TabPages.Add(detailTab);
-            lowerTabs.TabPages.Add(previewTab);
+            _lowerTabs.TabPages.Add(detailTab);
+            _lowerTabs.TabPages.Add(previewTab);
 
             // 按钮
             _ok = UiTheme.PrimaryButton("确定");
@@ -171,34 +189,39 @@ namespace UNCAD.UI
             Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
             FlowLayoutPanel btnRow = UiTheme.CommandBar();
             btnRow.Dock = DockStyle.Fill;
+            btnRow.AutoSize = false;
+            btnRow.MinimumSize = new Size(0, 52);
+            btnRow.Padding = Padding.Empty;
             btnRow.Margin = Padding.Empty;
             btnRow.Controls.Add(cancel);
             btnRow.Controls.Add(_ok);
 
             // 内容行按实际尺寸展开，列表和详情共享全部剩余空间。
-            var layout = new TableLayoutPanel
+            _layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
                 RowCount = 6,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
-                BackColor = Color.Transparent
+                BackColor = Color.Transparent,
+                AutoScroll = true,
+                GrowStyle = TableLayoutPanelGrowStyle.FixedSize
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 68f));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 32f));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.Controls.Add(machineInputPanel, 0, 0);
-            layout.Controls.Add(_machineSuggest, 0, 1);
-            layout.Controls.Add(_machineSummary, 0, 2);
-            layout.Controls.Add(circuitPanel, 0, 3);
-            layout.Controls.Add(lowerTabs, 0, 4);
-            layout.Controls.Add(btnRow, 0, 5);
-            Controls.Add(layout);
+            _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 174f));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52f));
+            _layout.Controls.Add(_machineInputPanel, 0, 0);
+            _layout.Controls.Add(_machineSuggest, 0, 1);
+            _layout.Controls.Add(_machineSummary, 0, 2);
+            _layout.Controls.Add(_circuitPanel, 0, 3);
+            _layout.Controls.Add(_lowerTabs, 0, 4);
+            _layout.Controls.Add(btnRow, 0, 5);
+            Controls.Add(_layout);
             AcceptButton = _ok;
             CancelButton = cancel;
 
@@ -223,9 +246,21 @@ namespace UNCAD.UI
             };
             _circuit.SelectedIndexChanged += (s, e) => UpdatePreview();
             _circuit.Resize += (s, e) => ResizeCircuitColumns();
-            Shown += (s, e) => ResizeCircuitColumns();
+            Shown += (s, e) =>
+            {
+                ApplyStableLayout();
+                ResizeCircuitColumns();
+            };
+            DpiChanged += (s, e) =>
+            {
+                try { BeginInvoke((MethodInvoker)ApplyStableLayout); }
+                catch (InvalidOperationException) { }
+            };
+            Resize += (s, e) => ApplyStableLayout();
             _circuit.DoubleClick += (s, e) => Confirm();
             _ok.Click += (s, e) => Confirm();
+
+            ApplyStableLayout();
         }
 
         private void OnMachineInputKeyDown(object sender, KeyEventArgs e)
@@ -258,6 +293,7 @@ namespace UNCAD.UI
             {
                 _machineSuggest.Visible = false;
                 _machineSuggest.Items.Clear();
+                SetSuggestionRowHeight(0);
                 return;
             }
             var list = _machineIds
@@ -286,6 +322,72 @@ namespace UNCAD.UI
                 int preferredHeight = _machineSuggest.PreferredHeight;
                 _machineSuggest.MinimumSize = new Size(0, preferredHeight);
                 _machineSuggest.Height = preferredHeight;
+                SetSuggestionRowHeight(preferredHeight + _machineSuggest.Margin.Top
+                    + _machineSuggest.Margin.Bottom);
+            }
+            else
+            {
+                SetSuggestionRowHeight(0);
+            }
+        }
+
+        private void SetSuggestionRowHeight(int height)
+        {
+            if (_layout == null || _layout.RowStyles.Count < 2) return;
+            _layout.RowStyles[1].SizeType = SizeType.Absolute;
+            _layout.RowStyles[1].Height = Math.Max(0, height);
+            _layout.PerformLayout();
+        }
+
+        /// <summary>
+        /// Keeps the fixed-format regions from collapsing when WinForms measures
+        /// an empty ListView or a hidden suggestion row. The outer panel scrolls
+        /// when a very small/high-DPI window cannot show all regions at once.
+        /// </summary>
+        private void ApplyStableLayout()
+        {
+            if (_layout == null || IsDisposed || _applyingLayout) return;
+            _applyingLayout = true;
+            try
+            {
+                // Absolute rows are scaled by WinForms during a DPI change. Do
+                // not write the design pixels back here or a 150/200% dialog
+                // immediately clips its input box again. Only raise a row when
+                // the current font metrics prove that the content needs more.
+                int inputHeight = Math.Max((int)Math.Round(_layout.RowStyles[0].Height),
+                    _machineInput.PreferredHeight + _machineInputPanel.Padding.Vertical
+                    + 30);
+                _layout.RowStyles[0].SizeType = SizeType.Absolute;
+                _layout.RowStyles[0].Height = inputHeight;
+
+                int summaryHeight = Math.Max((int)Math.Round(_layout.RowStyles[2].Height),
+                    _machineSummary.PreferredSize.Height + 4);
+                _layout.RowStyles[2].SizeType = SizeType.Absolute;
+                _layout.RowStyles[2].Height = summaryHeight;
+
+                int circuitMinimum = Math.Max(1, _circuitPanel.MinimumSize.Height);
+                int tabsMinimum = Math.Max(1, _lowerTabs.MinimumSize.Height);
+                float fixedHeight = _layout.RowStyles[0].Height
+                    + _layout.RowStyles[1].Height
+                    + _layout.RowStyles[2].Height
+                    + _layout.RowStyles[5].Height;
+                int availableHeight = Math.Max(0,
+                    _layout.ClientSize.Height - (int)Math.Round(fixedHeight));
+                int lowerHeight = Math.Max(tabsMinimum,
+                    (int)Math.Round(availableHeight * 0.32));
+                int circuitHeight = Math.Max(circuitMinimum,
+                    availableHeight - lowerHeight);
+                _layout.RowStyles[3].SizeType = SizeType.Absolute;
+                _layout.RowStyles[3].Height = circuitHeight;
+                _layout.RowStyles[4].SizeType = SizeType.Absolute;
+                _layout.RowStyles[4].Height = lowerHeight;
+                SetSuggestionRowHeight(_machineSuggest.Visible
+                    ? _machineSuggest.Height + _machineSuggest.Margin.Top
+                        + _machineSuggest.Margin.Bottom : 0);
+            }
+            finally
+            {
+                _applyingLayout = false;
             }
         }
 

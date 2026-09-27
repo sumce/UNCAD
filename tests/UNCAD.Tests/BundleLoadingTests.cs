@@ -185,6 +185,12 @@ namespace UNCAD.Tests
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
+                "Web\\QuickLine3D\\index.html", "Web\\QuickLine3D\\app.js",
+                "Web\\QuickLine3D\\styles.css",
+                "Web\\QuickLine3D\\vendor\\three\\OrbitControls.js",
+                "Web\\QuickLine3D\\vendor\\three\\three.core.min.js",
+                "Web\\QuickLine3D\\vendor\\three\\three.module.min.js",
+                "Web\\QuickLine3D\\vendor\\three\\LICENSE.txt",
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
             };
             string build = File.ReadAllText(RepoFile("build.ps1"));
@@ -203,17 +209,20 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void PackagePipeline_UsesWebView2OnlyForStartupSplash()
+        public void PackagePipeline_IncludesLocalU1L3DWebAssets()
         {
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
             string csproj = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
 
             Assert.Contains("WebView2Loader.dll", build);
-            Assert.DoesNotContain("Web\\QuickLine3D", build);
+            Assert.Contains("Web\\QuickLine3D", build);
             Assert.Contains("WebView2Loader.dll", installer);
-            Assert.DoesNotContain("Web\\QuickLine3D", installer);
+            Assert.Contains("Web\\QuickLine3D", installer);
             Assert.Contains("Microsoft.Web.WebView2", csproj);
+            Assert.Contains("Content Include=\"Web\\QuickLine3D", csproj);
+            Assert.Contains("SetVirtualHostNameToFolderMapping", File.ReadAllText(
+                RepoFile("src", "UNCAD", "UI", "U1L3DPreviewForm.cs")));
             Assert.Contains("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);

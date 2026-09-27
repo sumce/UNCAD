@@ -7,6 +7,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
 {
+#pragma warning disable 618 // AutoCAD 2022 native Table APIs avoid wrapper invalidation here.
     internal static class CadTableFillWriter
     {
         public static int Fill(CadContext ctx, ObjectId[] tableIds, int startRow,
@@ -31,17 +32,14 @@ namespace UNCAD.Features.Fill
             Transaction tr = transaction;
             foreach (ObjectId id in tableIds)
             {
-                var table = tr.GetObject(id, OpenMode.ForRead) as Table;
+                if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                var table = tr.GetObject(id, OpenMode.ForWrite, true) as Table;
                 if (table == null) continue;
                 if (table.Rows.Count < 2 || table.Columns.Count < 6)
                 {
                     ctx.Write("\n[BOQ-TABLE/清单表格] 表格格式不兼容：至少需要表头和 1 个数据行、共 6 列，本次未写入。");
                     return -1;
                 }
-                table.UpgradeOpen();
-                double[] rowHeights = CaptureRowHeights(table);
-                double[] columnWidths = CaptureColumnWidths(table);
-
                 int row = ResolveWriteStartRow(table, startRow);
                 if (row < 0)
                 {
@@ -58,44 +56,70 @@ namespace UNCAD.Features.Fill
                     return -1;
                 }
 
-                table.SuppressRegenerateTable(true);
-                try
-                {
-                    // The shipped template ships with cell format locks to protect
-                    // hand edits; the plugin must still write values and heights,
-                    // so unlock every cell it touches (idempotent, cheap).
-                    UnlockWriteRange(table, row, rowsToClear, plannedRows.Count);
+                // Do not toggle the table regeneration switch here.  AutoCAD 2022 can
+                // dereference the native table while regeneration is restored from
+                // a finally block, which is an uncatchable access violation.  The
+                // BOQ table is small; direct Table.Set* calls are slower by a few
+                // milliseconds but keep the transaction in a valid native state.
+                // The shipped template may lock cells to protect hand edits; the
+                // plugin still owns the generated range, so unlock it first.
+                UnlockWriteRange(table, row, rowsToClear, plannedRows.Count);
 
-                    for (int clearRow = row; clearRow < row + rowsToClear; clearRow++)
-                        for (int column = 0; column <= 5; column++)
-                            SetCellTextPreservingFormat(table, clearRow, column, "");
+                for (int clearRow = row; clearRow < row + rowsToClear; clearRow++)
+                    for (int column = 0; column <= 5; column++)
+                        SetCellTextPreservingFormat(table, clearRow, column, "",
+                            fitToCell: true);
 
-                    for (int i = 0; i < plannedRows.Count; i++)
-                    {
-                        TableFillRow planned = plannedRows[i];
-                        int targetRow = row + i;
-                        SetCellTextPreservingFormat(table, targetRow, 0, (i + 1).ToString(),
-                            textHeight, true);
-                        SetCellTextPreservingFormat(table, targetRow, 1, planned.Name,
-                            textHeight, true);
-                        SetCellTextPreservingFormat(table, targetRow, 2, planned.Description,
-                            textHeight, true);
-                        SetCellTextPreservingFormat(table, targetRow, 3, planned.Unit,
-                            textHeight, true);
-                        SetCellTextPreservingFormat(table, targetRow, 4, planned.Quantity,
-                            textHeight, true);
-                        SetCellTextPreservingFormat(table, targetRow, 5, planned.Code,
-                            textHeight, true);
-                    }
-                }
-                finally
+                for (int i = 0; i < plannedRows.Count; i++)
                 {
-                    table.SuppressRegenerateTable(false);
-                    RestoreTableDimensions(table, rowHeights, columnWidths);
+                    TableFillRow planned = plannedRows[i];
+                    int targetRow = row + i;
+                    SetCellTextPreservingFormat(table, targetRow, 0, (i + 1).ToString(),
+                        textHeight, true);
+                    SetCellTextPreservingFormat(table, targetRow, 1, planned.Name,
+                        textHeight, true);
+                    SetCellTextPreservingFormat(table, targetRow, 2, planned.Description,
+                        textHeight, true);
+                    SetCellTextPreservingFormat(table, targetRow, 3, planned.Unit,
+                        textHeight, true);
+                    SetCellTextPreservingFormat(table, targetRow, 4, planned.Quantity,
+                        textHeight, true);
+                    SetCellTextPreservingFormat(table, targetRow, 5, planned.Code,
+                        textHeight, true);
                 }
+
+                // Apply the BOQ data-row height after content and per-content
+                // auto-scale overrides have been cleared.  AutoCAD may require a
+                // few extra drawing units for one wrapped row; use the largest
+                // native minimum and apply it to the whole generated range so
+                // rows stay uniform instead of differing by content.
+                LockGeneratedRowHeights(table, row, rowsToClear);
+                table.RecordGraphicsModified(true);
                 filled += plannedRows.Count;
             }
             return filled;
+        }
+
+        /// <summary>
+        /// Reapplies generated-row geometry after another CAD reader may have
+        /// caused AutoCAD to regenerate the table.  Call this immediately before
+        /// transaction commit because native table layout is lazy.
+        /// </summary>
+        internal static void FixGeneratedRowHeights(Transaction transaction,
+            ObjectId[] tableIds, int startRow, int clearRowCount)
+        {
+            foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
+            {
+                if (id.IsNull || !id.IsValid || id.IsErased) continue;
+                Table table = transaction.GetObject(id, OpenMode.ForWrite, true) as Table;
+                if (table == null) continue;
+                int row = ResolveWriteStartRow(table, startRow);
+                if (row < 0) continue;
+                int count = TableClearPolicy.ResolveRows(table.Rows.Count - row,
+                    clearRowCount);
+                LockGeneratedRowHeights(table, row, count);
+                table.RecordGraphicsModified(true);
+            }
         }
 
         /// <summary>
@@ -114,12 +138,11 @@ namespace UNCAD.Features.Fill
                 {
                     try
                     {
-                        Cell cell = table.Cells[row, column];
-                        CellStates state = cell.State ?? CellStates.None;
+                        CellStates state = table.GetCellState(row, column);
                         CellStates unlocked = state & ~(CellStates.ContentLocked
                             | CellStates.FormatLocked | CellStates.ContentReadOnly
                             | CellStates.FormatReadOnly);
-                        if (unlocked != state) cell.State = unlocked;
+                        if (unlocked != state) table.SetCellState(row, column, unlocked);
                     }
                     catch (System.Exception ex)
                     {
@@ -133,54 +156,48 @@ namespace UNCAD.Features.Fill
         private static void SetCellTextPreservingFormat(Table table, int row, int column,
             string text, double? targetTextHeight = null, bool fitToCell = false)
         {
-            Cell cell = table.Cells[row, column];
-            double? originalTextHeight = cell.TextHeight;
-            ObjectId? textStyleId = cell.TextStyleId;
-
-            cell.TextString = text ?? "";
-            cell.TextHeight = targetTextHeight ?? originalTextHeight;
-            cell.TextStyleId = textStyleId;
-            if (!fitToCell) return;
-            foreach (CellContent content in cell.Contents)
+            // Use Table's native cell methods instead of holding Cell/CellContent
+            // wrappers across a text mutation.  This keeps every native call tied
+            // to the live table object while AutoCAD regenerates the cell.
+            table.SetTextString(row, column, text ?? "");
+            if (targetTextHeight.HasValue)
             {
-                if (targetTextHeight.HasValue) content.TextHeight = targetTextHeight.Value;
-                content.IsAutoScale = true;
+                table.SetTextHeight(row, column, targetTextHeight.Value);
+                table.SetTextHeight(row, column, 0, targetTextHeight.Value);
+            }
+            if (fitToCell)
+            {
+                // Existing BOQ rows may carry a per-content override left by an
+                // older build.  SetAutoScale(false) changes the cell default but
+                // does not clear that override, so force content slot 0 as well.
+                table.SetAutoScale(row, column, false);
+                table.SetIsAutoScale(row, column, 0, false);
             }
         }
 
-        private static double[] CaptureRowHeights(Table table)
+        private static void LockGeneratedRowHeights(Table table, int startRow, int count)
         {
-            var heights = new double[table.Rows.Count];
-            for (int row = 0; row < heights.Length; row++) heights[row] = table.Rows[row].Height;
-            return heights;
-        }
-
-        private static double[] CaptureColumnWidths(Table table)
-        {
-            var widths = new double[table.Columns.Count];
-            for (int column = 0; column < widths.Length; column++)
-                widths[column] = table.Columns[column].Width;
-            return widths;
-        }
-
-        private static void RestoreTableDimensions(Table table, double[] rowHeights,
-            double[] columnWidths)
-        {
-            for (int row = 0; row < rowHeights.Length && row < table.Rows.Count; row++)
+            int endRow = Math.Min(table.Rows.Count, startRow + Math.Max(0, count));
+            double fixedHeight = TableFillFormatter.GeneratedRowHeight;
+            for (int row = Math.Max(0, startRow); row < endRow; row++)
             {
-                try { table.Rows[row].Height = rowHeights[row]; }
+                try { fixedHeight = Math.Max(fixedHeight, table.MinimumRowHeight(row)); }
                 catch (System.Exception ex)
                 {
-                    Log.Warn("U1F restore row height " + row + " failed: " + ex.Message);
+                    Log.Warn("U1F read generated row minimum height " + row + " failed: "
+                        + ex.Message);
                 }
             }
-            for (int column = 0; column < columnWidths.Length
-                && column < table.Columns.Count; column++)
+            for (int row = Math.Max(0, startRow); row < endRow; row++)
             {
-                try { table.Columns[column].Width = columnWidths[column]; }
+                try
+                {
+                    table.SetRowHeight(row, fixedHeight);
+                }
                 catch (System.Exception ex)
                 {
-                    Log.Warn("U1F restore column width " + column + " failed: " + ex.Message);
+                    Log.Warn("U1F lock generated row height " + row + " failed: "
+                        + ex.Message);
                 }
             }
         }
@@ -213,7 +230,7 @@ namespace UNCAD.Features.Fill
 
             for (int row = 0; row < limit; row++)
             {
-                string number = table.Cells[row, 0].TextString.Trim();
+                string number = ReadCellText(table, row, 0);
                 if (TableLayoutClassifier.IsNumberedDataRow(number)) return row;
             }
             return rows > 1 ? 1 : 0;
@@ -221,10 +238,25 @@ namespace UNCAD.Features.Fill
 
         private static bool IsHeaderLike(Table table, int row)
         {
-            string number = table.Cells[row, 0].TextString.Trim();
-            string name = table.Cells[row, 1].TextString.Trim();
-            string code = table.Columns.Count > 5 ? table.Cells[row, 5].TextString.Trim() : "";
+            string number = ReadCellText(table, row, 0);
+            string name = ReadCellText(table, row, 1);
+            string code = table.Columns.Count > 5 ? ReadCellText(table, row, 5) : "";
             return TableLayoutClassifier.IsHeaderLike(number, name, code);
         }
+
+        private static string ReadCellText(Table table, int row, int column)
+        {
+            try
+            {
+                return table.TextString(row, column)?.Trim() ?? "";
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("U1F 读取清单单元格失败: 行 " + row + " 列 " + column
+                    + "，" + ex.Message);
+                return "";
+            }
+        }
     }
+#pragma warning restore 618
 }

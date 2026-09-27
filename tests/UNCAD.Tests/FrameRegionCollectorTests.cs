@@ -52,6 +52,21 @@ namespace UNCAD.Tests
             Assert.True(extentsFallback > annotationAnchor);
             Assert.Contains("anchor = mtext.Location;", source);
             Assert.Contains("text.AlignmentPoint", source);
+            Assert.Contains("dimension.TextPosition", source);
+            Assert.Contains("!includeAllEntities", source);
+            Assert.Contains("TryAssignAtAnchor(boundaryIndex, annotationAnchor, id)", source);
+        }
+
+        [Fact]
+        public void SingleFrameCollection_UsesAllFramesAsOwnershipBoundaries()
+        {
+            string source = File.ReadAllText(Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "UNCAD", "Cad", "FrameRegionCollector.cs")));
+
+            Assert.Contains("var ownershipFrameIds = new HashSet<ObjectId>", source);
+            Assert.Contains("ownership.Groups.AddRange(groups);", source);
+            Assert.Contains("ownershipFrameIds.Contains(id)", source);
         }
     }
 }

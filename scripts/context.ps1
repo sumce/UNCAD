@@ -78,6 +78,10 @@ switch ($Area) {
         Add-SourceDirectory "src\UNCAD\Features\Unl"
         Add-SourceDirectory "src\UNCAD\Core\QuickLine"
         Add-SourceDirectory "src\UNCAD\Cad\QuickLine"
+        Add-RelativeFile "src\UNCAD\UI\U1L3DPreviewForm.cs"
+        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\index.html"
+        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\app.js"
+        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\styles.css"
         Add-RelativeFile "src\UNCAD\UI\UiTheme.cs"
     }
     "Layout" {

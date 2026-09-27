@@ -36,8 +36,8 @@ namespace UNCAD.Tests
             Assert.Contains("HasCurrentDrawingInfoTable", migration);
             string writer = Read("src", "UNCAD", "Features", "Fill",
                 "CadDrawingInfoTableWriter.cs");
-            Assert.Contains("table.Cells[headerRow + 1, 1].TextString = floor", writer);
-            Assert.Contains("table.Cells[headerRow + 1, 4].TextString = date", writer);
+            Assert.Contains("table.SetTextString(headerRow + 1, 1, floor)", writer);
+            Assert.Contains("table.SetTextString(headerRow + 1, 4, date)", writer);
             string submission = Read("src", "UNCAD", "Features", "Submit",
                 "AutomaticSubmissionService.cs");
             Assert.Contains("CadTableLayoutClassifier.IsDrawingInfoTable(table)", submission);

@@ -38,6 +38,13 @@ namespace UNCAD.Tests
                         Application.DoEvents();
                         var grid = (DataGridView)form.Controls.Find("BatchCatalogGrid", true).Single();
                         var confirm = (Button)form.AcceptButton;
+                        Assert.False(grid.AllowUserToResizeRows);
+                        Assert.Equal(DataGridViewAutoSizeRowsMode.None,
+                            grid.AutoSizeRowsMode);
+                        Assert.Equal(UiTheme.NotAutoScaled(44),
+                            grid.RowTemplate.Height);
+                        Assert.All(grid.Rows.Cast<DataGridViewRow>(), row =>
+                            Assert.Equal(UiTheme.NotAutoScaled(44), row.Height));
                         Assert.False(confirm.Enabled);
                         Assert.Null(grid.Rows[0].Cells["Catalog"].Value);
                         Assert.Null(grid.Rows[1].Cells["Catalog"].Value);

@@ -1,0 +1,60 @@
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  color: #e8edf3;
+  background: #0b0f14;
+  --line: #27313d;
+  --muted: #8e9aaa;
+  --panel: #111821;
+  --panel2: #151e28;
+  --accent: #79b8ff;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button { font: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#app { display: grid; grid-template-rows: 52px minmax(0, 1fr) 42px; background: #0b0f14; }
+.topbar, .footer { display: flex; align-items: center; gap: 16px; padding: 0 16px; border-color: var(--line); background: var(--panel); }
+.topbar { border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.brand strong { color: #fff; letter-spacing: .02em; }
+.brand span, .status, .footer { color: var(--muted); font-size: 12px; }
+.toolbar { display: flex; gap: 6px; margin-left: auto; }
+button { border: 1px solid #344352; border-radius: 6px; color: #dbe5ef; background: #18222d; padding: 6px 11px; cursor: pointer; }
+button:hover { border-color: #6684a1; background: #202e3b; }
+.status { min-width: 120px; text-align: right; }
+.workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 310px; }
+#viewport { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #0d131a; }
+#canvasHost, #canvasHost canvas { display: block; width: 100%; height: 100%; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); background: #0d131a; }
+#axisLegend { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 10px; padding: 6px 9px; border: 1px solid #33404e; border-radius: 6px; background: rgba(17,24,33,.86); font-weight: 700; pointer-events: none; }
+.x { color: #f1847f; } .y { color: #7ed49c; } .z { color: #79b8ff; }
+#routeLabels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.route-label { position: absolute; transform: translate(-50%, -50%); padding: 2px 5px; border: 1px solid #3a4857; border-radius: 4px; background: rgba(17,24,33,.86); color: #d7e1ec; font-size: 11px; white-space: nowrap; }
+.axis-label { border-color: #718399; color: #f0f5fb; font-weight: 700; }
+.inspector { min-width: 0; min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--panel); }
+.inspector section { padding: 16px; border-bottom: 1px solid var(--line); }
+h2 { margin: 0 0 12px; font-size: 13px; color: #dbe5ef; }
+.meta { display: grid; grid-template-columns: 76px minmax(0,1fr); gap: 8px 10px; margin: 0; font-size: 12px; }
+.meta dt { color: var(--muted); } .meta dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.axis-card { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px solid #202a35; }
+.axis-card span, .muted { color: var(--muted); font-size: 12px; }
+.axis-card strong { color: #f0f5fb; font-size: 15px; }
+.axis-marks { display: grid; gap: 4px; margin-top: 10px; color: #a9b7c6; font-size: 11px; }
+.route-summary { display: flex; align-items: baseline; gap: 6px; color: var(--muted); font-size: 12px; }
+.route-summary strong { color: #f0f5fb; font-size: 18px; margin-left: 4px; }
+.route-list { display: grid; gap: 4px; margin-top: 12px; height: 220px; min-height: 220px; max-height: 220px; overflow: auto; align-content: start; }
+.route-row { display: grid; grid-template-columns: 42px 1fr auto; gap: 7px; padding: 6px 7px; border-radius: 5px; background: var(--panel2); font-size: 11px; }
+.route-row .axis { font-weight: 700; } .route-row .distance { color: #dbe5ef; font-variant-numeric: tabular-nums; text-align: right; }
+#diagnostics { margin: 0; padding-left: 18px; color: #e3b77a; font-size: 11px; }
+#diagnostics li { margin-bottom: 6px; }
+.footer { justify-content: space-between; border-top: 1px solid var(--line); }
+@media (max-width: 760px) {
+  .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(300px, 1fr) 270px; }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); }
+  .status { display: none; }
+  .toolbar { flex-shrink: 0; gap: 4px; }
+  .toolbar button { flex-shrink: 0; padding-right: 8px; padding-left: 8px; white-space: nowrap; }
+}
+@media (max-width: 430px) { .brand span { display: none; } }

@@ -47,7 +47,8 @@ namespace UNCAD.Tests
                         FlowLayoutPanel commandBar = Find<FlowLayoutPanel>(form);
                         ListView circuits = Find<ListView>(form);
 
-                        Assert.True(machinePanel.AutoSize);
+                        Assert.False(machinePanel.AutoSize);
+                        Assert.True(machinePanel.Height >= 70);
                         Assert.True(machinePanel.Bottom <= summary.Top);
                         Assert.True(machineLabel.Bottom <= machine.Top);
                         Assert.True(machine.Height >= machine.PreferredHeight);

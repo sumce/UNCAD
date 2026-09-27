@@ -40,6 +40,13 @@ namespace UNCAD.Tests
                         DataGridView grid = Find<DataGridView>(form);
                         Assert.Equal(3, grid.Rows.Count);
                         Assert.Equal(7, grid.Columns.Count);
+                        Assert.False(grid.AllowUserToResizeRows);
+                        Assert.Equal(DataGridViewAutoSizeRowsMode.None,
+                            grid.AutoSizeRowsMode);
+                        Assert.Equal(UiTheme.NotAutoScaled(44),
+                            grid.RowTemplate.Height);
+                        Assert.All(grid.Rows.Cast<DataGridViewRow>(), row =>
+                            Assert.Equal(UiTheme.NotAutoScaled(44), row.Height));
                         Assert.Equal("C1", FindByName<TextBox>(form,
                             "OriginalCableModel").Text);
                         Assert.Equal("C1", FindByName<TextBox>(form,
@@ -62,6 +69,8 @@ namespace UNCAD.Tests
                         removeItem.PerformClick();
                         Assert.Equal(2, grid.Rows.Count);
                         Assert.Equal(2, form.Data.Items.Count);
+                        Assert.All(grid.Rows.Cast<DataGridViewRow>(), row =>
+                            Assert.Equal(UiTheme.NotAutoScaled(44), row.Height));
                         Assert.True(form.ClientSize.Width >= 980);
                         Assert.True(form.ClientSize.Height >= 620);
                     }

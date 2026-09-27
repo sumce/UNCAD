@@ -461,6 +461,11 @@ namespace UNCAD.Features.Fill
                     // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
                     automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
                         automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
+                    // Excel submission reads the modified table and can trigger
+                    // AutoCAD's lazy table regeneration.  Reapply the uniform row
+                    // geometry as the final native table operation before commit.
+                    CadTableFillWriter.FixGeneratedRowHeights(transaction,
+                        selection.TableIds, startRow, clearRowCount);
                     transaction.Commit();
                     outputBatch.Complete();
                 }

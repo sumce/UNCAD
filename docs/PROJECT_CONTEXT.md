@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.9`.
+- Current release: `2.4.10`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -32,7 +32,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1SET`, `U1DATA` |
-| Drawing helpers | `U1L`, `U1LX`, `U1DT`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U1DT`, `U1C`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 
@@ -53,6 +53,11 @@ AutoCAD startup (remote source only)
 
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels
+
+U1L3D
+  select one complete frame -> collect contained U1L routes -> reconstruct
+  isometric 3D branches -> read axis positions from the last successful SQLite
+  snapshot -> show a read-only local WebView2 preview (4800 mm per grid step)
 
 XLAYOUT/XSTS
   collect frame regions -> resolve machine identity -> arrange or compare

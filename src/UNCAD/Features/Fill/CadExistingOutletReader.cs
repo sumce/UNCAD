@@ -7,6 +7,7 @@ using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
 {
+#pragma warning disable 618 // AutoCAD 2022 direct table reads avoid stale Cell wrappers.
     /// <summary>Reads the outlet rows that U1U must preserve verbatim from the current CAD BOQ.</summary>
     internal static class CadExistingOutletReader
     {
@@ -58,7 +59,7 @@ namespace UNCAD.Features.Fill
 
         private static string CellText(Table table, int row, int column)
         {
-            try { return table.Cells[row, column].TextString ?? ""; }
+            try { return table.TextString(row, column) ?? ""; }
             catch (System.Exception ex)
             {
                 Log.Warn("U1U read existing outlet cell failed: " + ex.Message);
@@ -66,4 +67,5 @@ namespace UNCAD.Features.Fill
             }
         }
     }
+#pragma warning restore 618
 }

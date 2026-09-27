@@ -161,6 +161,7 @@ namespace UNCAD.UI
             };
             _grid.CellValueChanged += GridValueChanged;
             _grid.SelectionChanged += (sender, args) => UpdateDeleteState();
+            DpiChanged += (sender, args) => UiTheme.FixGridRows(_grid, 44);
             UpdateDeleteState();
         }
 
@@ -219,8 +220,12 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
-                AllowUserToResizeRows = true,
+                // The review grid is a fixed-format checklist. Letting a user
+                // drag one row, or letting wrapped text auto-grow it, makes the
+                // table drift from the CAD BOQ layout and from row to row.
+                AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
+                AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
                 MultiSelect = false,
@@ -271,6 +276,7 @@ namespace UNCAD.UI
                 row.Tag = item;
                 ApplyCatalogState(row, item);
             }
+            UiTheme.FixGridRows(_grid, 44);
             UpdateCount();
             UpdateCatalogWarning();
             if (Data.Items.Any(item => item.RequiresCatalogConfirmation))
@@ -338,6 +344,7 @@ namespace UNCAD.UI
             DataGridViewRow row = _grid.Rows[index];
             row.Tag = item;
             ApplyCatalogState(row, item);
+            UiTheme.FixGridRows(_grid, 44);
             _tabs.SelectedIndex = 1;
             _grid.CurrentCell = row.Cells["Name"];
             UpdateCount();
@@ -413,6 +420,7 @@ namespace UNCAD.UI
             DataGridViewRow row = _grid.CurrentRow;
             if (!(row?.Tag is FillReviewItem item) || !Data.RemoveItem(item)) return;
             _grid.Rows.Remove(row);
+            UiTheme.FixGridRows(_grid, 44);
             UpdateCount();
             UpdateCatalogWarning();
             UpdateDeleteState();

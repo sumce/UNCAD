@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-Current 2.4.9 builds publish 27 commands and intentionally do not include the removed `U1X` 3D editor. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The published 2.4.10 package has 28 commands and does not include the removed `U1X` editor. `U1L3D` provides a read-only frame preview. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,14 @@ Current 2.4.9 builds publish 27 commands and intentionally do not include the re
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.10
+
+- 新增 `U1L3D`：框选完整图框，将 U1L 等测草图重建为只读 3D 预览，并按机台上下游快照显示 4.8 米轴网。
+- 修复 U1U 因异常尺寸外包范围跨越多个图框而重复计入电缆长度的问题；尺寸按文字锚点排他归属。
+- 修复 BOQ 表格写入后的行高不一致与 AutoCAD 原生表格访问冲突风险，生成范围统一采用可容纳内容的固定行高。
+- 修复 Xmerge 已重命名隔离同名块后，仍因动态块外包范围变化而停止合并的问题。
+- 优化机台选择与复核窗口的自适应布局；安装包补齐 U1L3D 本地 Web 资源。
 
 ## v2.4.9
 

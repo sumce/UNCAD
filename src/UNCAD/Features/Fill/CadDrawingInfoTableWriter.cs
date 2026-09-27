@@ -9,6 +9,7 @@ using UNCAD.Core.Text;
 
 namespace UNCAD.Features.Fill
 {
+#pragma warning disable 618 // AutoCAD 2022 direct Table setters avoid stale Cell wrappers.
     internal static class CadDrawingInfoTableWriter
     {
         internal static bool IsDrawingInfoTable(Table table)
@@ -19,7 +20,7 @@ namespace UNCAD.Features.Fill
 
         internal static bool RepairSplitFloorLayout(Transaction transaction, ObjectId id)
         {
-            Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
+            Table table = transaction.GetObject(id, OpenMode.ForWrite, true) as Table;
             if (table == null || table.Columns.Count != 7
                 || !CadTableLayoutClassifier.TryFindDrawingInfoHeader(table,
                     out int headerRow)
@@ -34,23 +35,21 @@ namespace UNCAD.Features.Fill
             string date = CellText(table, valueRow, 5);
             string version = CellText(table, valueRow, 6);
 
-            table.UpgradeOpen();
-            table.Cells[headerRow, 1].TextString = "楼层";
-            table.Cells[headerRow, 2].TextString = "制图";
-            table.Cells[headerRow, 3].TextString = "审核";
-            table.Cells[headerRow, 4].TextString = "日期";
-            table.Cells[headerRow, 5].TextString = "版本";
-            table.Cells[headerRow, 6].TextString = "";
+            table.SetTextString(headerRow, 1, "楼层");
+            table.SetTextString(headerRow, 2, "制图");
+            table.SetTextString(headerRow, 3, "审核");
+            table.SetTextString(headerRow, 4, "日期");
+            table.SetTextString(headerRow, 5, "版本");
+            table.SetTextString(headerRow, 6, "");
             if (valueRow < table.Rows.Count)
             {
-                table.Cells[valueRow, 1].TextString = floor;
-                table.Cells[valueRow, 2].TextString = drafter;
-                table.Cells[valueRow, 3].TextString = reviewer;
-                table.Cells[valueRow, 4].TextString = date;
-                table.Cells[valueRow, 5].TextString = version;
-                table.Cells[valueRow, 6].TextString = "";
+                table.SetTextString(valueRow, 1, floor);
+                table.SetTextString(valueRow, 2, drafter);
+                table.SetTextString(valueRow, 3, reviewer);
+                table.SetTextString(valueRow, 4, date);
+                table.SetTextString(valueRow, 5, version);
+                table.SetTextString(valueRow, 6, "");
             }
-            table.GenerateLayout();
             table.RecordGraphicsModified(true);
             return true;
         }
@@ -63,13 +62,12 @@ namespace UNCAD.Features.Fill
 
             foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
             {
-                Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
+                Table table = transaction.GetObject(id, OpenMode.ForWrite, true) as Table;
                 if (!CadTableLayoutClassifier.TryFindCurrentDrawingInfoHeader(table,
                     out int headerRow)
                     || headerRow + 1 >= table.Rows.Count) continue;
-                table.UpgradeOpen();
-                table.Cells[headerRow + 1, 1].TextString = floor;
-                table.Cells[headerRow + 1, 4].TextString = date;
+                table.SetTextString(headerRow + 1, 1, floor);
+                table.SetTextString(headerRow + 1, 4, date);
                 table.RecordGraphicsModified(true);
             }
         }
@@ -82,7 +80,8 @@ namespace UNCAD.Features.Fill
         private static string CellText(Table table, int row, int column)
             => row >= 0 && row < table.Rows.Count && column >= 0
                 && column < table.Columns.Count
-                ? TextParser.CleanMText(table.Cells[row, column].TextString ?? "").Trim()
+                ? TextParser.CleanMText(table.TextString(row, column) ?? "").Trim()
                 : "";
     }
+#pragma warning restore 618
 }

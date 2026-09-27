@@ -31,6 +31,13 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.10", "2026-09-27",
+                    "新增：U1L3D 可框选完整图框，将 U1L 等测草图重建为只读 3D 预览，并按机台上下游快照显示 4.8 米轴网。",
+                    "修复：U1U 按文字锚点排他归属尺寸标注，异常尺寸外包范围不再把其他图框的电缆长度重复计入当前机台。",
+                    "修复：BOQ 表格写入不再切换 AutoCAD 表格延迟重生成，清除内容级自动缩放并统一生成行高度，降低访问冲突崩溃风险。",
+                    "修复：Xmerge 使用重命名隔离同名块后，不再因动态块重生成产生的外包范围变化而误判为不兼容。",
+                    "优化：机台选择与复核窗口按可用工作区自适应布局，小屏、高 DPI 和多显示器下输入区保持完整。",
+                    "修复：正式安装包包含 U1L3D 的本地 Web 资源，安装验证不再提示缺少 Web\\QuickLine3D\\index.html。"),
                 new VersionChangeLogEntry("2.4.9", "2026-09-20",
                     "优化：机台 ID 与设备名称匹配忽略大小写、Unicode 空白及文本内部空格，M Q-01 与 MQ-01、设备 A 与设备A 可正确对应。",
                     "修复：统一图框、Excel 快照、XSTS、XLAYOUT、DWG 导出、U1S/自动提交和 BOQ 分组的身份匹配规则，同时保留用户原始显示文本。",

@@ -320,10 +320,35 @@ namespace UNCAD.Cad
                 }
 
                 FrameRegionGroup[] groups = result.Groups.ToArray();
+                var ownershipFrameIds = new HashSet<ObjectId>(selectedFrames);
+                if (!includeAllEntities)
+                {
+                    // A single-frame U1U still needs every frame as an ownership boundary.
+                    // Otherwise a dimension inside overlapping frames is counted by whichever
+                    // frame happens to be selected, even when another frame is its real owner.
+                    var ownership = new FrameRegionCollection();
+                    ownership.Groups.AddRange(groups);
+                    foreach (ObjectId id in space)
+                    {
+                        if (selectedFrames.Contains(id)) continue;
+                        BlockReference frame;
+                        try
+                        {
+                            frame = transaction.GetObject(id, OpenMode.ForRead, true)
+                                as BlockReference;
+                        }
+                        catch { continue; }
+                        if (frame == null || frame is Table
+                            || !IsSupportedFrame(transaction, frame)) continue;
+                        ownershipFrameIds.Add(id);
+                        AddFrame(ownership, transaction, frame, boundaryCache);
+                    }
+                    groups = ownership.Groups.ToArray();
+                }
                 var boundaryIndex = new FrameBoundaryIndex(groups);
                 foreach (ObjectId id in space)
                 {
-                    if (selectedFrames.Contains(id)) continue;
+                    if (ownershipFrameIds.Contains(id)) continue;
                     Entity entity;
                     try
                     {
@@ -350,6 +375,16 @@ namespace UNCAD.Cad
                             && IsFinite(block.Position)
                             && TryAssignAtAnchor(boundaryIndex, block.Position, id))
                             continue;
+
+                        // Statistics annotations have an authored text anchor. Treat it as
+                        // authoritative: malformed dimensions can report geometric extents
+                        // spanning the whole drawing and must not fall back to bounds.
+                        if (!includeAllEntities
+                            && TryAnnotationAnchor(entity, out Point3d annotationAnchor))
+                        {
+                            TryAssignAtAnchor(boundaryIndex, annotationAnchor, id);
+                            continue;
+                        }
 
                         if (TryAnchor(entity, out Point3d anchor, includeAllEntities)
                             && TryAssignAtAnchor(boundaryIndex, anchor, id)) continue;
@@ -1141,6 +1176,18 @@ namespace UNCAD.Cad
             {
                 anchor = mtext.Location;
                 return true;
+            }
+            if (entity is Dimension dimension)
+            {
+                try
+                {
+                    if (IsFinite(dimension.TextPosition))
+                    {
+                        anchor = dimension.TextPosition;
+                        return true;
+                    }
+                }
+                catch { }
             }
             if (!(entity is DBText text)) return false;
             Point3d textAnchor = text.Justify == AttachmentPoint.BaseLeft

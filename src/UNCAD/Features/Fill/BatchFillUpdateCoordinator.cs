@@ -355,6 +355,9 @@ namespace UNCAD.Features.Fill
                     automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
                         automaticExcelPath, plans.Select(plan => plan.Selection.SourceIds),
                         outputBatch);
+                    foreach (Plan plan in plans)
+                        CadTableFillWriter.FixGeneratedRowHeights(transaction,
+                            plan.Selection.TableIds, options.StartRow, options.ClearRows);
                     transaction.Commit();
                     outputBatch.Complete();
                 }

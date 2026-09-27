@@ -63,12 +63,14 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
+                AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
                 RowHeadersVisible = false,
                 MultiSelect = false,
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
                 EditMode = DataGridViewEditMode.EditOnEnter,
-                AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+                RowTemplate = { Height = UiTheme.NotAutoScaled(44) },
                 BackgroundColor = UiTheme.Surface,
                 GridColor = UiTheme.Border
             };
@@ -116,6 +118,7 @@ namespace UNCAD.UI
                     _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
             _grid.CellValueChanged += (sender, args) => UpdateConfirmation();
+            DpiChanged += (sender, args) => UiTheme.FixGridRows(_grid, 44);
             AcceptButton = _confirm;
             CancelButton = cancel;
 
@@ -140,6 +143,7 @@ namespace UNCAD.UI
                 foreach (ListItem item in request.Candidates)
                     cell.Items.Add(item);
             }
+            UiTheme.FixGridRows(_grid, 44);
             UpdateConfirmation();
         }
 

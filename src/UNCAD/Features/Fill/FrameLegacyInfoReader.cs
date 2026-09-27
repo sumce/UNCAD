@@ -5,6 +5,7 @@ using UNCAD.Cad;
 
 namespace UNCAD.Features.Fill
 {
+#pragma warning disable 618 // AutoCAD 2022 direct table reads avoid stale Cell wrappers.
     /// <summary>
     /// 旧图框没有 frameinfo_json 记录时的"上次更新时间"回退:读制图信息表
     /// 日期列(yyyy-MM-dd)。仅用于 U1U 更新对比展示,不写回图纸。
@@ -23,7 +24,7 @@ namespace UNCAD.Features.Fill
                         out headerRow)
                     || headerRow + 1 >= table.Rows.Count
                     || table.Columns.Count <= 4) continue;
-                string value = (table.Cells[headerRow + 1, 4].TextString ?? "").Trim();
+                string value = (table.TextString(headerRow + 1, 4) ?? "").Trim();
                 if (DateTime.TryParse(value, CultureInfo.InvariantCulture,
                     DateTimeStyles.None, out DateTime parsed))
                     return parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -42,4 +43,5 @@ namespace UNCAD.Features.Fill
             }
         }
     }
+#pragma warning restore 618
 }

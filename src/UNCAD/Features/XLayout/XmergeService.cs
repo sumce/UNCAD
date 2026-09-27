@@ -154,7 +154,7 @@ namespace UNCAD.Features.XLayout
                 prepared.Database.WblockCloneObjects(prepared.EntityIds, target.ObjectId,
                     mapping, policy, false);
                 ValidateClones(prepared.Snapshots, mapping, transaction,
-                    "写入当前图纸", true);
+                    "写入当前图纸", policy);
                 RecomputeClonedTables(prepared.EntityIds, mapping, transaction);
                 transaction.Commit();
             }
@@ -215,7 +215,7 @@ namespace UNCAD.Features.XLayout
                             source.Database.WblockCloneObjects(source.EntityIds, target.ObjectId,
                                 mapping, policy, false);
                             ValidateClones(source.Snapshots, mapping, transaction,
-                                "合并 " + Path.GetFileName(source.Path), true);
+                                "合并 " + Path.GetFileName(source.Path), policy);
                         }
                         catch (IncompatibleCloneException) when (
                             policy == DuplicateRecordCloning.Ignore)
@@ -446,8 +446,12 @@ namespace UNCAD.Features.XLayout
 
         private static void ValidateClones(IReadOnlyList<EntitySnapshot> expected,
             IdMapping mapping, Transaction transaction, string stage,
-            bool compareEntityBounds)
+            DuplicateRecordCloning policy)
         {
+            // Ignore/Replace bounds expose a same-name definition being silently reused.
+            // MangleName already isolates every conflicting definition; AutoCAD may lazily
+            // regenerate dynamic-block extents after that clone even when its state is intact.
+            bool compareEntityBounds = policy != DuplicateRecordCloning.MangleName;
             foreach (EntitySnapshot snapshot in expected ?? Array.Empty<EntitySnapshot>())
             {
                 ObjectId cloneId = MappedId(mapping, snapshot.Id, stage);
