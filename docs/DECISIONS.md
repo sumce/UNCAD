@@ -166,8 +166,11 @@ rewrite an existing entry.
   (`桥架200*100 2500mm`, `⌀20线管 2000mm`), so the reader
   (`StatisticsTextReader`) pairs the two lines back into that form per MTEXT.
   Pairing is strict — line 1 must be a catalog bridge/conduit name and line 2
-  must be a bare length — so a lone `2000mm` and every single-line legacy
-  label still count as a cable. Re-running `U1Q*`/`U1C` replaces the legacy
+  must be a bare length. A rejected MTEXT that still clearly contains a bridge
+  or conduit heading remains one statistics input so its bare length cannot
+  leak into the cable sum; a generic `说明\\P2000mm`, a lone `2000mm`, and
+  every single-line legacy cable label still count as cable. Re-running
+  `U1Q*`/`U1C` replaces the legacy
   single-line labels in the command's own selection; nothing else is migrated
   automatically. `Φ32` resolves through the catalog `别名1` to the `38mm`
   row, so a `U1C` run at diameter 32 labels the drawing with that row's name

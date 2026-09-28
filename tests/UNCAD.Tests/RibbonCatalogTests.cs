@@ -41,8 +41,8 @@ namespace UNCAD.Tests
         {
             RibbonItemDefinition[] menus = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).Where(item => item.IsMenu).ToArray();
-            Assert.Single(menus);
-            Assert.Equal(new[] { 3 }, menus.Select(menu => menu.Children.Count));
+            Assert.Equal(2, menus.Length);
+            Assert.Equal(new[] { 5, 3 }, menus.Select(menu => menu.Children.Count));
             Assert.All(menus, menu =>
             {
                 Assert.Null(menu.Command);
@@ -53,6 +53,14 @@ namespace UNCAD.Tests
                     Assert.False(string.IsNullOrWhiteSpace(child.Command));
                 });
             });
+
+            RibbonItemDefinition conduit = Assert.Single(menus,
+                menu => menu.Text == "线管规格");
+            Assert.Equal(new[]
+            {
+                CommandIds.Conduit, CommandIds.Conduit20, CommandIds.Conduit25,
+                CommandIds.Conduit38, CommandIds.Conduit51
+            }, conduit.Children.Select(child => child.Command));
         }
 
         [Fact]

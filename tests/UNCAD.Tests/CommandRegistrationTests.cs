@@ -23,9 +23,11 @@ namespace UNCAD.Tests
                 CommandIds.Legacy);
             Assert.Equal("U1LX;UNLX", CommandIds.QuickLineFeatureCommands);
             Assert.Equal("U1L3D", CommandIds.QuickLine3dPreviewFeatureCommands);
+            Assert.Equal("U1C;U1C20;U1C25;U1C38;U1C51",
+                CommandIds.ConduitFeatureCommands);
             Assert.Equal("U1DWG;U1D", CommandIds.DwgExportFeatureCommands);
-            Assert.Equal(28, CommandIds.Registered.Count);
-            Assert.Equal(28, CommandIds.Registered.Distinct(
+            Assert.Equal(32, CommandIds.Registered.Count);
+            Assert.Equal(32, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
             Assert.DoesNotContain(CommandIds.Registered, command =>
                 command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));
@@ -78,7 +80,8 @@ namespace UNCAD.Tests
             string[] registeredConstants =
             {
                 "Line", "LineQuick", "Line3dPreview", "DimensionText", "Arch", "Tray100", "Tray200", "Tray400",
-                "Fill", "FillUpdate", "Submit", "Conduit", "About", "Settings", "DataRefresh",
+                "Fill", "FillUpdate", "Submit", "Conduit", "Conduit20", "Conduit25",
+                "Conduit38", "Conduit51", "About", "Settings", "DataRefresh",
                 "DwgExport", "DwgExportShort", "XLayout", "Statistics", "Merge", "Help", "LegacyLine", "LegacyLineQuick",
                 "LegacyArch", "LegacyTray100", "LegacyTray200", "LegacyTray400",
                 "LegacyStatistics"

@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The published 2.4.11 package has 28 commands and does not include the removed `U1X` editor. `U1L3D` provides a read-only frame preview. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The published 2.4.12 package has 32 commands and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only frame preview. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,12 @@ The published 2.4.11 package has 28 commands and does not include the removed `U
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.4.12
+
+- 新增 `U1C20`、`U1C25`、`U1C38`、`U1C51`，可直接按固定 BOQ 型号生成线管标注；`U1C` 继续使用 `U1SET` 默认规格。
+- 多种刚性线管在同一图框中按管径分别求和并写入对应 BOQ 行，重复规格只在本型号内累计。
+- 修复两行线管 MTEXT 未精确配对时，第二行裸长度被误算进电缆求和的问题；异常线管文本不再污染电缆米数。
 
 ## v2.4.11
 
@@ -345,7 +351,7 @@ The published 2.4.11 package has 28 commands and does not include the removed `U
 | `U1Q1` / `U1Q2` / `U1Q4` | `UNQ1` / `UNQ2` / `UNQ4` | 绘制 100 / 200 / 400 mm 桥架标注 |
 | `U1F` | — | 生成单图框清单和属性，完成后自动更新 XLSX |
 | `U1U` | — | 单框或多图框批量更新，完成后自动更新 XLSX |
-| `U1C` | — | 按统一设置中的管径绘制线管标注（同时更新图框内 Ruanguan 软管块长度） |
+| `U1C` / `U1C20` / `U1C25` / `U1C38` / `U1C51` | — | 使用默认或指定 BOQ 管径绘制线管标注（同时更新图框内 Ruanguan 软管块长度） |
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
 | `U1SET` | — | 打开全部功能的统一设置中心 |

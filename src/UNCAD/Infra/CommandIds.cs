@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.4.11.</summary>
+    /// <summary>Public AutoCAD command contract for v2.4.12.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -18,6 +18,10 @@ namespace UNCAD.Infra
         public const string Help = "U1HELP";
         public const string About = "U1A";
         public const string Conduit = "U1C";
+        public const string Conduit20 = "U1C20";
+        public const string Conduit25 = "U1C25";
+        public const string Conduit38 = "U1C38";
+        public const string Conduit51 = "U1C51";
         public const string Tray100 = "U1Q1";
         public const string Tray200 = "U1Q2";
         public const string Tray400 = "U1Q4";
@@ -38,7 +42,8 @@ namespace UNCAD.Infra
         public const string AboutFeatureCommands = About;
         public const string FillFeatureCommands = Fill + ";" + FillUpdate;
         public const string SubmitFeatureCommands = Submit;
-        public const string ConduitFeatureCommands = Conduit;
+        public const string ConduitFeatureCommands = Conduit + ";" + Conduit20 + ";"
+            + Conduit25 + ";" + Conduit38 + ";" + Conduit51;
         public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
         public const string LineFeatureCommands = Line;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
@@ -73,7 +78,8 @@ namespace UNCAD.Infra
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
             Line, LineQuick, Line3dPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
+            Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
+            About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
             DwgExportShort,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics

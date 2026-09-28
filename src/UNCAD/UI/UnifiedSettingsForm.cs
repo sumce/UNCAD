@@ -43,6 +43,7 @@ namespace UNCAD.UI
         // 线管标注
         private readonly ComboBox _conduitDia = new ComboBox
         {
+            Name = "ConduitDiameter",
             Width = 100,
             DropDownStyle = ComboBoxStyle.DropDown
         };
@@ -124,7 +125,7 @@ namespace UNCAD.UI
                 new System.Drawing.Size(1040, 700), new System.Drawing.Size(860, 580));
 
             _conduitDia.Items.AddRange(new object[]
-                { "20", "25", "32", "38", "51", "75", "100" });
+                { "20", "25", "38", "51" });
             ConfigureStatisticsToolTips();
             LoadValues();
 
@@ -170,6 +171,19 @@ namespace UNCAD.UI
                 _conduitDia.Focus();
                 _conduitDia.SelectAll();
                 MessageBox.Show(this, "默认管径无效，请输入1到1000毫米之间的数值。",
+                    "U1SET", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            ListItem conduitItem = ListItemReader.EmbeddedCatalogIndex
+                .FindRigidConduit(diameter);
+            if (conduitItem == null
+                || BoqFeatureName.Extract(conduitItem.Feature).Length == 0)
+            {
+                _tabs.SelectedIndex = 2;
+                _conduitDia.Focus();
+                _conduitDia.SelectAll();
+                MessageBox.Show(this,
+                    "固定清单中没有该线管型号。可选型号为 20、25、38、51 mm。",
                     "U1SET", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }

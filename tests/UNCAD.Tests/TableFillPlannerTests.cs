@@ -129,6 +129,34 @@ namespace UNCAD.Tests
             Assert.True(conduit.CatalogMatched);
         }
 
+        [Fact]
+        public void Build_PreservesMultipleRigidConduitModelsAsSeparateRows()
+        {
+            var items = new List<ListItem>
+            {
+                Item("3.1", "镀锌穿线管", "20mm线管", "m", "20mm"),
+                Item("3.2", "镀锌穿线管", "25mm线管", "m", "25mm"),
+                Item("3.3", "镀锌穿线管", "38mm线管", "m", "38mm"),
+                Item("3.4", "镀锌穿线管", "51mm线管", "m", "51mm")
+            };
+            CableStatResult stat = StatCalculator.Calculate(new[]
+            {
+                "⌀20线管 2000mm", "⌀25线管 3000mm",
+                "⌀38线管 4000mm", "⌀51线管 5000mm",
+                "⌀20线管 1000mm"
+            }, 250.0);
+
+            List<TableFillRow> conduits = TableFillPlanner.Build(
+                new MachineRow(), items, stat)
+                .Where(row => row.Category == TableFillCategory.RigidConduit)
+                .ToList();
+
+            Assert.Equal(new[] { "3.1", "3.2", "3.3", "3.4" },
+                conduits.Select(row => row.Code));
+            Assert.Equal(new[] { "3", "3", "4", "5" },
+                conduits.Select(row => row.Quantity));
+        }
+
         [Theory]
         [InlineData("-", "电脑插座", "U220 1P3W 1P20A", null)]
         [InlineData("插座盘", "普通设备", "N220 1P3W 1P16A", "8.2")]

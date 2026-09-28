@@ -21,11 +21,17 @@ namespace UNCAD.Features.Conduit
         [CommandMethod(CommandIds.Conduit, CommandFlags.UsePickSet)]
         public void UncadConduit() => Run(null);
 
+        [CommandMethod(CommandIds.Conduit20, CommandFlags.UsePickSet)]
         public void UncadConduit20() => Run("20");
 
+        [CommandMethod(CommandIds.Conduit25, CommandFlags.UsePickSet)]
         public void UncadConduit25() => Run("25");
 
-        public void UncadConduit32() => Run("32");
+        [CommandMethod(CommandIds.Conduit38, CommandFlags.UsePickSet)]
+        public void UncadConduit38() => Run("38");
+
+        [CommandMethod(CommandIds.Conduit51, CommandFlags.UsePickSet)]
+        public void UncadConduit51() => Run("51");
 
         public void UncadConduitSet() => SettingsFeature.Show(2);
 

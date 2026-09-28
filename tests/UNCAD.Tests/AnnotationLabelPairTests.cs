@@ -113,6 +113,33 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void StatisticsLines_RecognizesLegacyTwoLineConduitWithoutCableLeak()
+        {
+            List<string> lines = AnnotationLabelPair.CollapseStatisticsLines(
+                new List<string> { "⌀20线管", "2000mm" }, Index());
+
+            CableStatResult stat = StatCalculator.Calculate(lines, 250.0);
+
+            Assert.Equal(2.0, Assert.Single(stat.Conduits).TotalM);
+            Assert.Empty(stat.CableFormatted);
+        }
+
+        [Fact]
+        public void StatisticsLines_RejectedConduitLabelDoesNotLeakLengthIntoCable()
+        {
+            List<string> lines = AnnotationLabelPair.CollapseStatisticsLines(
+                new List<string>
+                {
+                    "(共用)镀锌穿线管EMT PIPE 20mm(3/4\")", "2000mm"
+                }, Index());
+
+            CableStatResult stat = StatCalculator.Calculate(lines, 250.0);
+
+            Assert.Empty(stat.Conduits);
+            Assert.Empty(stat.CableFormatted);
+        }
+
+        [Fact]
         public void CollapseLines_LeavesUnknownModelAlone_SoBareLengthStaysACable()
         {
             // 第一行不是清单型号，就不是 U1Q/U1C 生成的标注。
@@ -236,14 +263,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void EmbeddedCatalog_ResolvesTheDiameterEveryU1CCommandWrites()
+        public void EmbeddedCatalog_EveryU1CModelFeedsConduitWithoutCableLeak()
         {
-            foreach (string diameter in new[] { "20", "25", "32", "38", "51" })
+            foreach (string diameter in new[] { "20", "25", "38", "51" })
             {
                 ListItem item = ListItemReader.EmbeddedCatalogIndex
                     .FindRigidConduit(diameter);
                 Assert.NotNull(item);
-                Assert.NotEqual("", BoqFeatureName.Extract(item.Feature));
+                string model = BoqFeatureName.Extract(item.Feature);
+                Assert.NotEqual("", model);
+
+                List<string> lines = AnnotationLabelPair.CollapseStatisticsLines(
+                    TextParser.SplitMTextLines(
+                        AnnotationLabelPair.Build(model, "2000mm")));
+                CableStatResult stat = StatCalculator.Calculate(lines, 250.0);
+
+                Assert.Equal("⌀" + diameter + "线管",
+                    Assert.Single(stat.Conduits).Spec);
+                Assert.Empty(stat.CableFormatted);
             }
         }
 
@@ -333,7 +370,7 @@ namespace UNCAD.Tests
         public void BareLengthInAMultiLineMText_IsStillCountedAsCable()
         {
             // 老图纸里沿用的多行 MTEXT：行首不是清单型号，长度行必须照旧算电缆。
-            List<string> lines = AnnotationLabelPair.CollapseLines(
+            List<string> lines = AnnotationLabelPair.CollapseStatisticsLines(
                 TextParser.SplitMTextLines("说明\\P2000mm"));
 
             CableStatResult stat = StatCalculator.Calculate(lines, 250.0);

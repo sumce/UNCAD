@@ -30,11 +30,11 @@ namespace UNCAD.Cad
             if (includeMText && entity is MText mtext)
             {
                 // U1Q/U1C 的两行标注（型号 + 长度）必须先按 MTEXT 为单位配对还原成
-                // 单行，统计引擎才认得；不成立的行原样保留，所以旧的单行标注和
-                // 孤立的 2000mm 仍然按电缆统计。配对只在本实体内部进行，
-                // 不会跨实体把相邻的两段文字吞并。
+                // 单行，统计引擎才认得；不成立但明显属于桥架/线管的多行内容保持
+                // 为一个统计输入，避免裸长度泄漏到电缆。孤立的 2000mm 仍按电缆
+                // 统计。配对只在本实体内部进行，不会跨实体吞并相邻文字。
                 // 先逐行清除格式码，否则 {\C1;型号} 这种写法匹配不上清单型号。
-                AddLines(lines, AnnotationLabelPair.CollapseLines(
+                AddLines(lines, AnnotationLabelPair.CollapseStatisticsLines(
                     TextParser.SplitMTextLines(mtext.Contents)
                         .ConvertAll(TextParser.CleanMText)));
                 return;

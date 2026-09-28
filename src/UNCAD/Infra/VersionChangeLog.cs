@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.12", "2026-09-28",
+                    "新增：U1C20、U1C25、U1C38、U1C51 可直接按固定 BOQ 型号生成线管标注；U1C 继续使用 U1SET 默认规格。",
+                    "优化：同一图框内的 20、25、38、51 mm 刚性线管按管径分别求和并写入对应 BOQ 行。",
+                    "修复：线管多行 MTEXT 未精确配对时，裸长度不再误算进电缆求和；旧式两行线管标注仍可正确识别。"),
                 new VersionChangeLogEntry("2.4.11", "2026-09-27",
                     "修复：版本更新记录窗口的正文容器不再被 WinForms 布局为零宽度，更新内容可正常显示、换行和滚动。",
                     "新增：U1L3D 可框选完整图框，将 U1L 等测草图重建为只读 3D 预览，并按机台上下游快照显示 4.8 米轴网。",

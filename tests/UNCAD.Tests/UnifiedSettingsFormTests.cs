@@ -101,6 +101,25 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ConduitTab_ListsOnlyRigidCatalogModels()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(2))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    ComboBox diameter = Find<ComboBox>(form, "ConduitDiameter");
+                    Assert.NotNull(diameter);
+                    Assert.Equal(new[] { "20", "25", "38", "51" },
+                        diameter.Items.Cast<object>().Select(item => item.ToString()));
+                    Assert.DoesNotContain("75", diameter.Items.Cast<object>());
+                    Assert.DoesNotContain("100", diameter.Items.Cast<object>());
+                }
+            });
+        }
+
+        [Fact]
         public void ExcelTab_ShowsSnapshotTableOutputAndIndependentAutofillCategories()
         {
             RunSta(() =>

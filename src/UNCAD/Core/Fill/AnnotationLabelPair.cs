@@ -80,6 +80,23 @@ namespace UNCAD.Core.Fill
         }
 
         /// <summary>
+        /// 将一个 MTEXT 转为统计输入。精确的清单型号仍按 <see cref="CollapseLines"/>
+        /// 还原；如果未能精确配对，但同一 MTEXT 明显包含桥架/线管标题和裸长度，
+        /// 则保持为一个整体，避免长度行被误算进电缆。
+        /// </summary>
+        public static List<string> CollapseStatisticsLines(IReadOnlyList<string> lines)
+            => CollapseStatisticsLines(lines, Embedded.Value);
+
+        public static List<string> CollapseStatisticsLines(IReadOnlyList<string> lines,
+            AnnotationModelIndex index)
+        {
+            List<string> result = CollapseLines(lines, index);
+            if (result.Count <= 1 || !ContainsAnnotationLength(result)) return result;
+
+            return new List<string> { string.Join(" ", result).Trim() };
+        }
+
+        /// <summary>
         /// 把一个标注实体的文字折算成“旧版单行写法”，用于识别并删除旧命令留下的
         /// 同位置标注。单行文字原样返回；多行且无法配对时也原样返回，
         /// 因此只有真正等价的两行标注才会命中旧标注。
@@ -94,6 +111,24 @@ namespace UNCAD.Core.Fill
             if (lines.Count <= 1) return raw;
             List<string> collapsed = CollapseLines(lines, index);
             return collapsed.Count == 1 ? collapsed[0] : raw;
+        }
+
+        private static bool IsBridgeOrConduitText(string value)
+        {
+            string text = value ?? "";
+            return text.IndexOf("桥架", StringComparison.Ordinal) >= 0
+                || text.IndexOf("线管", StringComparison.Ordinal) >= 0;
+        }
+
+        private static bool ContainsAnnotationLength(IReadOnlyList<string> lines)
+        {
+            bool foundHeading = false;
+            foreach (string line in lines)
+            {
+                if (foundHeading && TextParser.IsBareLengthToken(line)) return true;
+                if (IsBridgeOrConduitText(line)) foundHeading = true;
+            }
+            return false;
         }
     }
 }
