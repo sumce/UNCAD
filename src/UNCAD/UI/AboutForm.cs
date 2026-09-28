@@ -20,6 +20,7 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill
             };
             tabs.TabPages.Add(BuildOverviewTab(info));
+            tabs.TabPages.Add(BuildUpdatesTab());
             tabs.TabPages.Add(BuildTermsTab());
 
             Button close = UiTheme.Button("关闭", DialogResult.Cancel);
@@ -312,6 +313,19 @@ namespace UNCAD.UI
             card.Controls.Add(terms);
             page.Controls.Add(card);
             page.Controls.Add(PageHeader("使用条款", "软件许可与使用约定"));
+            return page;
+        }
+
+        private static TabPage BuildUpdatesTab()
+        {
+            var page = new TabPage("更新记录")
+            {
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(0),
+                UseVisualStyleBackColor = false
+            };
+            page.Controls.Add(UpdateNotesForm.CreateVersionPages(
+                VersionChangeLog.Entries));
             return page;
         }
 

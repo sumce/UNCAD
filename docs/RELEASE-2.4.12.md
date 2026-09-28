@@ -14,3 +14,9 @@ Release date: 2026-09-28
 - Prevented the bare length line of a conduit-like multiline MTEXT from leaking into the cable total when the complete annotation cannot be matched.
 - Preserved strict catalog-model pairing, so prefixed or altered labels are not accepted as valid BOQ conduit annotations.
 - Continued recognizing legacy two-line `diameter + length` conduit labels without counting their length as cable.
+
+## Update details
+
+- Gave every released version its own update-details page with a scrollable version list.
+- Kept the startup upgrade dialog limited to unseen versions.
+- Added the complete version history to the `U1A` About window.

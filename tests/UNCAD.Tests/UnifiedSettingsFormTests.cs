@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using UNCAD.Infra;
 using UNCAD.UI;
 using Xunit;
 
@@ -188,7 +189,7 @@ namespace UNCAD.Tests
                     TabControl tabs = Find<TabControl>(form, "AboutNavigation");
                     Assert.NotNull(tabs);
                     Assert.Equal(TabAlignment.Left, tabs.Alignment);
-                    Assert.Equal(new[] { "概览", "使用条款" }, tabs.TabPages
+                    Assert.Equal(new[] { "概览", "更新记录", "使用条款" }, tabs.TabPages
                         .Cast<TabPage>().Select(page => page.Text).ToArray());
                     UiCard authorization = Find<UiCard>(tabs.SelectedTab,
                         "AuthorizationCard");
@@ -207,6 +208,21 @@ namespace UNCAD.Tests
                         "授权状态文字超出卡片: " + statusBounds);
 
                     tabs.SelectedIndex = 1;
+                    Application.DoEvents();
+                    Control updates = Find<Control>(
+                        tabs.SelectedTab, "UpdateVersionPages");
+                    Assert.NotNull(updates);
+                    ListBox versions = Find<ListBox>(updates, "UpdateVersionList");
+                    Assert.Equal(VersionChangeLog.Entries.Count, versions.Items.Count);
+                    Assert.Equal(ProductMetadata.VersionLabel, versions.Items[0]);
+                    Panel host = Find<Panel>(updates, "UpdatePageHost");
+                    Panel latest = host.Controls.OfType<Panel>().Single(control =>
+                        Equals(control.Tag, ProductMetadata.VersionLabel));
+                    Assert.Contains(FindAll<RichTextBox>(latest),
+                        details => details.Text.Contains(
+                            VersionChangeLog.Entries[0].Changes[0]));
+
+                    tabs.SelectedIndex = 2;
                     Application.DoEvents();
                     TextBox terms = Assert.Single(FindAll<TextBox>(tabs.SelectedTab));
                     Assert.True(terms.Multiline);
