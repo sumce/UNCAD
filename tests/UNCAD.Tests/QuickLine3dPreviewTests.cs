@@ -10,18 +10,6 @@ namespace UNCAD.Tests
     public class QuickLine3dPreviewTests
     {
         [Fact]
-        public void RouteList_UsesFixedViewportHeight()
-        {
-            string styles = File.ReadAllText(PathOf("src", "UNCAD", "Web",
-                "QuickLine3D", "styles.css"));
-
-            Assert.Contains("height: 220px", styles);
-            Assert.Contains("min-height: 220px", styles);
-            Assert.Contains("max-height: 220px", styles);
-            Assert.Contains("overflow: auto", styles);
-        }
-
-        [Fact]
         public void AxisGrid_Uses4800MillimetresBetweenWorkbookAxes()
         {
             QuickLineAxisGrid grid = QuickLineAxisGridPlanner.Plan("54/X", "54/W");
@@ -33,6 +21,21 @@ namespace UNCAD.Tests
             Assert.Equal(new[] { 0d, 4800d },
                 grid.AlphabeticMarks.Select(item => item.OffsetMillimetres));
             Assert.Empty(grid.Diagnostics);
+        }
+
+        [Fact]
+        public void AxisGrid_KeepsEastWestNumericAndNorthSouthAlphabeticDirections()
+        {
+            QuickLineAxisGrid grid = QuickLineAxisGridPlanner.Plan("56/X", "54/W");
+
+            Assert.Equal(new[] { "54", "55", "56" },
+                grid.NumericMarks.Select(item => item.Label));
+            Assert.Equal(new[] { 0d, 4800d, 9600d },
+                grid.NumericMarks.Select(item => item.OffsetMillimetres));
+            Assert.Equal(new[] { "W", "X" },
+                grid.AlphabeticMarks.Select(item => item.Label));
+            Assert.Equal(new[] { 0d, 4800d },
+                grid.AlphabeticMarks.Select(item => item.OffsetMillimetres));
         }
 
         [Fact]
@@ -56,6 +59,67 @@ namespace UNCAD.Tests
             Assert.Single(grid.AlphabeticMarks);
             Assert.Equal("W", grid.AlphabeticMarks[0].Label);
             Assert.NotEmpty(grid.Diagnostics);
+        }
+
+        [Fact]
+        public void AxisPlacement_AlignsFramesByDownstreamAxesNotSelectionOrder()
+        {
+            IReadOnlyList<QuickLineAxisPlacement> placements =
+                QuickLineAxisPlacementPlanner.Plan(new[]
+                {
+                    new QuickLineAxisPlacementInput("B", "55/X", "55/Z"),
+                    new QuickLineAxisPlacementInput("A", "54/W", "54/Y")
+                });
+
+            QuickLineAxisPlacement first = placements.Single(item => item.Id == "A");
+            QuickLineAxisPlacement second = placements.Single(item => item.Id == "B");
+            Assert.Equal(0, first.OffsetXMillimetres);
+            Assert.Equal(0, first.OffsetYMillimetres);
+            Assert.Equal(4800, second.OffsetXMillimetres);
+            Assert.Equal(4800, second.OffsetYMillimetres);
+            Assert.True(first.Resolved);
+            Assert.True(second.Resolved);
+        }
+
+        [Fact]
+        public void AxisPlacement_InvalidAxisGetsVisibleFallback()
+        {
+            QuickLineAxisPlacement placement = Assert.Single(
+                QuickLineAxisPlacementPlanner.Plan(new[]
+                {
+                    new QuickLineAxisPlacementInput("A", "未配置", "54/X")
+                }));
+
+            Assert.False(placement.Resolved);
+            Assert.NotEmpty(placement.Diagnostics);
+        }
+
+        [Fact]
+        public void AxisPlacement_InvalidFrameDoesNotOverlapResolvedOrigin()
+        {
+            IReadOnlyList<QuickLineAxisPlacement> placements =
+                QuickLineAxisPlacementPlanner.Plan(new[]
+                {
+                    new QuickLineAxisPlacementInput("valid", "54/W", "54/X"),
+                    new QuickLineAxisPlacementInput("invalid", "?", "54/X")
+                });
+
+            QuickLineAxisPlacement invalid = placements.Single(item => item.Id == "invalid");
+            Assert.Equal(4800, invalid.OffsetXMillimetres);
+        }
+
+        [Fact]
+        public void RouteAnchor_UsesNearestCadEndpoint()
+        {
+            string node = QuickLineRouteAnchorPlanner.FindNearestNode(
+                new[]
+                {
+                    new QuickLineRouteEndpointCandidate("L1", "N2",
+                        new QuickLinePoint(100, 0))
+                },
+                new QuickLinePoint(96, 3));
+
+            Assert.Equal("N2", node);
         }
 
         [Fact]
@@ -115,6 +179,42 @@ namespace UNCAD.Tests
             Assert.Throws<ArgumentException>(() => QuickLineIsometricSceneBuilder.BuildAll(
                 QuickLineGraph.Build(new[] { line }), distances, distances,
                 new HashSet<string>()));
+        }
+
+        [Fact]
+        public void PreviewPayloadNamesCircuitsAndDirectionMarkers()
+        {
+            string feature = File.ReadAllText(PathOf("src", "UNCAD", "Features",
+                "Unl", "QuickLine3dPreviewFeature.cs"));
+            string app = File.ReadAllText(PathOf("src", "UNCAD", "Web",
+                "QuickLine3D", "app.js"));
+
+            Assert.Contains("[\"circuitName\"]", feature);
+            Assert.Contains("[\"directionMarkers\"]", feature);
+            Assert.Contains("下游", app);
+            Assert.Contains("上游", app);
+            Assert.Contains("南北字母轴（向北 +1）", app);
+            Assert.Contains("东西数字轴（向东 +1）", app);
+            Assert.DoesNotContain("const colors = { X:", app);
+        }
+
+        [Fact]
+        public void PreviewDecluttersDenseRouteLabels()
+        {
+            string app = File.ReadAllText(PathOf("src", "UNCAD", "Web",
+                "QuickLine3D", "app.js"));
+            string html = File.ReadAllText(PathOf("src", "UNCAD", "Web",
+                "QuickLine3D", "index.html"));
+
+            Assert.Contains("showRouteLabels", app);
+            Assert.Contains("occupied", app);
+            Assert.Contains("data.segments || []).length <= 24", app);
+            Assert.Contains(">路线标签</button>", html);
+            Assert.Contains("new THREE.BoxGeometry", app);
+            Assert.Contains("new THREE.SphereGeometry", app);
+            Assert.Contains("routeGroupId", app);
+            Assert.Contains("const routeGroups = new Map()", app);
+            Assert.DoesNotContain("new THREE.ArrowHelper", app);
         }
 
         private static QuickLineSegment Polar(string id, QuickLinePoint start,

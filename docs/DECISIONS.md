@@ -246,3 +246,44 @@ rewrite an existing entry.
 - Consequence: the preview never writes CAD entities, never refreshes a
   workbook or accesses the network, and does not restore the removed generic
   HTML dialog framework. Other user dialogs remain native WinForms.
+
+## D-025: U13D Multi-Frame Read-Only Preview (2026-09-29)
+
+- Status: accepted
+- Decision: `U13D` accepts multiple complete frames, aligns them in one
+  4800 mm axis coordinate system using each frame's downstream workbook axis,
+  and shows U1L route/cable meters plus bridge meters.
+- Consequence: bridge-to-route association is only reported when U1Q metadata
+  identifies a unique source line. Legacy bridge labels without source
+  metadata remain visible as unassociated; the preview never guesses.
+
+## D-026: U13D Direction And Circuit Labels (2026-09-29)
+
+- Status: accepted
+- Decision: U13D labels each route with its machine and circuit, and marks
+  downstream/upstream endpoints in the scene with compact dot/square markers;
+  it does not draw long connector lines between axis endpoints.
+  East/west uses numeric axes and north/south uses alphabetic axes; moving east
+  increases the number and moving north increases the letter.
+- Consequence: a route is one endpoint-connected U1L component, not one CAD
+  line segment. Direction markers first attach to terminal endpoints of that
+  component near the frame's device and upstream blocks; junctions and bends
+  are never treated as upstream/downstream endpoints. When those blocks are
+  unavailable, the marker falls back to the workbook axis coordinate and
+  reports the fallback in diagnostics. The preview does not use XYZ colors as
+  the primary orientation cue. Missing frame device text may use the uniquely
+  matched cached machine row's circuit name for display, without changing
+  drawing data.
+
+## D-027: Fixed BOQ Data-Row Height (2026-10-09)
+
+- Status: accepted
+- Decision: U1F/U1U keep generated BOQ Table rows, including cleared rows, at
+  5847.8848 drawing units. Long descriptions must not increase the row height
+  or stretch the other rows. Text in an overflowing row is reduced to fit;
+  a later update starts again from the configured text height.
+- Consequence: all description text is retained, column widths and headers
+  remain unchanged, and impossible cell margins are rejected before writing.
+  The description column uses a 0.85 line-spacing factor for multi-line
+  content. This applies to the generated BOQ data range, not frame migration
+  or the read-only 3D preview sidebar.

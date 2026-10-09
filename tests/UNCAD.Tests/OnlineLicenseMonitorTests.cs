@@ -67,7 +67,8 @@ namespace UNCAD.Tests
         {
             string json = ValidJson().Replace("UNCAD-JSWY", "CUSTOMER-ANY");
             OnlineLicenseState state = OnlineLicenseMonitor.ParseResponse(json,
-                DateTimeOffset.UtcNow, AuthorizationCode);
+                new DateTimeOffset(2026, 9, 3, 8, 0, 0, TimeSpan.FromHours(8)),
+                AuthorizationCode);
 
             Assert.True(state.IsActive);
             Assert.Equal("CUSTOMER-ANY", state.CustomerCode);

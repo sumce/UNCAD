@@ -49,6 +49,25 @@ namespace UNCAD.Core.QuickLine
         public double OffsetMillimetres { get; }
     }
 
+    /// <summary>
+    /// Parsed workbook axis coordinate. Numeric and alphabetic values are kept
+    /// separately so multiple selected frames can share one deterministic
+    /// 4800 mm coordinate system without relying on selection order.
+    /// </summary>
+    public sealed class QuickLineAxisCoordinate
+    {
+        internal QuickLineAxisCoordinate(int number, string letter, long letterIndex)
+        {
+            Number = number;
+            Letter = letter ?? string.Empty;
+            LetterIndex = letterIndex;
+        }
+
+        public int Number { get; }
+        public string Letter { get; }
+        internal long LetterIndex { get; }
+    }
+
     /// <summary>Plans the two grid directions without inventing coordinates for bad data.</summary>
     public static class QuickLineAxisGridPlanner
     {
@@ -107,6 +126,16 @@ namespace UNCAD.Core.QuickLine
 
             return new QuickLineAxisGrid(upstream, downstream, numeric, alphabetic,
                 diagnostics, spacingMillimetres);
+        }
+
+        /// <summary>Parses one workbook axis such as 54/W.</summary>
+        public static bool TryParseAxis(string value, out QuickLineAxisCoordinate axis)
+        {
+            axis = null;
+            if (!TryParse(value, out AxisValue parsed)) return false;
+            axis = new QuickLineAxisCoordinate(parsed.Number, parsed.Letter,
+                parsed.LetterIndex);
+            return true;
         }
 
         private static void AddNumericRange(ICollection<QuickLineAxisMark> target,

@@ -19,6 +19,8 @@ namespace UNCAD.Tests
             Assert.Contains("table.SetRowHeight(row,", source);
             Assert.Contains("table.SetAutoScale(row, column, false)", source);
             Assert.Contains("table.SetIsAutoScale(row, column, 0, false)", source);
+            Assert.Contains("DescriptionLineSpacingFactor = 0.85", source);
+            Assert.Contains(@"\pxsm", source);
             Assert.Contains("FixGeneratedRowHeights", source);
             Assert.Contains("table.RecordGraphicsModified(true)", source);
         }

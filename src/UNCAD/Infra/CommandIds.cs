@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.4.12.</summary>
+    /// <summary>Public AutoCAD command contract for v2.4.13.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -28,6 +28,7 @@ namespace UNCAD.Infra
         public const string Line = "U1L";
         public const string LineQuick = "U1LX";
         public const string Line3dPreview = "U1L3D";
+        public const string Line3dBatchPreview = "U13D";
         public const string DimensionText = "U1DT";
         public const string Arch = "U1R";
 
@@ -47,7 +48,7 @@ namespace UNCAD.Infra
         public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
         public const string LineFeatureCommands = Line;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
-        public const string QuickLine3dPreviewFeatureCommands = Line3dPreview;
+        public const string QuickLine3dPreviewFeatureCommands = Line3dPreview + ";" + Line3dBatchPreview;
         public const string DimensionTextFeatureCommands = DimensionText;
         public const string DataRefreshFeatureCommands = DataRefresh;
         public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
@@ -60,7 +61,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help
         };
 
@@ -77,7 +78,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
             About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
             DwgExportShort,

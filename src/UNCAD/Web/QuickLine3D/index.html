@@ -14,7 +14,7 @@
       <div class="toolbar" role="toolbar" aria-label="三维视图工具">
         <button id="fitButton" type="button" title="适应全部路线">适应视图</button>
         <button id="gridButton" type="button" title="显示或隐藏轴网">轴网</button>
-        <button id="labelsButton" type="button" title="显示或隐藏距离标签">标签</button>
+        <button id="labelsButton" type="button" title="显示或隐藏路线标签">路线标签</button>
       </div>
       <div id="status" class="status">正在载入...</div>
     </header>
@@ -22,7 +22,7 @@
       <section id="viewport" aria-label="U1L 三维预览">
         <div id="canvasHost"></div>
         <div id="loading">正在启动三维渲染器...</div>
-        <div id="axisLegend"><span class="x">X</span><span class="y">Y</span><span class="z">Z</span></div>
+        <div id="axisLegend"><span>北 ↑ 字母 +1</span><span>东 → 数字 +1</span><span>南 ↓</span><span>西 ←</span></div>
         <div id="routeLabels" aria-hidden="true"></div>
       </section>
       <aside class="inspector">
@@ -34,6 +34,7 @@
             <dt>设备楼层</dt><dd id="deviceFloor">-</dd>
             <dt>上游楼层</dt><dd id="panelFloor">-</dd>
             <dt>投影</dt><dd id="projection">-</dd>
+            <dt>图框</dt><dd id="frameCount">-</dd>
           </dl>
         </section>
         <section>
@@ -44,9 +45,18 @@
           <div id="axisMarks" class="axis-marks"></div>
         </section>
         <section>
-          <h2>路线</h2>
-          <div class="route-summary"><strong id="segmentCount">0</strong><span>段</span><strong id="routeLength">0</strong><span>mm</span></div>
+          <h2>路线 / 回路</h2>
+          <div class="route-summary"><div><strong id="segmentCount">0</strong><span>段</span></div><div><strong id="routeLength">0</strong><span>mm</span></div><div><strong id="routeMeters">0</strong><span>m</span></div></div>
           <div id="routeList" class="route-list"></div>
+        </section>
+        <section id="bridgeSection">
+          <h2>桥架</h2>
+          <div class="route-summary"><div><strong id="bridgeCount">0</strong><span>条</span></div><div><strong id="bridgeLength">0</strong><span>m</span></div></div>
+          <div id="bridgeList" class="route-list bridge-list"></div>
+        </section>
+        <section id="frameSection" hidden>
+          <h2>图框轴位</h2>
+          <div id="frameList" class="frame-list"></div>
         </section>
         <section id="diagnosticsSection" hidden>
           <h2>诊断</h2>

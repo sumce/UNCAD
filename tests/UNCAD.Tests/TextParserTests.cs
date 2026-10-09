@@ -128,6 +128,13 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void CleanMText_StripsCompactLineSpacingCode()
+        {
+            Assert.Equal("第一行\n第二行",
+                TextParser.CleanMText(@"\pxsm0.85;第一行\P第二行"));
+        }
+
+        [Fact]
         public void FormatNum_TrimsTrailingZeros_LikeRtos()
         {
             Assert.Equal("1", TextFormatter.FormatNum(1.00));

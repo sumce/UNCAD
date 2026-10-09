@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.12`.
+- Current release: `2.4.13`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -32,7 +32,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1SET`, `U1DATA` |
-| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 
@@ -58,6 +58,11 @@ U1L3D
   select one complete frame -> collect contained U1L routes -> reconstruct
   isometric 3D branches -> read axis positions from the last successful SQLite
   snapshot -> show a read-only local WebView2 preview (4800 mm per grid step)
+
+U13D
+  select multiple complete frames -> collect each frame's U1L routes and U1Q
+  bridge metadata -> align frames by workbook downstream axis -> show one
+  read-only WebView2 scene with route/bridge meters and unassociated diagnostics
 
 XLAYOUT/XSTS
   collect frame regions -> resolve machine identity -> arrange or compare

@@ -93,6 +93,8 @@ namespace UNCAD.UI
                         "点选线段后逐段快速填写毫米标注（兼容命令 UNLX）"),
                     RibbonItemDefinition.Button("U1L 三维预览", CommandIds.Line3dPreview,
                         "框选完整图框，按 U1L 等测线生成只读三维预览并显示上下游轴位"),
+                    RibbonItemDefinition.Button("U13D 多图框预览", CommandIds.Line3dBatchPreview,
+                        "框选多个图框，按轴位统一对齐并展示路由、电缆和桥架米数"),
                     RibbonItemDefinition.Button("标注转文字", CommandIds.DimensionText,
                         "将对齐标注的文字转换为可编辑单行文字，保留原尺寸线"),
                     RibbonItemDefinition.Button("开拱桥", CommandIds.Arch,

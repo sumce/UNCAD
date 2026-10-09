@@ -10,6 +10,8 @@ namespace UNCAD.Features.Fill
 #pragma warning disable 618 // AutoCAD 2022 native Table APIs avoid wrapper invalidation here.
     internal static class CadTableFillWriter
     {
+        private const double DescriptionLineSpacingFactor = 0.85;
+
         public static int Fill(CadContext ctx, ObjectId[] tableIds, int startRow,
             int clearRowCount, List<TableFillRow> plannedRows, double textHeight)
         {
@@ -55,6 +57,7 @@ namespace UNCAD.Features.Fill
                         + " 行。请减少勾选或在配置中心增大清除行数。");
                     return -1;
                 }
+                ValidateFixedRowMargins(table, row, rowsToClear);
 
                 // Do not toggle the table regeneration switch here.  AutoCAD 2022 can
                 // dereference the native table while regeneration is restored from
@@ -79,7 +82,7 @@ namespace UNCAD.Features.Fill
                     SetCellTextPreservingFormat(table, targetRow, 1, planned.Name,
                         textHeight, true);
                     SetCellTextPreservingFormat(table, targetRow, 2, planned.Description,
-                        textHeight, true);
+                        textHeight, true, DescriptionLineSpacingFactor);
                     SetCellTextPreservingFormat(table, targetRow, 3, planned.Unit,
                         textHeight, true);
                     SetCellTextPreservingFormat(table, targetRow, 4, planned.Quantity,
@@ -88,11 +91,9 @@ namespace UNCAD.Features.Fill
                         textHeight, true);
                 }
 
-                // Apply the BOQ data-row height after content and per-content
-                // auto-scale overrides have been cleared.  AutoCAD may require a
-                // few extra drawing units for one wrapped row; use the largest
-                // native minimum and apply it to the whole generated range so
-                // rows stay uniform instead of differing by content.
+                // Fit overflowing text before setting the fixed data-row height.
+                // Copying the largest native minimum to every row makes one long
+                // description stretch the entire BOQ table, including empty rows.
                 LockGeneratedRowHeights(table, row, rowsToClear);
                 table.RecordGraphicsModified(true);
                 filled += plannedRows.Count;
@@ -154,12 +155,18 @@ namespace UNCAD.Features.Fill
         }
 
         private static void SetCellTextPreservingFormat(Table table, int row, int column,
-            string text, double? targetTextHeight = null, bool fitToCell = false)
+            string text, double? targetTextHeight = null, bool fitToCell = false,
+            double? lineSpacingFactor = null)
         {
             // Use Table's native cell methods instead of holding Cell/CellContent
             // wrappers across a text mutation.  This keeps every native call tied
             // to the live table object while AutoCAD regenerates the cell.
-            table.SetTextString(row, column, text ?? "");
+            string value = text ?? "";
+            if (lineSpacingFactor.HasValue && value.IndexOf(@"\P",
+                StringComparison.OrdinalIgnoreCase) >= 0)
+                value = @"\pxsm" + lineSpacingFactor.Value.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture) + ";" + value;
+            table.SetTextString(row, column, value);
             if (targetTextHeight.HasValue)
             {
                 table.SetTextHeight(row, column, targetTextHeight.Value);
@@ -181,25 +188,44 @@ namespace UNCAD.Features.Fill
             double fixedHeight = TableFillFormatter.GeneratedRowHeight;
             for (int row = Math.Max(0, startRow); row < endRow; row++)
             {
-                try { fixedHeight = Math.Max(fixedHeight, table.MinimumRowHeight(row)); }
-                catch (System.Exception ex)
+                // Use AutoCAD's text layout, not character counts: fonts, margins
+                // and paragraph formatting all affect the minimum row height.
+                // Only overflowing rows shrink; each new fill resets the requested
+                // text height first so repeated updates cannot compound scaling.
+                for (int attempt = 0; attempt < 12; attempt++)
                 {
-                    Log.Warn("U1F read generated row minimum height " + row + " failed: "
-                        + ex.Message);
+                    double minimum = table.MinimumRowHeight(row);
+                    if (minimum <= fixedHeight) break;
+                    if (double.IsNaN(minimum) || double.IsInfinity(minimum))
+                        throw new InvalidOperationException("清单行高无法计算，本次修改已取消。");
+                    double scale = Math.Min(0.9, fixedHeight / minimum * 0.95);
+                    for (int column = 0; column < Math.Min(6, table.Columns.Count); column++)
+                    {
+                        if (string.IsNullOrEmpty(table.TextString(row, column))) continue;
+                        double height = table.GetTextHeight(row, column, 0) * scale;
+                        table.SetTextHeight(row, column, height);
+                        table.SetTextHeight(row, column, 0, height);
+                    }
                 }
+                // Do not swallow a layout failure and commit an enlarged table.
+                if (table.MinimumRowHeight(row) > fixedHeight)
+                    throw new InvalidOperationException("清单第 " + (row + 1)
+                        + " 行无法保持固定高度，请检查单元格边距或文字格式。本次修改已取消。");
+                table.SetRowHeight(row, fixedHeight);
             }
-            for (int row = Math.Max(0, startRow); row < endRow; row++)
-            {
-                try
-                {
-                    table.SetRowHeight(row, fixedHeight);
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Warn("U1F lock generated row height " + row + " failed: "
-                        + ex.Message);
-                }
-            }
+        }
+
+        private static void ValidateFixedRowMargins(Table table, int startRow, int count)
+        {
+            // Native table layout caches can outlive a transaction abort. Reject
+            // impossible geometry before a text mutation can trigger regeneration.
+            for (int row = startRow; row < startRow + count; row++)
+                for (int column = 0; column < Math.Min(6, table.Columns.Count); column++)
+                    if (table.GetMargin(row, column, CellMargins.Top)
+                        + table.GetMargin(row, column, CellMargins.Bottom)
+                        >= TableFillFormatter.GeneratedRowHeight)
+                        throw new InvalidOperationException("清单第 " + (row + 1)
+                            + " 行的上下边距超过固定行高，请先调整边距。本次未写入表格。");
         }
 
         // Capacity preflight and the actual transaction must resolve the same final data row.

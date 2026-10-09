@@ -31,6 +31,11 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.4.13", "2026-09-29",
+                    "新增：U13D 可框选多个完整图框，按工作簿下游轴位和 4800mm 轴距统一对齐。",
+                    "新增：只读 3D 预览展示全部 U1L 路由、电缆米数、桥架米数和每个图框的轴位偏移。",
+                    "优化：U1Q 桥架带有源线元数据时可绑定到对应路线；旧标注无法唯一判断时显示未关联，不再猜测。",
+                    "修复：BOQ 清单长描述不再撑大整张表；多行特征描述采用紧凑行距并保持固定数据行高。"),
                 new VersionChangeLogEntry("2.4.12", "2026-09-28",
                     "新增：U1C20、U1C25、U1C38、U1C51 可直接按固定 BOQ 型号生成线管标注；U1C 继续使用 U1SET 默认规格。",
                     "优化：同一图框内的 20、25、38、51 mm 刚性线管按管径分别求和并写入对应 BOQ 行。",

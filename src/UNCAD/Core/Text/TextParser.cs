@@ -14,6 +14,8 @@ namespace UNCAD.Core.Text
     {
         private static readonly Regex MTextLineBreakRegex = new Regex(
             @"\\[PpXx]|\r\n|\r|\n", RegexOptions.Compiled);
+        private static readonly Regex MTextParagraphControlRegex = new Regex(
+            @"\\px[^;]*;", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex MTextStackRegex = new Regex(
             @"\\[Ss]([^;]*);", RegexOptions.Compiled);
         private static readonly Regex MTextSemicolonCodeRegex = new Regex(
@@ -32,7 +34,8 @@ namespace UNCAD.Core.Text
         public static string CleanMText(string s)
         {
             if (string.IsNullOrEmpty(s)) return s ?? "";
-            string value = s.Replace("\\P", "\n")
+            string value = MTextParagraphControlRegex.Replace(s, "")
+                .Replace("\\P", "\n")
                 .Replace("\\p", "\n")
                 .Replace("\\X", "\n")
                 .Replace("\\x", "\n")
