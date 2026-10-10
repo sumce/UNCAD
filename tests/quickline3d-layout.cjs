@@ -28,7 +28,8 @@ function payload(dense) {
       projectionMode: 'Isometric',
       nodes: [{ id: 'a', position: { x: 0, y: 0, z: 0 } }, { id: 'b', position: { x: 4800, y: 0, z: 0 } }],
       segments: Array.from({ length: count }, (_, i) => ({
-        id: String(i), routeGroupId: `route-${i}`, frameLabel: name, circuitName: name,
+        id: String(i), routeGroupId: `route-${i}`,
+        frameLabel: dense ? `${name}-${i % 30}` : name, circuitName: name,
         startNodeId: 'a', endNodeId: 'b', distanceMm: length, axis: 'X'
       })),
       diagnostics: Array.from({ length: count }, (_, i) => `${i}: ${name}`)
@@ -48,7 +49,9 @@ async function measure(page, dense) {
   const data = payload(dense);
   await page.evaluate(message => window.dispatchEvent(new MessageEvent('preview-test', { data: message })), data);
   await page.locator('#loading').waitFor({ state: 'hidden' });
-  assert.equal(await page.locator('#routeList .route-row').count(), data.scene.segments.length);
+  const groups = new Set(data.scene.segments.map(segment =>
+    `${segment.frameLabel || ''}\u0000${segment.circuitName || ''}`));
+  assert.equal(await page.locator('#routeList .route-row').count(), groups.size);
   return page.evaluate(() => {
     const selectors = ['.inspector', '#viewport', '#routeList', '#bridgeList', '#frameList', '#axisMarks', '#diagnostics', '.route-row', '.frame-row', '.route-summary'];
     return Object.fromEntries(selectors.map(selector => {
@@ -81,6 +84,11 @@ async function main() {
       await page.locator('#canvasHost canvas').waitFor();
       const baseline = await measure(page, false);
       const dense = await measure(page, true);
+      const firstRoute = page.locator('#routeList .route-selectable').first();
+      await firstRoute.click();
+      assert.equal(await page.locator('#routeList .route-selectable.selected').count(), 1);
+      await firstRoute.click();
+      assert.equal(await page.locator('#routeList .route-selectable.selected').count(), 0);
       for (const selector of Object.keys(baseline)) {
         assert.equal(dense[selector].width, baseline[selector].width, `${width}: ${selector} width changed`);
         assert.equal(dense[selector].height, baseline[selector].height, `${width}: ${selector} height changed`);
@@ -91,7 +99,7 @@ async function main() {
         assert.ok(dense[selector].scrollHeight > dense[selector].clientHeight, `${selector} should scroll internally`);
       }
       assert.equal(await page.locator('.route-identity').first().getAttribute('title'),
-        await page.locator('.route-identity').first().textContent());
+        await page.locator('.route-identity > span').first().textContent());
       const canvas = page.locator('#canvasHost canvas');
       const rendered = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => {
         const sample = document.createElement('canvas');

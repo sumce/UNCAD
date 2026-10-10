@@ -34,7 +34,7 @@ namespace UNCAD.UI
                 Dock = DockStyle.Fill,
                 AutoEllipsis = true,
                 ForeColor = UiTheme.WarningFg,
-                Text = string.IsNullOrWhiteSpace(reason) ? "请输入授权码。" : reason,
+                Text = string.IsNullOrWhiteSpace(reason) ? "请输入账号。" : reason,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Margin = new Padding(0)
             };
@@ -96,7 +96,7 @@ namespace UNCAD.UI
             layout.Controls.Add(_status, 0, 2);
             layout.Controls.Add(new Label
             {
-                Text = "授权码",
+                Text = "账号",
                 Dock = DockStyle.Fill,
                 Font = UiTheme.FontBodyBold,
                 ForeColor = UiTheme.TextPrimary,

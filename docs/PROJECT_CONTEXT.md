@@ -34,6 +34,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1SET`, `U1DATA` |
 | Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
+| Online account | `UNC_LOGIN` (WebView2 login; account + single-device online) |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 
 ## Main Data Flows

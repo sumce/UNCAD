@@ -109,6 +109,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void AxisGrid_CombinesAllSelectedFrameAxes()
+        {
+            QuickLineAxisGrid grid = QuickLineAxisGridPlanner.PlanCombined(new[]
+            {
+                new QuickLineAxisPlacementInput("A", "54/W", "54/X"),
+                new QuickLineAxisPlacementInput("B", "55/X", "55/Z")
+            });
+
+            Assert.Equal(new[] { "54", "55" },
+                grid.NumericMarks.Select(item => item.Label));
+            Assert.Equal(new[] { "W", "X", "Y", "Z" },
+                grid.AlphabeticMarks.Select(item => item.Label));
+            Assert.Equal(new[] { 0d, 4800d, 9600d, 14400d },
+                grid.AlphabeticMarks.Select(item => item.OffsetMillimetres));
+        }
+
+        [Fact]
         public void RouteAnchor_UsesNearestCadEndpoint()
         {
             string node = QuickLineRouteAnchorPlanner.FindNearestNode(
@@ -201,6 +218,8 @@ namespace UNCAD.Tests
         [Fact]
         public void PreviewDecluttersDenseRouteLabels()
         {
+            string feature = File.ReadAllText(PathOf("src", "UNCAD", "Features",
+                "Unl", "QuickLine3dPreviewFeature.cs"));
             string app = File.ReadAllText(PathOf("src", "UNCAD", "Web",
                 "QuickLine3D", "app.js"));
             string html = File.ReadAllText(PathOf("src", "UNCAD", "Web",
@@ -214,6 +233,13 @@ namespace UNCAD.Tests
             Assert.Contains("new THREE.SphereGeometry", app);
             Assert.Contains("routeGroupId", app);
             Assert.Contains("const routeGroups = new Map()", app);
+            Assert.Contains("directionLabelsButton", File.ReadAllText(PathOf("src",
+                "UNCAD", "Web", "QuickLine3D", "index.html")));
+            Assert.Contains("PlanCombined", feature);
+            Assert.Contains("sceneOffsetX -= downstreamPoint.X", feature);
+            Assert.Contains("sceneOffsetY -= downstreamPoint.Y", feature);
+            Assert.Contains("selectedRouteIds", app);
+            Assert.Contains("applyRouteSelection", app);
             Assert.DoesNotContain("new THREE.ArrowHelper", app);
         }
 

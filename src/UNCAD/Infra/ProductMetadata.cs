@@ -28,8 +28,8 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-09-29";
-        public const string VersionLabel = "2.4.13";
+        public const string ReleaseDateUtc = "2026-10-10";
+        public const string VersionLabel = "2.5.0";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
         public const string VersionSuffix = "";
 
@@ -94,20 +94,20 @@ namespace UNCAD.Infra
             }
         }
 
+        /// <summary>
+        /// 在线有效性判定。**不支持离线使用**：
+        /// 只有拿到服务器明确结论且为 active 才允许执行命令；
+        /// 拿不到结论（未验证 / 网络不可达）一律停用，没有"离线宽限"这回事。
+        /// </summary>
         public static LicenseSnapshot CurrentLicense()
         {
-            // 本地可信时间只保护离线宽限；在线有效期以服务器响应为准。
             DateTime now = TrustedClock.NowUtc(out bool clockTampered);
             OnlineLicenseState online = OnlineLicenseMonitor.Current;
-            // 宽限期：仅在"没拿到服务器结论"（pending/unavailable）时生效。
-            // 服务器明确返回过期/吊销仍立即停用；时钟回拨同样不享受宽限。
-            bool withinGrace = (online.Status == "pending" || online.Status == "unavailable")
-                && OnlineLicenseMonitor.IsWithinGraceWindow();
-            return EvaluateOnlineLicense(online, now, clockTampered, withinGrace);
+            return EvaluateOnlineLicense(online, now, clockTampered);
         }
 
         internal static LicenseSnapshot EvaluateOnlineLicense(OnlineLicenseState online,
-            DateTime trustedNow, bool clockTampered, bool withinGrace)
+            DateTime trustedNow, bool clockTampered)
         {
             if (online == null) throw new ArgumentNullException(nameof(online));
             LicenseMode mode = online.HasResponse
@@ -120,15 +120,16 @@ namespace UNCAD.Infra
             LicenseSnapshot license = EvaluateLicense(mode, expiresAt, evaluationTime);
             string edition = mode == LicenseMode.Perpetual
                 ? "正式版" : "项目授权版";
+            // 必须"拿到服务器结论且 active"才放行——这是取消离线支持的核心。
             bool serverActive = online.HasResponse && online.IsActive;
-            bool grace = !clockTampered && !serverActive
-                && (online.Status == "pending" || online.Status == "unavailable")
-                && withinGrace;
             license.StatusText = serverActive
-                ? edition + " · 在线有效" : grace
-                    ? edition + " · 离线宽限中（等待服务器验证）" : online.Status == "pending"
-                        ? "UNCAD Pro · 在线验证中" : edition + " · 在线不可用";
-            if (serverActive || grace)
+                ? edition + " · 在线有效"
+                : online.Status == "pending"
+                    ? "UNCAD Pro · 在线验证中"
+                    : online.Status == "unavailable"
+                        ? "UNCAD Pro · 无法连接授权服务器"
+                        : edition + " · 在线不可用";
+            if (serverActive)
             {
                 license.IsExpired = false;
                 license.BlockReason = "";
@@ -140,6 +141,15 @@ namespace UNCAD.Infra
                 {
                     license.StatusText = "已过期 · 检测到系统时间被回拨";
                     license.BlockReason = "检测到系统时间被回拨，授权验证失败。";
+                }
+                else if (!online.HasResponse
+                    && (online.Status == "pending" || online.Status == "unavailable"))
+                {
+                    // 明确告知用户是"连不上服务器"，而不是含糊的"授权不可用"。
+                    license.BlockReason = "UNCAD 需要联网验证授权，当前无法连接授权服务器"
+                        + (string.IsNullOrWhiteSpace(online.FailureReason)
+                            ? "。" : "：" + online.FailureReason)
+                        + " 本版本不支持离线使用，请检查网络后重试。";
                 }
                 else license.BlockReason = online.FailureReason;
             }

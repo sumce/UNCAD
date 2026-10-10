@@ -128,6 +128,66 @@ namespace UNCAD.Core.QuickLine
                 diagnostics, spacingMillimetres);
         }
 
+        /// <summary>
+        /// Builds one shared grid for a multi-frame preview. Both workbook axes
+        /// participate so the visible marks cover every placed frame.
+        /// </summary>
+        public static QuickLineAxisGrid PlanCombined(
+            IEnumerable<QuickLineAxisPlacementInput> inputs,
+            double spacingMillimetres = DefaultSpacingMillimetres)
+        {
+            if (double.IsNaN(spacingMillimetres)
+                || double.IsInfinity(spacingMillimetres)
+                || spacingMillimetres <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(spacingMillimetres));
+
+            int minNumber = int.MaxValue;
+            int maxNumber = int.MinValue;
+            long minLetter = long.MaxValue;
+            long maxLetter = long.MinValue;
+            var diagnostics = new List<string>();
+            foreach (QuickLineAxisPlacementInput input in
+                inputs ?? Enumerable.Empty<QuickLineAxisPlacementInput>())
+            {
+                if (input == null) continue;
+                bool hasDownstream = TryParse(input.DownstreamAxis,
+                    out AxisValue downstream);
+                bool hasUpstream = TryParse(input.UpstreamAxis,
+                    out AxisValue upstream);
+                if (!hasDownstream && !hasUpstream)
+                {
+                    diagnostics.Add("图框“" + input.Id
+                        + "”没有可解析的轴位，未纳入批量轴网。");
+                    continue;
+                }
+
+                foreach (AxisValue axis in new[] { downstream, upstream })
+                {
+                    if (axis.Number == 0 && axis.LetterIndex == 0) continue;
+                    minNumber = Math.Min(minNumber, axis.Number);
+                    maxNumber = Math.Max(maxNumber, axis.Number);
+                    minLetter = Math.Min(minLetter, axis.LetterIndex);
+                    maxLetter = Math.Max(maxLetter, axis.LetterIndex);
+                }
+            }
+
+            var numeric = new List<QuickLineAxisMark>();
+            var alphabetic = new List<QuickLineAxisMark>();
+            if (minNumber != int.MaxValue)
+                AddNumericRange(numeric, minNumber, maxNumber,
+                    spacingMillimetres, diagnostics);
+            if (minLetter != long.MaxValue)
+                AddLetterRange(alphabetic,
+                    new AxisValue(0, ToLetters(minLetter), minLetter),
+                    new AxisValue(0, ToLetters(maxLetter), maxLetter),
+                    spacingMillimetres, diagnostics);
+
+            if (numeric.Count == 0 || alphabetic.Count == 0)
+                diagnostics.Add("批量预览没有完整的数字/字母轴位，轴网可能不完整。");
+            return new QuickLineAxisGrid("", "", numeric, alphabetic,
+                diagnostics, spacingMillimetres);
+        }
+
         /// <summary>Parses one workbook axis such as 54/W.</summary>
         public static bool TryParseAxis(string value, out QuickLineAxisCoordinate axis)
         {

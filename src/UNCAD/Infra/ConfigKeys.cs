@@ -81,9 +81,11 @@ namespace UNCAD.Infra
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹
         // 试用授权防回拨:系统时间水位线(max-seen UTC,yyyyMMddHHmmss)。
         public const string ClockWatermarkUtc = "UNC_CLOCK_WATERMARK";
-        // 专业版在线授权码：由用户首次使用时输入，升级后继续沿用。
+        // 在线授权账号名（v2）：旧版本此处存的是"授权码"，键名沿用以免升级后丢登录态；
+        // 值语义已变为账号名，授权码机制已废弃。
         public const string OnlineAuthorizationCode = "UNC_ONLINE_AUTHORIZATION_CODE";
-        // 上次在线授权验证成功的 UTC 时间戳（宽限期判定，防回拨由 TrustedClock 背书）。
+        // 历史键（**保留，勿删**）：曾是"上次在线验证成功"的宽限水位线。
+        // 取消离线支持后代码不再读写它；保留键名只是为了让老版本升级后配置不错乱。
         public const string LicenseLastValidatedUtc = "UNC_LICENSE_LAST_OK";
     }
 }

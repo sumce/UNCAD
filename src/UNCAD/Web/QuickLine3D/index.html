@@ -15,6 +15,7 @@
         <button id="fitButton" type="button" title="适应全部路线">适应视图</button>
         <button id="gridButton" type="button" title="显示或隐藏轴网">轴网</button>
         <button id="labelsButton" type="button" title="显示或隐藏路线标签">路线标签</button>
+        <button id="directionLabelsButton" type="button" title="显示或隐藏上下游端点标签">端点标签</button>
       </div>
       <div id="status" class="status">正在载入...</div>
     </header>
@@ -22,7 +23,7 @@
       <section id="viewport" aria-label="U1L 三维预览">
         <div id="canvasHost"></div>
         <div id="loading">正在启动三维渲染器...</div>
-        <div id="axisLegend"><span>北 ↑ 字母 +1</span><span>东 → 数字 +1</span><span>南 ↓</span><span>西 ←</span></div>
+        <div id="axisLegend"><span>北 ↑ 字母 +1</span><span>东 → 数字 +1</span><span>下游 ●</span><span>上游 ■</span></div>
         <div id="routeLabels" aria-hidden="true"></div>
       </section>
       <aside class="inspector">
@@ -45,7 +46,7 @@
           <div id="axisMarks" class="axis-marks"></div>
         </section>
         <section>
-          <h2>路线 / 回路</h2>
+          <h2>机台 / 回路</h2>
           <div class="route-summary"><div><strong id="segmentCount">0</strong><span>段</span></div><div><strong id="routeLength">0</strong><span>mm</span></div><div><strong id="routeMeters">0</strong><span>m</span></div></div>
           <div id="routeList" class="route-list"></div>
         </section>

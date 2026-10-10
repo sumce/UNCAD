@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -51,6 +54,40 @@ namespace UNCAD.Features.DwgExport
             }
             ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框，"
                 + result.MachineCount + " 个机台文件：" + result.FilePath);
+            UploadExport(result);
+            if (result.MachineCount > 0)
+                ctx.Write("\n[U1DWG] 已排队上传 " + result.MachineCount
+                    + " 个机台的 DWG 与回路登记（后台执行，失败不影响图纸）。");
+        }
+
+        /// <summary>
+        /// 导出成功后把数据交给后台线程上传：先登记"该机台覆盖了哪些回路"，
+        /// 再上传该机台的 DWG 本体。**绝不能阻塞 CAD 主线程，也绝不能因上传失败回滚图纸**：
+        /// 失败只在日志与命令行提示（由 Bootstrap 的 Idle 循环输出），可重新执行命令重试。
+        /// </summary>
+        private static void UploadExport(DwgExportResult result)
+        {
+            List<DwgExportMachine> machines = result?.Machines;
+            if (machines == null || machines.Count == 0) return;
+            var captured = new List<DwgExportMachine>(machines);
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                foreach (DwgExportMachine machine in captured)
+                {
+                    try
+                    {
+                        ClientSubmissionUploader.Default.ReportDwgExport(machine.MachineId,
+                            machine.Circuits);
+                        ClientSubmissionUploader.Default.UploadDwgFile(machine.MachineId,
+                            machine.FilePath, machine.Circuits);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        // 上传链路的任何异常都不得影响已完成的导出结果。
+                        Log.Warn("U1DWG 上传异常（已忽略）: " + ex.Message);
+                    }
+                }
+            });
         }
     }
 }

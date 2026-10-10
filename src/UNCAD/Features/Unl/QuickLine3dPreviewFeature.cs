@@ -501,6 +501,8 @@ namespace UNCAD.Features.Unl
             var frameValues = new List<object>();
             var directionMarkers = new List<object>();
             var diagnostics = new List<string>();
+            QuickLineAxisGrid batchAxes = QuickLineAxisGridPlanner.PlanCombined(inputs);
+            diagnostics.AddRange(batchAxes.Diagnostics);
             int routeFrameCount = 0;
             int frameIndex = 0;
 
@@ -523,6 +525,18 @@ namespace UNCAD.Features.Unl
                 string framePrefix = "F" + (++frameIndex) + "_";
                 Dictionary<string, string> routeGroups =
                     BuildRouteGroupIds(frame.Labelled);
+                double sceneOffsetX = placement.OffsetXMillimetres;
+                double sceneOffsetY = placement.OffsetYMillimetres;
+                if (frame.RouteAnchors != null
+                    && frame.RouteAnchors.TryGetValue("downstream",
+                        out QuickLineSpatialPoint downstreamPoint))
+                {
+                    // BuildAll roots a scene at the first collected segment. Move
+                    // that arbitrary local origin so the resolved downstream node
+                    // lands on the workbook axis placement.
+                    sceneOffsetX -= downstreamPoint.X;
+                    sceneOffsetY -= downstreamPoint.Y;
+                }
                 var nodeMap = new Dictionary<string, string>(
                     StringComparer.OrdinalIgnoreCase);
                 if (frame.Scene != null)
@@ -537,8 +551,8 @@ namespace UNCAD.Features.Unl
                             ["id"] = nodeId,
                             ["position"] = new Dictionary<string, object>
                             {
-                                ["x"] = node.Position.X + placement.OffsetXMillimetres,
-                                ["y"] = node.Position.Y + placement.OffsetYMillimetres,
+                                ["x"] = node.Position.X + sceneOffsetX,
+                                ["y"] = node.Position.Y + sceneOffsetY,
                                 ["z"] = node.Position.Z
                             }
                         });
@@ -583,8 +597,8 @@ namespace UNCAD.Features.Unl
                         ? frame.Id : frame.Identity.MachineId,
                     circuitName,
                     axes,
-                    placement.OffsetXMillimetres,
-                    placement.OffsetYMillimetres,
+                    sceneOffsetX,
+                    sceneOffsetY,
                     frame.RouteAnchors));
 
                 foreach (BridgePreviewInfo bridge in frame.Bridges)
@@ -630,8 +644,22 @@ namespace UNCAD.Features.Unl
                 ["bridges"] = bridgeValues.ToArray(),
                 ["axisGrid"] = new Dictionary<string, object>
                 {
+                    ["upstreamAxis"] = batchAxes.UpstreamAxis,
+                    ["downstreamAxis"] = batchAxes.DownstreamAxis,
                     ["spacingMillimetres"] =
-                        QuickLineAxisGridPlanner.DefaultSpacingMillimetres,
+                        batchAxes.SpacingMillimetres,
+                    ["numericMarks"] = batchAxes.NumericMarks.Select(item => (object)
+                        new Dictionary<string, object>
+                        {
+                            ["label"] = item.Label,
+                            ["offsetMillimetres"] = item.OffsetMillimetres
+                        }).ToArray(),
+                    ["alphabeticMarks"] = batchAxes.AlphabeticMarks.Select(item => (object)
+                        new Dictionary<string, object>
+                        {
+                            ["label"] = item.Label,
+                            ["offsetMillimetres"] = item.OffsetMillimetres
+                        }).ToArray(),
                     ["diagnostics"] = diagnostics.ToArray()
                 },
                 ["metadata"] = new Dictionary<string, object>

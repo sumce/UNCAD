@@ -16,6 +16,11 @@ namespace UNCAD.Infra
         public const string Statistics = "XSTS";
         public const string Merge = "Xmerge";
         public const string Help = "U1HELP";
+        /// <summary>
+        /// 在线登录命令：授权缺失/过期时用户唯一的恢复入口，因此它绝不调用
+        /// ProductMetadata.EnsureCommandAllowed。
+        /// </summary>
+        public const string ClientLogin = "UNC_LOGIN";
         public const string About = "U1A";
         public const string Conduit = "U1C";
         public const string Conduit20 = "U1C20";
@@ -58,6 +63,7 @@ namespace UNCAD.Infra
         public const string XstsFeatureCommands = Statistics;
         public const string MergeFeatureCommands = Merge;
         public const string HelpFeatureCommands = Help;
+        public const string ClientLoginFeatureCommands = ClientLogin;
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
@@ -81,6 +87,7 @@ namespace UNCAD.Infra
             Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
             About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
+            ClientLogin,
             DwgExportShort,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics

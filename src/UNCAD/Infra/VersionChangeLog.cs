@@ -31,6 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.5.0", "2026-10-10",
+                    "新增：授权改为账号制，并用 WebView2 登录一次后自动续期，不再使用授权码。",
+                    "新增：同一账号同一时刻只允许一台设备在线；新设备登录会顶掉上一台并立即停用其命令。",
+                    "新增：执行 U1U/U1F/U1DWG 时自动上传该回路清单与 DWG 到服务端，以回路（一个图框）为最小单位。",
+                    "变更：取消离线宽限，授权必须联网验证；无法连接授权服务器时命令立即停用并给出中文原因。",
+                    "优化：U1L3D/U13D 多图框预览使用合并轴网，并修正下游节点未对齐工作簿轴位的问题。"),
                 new VersionChangeLogEntry("2.4.13", "2026-09-29",
                     "新增：U13D 可框选多个完整图框，按工作簿下游轴位和 4800mm 轴距统一对齐。",
                     "新增：只读 3D 预览展示全部 U1L 路由、电缆米数、桥架米数和每个图框的轴位偏移。",

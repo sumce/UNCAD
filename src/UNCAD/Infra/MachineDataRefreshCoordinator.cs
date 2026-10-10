@@ -21,6 +21,7 @@ namespace UNCAD.Infra
     {
         private readonly Func<string, MachineWorkbookSourceResult> _refresh;
         private readonly Action<Action> _queue;
+        private readonly MachineLedgerReporter _ledger;
         private readonly object _noticeGate = new object();
         private readonly Queue<string> _notices = new Queue<string>();
         private int _refreshing;
@@ -31,10 +32,12 @@ namespace UNCAD.Infra
 
         internal MachineDataRefreshCoordinator(
             Func<string, MachineWorkbookSourceResult> refresh,
-            Action<Action> queue)
+            Action<Action> queue,
+            MachineLedgerReporter ledger = null)
         {
             _refresh = refresh ?? throw new ArgumentNullException(nameof(refresh));
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+            _ledger = ledger ?? MachineLedgerReporter.Default;
         }
 
         internal MachineDataRefreshStartStatus TryStartStartupRefresh(string source)
@@ -66,6 +69,16 @@ namespace UNCAD.Infra
                 message = _notices.Dequeue();
                 return true;
             }
+        }
+
+        /// <summary>
+        /// 把后台任务（台账上报 / U1F·U1U·U1DWG 数据上传）的提示排入同一队列，
+        /// 由 Bootstrap 的 Idle 循环统一输出到命令行——后台线程不能直接写 Editor。
+        /// </summary>
+        internal static void EnqueueNotice(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            Default.AddNotice(message);
         }
 
         private MachineDataRefreshStartStatus TryStart(string source)
@@ -101,6 +114,7 @@ namespace UNCAD.Infra
                 AddNotice("机台数据已后台更新，共 " + rows + " 行"
                     + Detail(result.Warning) + "。");
                 Log.Info("机台数据后台刷新完成: " + rows + " 行");
+                ReportLedger(source);
             }
             catch (Exception ex)
             {
@@ -119,6 +133,26 @@ namespace UNCAD.Infra
         private void AddNotice(string message)
         {
             lock (_noticeGate) _notices.Enqueue(message);
+        }
+
+        /// <summary>
+        /// 刷新成功后把台账上报给服务端（机台数据的唯一写入口）。
+        /// 上报失败绝不影响本次刷新结论：只记日志 + 命令行提示，下次刷新自动重试；
+        /// 只有 409（本机授权已被其它设备接管）会明确要求重新登录。
+        /// </summary>
+        private void ReportLedger(string source)
+        {
+            try
+            {
+                MachineLedgerReportOutcome outcome = _ledger.Report(source);
+                if (!string.IsNullOrWhiteSpace(outcome.Message))
+                    AddNotice(outcome.Message);
+            }
+            catch (Exception ex)
+            {
+                // 上报绝不能影响本地刷新与用户可用性。
+                Log.Warn("台账上报异常（已忽略，下次刷新重试）: " + ex.Message);
+            }
         }
 
         private static string Detail(string value)

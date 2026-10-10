@@ -62,7 +62,8 @@ namespace UNCAD.Infra
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路优先读取 U1SET 配置的机台 Excel。"),
                 E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),
                 E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "多行文字和统计分类可在 U1SET 独立开关。"),
-                E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。")
+                E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。"),
+                E(CommandIds.ClientLogin, "在线登录", "UNC_LOGIN", "使用 UNCAD 账号登录并在本机上线；一个账号同时只有一台设备在线", "授权缺失、过期或被其它设备顶掉时仍可运行，是在线授权的恢复入口；重新登录即在本机抢回授权（服务端不支持免密抢回），成功后立即做一次心跳校验。")
             };
 
         public static IReadOnlyList<CommandHelpEntry> All => Entries;

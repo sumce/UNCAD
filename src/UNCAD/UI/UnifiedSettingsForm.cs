@@ -716,18 +716,30 @@ namespace UNCAD.UI
             button.Text = "刷新中...";
             try
             {
-                MachineWorkbookSourceResult result = await Task.Run(() => MachineWorkbookSource.Refresh(source));
+                // U1SET 的刷新不走后台协调器，因此这里同样在成功后上报台账；
+                // 上报失败只影响提示文案，不影响本地快照与用户可用性。
+                MachineWorkbookSourceResult result = null;
+                MachineLedgerReportOutcome ledger = null;
+                await Task.Run(() =>
+                {
+                    result = MachineWorkbookSource.Refresh(source);
+                    if (!result.UsedCachedFallback && result.Snapshot != null)
+                        ledger = MachineLedgerReporter.Default.Report(source);
+                });
                 string message = result.UsedCachedFallback
                     ? "网络暂时不可用，继续使用上次 SQLite 快照。"
                     : "机台 Excel 已解析并写入 SQLite 快照。";
                 if (!result.UsedCachedFallback && result.Snapshot != null)
                     message += "\n有效回路: " + result.Snapshot.RowCount + " 行。";
+                if (ledger != null && !string.IsNullOrWhiteSpace(ledger.Message))
+                    message += "\n" + ledger.Message;
                 if (!string.IsNullOrWhiteSpace(result.Warning))
                     message += "\n" + result.Warning;
                 if (IsDisposed || Disposing) return;
                 UpdateMachineSnapshotStatus();
                 MessageBox.Show(this, message, "U1SET", MessageBoxButtons.OK,
-                    result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
+                    result.UsedCachedFallback || ledger?.RequiresRelogin == true
+                        || !string.IsNullOrWhiteSpace(result.Warning)
                         ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
             catch (Exception ex)

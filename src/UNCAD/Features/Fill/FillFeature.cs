@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
@@ -524,6 +525,56 @@ namespace UNCAD.Features.Fill
                 + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
                 + " 条，覆盖文件 " + automaticExcel.ReplacedCount
                 + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
+            // 阶段6 之后：把**该回路（=该图框）**的清单内容交给后台线程上传。
+            // 上传失败只记日志+命令行提示，绝不回滚已经提交的 CAD 事务与 BOQ 输出。
+            if (UploadCircuitSubmission(picked, tableRows, updateMode, selection))
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 已排队上传该回路清单（后台执行，失败不影响图纸）。");
+        }
+
+        /// <summary>
+        /// U1F/U1U 成功后的数据上传：最小单位是**回路**（= 一个图框），只提交该回路的
+        /// 清单编号/名称/数量/单位，不提交 frameinfo_json、BOQ 全量或任何图纸大对象。
+        /// 在后台线程执行，不阻塞 CAD；失败不影响图纸与本地刷新。
+        /// 返回是否已排队（缺机台/回路标识时不排队）。单图框与批量 U1U 共用本方法。
+        /// </summary>
+        internal static bool UploadCircuitSubmission(MachineRow picked,
+            List<TableFillRow> rows, bool updateMode, FillSelection selection)
+        {
+            if (picked == null) return false;
+            string machineId = (picked.MachineId ?? "").Trim();
+            string circuitName = (picked.CircuitName ?? "").Trim();
+            if (machineId.Length == 0 || circuitName.Length == 0) return false;
+            string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
+            string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
+            var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    ClientSubmissionUploader.Default.SubmitCircuit(machineId, circuitName,
+                        command, frameHandle, captured);
+                }
+                catch (System.Exception ex)
+                {
+                    // 上传链路的任何异常都不得影响已完成的写入结果。
+                    Log.Warn("U1F/U1U 上传异常（已忽略）: " + ex.Message);
+                }
+            });
+            return true;
+        }
+
+        /// <summary>取图框块参照的句柄作为 frameHandle；不可用时返回空串（不上报句柄）。</summary>
+        private static string FirstFrameHandle(ObjectId[] frameBlockIds)
+        {
+            if (frameBlockIds == null) return "";
+            foreach (ObjectId id in frameBlockIds)
+            {
+                if (id.IsNull) continue;
+                try { return id.Handle.ToString(); }
+                catch (System.Exception) { /* 已删除/无效对象：忽略，继续找下一个 */ }
+            }
+            return "";
         }
 
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,

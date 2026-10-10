@@ -17,9 +17,11 @@ const el = {
   frameList: document.getElementById('frameList'),
   diagnosticsSection: document.getElementById('diagnosticsSection'), diagnostics: document.getElementById('diagnostics'),
   routeLabels: document.getElementById('routeLabels'), fit: document.getElementById('fitButton'),
-  grid: document.getElementById('gridButton'), labels: document.getElementById('labelsButton'), close: document.getElementById('closeButton')
+  grid: document.getElementById('gridButton'), labels: document.getElementById('labelsButton'),
+  close: document.getElementById('closeButton'),
+  directionLabels: document.getElementById('directionLabelsButton')
 };
-const state = { renderer: null, scene: null, camera: null, controls: null, routeGroup: null, gridGroup: null, directionGroup: null, labelPoints: [], showGrid: true, showRouteLabels: true, viewHeight: 1000 };
+const state = { renderer: null, scene: null, camera: null, controls: null, routeGroup: null, gridGroup: null, directionGroup: null, labelPoints: [], selectedRouteIds: null, showGrid: true, showRouteLabels: true, showDirectionLabels: true, viewHeight: 1000 };
 const routeColor = 0x9bc2df;
 
 boot();
@@ -59,6 +61,11 @@ function bindUi() {
     el.labels.textContent = state.showRouteLabels ? '隐藏路线标签' : '显示路线标签';
     updateLabels();
   });
+  el.directionLabels.addEventListener('click', () => {
+    state.showDirectionLabels = !state.showDirectionLabels;
+    el.directionLabels.textContent = state.showDirectionLabels ? '隐藏端点标签' : '显示端点标签';
+    updateLabels();
+  });
   el.close.addEventListener('click', () => post({ type: 'close', schemaVersion: 1 }));
   window.addEventListener('resize', resize);
 }
@@ -74,8 +81,11 @@ function receive(raw) {
 function renderEnvelope(envelope) {
   const data = envelope.scene || {}, meta = envelope.metadata || {}, grid = envelope.axisGrid || {};
   const batch = envelope.mode === 'batch';
+  state.selectedRouteIds = null;
   state.showRouteLabels = !batch || (data.segments || []).length <= 24;
+  state.showDirectionLabels = !batch || (data.directionMarkers || []).length <= 24;
   el.labels.textContent = state.showRouteLabels ? '隐藏路线标签' : '显示路线标签';
+  el.directionLabels.textContent = state.showDirectionLabels ? '隐藏端点标签' : '显示端点标签';
   el.machine.textContent = text(meta.machineId || (batch ? '多图框' : ''));
   el.device.textContent = text(meta.deviceName || (batch ? '统一轴位预览' : ''));
   el.frameCount.textContent = batch ? text(meta.frameCount) : '1';
@@ -108,10 +118,12 @@ function buildGeometry(data, grid) {
     const start = nodes.get(segment.startNodeId), end = nodes.get(segment.endNodeId);
     if (!start || !end) continue;
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-    state.routeGroup.add(new THREE.Line(geometry, new THREE.LineBasicMaterial({
-      color: routeColor
-    })));
     const key = String(segment.routeGroupId || segment.id);
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+      color: routeColor
+    }));
+    line.userData.routeGroupId = key;
+    state.routeGroup.add(line);
     let group = routeGroups.get(key);
     if (!group) {
       group = {
@@ -129,7 +141,8 @@ function buildGeometry(data, grid) {
     if (group.segmentCount > 0)
       group.midpoint.multiplyScalar(1 / group.segmentCount);
     state.labelPoints.push({ point: group.midpoint,
-      text: routeLabel(group), kind: 'route' });
+      text: routeLabel(group), kind: 'route',
+      routeGroupId: group.routeGroupId });
   }
   for (const point of nodes.values()) {
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(38, 12, 8),
@@ -226,32 +239,72 @@ function renderRouteList(segments, batch) {
   for (const segment of segments) {
     const lengthMm = Number(segment.distanceMm) || 0;
     length += lengthMm;
-    const key = String(segment.routeGroupId || segment.id);
+    const key = batch
+      ? `${String(segment.frameLabel || '')}\u0000${String(segment.circuitName || '')}`
+      : String(segment.routeGroupId || segment.id);
     let group = groups.get(key);
     if (!group) {
       group = {
         routeGroupId: key, frameLabel: segment.frameLabel,
-        circuitName: segment.circuitName, distanceMm: 0, segmentCount: 0
+        circuitName: segment.circuitName, distanceMm: 0, segmentCount: 0,
+        routeIds: new Set()
       };
       groups.set(key, group);
     }
     group.distanceMm += lengthMm;
     group.segmentCount++;
+    group.routeIds.add(String(segment.routeGroupId || segment.id));
   }
   for (const group of groups.values()) {
     const row = document.createElement('div'); row.className = 'route-row';
-    const id = document.createElement('span'); id.className = 'route-identity';
+    const id = document.createElement('div'); id.className = 'route-identity';
+    const title = document.createElement('span');
     const circuit = text(group.circuitName);
     const owner = batch ? `${text(group.frameLabel)} · ` : '';
-    id.textContent = `${owner}${circuit === '-' ? '未识别回路' : circuit} · `
-      + `${routeName(group.routeGroupId)} · ${group.segmentCount}段`;
+    const routes = [...group.routeIds].map(routeName);
+    title.textContent = `${owner}${circuit === '-' ? '未识别回路' : circuit}`;
+    title.title = `${owner}${circuit === '-' ? '未识别回路' : circuit}`;
+    id.title = title.title;
+    const route = document.createElement('span'); route.className = 'route-detail';
+    route.textContent = `${routes.length}条路由 · ${group.segmentCount}段`
+      + (routes.length <= 4 ? ` · ${routes.join('、')}` : '');
+    route.title = routes.join('、');
     const distance = document.createElement('span'); distance.className = 'distance';
     distance.textContent = `${format(group.distanceMm)} mm`;
+    id.append(title, route);
     row.append(id, distance); el.routeList.appendChild(row);
+    row.classList.add('route-selectable');
+    row.addEventListener('click', () => {
+      const ids = [...group.routeIds];
+      const same = state.selectedRouteIds
+        && ids.length === state.selectedRouteIds.size
+        && ids.every(id => state.selectedRouteIds.has(id));
+      state.selectedRouteIds = same ? null : new Set(ids);
+      for (const item of document.querySelectorAll('.route-selectable'))
+        item.classList.toggle('selected', item === row && !!state.selectedRouteIds);
+      applyRouteSelection();
+    });
   }
   el.segmentCount.textContent = String(segments.length);
   el.routeLength.textContent = format(length);
   el.routeMeters.textContent = format(length / 1000);
+}
+
+function applyRouteSelection() {
+  if (!state.routeGroup) return;
+  for (const child of state.routeGroup.children) {
+    const key = child.userData && child.userData.routeGroupId;
+    if (!key || !child.material || !child.material.color) continue;
+    const active = !state.selectedRouteIds || state.selectedRouteIds.has(key);
+    child.material.color.setHex(active ? routeColor : 0x344352);
+    child.material.transparent = !active;
+    child.material.opacity = active ? 1 : .16;
+  }
+  for (const item of state.labelPoints) {
+    if (item.kind !== 'route') continue;
+    item.element.style.display = !state.selectedRouteIds
+      || state.selectedRouteIds.has(item.routeGroupId) ? '' : 'none';
+  }
 }
 function renderBridges(bridges) {
   let length = 0; el.bridgeList.innerHTML = '';
@@ -330,6 +383,15 @@ function updateLabels() {
     item.element.style.left = `${x}px`;
     item.element.style.top = `${y}px`;
     if (item.kind === 'route' && !state.showRouteLabels) {
+      item.element.style.display = 'none';
+      continue;
+    }
+    if (item.kind === 'route' && state.selectedRouteIds
+      && !state.selectedRouteIds.has(item.routeGroupId)) {
+      item.element.style.display = 'none';
+      continue;
+    }
+    if (item.kind === 'direction' && !state.showDirectionLabels) {
       item.element.style.display = 'none';
       continue;
     }

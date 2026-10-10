@@ -19,6 +19,16 @@ namespace UNCAD.Features.DwgExport
         public string FilePath { get; set; }
         public int MachineCount { get; set; }
         public int FrameCount { get; set; }
+        /// <summary>按机台拆分的导出明细：上传接口需要"每个机台的文件 + 覆盖的回路"。</summary>
+        public List<DwgExportMachine> Machines { get; set; } = new List<DwgExportMachine>();
+    }
+
+    /// <summary>一个机台的导出结果：DWG 文件路径 + 覆盖的回路（回路 = 一个图框的设备名）。</summary>
+    internal sealed class DwgExportMachine
+    {
+        public string MachineId { get; set; }
+        public string FilePath { get; set; }
+        public List<string> Circuits { get; set; } = new List<string>();
     }
 
     /// <summary>Source frame with the recognized machine and device identity.</summary>
@@ -101,11 +111,27 @@ namespace UNCAD.Features.DwgExport
                     throw;
                 }
             }
+            var exported = new List<DwgExportMachine>();
+            for (int exportIndex = 0; exportIndex < machineGroups.Count; exportIndex++)
+            {
+                IGrouping<string, DwgExportFrame> machine = machineGroups[exportIndex];
+                exported.Add(new DwgExportMachine
+                {
+                    MachineId = machine.Key,
+                    FilePath = paths[exportIndex],
+                    // 回路 = 图框的设备名；去重保持顺序，空名不上报。
+                    Circuits = machine.Select(frame => (frame.DeviceName ?? "").Trim())
+                        .Where(name => name.Length > 0)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList()
+                });
+            }
             return new DwgExportResult
             {
                 FilePath = string.Join("; ", paths),
                 MachineCount = paths.Count,
-                FrameCount = frames.Count
+                FrameCount = frames.Count,
+                Machines = exported
             };
         }
 

@@ -24,7 +24,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button { border: 1px solid #344352; border-radius: 6px; color: #dbe5ef; background: #18222d; padding: 6px 11px; cursor: pointer; }
 button:hover { border-color: #6684a1; background: #202e3b; }
 .status { min-width: 120px; text-align: right; }
-.workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 310px; }
+.workspace { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
 #viewport { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #0d131a; }
 #canvasHost, #canvasHost canvas { display: block; width: 100%; height: 100%; }
 #loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); background: #0d131a; }
@@ -51,9 +51,14 @@ h2 { margin: 0 0 12px; font-size: 13px; color: #dbe5ef; }
 /* Constrain implicit grid tracks as well as the list box: long values must not set its width. */
 .route-list, .frame-list { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; height: 220px; min-height: 220px; max-height: 220px; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
 .route-list { gap: 4px; margin-top: 12px; }
-.route-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 45%); gap: 7px; padding: 6px 7px; border-radius: 5px; background: var(--panel2); font-size: 11px; line-height: 16px; }
-.route-row > span, .frame-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(82px, 28%); gap: 7px; padding: 6px 7px; border-radius: 5px; background: var(--panel2); font-size: 11px; line-height: 16px; }
+.route-row > *, .frame-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-row .route-identity { display: grid; gap: 1px; }
+.route-row .route-identity > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-row .axis { font-weight: 700; } .route-row .distance { color: #dbe5ef; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.route-row .route-detail { color: var(--muted); font-size: 10px; }
+.route-selectable { cursor: pointer; }
+.route-selectable:hover, .route-selectable.selected { outline: 1px solid var(--accent); background: #1b2a39; }
 .route-row .unlinked { color: #e3b77a; font-size: 10px; }
 .bridge-list { height: 150px; min-height: 150px; max-height: 150px; }
 .frame-list { gap: 6px; }

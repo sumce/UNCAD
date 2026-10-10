@@ -18,7 +18,7 @@ namespace UNCAD.Tests
                 {
                     Updated = true,
                     Snapshot = new MachineWorkbookSnapshotInfo { RowCount = 12 }
-                }, queued.Add);
+                }, queued.Add, MachineLedgerReporter.None);
 
             Assert.Equal(MachineDataRefreshStartStatus.NoSource,
                 coordinator.TryStartStartupRefresh(""));
@@ -42,7 +42,8 @@ namespace UNCAD.Tests
         {
             var queued = new List<Action>();
             var coordinator = new MachineDataRefreshCoordinator(
-                _ => throw new InvalidDataException("bad workbook"), queued.Add);
+                _ => throw new InvalidDataException("bad workbook"), queued.Add,
+                MachineLedgerReporter.None);
 
             Assert.Equal(MachineDataRefreshStartStatus.Started,
                 coordinator.TryStartManualRefresh(@"C:\data\machines.xlsx"));

@@ -218,7 +218,7 @@ namespace UNCAD.UI
             }, 0, 0);
             if (ProductMetadata.RequiresOnlineLicense)
             {
-                Button update = UiTheme.Button("更新授权码");
+                Button update = UiTheme.Button("账号登录");
                 update.Anchor = AnchorStyles.Right;
                 update.Click += (sender, args) => UpdateAuthorization(card);
                 footer.Controls.Add(update, 1, 0);
@@ -431,8 +431,11 @@ namespace UNCAD.UI
 
         private static void UpdateAuthorization(Control owner)
         {
-            using (var form = new OnlineLicenseForm(
-                OnlineLicenseMonitor.Current.FailureReason))
+            // v2：授权主体是账号，且一个账号同一时刻只允许一台设备在线。
+            // 这里必须走 ClientLoginForm（WebView2 登录 + 设备绑定 + 令牌写回），
+            // 而不是旧的"输入授权码 → 验证并保存"：后者既没有设备标识也没有令牌，
+            // 被其它设备顶掉后用户在这个入口无法重新登录抢回。
+            using (var form = new ClientLoginForm())
             {
                 if (form.ShowDialog(owner.FindForm()) == DialogResult.OK)
                     owner.FindForm()?.Close();

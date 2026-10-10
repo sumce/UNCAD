@@ -260,7 +260,12 @@ namespace UNCAD
                 try
                 {
                     _licenseDialogOpen = true;
-                    using (var form = new OnlineLicenseForm(reason))
+                    // v2：激活/被顶掉必须走 ClientLoginForm（WebView2 登录 → 设备绑定 → 令牌写回），
+                    // 不能再用 OnlineLicenseForm（只输入账号 + 验证并保存，既没有设备标识也没有令牌，
+                    // 被其它设备顶掉的用户在这个入口永远无法重新上线）。
+                    // reason 由通知弹窗（见下方 notice 分支）负责告知，这里不再需要传入。
+                    _ = reason;
+                    using (var form = new ClientLoginForm())
                         Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
                 }
                 finally { _licenseDialogOpen = false; }

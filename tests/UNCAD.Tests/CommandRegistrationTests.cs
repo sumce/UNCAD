@@ -26,11 +26,12 @@ namespace UNCAD.Tests
             Assert.Equal("U1C;U1C20;U1C25;U1C38;U1C51",
                 CommandIds.ConduitFeatureCommands);
             Assert.Equal("U1DWG;U1D", CommandIds.DwgExportFeatureCommands);
-            Assert.Equal(33, CommandIds.Registered.Count);
-            Assert.Equal(33, CommandIds.Registered.Distinct(
+            Assert.Equal(34, CommandIds.Registered.Count);
+            Assert.Equal(34, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
-            Assert.DoesNotContain(CommandIds.Registered, command =>
-                command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase));
+            // UNC_ 前缀只允许在线登录命令使用（它是在线授权的恢复入口）。
+            Assert.Equal(new[] { CommandIds.ClientLogin }, CommandIds.Registered.Where(
+                command => command.StartsWith("UNC_", System.StringComparison.OrdinalIgnoreCase)));
             Assert.DoesNotContain(CommandIds.Registered, command =>
                 command.StartsWith("OPUN", System.StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain("UNADDX", CommandIds.Registered);
@@ -82,7 +83,9 @@ namespace UNCAD.Tests
                 "Line", "LineQuick", "Line3dPreview", "Line3dBatchPreview", "DimensionText", "Arch", "Tray100", "Tray200", "Tray400",
                 "Fill", "FillUpdate", "Submit", "Conduit", "Conduit20", "Conduit25",
                 "Conduit38", "Conduit51", "About", "Settings", "DataRefresh",
-                "DwgExport", "DwgExportShort", "XLayout", "Statistics", "Merge", "Help", "LegacyLine", "LegacyLineQuick",
+                "DwgExport", "DwgExportShort", "XLayout", "Statistics", "Merge", "Help",
+                "ClientLogin",
+                "LegacyLine", "LegacyLineQuick",
                 "LegacyArch", "LegacyTray100", "LegacyTray200", "LegacyTray400",
                 "LegacyStatistics"
             };

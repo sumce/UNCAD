@@ -53,8 +53,9 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void OnlineLicense_AllowsCommandsDuringOfflineGraceWindow()
+        public void OnlineLicense_BlocksCommandsWhenServerVerdictIsUnavailable()
         {
+            // 取消离线支持：拿不到服务器结论（unavailable）必须立即停用，没有宽限。
             var online = new OnlineLicenseState
             {
                 HasResponse = false,
@@ -64,10 +65,11 @@ namespace UNCAD.Tests
             };
 
             LicenseSnapshot license = ProductMetadata.EvaluateOnlineLicense(online,
-                DateTime.UtcNow, false, true);
+                DateTime.UtcNow, false);
 
-            Assert.False(license.IsExpired);
-            Assert.Contains("离线宽限中", license.StatusText);
+            Assert.True(license.IsExpired);
+            Assert.False(string.IsNullOrWhiteSpace(license.BlockReason));
+            Assert.Contains("不支持离线使用", license.BlockReason);
         }
 
         [Fact]
@@ -86,7 +88,7 @@ namespace UNCAD.Tests
             };
 
             LicenseSnapshot license = ProductMetadata.EvaluateOnlineLicense(online,
-                new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc), true, false);
+                new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc), true);
 
             Assert.False(license.IsExpired);
             Assert.Contains("在线有效", license.StatusText);

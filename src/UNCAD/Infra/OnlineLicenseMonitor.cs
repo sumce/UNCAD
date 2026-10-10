@@ -25,6 +25,16 @@ namespace UNCAD.Infra
         public string MessageLevel { get; set; }
         public string Message { get; set; }
         public string FailureReason { get; set; }
+
+        // ---- v2：账号 + 单设备在线 ----
+        /// <summary>服务端回显的请求设备 ID。</summary>
+        public string DeviceId { get; set; }
+        /// <summary>当前在线设备的机器名（被顶掉时用于提示"已被谁登录"）。</summary>
+        public string ActiveDeviceName { get; set; }
+        /// <summary>当前在线设备的上线时间（原样保留服务端 ISO 文本）。</summary>
+        public string SignedInAt { get; set; }
+        /// <summary>账号允许的并发设备数（当前恒为 1）。</summary>
+        public int? DeviceLimit { get; set; }
     }
 
     internal sealed class OnlineLicenseNotice
@@ -39,6 +49,7 @@ namespace UNCAD.Infra
         public int SchemaVersion { get; set; }
         public string Product { get; set; }
         public string LicenseMode { get; set; }
+        /// <summary>v1 为授权码；v2 起回显<b>账号名</b>（保留字段名以维持路径一致性校验）。</summary>
         public string AuthorizationCode { get; set; }
         public string CustomerCode { get; set; }
         public string Company { get; set; }
@@ -49,25 +60,35 @@ namespace UNCAD.Infra
         public string MessageTitle { get; set; }
         public string MessageLevel { get; set; }
         public string Message { get; set; }
+        public string DeviceId { get; set; }
+        public string ActiveDeviceName { get; set; }
+        public string SignedInAt { get; set; }
+        public int? DeviceLimit { get; set; }
     }
 
     internal static class OnlineLicenseMonitor
     {
-        internal static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
         /// <summary>
-        /// 上一次在线验证成功后的宽限期：期间轮询失败（抖动/断网/服务器维护）
-        /// 不禁用命令，超过宽限期才按不可用处理。水位线由 TrustedClock 背书，
-        /// 回拨系统时间无法延长。仅适用于"没拿到服务器结论"的场景
-        /// （pending/unavailable）；服务器明确返回过期/吊销仍立即停用。
+        /// 心跳间隔：3 分钟。被顶掉的设备最迟一个周期就会拿到 device-kicked 并被
+        /// 立即停用；本次登录/抢回会立刻触发一次心跳，无需等轮询。
+        ///
+        /// **本版本不支持离线使用，没有宽限期**：拿不到服务器明确结论
+        /// （pending / unavailable）时，ProductMetadata 会立即停用全部命令，
+        /// 只保留明确的中文原因。历史上的 <c>UNC_LICENSE_LAST_OK</c> 水位线
+        /// 键名仍然保留（升级兼容），但已不再读写、也不再参与判定。
         /// </summary>
-        internal static readonly TimeSpan GracePeriod = TimeSpan.FromMinutes(30);
+        internal static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(3);
         private const int TimeoutMilliseconds = 8000;
         private const int MaximumBytes = 64 * 1024;
+        /// <summary>v2 请求头：本机登录凭证（未登录时不发送）。</summary>
+        internal const string TokenHeaderName = "X-Uncad-Token";
+        /// <summary>v2 查询参数：本机设备 ID（始终携带）。</summary>
+        internal const string DeviceQueryName = "device";
         private static readonly string LicenseHost = DecodeHost();
         private static readonly object Sync = new object();
         private static Timer _timer;
         private static int _refreshing;
-        private static OnlineLicenseState _current = Pending("正在读取授权码。");
+        private static OnlineLicenseState _current = Pending("正在读取账号授权。");
         private static OnlineLicenseNotice _pendingNotice;
         private static string _pendingActivationReason;
         private static string _pendingActivationKey;
@@ -79,8 +100,15 @@ namespace UNCAD.Infra
             get { lock (Sync) return _current; }
         }
 
-        internal static string StoredAuthorizationCode
+        /// <summary>本机保存的账号名（v2：路径 /d/key/{account}/pro.key 的 {account}）。</summary>
+        internal static string StoredAccount
             => (Settings.Get(ConfigKeys.OnlineAuthorizationCode, "") ?? "").Trim();
+
+        /// <summary>兼容旧命名：v1 存授权码，v2 存账号名，同一个注册表键。</summary>
+        internal static string StoredAuthorizationCode => StoredAccount;
+
+        /// <summary>本机登录凭证（v2）；未登录时为空，请求不带 X-Uncad-Token。</summary>
+        internal static string StoredToken => DeviceIdentity.GetToken();
 
         internal static void Start()
         {
@@ -88,7 +116,7 @@ namespace UNCAD.Infra
             lock (Sync)
             {
                 if (_timer != null) return;
-                _current = Pending("正在验证在线授权。");
+                _current = Pending("正在验证账号授权。");
                 _pendingNotice = null;
                 _pendingActivationReason = null;
                 _pendingActivationKey = null;
@@ -96,7 +124,7 @@ namespace UNCAD.Infra
                 _lastNoticeKey = null;
                 _timer = new Timer(Refresh, null, TimeSpan.Zero, RefreshInterval);
             }
-            Log.Info("在线授权监控已启动，每 5 分钟刷新一次");
+            Log.Info("在线授权监控已启动，每 3 分钟刷新一次");
         }
 
         internal static void Stop()
@@ -131,53 +159,28 @@ namespace UNCAD.Infra
             {
                 notice = _pendingNotice;
                 if (notice == null) return false;
-                _pendingNotice = null;
                 _lastNoticeKey = NoticeKey(notice);
                 return true;
             }
         }
 
         /// <summary>
-        /// 上次在线验证成功距今是否仍在宽限期内。时间基准取
-        /// TrustedClock（水位线钳制），回拨系统时间无法借此延长授权。
+        /// 用本机设备身份与凭证校验账号并保存。只有服务器返回 active 才写入账号；
+        /// 失败抛出 DTO 里带中文原因的异常（被踢 / 凭证失效 / 未绑定等）。
         /// </summary>
-        internal static bool IsWithinGraceWindow()
-        {
-            if (StoredAuthorizationCode.Length == 0) return false;
-            string stamp = Settings.Get(ConfigKeys.LicenseLastValidatedUtc, "");
-            if (!DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture,
-                DateTimeStyles.None, out DateTimeOffset last)) return false;
-            DateTime now = TrustedClock.NowUtc(out bool clockTampered);
-            if (clockTampered) return false;
-            return now - last.UtcDateTime <= GracePeriod;
-        }
-
-        private static void WriteLastValidatedStamp()
-        {
-            try
-            {
-                Settings.Set(ConfigKeys.LicenseLastValidatedUtc,
-                    TrustedClock.NowUtc(out _).ToString("o", CultureInfo.InvariantCulture));
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("记录授权验证水位线失败: " + ex.Message);
-            }
-        }
-
-        internal static OnlineLicenseState ValidateAndSave(string authorizationCode)
+        internal static OnlineLicenseState ValidateAndSave(string account)
         {
             if (Interlocked.Exchange(ref _refreshing, 1) != 0)
                 throw new InvalidOperationException("后台授权验证正在进行，请稍后重试。");
             try
             {
-                string code = NormalizeCode(authorizationCode);
-                OnlineLicenseState validated = Download(code);
+                string normalized = NormalizeAccount(account);
+                OnlineLicenseState validated = Download(normalized);
                 if (!validated.IsActive)
                     throw new InvalidOperationException(validated.FailureReason);
-                Settings.Set(ConfigKeys.OnlineAuthorizationCode, code);
-                lock (Sync) Publish(validated, code);
-                Log.Info("在线授权码已验证并保存");
+                Settings.Set(ConfigKeys.OnlineAuthorizationCode, normalized);
+                lock (Sync) Publish(validated, normalized);
+                Log.Info("在线授权已验证并保存，设备 " + validated.DeviceId);
                 return validated;
             }
             finally
@@ -189,22 +192,24 @@ namespace UNCAD.Infra
         private static void Refresh(object state)
         {
             if (Interlocked.Exchange(ref _refreshing, 1) != 0) return;
-            string code = StoredAuthorizationCode;
+            string account = StoredAccount;
             try
             {
-                if (code.Length == 0)
+                if (account.Length == 0)
                 {
                     lock (Sync)
                     {
-                        OnlineLicenseState missing = Pending("尚未设置授权码。");
+                        OnlineLicenseState missing = Pending("尚未登录 UNCAD 账号。");
                         missing.Status = "missing";
-                        Publish(missing, code);
+                        Publish(missing, account);
                     }
                     return;
                 }
-                OnlineLicenseState refreshed = Download(code);
-                lock (Sync) Publish(refreshed, code);
-                Log.Info("在线授权刷新成功: " + refreshed.Status);
+                OnlineLicenseState refreshed = Download(account);
+                lock (Sync) Publish(refreshed, account);
+                Log.Info("账号授权刷新成功: " + refreshed.Status
+                    + (string.IsNullOrEmpty(refreshed.ActiveDeviceName)
+                        ? "" : "（在线设备 " + refreshed.ActiveDeviceName + "）"));
             }
             catch (Exception ex)
             {
@@ -215,10 +220,10 @@ namespace UNCAD.Infra
                         HasResponse = false,
                         IsActive = false,
                         Status = "unavailable",
-                        FailureReason = "无法验证授权码：" + ex.Message
-                    }, code);
+                        FailureReason = "无法验证账号授权：" + ex.Message
+                    }, account);
                 }
-                Log.Warn("在线授权刷新失败: " + ex.Message);
+                Log.Warn("账号授权刷新失败: " + ex.Message);
             }
             finally
             {
@@ -226,11 +231,10 @@ namespace UNCAD.Infra
             }
         }
 
-        private static void Publish(OnlineLicenseState state, string authorizationCode)
+        private static void Publish(OnlineLicenseState state, string account)
         {
             _current = state;
             QueueNotice(state);
-            if (state.IsActive) WriteLastValidatedStamp();
             if (state.IsActive)
             {
                 _pendingActivationReason = null;
@@ -239,20 +243,22 @@ namespace UNCAD.Infra
                 return;
             }
             string reason = string.IsNullOrWhiteSpace(state.FailureReason)
-                ? "当前授权码不可用。" : state.FailureReason;
-            string key = (authorizationCode ?? "") + "\n" + reason;
+                ? "当前账号授权不可用。" : state.FailureReason;
+            string key = (account ?? "") + "\n" + reason;
             if (key == _lastActivationKey || key == _pendingActivationKey) return;
             _pendingActivationReason = reason;
             _pendingActivationKey = key;
         }
 
-        private static OnlineLicenseState Download(string authorizationCode)
+        private static OnlineLicenseState Download(string account)
         {
-            string code = NormalizeCode(authorizationCode);
-            Uri endpoint = BuildEndpoint(code);
+            string normalized = NormalizeAccount(account);
+            string deviceId = DeviceIdentity.GetOrCreateDeviceId();
+            Uri endpoint = BuildRequestUri(normalized, deviceId);
             var requestUri = new UriBuilder(endpoint)
             {
-                Query = "_=" + DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture)
+                Query = (endpoint.Query.Length > 1 ? endpoint.Query.Substring(1) + "&" : "")
+                    + "_=" + DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture)
             }.Uri;
             HttpWebRequest request = WebRequest.CreateHttp(requestUri);
             request.Method = "GET";
@@ -264,6 +270,9 @@ namespace UNCAD.Infra
             request.CachePolicy = new RequestCachePolicy(RequestCacheLevel.NoCacheNoStore);
             request.Timeout = TimeoutMilliseconds;
             request.ReadWriteTimeout = TimeoutMilliseconds;
+            // 未登录时不带凭证：服务端随后返回 unbound / device-missing。
+            string token = DeviceIdentity.GetToken();
+            if (token.Length > 0) request.Headers[TokenHeaderName] = token;
 
             using (var response = (HttpWebResponse)request.GetResponse())
             {
@@ -276,33 +285,51 @@ namespace UNCAD.Infra
                     throw new InvalidDataException("授权文件超过 64 KB 限制。");
 
                 return ParseResponse(ReadBody(response.GetResponseStream()),
-                    ReadServerTime(response), code);
+                    ReadServerTime(response), normalized, deviceId);
             }
         }
 
-        internal static Uri BuildEndpoint(string authorizationCode)
+        /// <summary>授权端点路径（不含 device / _ 查询参数）。</summary>
+        internal static Uri BuildEndpoint(string account)
         {
-            string code = NormalizeCode(authorizationCode);
+            string normalized = NormalizeAccount(account);
             var uri = new Uri("https://" + LicenseHost + "/d/key/"
-                + Uri.EscapeDataString(code) + "/pro.key", UriKind.Absolute);
+                + Uri.EscapeDataString(normalized) + "/pro.key", UriKind.Absolute);
             if (!IsExpectedEndpoint(uri))
                 throw new InvalidDataException("授权服务器地址不受信任。");
             return uri;
         }
 
-        internal static string NormalizeCode(string value)
+        /// <summary>v2 心跳请求地址：路径 + <c>?device={deviceId}</c>。</summary>
+        internal static Uri BuildRequestUri(string account, string deviceId)
         {
-            string code = (value ?? "").Trim();
-            if (code.Length == 0) throw new ArgumentException("请输入授权码。", nameof(value));
-            if (code.Length > 128) throw new ArgumentException("授权码不能超过 128 个字符。", nameof(value));
-            foreach (char character in code)
-                if (!(character >= 'a' && character <= 'z')
-                    && !(character >= 'A' && character <= 'Z')
-                    && !(character >= '0' && character <= '9')
-                    && character != '-' && character != '_')
-                    throw new ArgumentException("授权码只能包含字母、数字、连字符和下划线。",
+            var builder = new UriBuilder(BuildEndpoint(account))
+            {
+                Query = DeviceQueryName + "=" + Uri.EscapeDataString((deviceId ?? "").Trim())
+            };
+            return builder.Uri;
+        }
+
+        /// <summary>
+        /// 账号名规范化。服务端账号为 3-64 字符且不限制字符集（可能是中文），
+        /// 因此这里只拒绝会破坏 URL 路径/查询的字符与空白，不再套用 v1 授权码的
+        /// [A-Za-z0-9_-] 限制。
+        /// </summary>
+        internal static string NormalizeAccount(string value)
+        {
+            string account = (value ?? "").Trim();
+            if (account.Length == 0) throw new ArgumentException("请输入账号。", nameof(value));
+            if (account.Length > 128)
+                throw new ArgumentException("账号不能超过 128 个字符。", nameof(value));
+            foreach (char character in account)
+            {
+                if (char.IsControl(character) || char.IsWhiteSpace(character)
+                    || character == '/' || character == '\\' || character == '?'
+                    || character == '#' || character == '&' || character == '=')
+                    throw new ArgumentException("账号包含不允许的字符（空白或 / \\ ? # & =）。",
                         nameof(value));
-            return code;
+            }
+            return account;
         }
 
         internal static bool IsExpectedEndpoint(Uri uri)
@@ -315,7 +342,15 @@ namespace UNCAD.Infra
 
         private static string DecodeHost()
         {
-            byte[] encoded = { 57, 54, 53, 47, 62, 116, 59, 53, 41, 59, 116, 55, 63 };
+            // 主机名在这里按字节 XOR 0x5A 保存，避免明文域名被字符串扫描/替换。
+            // uncad.aosa.me 的每个 ASCII 字节异或 0x5A：
+            //   u 0x75^0x5A=0x2F=47   n 0x6E^0x5A=0x34=52   c 0x63^0x5A=0x39=57
+            //   a 0x61^0x5A=0x3B=59   d 0x64^0x5A=0x3E=62   . 0x2E^0x5A=0x74=116
+            //   a=59  o 0x6F^0x5A=0x35=53  s 0x73^0x5A=0x29=41  a=59
+            //   . =116  m 0x6D^0x5A=0x37=55  e 0x65^0x5A=0x3F=63
+            // 解码后必须等于 "uncad.aosa.me"，并与 IsExpectedEndpoint 的
+            // https + 443 + 不回跳校验配套使用（该边界不得放宽）。
+            byte[] encoded = { 47, 52, 57, 59, 62, 116, 59, 53, 41, 59, 116, 55, 63 };
             var characters = new char[encoded.Length];
             for (int index = 0; index < encoded.Length; index++)
                 characters[index] = (char)(encoded[index] ^ 0x5A);
@@ -323,7 +358,11 @@ namespace UNCAD.Infra
         }
 
         internal static OnlineLicenseState ParseResponse(string json,
-            DateTimeOffset serverNow, string expectedAuthorizationCode)
+            DateTimeOffset serverNow, string expectedAccount)
+            => ParseResponse(json, serverNow, expectedAccount, null);
+
+        internal static OnlineLicenseState ParseResponse(string json,
+            DateTimeOffset serverNow, string expectedAccount, string expectedDeviceId)
         {
             OnlineLicenseDocument document;
             try
@@ -339,13 +378,18 @@ namespace UNCAD.Infra
                 throw new InvalidDataException("授权文件版本无效。");
             if (!string.Equals(document.Product, "UNCAD Pro", StringComparison.Ordinal))
                 throw new InvalidDataException("授权文件产品无效。");
-            if (!string.Equals(document.AuthorizationCode, expectedAuthorizationCode,
+            if (!string.Equals(document.AuthorizationCode, expectedAccount,
                 StringComparison.Ordinal))
-                throw new InvalidDataException("授权文件中的授权码与输入不一致。");
+                throw new InvalidDataException("授权文件中的账号与请求不一致。");
             if (string.IsNullOrWhiteSpace(document.CustomerCode))
                 throw new InvalidDataException("授权文件缺少客户代码。");
             if (!Enum.TryParse(document.LicenseMode, true, out LicenseMode licenseMode))
                 throw new InvalidDataException("授权文件授权模式无效。");
+            // 服务端回显本机设备 ID；老服务端不返回该字段（为空）时容忍。
+            string echoDevice = (document.DeviceId ?? "").Trim();
+            if (echoDevice.Length > 0 && !string.IsNullOrEmpty(expectedDeviceId)
+                && !string.Equals(echoDevice, expectedDeviceId, StringComparison.Ordinal))
+                throw new InvalidDataException("授权响应中的设备标识与本机不一致。");
 
             DateTimeOffset? expiresAt = null;
             if (!string.IsNullOrWhiteSpace(document.ExpiresAt))
@@ -361,9 +405,6 @@ namespace UNCAD.Infra
             string status = (document.Status ?? "").Trim().ToLowerInvariant();
             bool expired = expiresAt.HasValue && expiresAt.Value <= serverNow;
             bool active = status == "active" && !expired;
-            string reason = active ? "" : status != "active"
-                ? "服务器授权状态为“" + (status.Length == 0 ? "unknown" : status) + "”。"
-                : "服务器授权已于 " + FormatExpiry(expiresAt.Value) + " 到期。";
             return new OnlineLicenseState
             {
                 HasResponse = true,
@@ -380,8 +421,70 @@ namespace UNCAD.Infra
                     ? "UNCAD 通知" : document.MessageTitle.Trim(),
                 MessageLevel = (document.MessageLevel ?? "warning").Trim().ToLowerInvariant(),
                 Message = (document.Message ?? "").Trim(),
-                FailureReason = reason
+                DeviceId = echoDevice,
+                ActiveDeviceName = (document.ActiveDeviceName ?? "").Trim(),
+                SignedInAt = (document.SignedInAt ?? "").Trim(),
+                DeviceLimit = document.DeviceLimit,
+                FailureReason = DescribeFailure(status, document, expiresAt, expired)
             };
+        }
+
+        /// <summary>
+        /// 拒绝原因（中文）。服务端已写好针对性 Message 时优先采用一手文案
+        /// （例如被踢提示里的设备名与时间）；否则用客户端兜底文案，保证任何
+        /// 非 active 状态都有明确、可展示的中文原因。
+        /// </summary>
+        private static string DescribeFailure(string status, OnlineLicenseDocument document,
+            DateTimeOffset? expiresAt, bool expired)
+        {
+            string fallback;
+            switch (status)
+            {
+                case "active":
+                    fallback = expired && expiresAt.HasValue
+                        ? "服务器授权已于 " + FormatExpiry(expiresAt.Value) + " 到期。"
+                        : "";
+                    break;
+                case "device-kicked":
+                    string device = string.IsNullOrWhiteSpace(document.ActiveDeviceName)
+                        ? "其它设备" : document.ActiveDeviceName.Trim();
+                    string signedIn = string.IsNullOrWhiteSpace(document.SignedInAt)
+                        ? "未知时间" : document.SignedInAt.Trim();
+                    fallback = "本账号已在设备「" + device + "」于 " + signedIn
+                        + " 登录，本机授权已停止。如需在本机使用，请重新登录以在此设备上线。";
+                    break;
+                case "token-invalid":
+                    fallback = "本机登录凭证已失效（可能已在其它设备重新登录），请重新登录 UNCAD 账号。";
+                    break;
+                case "unbound":
+                    fallback = "该设备尚未绑定到本账号，请在本机登录以完成绑定。";
+                    break;
+                case "device-missing":
+                    fallback = "缺少设备标识，请在本机重新登录 UNCAD 账号。";
+                    break;
+                case "unknown":
+                    fallback = "账号不存在或已被删除，请联系 " + ProductMetadata.CompanyName + "。";
+                    break;
+                case "expired":
+                    fallback = expiresAt.HasValue
+                        ? "服务器授权已于 " + FormatExpiry(expiresAt.Value) + " 到期。"
+                        : "服务器授权已到期。";
+                    break;
+                case "suspended":
+                    fallback = "账号授权已被暂停，请联系 " + ProductMetadata.CompanyName + "。";
+                    break;
+                case "revoked":
+                    fallback = "授权已被吊销或本设备已被管理员禁止使用，请联系 "
+                        + ProductMetadata.CompanyName + "。";
+                    break;
+                default:
+                    fallback = "服务器授权状态为“"
+                        + (status.Length == 0 ? "unknown" : status) + "”。";
+                    break;
+            }
+            if (string.Equals(status, "active", StringComparison.Ordinal)) return fallback;
+            string message = (document.Message ?? "").Trim();
+            return message.Length > 0 ? message : fallback;
         }
 
         private static void QueueNotice(OnlineLicenseState state)
