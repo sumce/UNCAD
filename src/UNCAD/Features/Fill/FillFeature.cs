@@ -33,6 +33,12 @@ namespace UNCAD.Features.Fill
         Description = "动态填充清单，并可读取已填充身份按当前统计重新生成")]
     public class FillFeature : CommandBase
     {
+        /// <summary>
+        /// 等轴测场景上限（字符）。与服务端 <c>MaximumSceneChars</c> 对齐：
+        /// 正常单图框场景只有几十 KB 量级，超过说明图框内 U1L 线段异常多，
+        /// 宁可这次不上传 3D（清单照常上传），也不要把服务端当网盘。
+        /// </summary>
+        internal const int MaximumSceneChars = 1_000_000;
         [CommandMethod(CommandIds.Fill, CommandFlags.UsePickSet)]
         public void UncadFill() => Run();
 
@@ -560,20 +566,23 @@ namespace UNCAD.Features.Fill
                 + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
                 + " 条，覆盖文件 " + automaticExcel.ReplacedCount
                 + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
-            // 阶段6 之后：把**该回路（=该图框）**的清单内容交给后台线程上传。
+            // 阶段6 之后：把**该回路（=该图框）**的清单内容 + 等轴测（3D）场景交给后台线程上传。
             // 上传失败只记日志+命令行提示，绝不回滚已经提交的 CAD 事务与 BOQ 输出。
-            if (UploadCircuitSubmission(picked, tableRows, updateMode, selection))
+            if (UploadCircuitSubmission(ctx, picked, tableRows, updateMode, selection))
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 已排队上传该回路清单（后台执行，失败不影响图纸）。");
+                    + "] 已排队上传该回路清单与等轴测数据（后台执行，失败不影响图纸）。");
         }
 
         /// <summary>
-        /// U1F/U1U 成功后的数据上传：最小单位是**回路**（= 一个图框），只提交该回路的
-        /// 清单编号/名称/数量/单位，不提交 frameinfo_json、BOQ 全量或任何图纸大对象。
-        /// 在后台线程执行，不阻塞 CAD；失败不影响图纸与本地刷新。
+        /// U1F/U1U 成功后的数据上传：最小单位是**回路**（= 一个图框），提交该回路的
+        /// 清单编号/名称/数量/单位，**以及该图框的等轴测（3D）场景**（U1L3D 用的同一份
+        /// envelope，网页端的「ISO 图」就是它）。不提交 frameinfo_json、BOQ 全量或任何图纸大对象。
+        ///
+        /// **场景必须在 CAD 线程上构建**（要读图框内的 U1L 线段），因此这里先同步构建 JSON，
+        /// 再连同清单一起排队到后台线程上传；上传失败不影响图纸与本地刷新。
         /// 返回是否已排队（缺机台/回路标识时不排队）。单图框与批量 U1U 共用本方法。
         /// </summary>
-        internal static bool UploadCircuitSubmission(MachineRow picked,
+        internal static bool UploadCircuitSubmission(CadContext ctx, MachineRow picked,
             List<TableFillRow> rows, bool updateMode, FillSelection selection)
         {
             if (picked == null) return false;
@@ -582,13 +591,15 @@ namespace UNCAD.Features.Fill
             if (machineId.Length == 0 || circuitName.Length == 0) return false;
             string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
+            string sceneJson = BuildSceneJson(ctx, machineId, circuitName,
+                selection?.FrameBlockIds);
             var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
                     ClientSubmissionUploader.Default.SubmitCircuit(machineId, circuitName,
-                        command, frameHandle, captured);
+                        command, frameHandle, captured, sceneJson);
                 }
                 catch (System.Exception ex)
                 {
@@ -597,6 +608,46 @@ namespace UNCAD.Features.Fill
                 }
             });
             return true;
+        }
+
+        /// <summary>
+        /// 构建该图框的等轴测场景 JSON（超大 / 构建失败 / 图框内没有 U1L 标注时返回空串，
+        /// 此时只上传清单，不影响主流程）。扫描耗时写日志，便于真机上发现批量 U1U 的退化。
+        /// </summary>
+        private static string BuildSceneJson(CadContext ctx, string machineId,
+            string circuitName, ObjectId[] frameBlockIds)
+        {
+            if (ctx == null || frameBlockIds == null || frameBlockIds.Length == 0) return "";
+            try
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                bool built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
+                    out string sceneJson, out string issue);
+                watch.Stop();
+                if (!built)
+                {
+                    // "图框内没有 U1L 标注"是正常情况，只记日志，不当失败。
+                    Log.Info("未上传等轴测场景（" + machineId + " " + circuitName + "）：" + issue);
+                    return "";
+                }
+                Log.Info("等轴测场景已构建：" + machineId + " " + circuitName + "（"
+                    + sceneJson.Length.ToString("N0") + " 字符，耗时 "
+                    + watch.ElapsedMilliseconds + " ms）");
+                if (sceneJson.Length > MaximumSceneChars)
+                {
+                    Log.Warn("等轴测场景超过上限（" + sceneJson.Length + " > "
+                        + MaximumSceneChars + " 字符），本次不上传：" + machineId + " "
+                        + circuitName);
+                    return "";
+                }
+                return sceneJson;
+            }
+            catch (System.Exception ex)
+            {
+                // 场景只是"锦上添花"，任何异常都不得影响清单上传与图纸。
+                Log.Warn("构建等轴测场景失败（已忽略，清单照常上传）: " + ex.Message);
+                return "";
+            }
         }
 
         /// <summary>取图框块参照的句柄作为 frameHandle；不可用时返回空串（不上报句柄）。</summary>

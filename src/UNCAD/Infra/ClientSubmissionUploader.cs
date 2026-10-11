@@ -77,6 +77,8 @@ namespace UNCAD.Infra
         public string command { get; set; }
         public string frameHandle { get; set; }
         public List<CircuitInventoryRow> inventory { get; set; }
+        /// <summary>等轴测场景 envelope（可选；无 U1L 数据时为 null，字段不出现在 JSON 里）。</summary>
+        public string scene { get; set; }
     }
 
     internal sealed class DwgExportPayload
@@ -142,9 +144,13 @@ namespace UNCAD.Infra
             _send = send ?? throw new ArgumentNullException(nameof(send));
         }
 
-        /// <summary>U1F/U1U 成功后提交**该回路（=该图框）**的清单内容。</summary>
+        /// <summary>
+        /// U1F/U1U 成功后提交**该回路（=该图框）**的清单内容，以及该图框的**等轴测（3D）场景**。
+        /// <paramref name="sceneJson"/> 为 null/空时不发 scene 字段（图框内没有 U1L 标注）。
+        /// </summary>
         internal ClientSubmissionOutcome SubmitCircuit(string machineId, string circuitName,
-            string command, string frameHandle, IReadOnlyList<TableFillRow> rows)
+            string command, string frameHandle, IReadOnlyList<TableFillRow> rows,
+            string sceneJson = null)
         {
             string machine = (machineId ?? "").Trim();
             string circuit = (circuitName ?? "").Trim();
@@ -161,14 +167,19 @@ namespace UNCAD.Infra
                 circuitName = circuit,
                 command = NormalizeCommand(command),
                 frameHandle = (frameHandle ?? "").Trim(),
-                inventory = BuildInventory(rows)
+                inventory = BuildInventory(rows),
+                // 等轴测（ISO）场景：与客户端 U1L3D 预览同一份 envelope（同一套构建逻辑）。
+                // 图框内没有带毫米标注的 U1L 线段时为空 → 不发该字段（不是错误）。
+                scene = string.IsNullOrWhiteSpace(sceneJson) ? null : sceneJson
             };
             ClientSubmissionOutcome outcome = Post(credentials, CircuitPath,
                 BuildQuery(credentials), Serialize(payload), null);
             if (outcome.Status == ClientSubmissionStatus.Accepted)
             {
                 outcome.Message = "回路清单已上传：" + payload.command + " " + machine + " "
-                    + circuit + "（" + payload.inventory.Count + " 项清单）。";
+                    + circuit + "（" + payload.inventory.Count + " 项清单"
+                    + (payload.scene == null ? "" : " + 等轴测场景 "
+                        + payload.scene.Length.ToString("N0") + " 字符") + "）。";
                 Log.Info(outcome.Message);
                 outcome.Message = "";   // 成功只在日志里留痕，避免多机台刷屏
             }

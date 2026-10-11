@@ -385,7 +385,7 @@ namespace UNCAD.Tests
                 StringComparison.Ordinal);
             int lastRollback = source.LastIndexOf("outputBatch.Rollback();",
                 StringComparison.Ordinal);
-            int upload = source.IndexOf("UploadCircuitSubmission(picked, tableRows",
+            int upload = source.IndexOf("UploadCircuitSubmission(ctx, picked, tableRows",
                 StringComparison.Ordinal);
 
             Assert.True(commit >= 0 && batchComplete > commit);

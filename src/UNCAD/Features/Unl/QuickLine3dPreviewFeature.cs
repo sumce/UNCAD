@@ -63,6 +63,35 @@ namespace UNCAD.Features.Unl
             }
 
             FrameRegionGroup region = regions.Groups[0];
+            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region,
+                out string sceneIssue);
+            if (envelope == null)
+            {
+                ctx.Write("\n[U1L3D] " + sceneIssue);
+                return;
+            }
+
+            using (var form = new U1L3DPreviewForm(envelope))
+                AcApplication.ShowModalDialog(form);
+        }
+
+        /// <summary>
+        /// 由**已解析的图框**构建等轴测 envelope。
+        ///
+        /// U1L3D 的本地预览与 U1F/U1U 的**自动上传**共用这一份逻辑，避免出现
+        /// "网页里看到的 3D 与客户端看到的不是同一份"。失败返回 null 并给出中文原因
+        /// （图框内没有带毫米标注的 U1L 线段属正常情况，不是错误）。
+        /// </summary>
+        private static Dictionary<string, object> BuildRegionEnvelope(CadContext ctx,
+            FrameRegionGroup region, out string issue)
+        {
+            issue = "";
+            if (ctx == null || region == null)
+            {
+                issue = "缺少图框上下文。";
+                return null;
+            }
+
             ExistingFillIdentity identity;
             Point2d? downstreamAnchor;
             Point2d? upstreamAnchor;
@@ -83,14 +112,14 @@ namespace UNCAD.Features.Unl
             HashSet<ObjectId> frameEntityIds = new HashSet<ObjectId>(region.EntityIds);
             IReadOnlyList<QuickLineCadSegment> scanned = QuickLineCadService.Scan(ctx,
                 new QuickLineScanOptions { IncludeUnlabelled = true });
-            List<QuickLineCadSegment> frameLines = scanned
-                .Where(item => frameEntityIds.Contains(item.LineId)).ToList();
-            List<QuickLineCadSegment> labelled = frameLines
-                .Where(item => item.HasMillimetreLabel).ToList();
+            List<QuickLineCadSegment> labelled = scanned
+                .Where(item => frameEntityIds.Contains(item.LineId))
+                .Where(item => item.HasMillimetreLabel)
+                .ToList();
             if (labelled.Count == 0)
             {
-                ctx.Write("\n[U1L3D] 当前图框内没有带毫米标注的 U1L 线段。");
-                return;
+                issue = "当前图框内没有带毫米标注的 U1L 线段。";
+                return null;
             }
 
             QuickLineIsometricScene scene = BuildScene(labelled);
@@ -102,10 +131,54 @@ namespace UNCAD.Features.Unl
             diagnostics.AddRange(anchorDiagnostics);
             QuickLineAxisGrid axes = QuickLineAxisGridPlanner.Plan(
                 machine?.UpstreamAxis, machine?.DownstreamAxis);
-            Dictionary<string, object> envelope = BuildEnvelope(scene, axes,
-                identity, machine, diagnostics, routeAnchors);
-            using (var form = new U1L3DPreviewForm(envelope))
-                AcApplication.ShowModalDialog(form);
+            return BuildEnvelope(scene, axes, identity, machine, diagnostics, routeAnchors);
+        }
+
+        /// <summary>
+        /// U1F/U1U 自动上传用：把**单个图框（= 一个回路）**的等轴测场景序列化成 JSON，
+        /// 与 U1L3D 本地预览用的是同一个 envelope（同一套 BuildScene / BuildEnvelope）。
+        ///
+        /// 返回 false 时 <paramref name="issue"/> 说明原因；"图框内没有 U1L 标注"属正常情况，
+        /// 调用方只需记日志、不要当失败处理。
+        /// </summary>
+        internal static bool TryBuildSceneJson(CadContext ctx, ObjectId[] frameBlockIds,
+            out string sceneJson, out string issue)
+        {
+            sceneJson = "";
+            issue = "";
+            if (ctx == null)
+            {
+                issue = "缺少图形上下文。";
+                return false;
+            }
+            if (frameBlockIds == null || frameBlockIds.Length == 0)
+            {
+                issue = "缺少图框。";
+                return false;
+            }
+
+            FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
+                frameBlockIds);
+            if (regions.Errors.Count > 0)
+            {
+                issue = string.Join("；", regions.Errors);
+                return false;
+            }
+            if (regions.Groups.Count != 1)
+            {
+                issue = "需要恰好一个完整图框（当前 " + regions.Groups.Count + " 个）。";
+                return false;
+            }
+
+            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx,
+                regions.Groups[0], out issue);
+            if (envelope == null) return false;
+
+            sceneJson = new System.Web.Script.Serialization.JavaScriptSerializer
+            {
+                MaxJsonLength = 16 * 1024 * 1024
+            }.Serialize(envelope);
+            return sceneJson.Length > 0;
         }
 
         protected override void Execute(CadContext ctx, object state)

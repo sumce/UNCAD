@@ -78,6 +78,10 @@ function receive(raw) {
   } catch (error) { fail(error); }
 }
 
+// 同一套查看器也被**网页端**复用（项目 → ISO 图）：浏览器里没有 chrome.webview，
+// 由宿主页面（?scene=<url>）把场景 JSON 直接交进来。仅多一个入口，不影响 WebView2 用法。
+window.__uncadRenderScene = receive;
+
 function renderEnvelope(envelope) {
   const data = envelope.scene || {}, meta = envelope.metadata || {}, grid = envelope.axisGrid || {};
   const batch = envelope.mode === 'batch';

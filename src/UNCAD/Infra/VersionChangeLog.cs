@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.6", "2026-10-11",
+                    "新增：执行 U1U/U1F 时，该图框（= 该回路）的**等轴测（3D）场景**随清单一起自动上传；在官网项目页的「ISO 图」里可以直接在线查看，用的是与客户端 U1L3D 完全相同的渲染器（同样的 4800mm 轴距、上下游轴位、路由与桥架长度）。",
+                    "说明：3D 与本地 U1L3D 是同一份场景数据，只是多了一条上传链路；图框内没有带毫米标注的 U1L 线段时不会有 3D 数据，只上传清单（属正常情况，命令行不报错）。",
+                    "说明：场景构建失败或超过上限时只记日志、不影响清单上传与图纸，绝不因为 3D 让 U1U/U1F 变慢到不可用（构建耗时写日志，便于按需优化）。"),
                 new VersionChangeLogEntry("2.6.5", "2026-10-11",
                     "加固 U1PDF 出图收尾：出图后先逐字段还原用户的打印设置，只有全部还原成功才提交；只要有一步没还原成功就整体回滚，绝不把临时的设备/纸张/旋转留给用户。",
                     "回滚只丢弃对布局的临时改动，不影响已经出好的 PDF 与自动上传。该行为的前提（不提交即回滚）已用真机探针 UNCAD_TXPROBE 验证。"),

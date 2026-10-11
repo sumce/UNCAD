@@ -438,15 +438,15 @@ namespace UNCAD.Features.Fill
                     + " mm/格）。" : "")
                 + " BOQ 文件处理 " + automaticExcel.AddedCount + " 条，覆盖 "
                 + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath);
-            // 批量 U1U 同样是"以回路为最小单位"：每个图框各自上传自己的清单内容。
+            // 批量 U1U 同样是"以回路为最小单位"：每个图框各自上传自己的清单内容与等轴测场景。
             // 上传在后台执行，失败只记日志+命令行提示，绝不影响已提交的批量写入。
             int queued = 0;
             foreach (Plan plan in plans)
-                if (FillFeature.UploadCircuitSubmission(plan.Machine, plan.Rows, true,
+                if (FillFeature.UploadCircuitSubmission(ctx, plan.Machine, plan.Rows, true,
                     plan.Selection)) queued++;
             if (queued > 0)
                 ctx.Write("\n[U1U] 已排队上传 " + queued
-                    + " 个回路的清单（后台执行，失败不影响图纸）。");
+                    + " 个回路的清单与等轴测数据（后台执行，失败不影响图纸）。");
         }
 
         private static void Preflight(CadContext ctx, Transaction readTransaction,
