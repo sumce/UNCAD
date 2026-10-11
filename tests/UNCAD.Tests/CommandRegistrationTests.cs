@@ -39,6 +39,16 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void FeatureCommandLists_CoverEveryRegisteredCompatibilityAlias()
+        {
+            // FeatureRegistry.Summary 直接拼接这些字符串并打印"已加载：…"，
+            // 漏掉兼容旧名等于对用户隐瞒命令（曾经漏 UNL/UNR/UNQ1/UNQ2/UNQ4）。
+            Assert.Equal("U1Q1;U1Q2;U1Q4;UNQ1;UNQ2;UNQ4", CommandIds.TrayFeatureCommands);
+            Assert.Equal("U1L;UNL", CommandIds.LineFeatureCommands);
+            Assert.Equal("U1R;UNR", CommandIds.ArchFeatureCommands);
+        }
+
+        [Fact]
         public void UnlxAlias_IsRegisteredAndForwardsToCanonicalQuickLineHandler()
         {
             string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
@@ -63,37 +73,57 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void SourceCommandMethods_RegisterEachPublicCommandExactlyOnce()
+        public void SourceCommandMethods_RegisterEveryPublicCommandExactlyOnce()
         {
-            string features = RepoFile("src", "UNCAD", "Features");
+            // 扫描整个 src/UNCAD（不只 Features），并同时接受 CommandIds.X 与字面量两种写法：
+            // 只认一种写法、只扫一个目录时，新命令漏注册或写到别处都不会让断言变红。
+            string sourceRoot = RepoFile("src", "UNCAD");
             var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (string file in Directory.GetFiles(features, "*.cs", SearchOption.AllDirectories))
+            foreach (string file in Directory.GetFiles(sourceRoot, "*.cs",
+                SearchOption.AllDirectories))
             {
+                if (file.IndexOf(@"\obj\", StringComparison.OrdinalIgnoreCase) >= 0
+                    || file.IndexOf(@"\bin\", StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
                 string source = File.ReadAllText(file);
-                foreach (Match match in Regex.Matches(source,
-                    @"\[CommandMethod\(CommandIds\.([A-Za-z0-9_]+)"))
+                foreach (Match attribute in Regex.Matches(source,
+                    @"\[CommandMethod\(\s*([^)]*)"))
                 {
-                    string constant = match.Groups[1].Value;
-                    counts[constant] = counts.TryGetValue(constant, out int count)
+                    string arguments = attribute.Groups[1].Value;
+                    Match constant = Regex.Match(arguments, @"CommandIds\.(\w+)");
+                    string command;
+                    if (constant.Success)
+                    {
+                        command = ResolveCommandConstant(constant.Groups[1].Value);
+                    }
+                    else
+                    {
+                        int quote = arguments.IndexOf('"');
+                        int end = quote < 0 ? -1 : arguments.IndexOf('"', quote + 1);
+                        if (end <= quote) continue;
+                        command = arguments.Substring(quote + 1, end - quote - 1);
+                    }
+                    counts[command] = counts.TryGetValue(command, out int count)
                         ? count + 1 : 1;
                 }
             }
 
-            string[] registeredConstants =
-            {
-                "Line", "LineQuick", "Line3dPreview", "Line3dBatchPreview", "DimensionText", "Arch", "Tray100", "Tray200", "Tray400",
-                "Fill", "FillUpdate", "Submit", "Conduit", "Conduit20", "Conduit25",
-                "Conduit38", "Conduit51", "About", "Settings", "DataRefresh",
-                "DwgExport", "DwgExportShort", "XLayout", "Statistics", "Merge", "Help",
-                "ClientLogin", "PdfExport",
-                "LegacyLine", "LegacyLineQuick",
-                "LegacyArch", "LegacyTray100", "LegacyTray200", "LegacyTray400",
-                "LegacyStatistics"
-            };
-            Assert.Equal(registeredConstants.Length, counts.Count);
-            foreach (string constant in registeredConstants)
-                Assert.True(counts.TryGetValue(constant, out int count) && count == 1,
-                    "CommandIds." + constant + " must have exactly one [CommandMethod] registration.");
+            // 注册集合必须与公开契约逐一相等：少注册=用户敲了没反应，
+            // 多注册=Bundle/帮助/Ribbon 都没同步。
+            Assert.Equal(
+                CommandIds.Registered.OrderBy(value => value, StringComparer.OrdinalIgnoreCase),
+                counts.Keys.OrderBy(value => value, StringComparer.OrdinalIgnoreCase));
+            foreach (KeyValuePair<string, int> entry in counts)
+                Assert.True(entry.Value == 1, entry.Key
+                    + " must have exactly one [CommandMethod] registration.");
+        }
+
+        private static string ResolveCommandConstant(string constant)
+        {
+            System.Reflection.FieldInfo field = typeof(CommandIds).GetField(constant,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            Assert.True(field != null, "CommandIds." + constant + " 不存在");
+            return (string)field.GetValue(null);
         }
 
         private static string RepoFile(params string[] parts)

@@ -110,6 +110,10 @@ namespace UNCAD.Infra
 
         public void Rollback()
         {
+            // Complete() 已经删除了备份并释放了锁；此时再回滚只会拿已删除的备份
+            // 去覆盖输出文件，产生一条假的"无法完整恢复"失败，把完好的现场报成
+            // 损坏。Rollback 因此必须是幂等的：批次一旦收尾就什么都不做。
+            if (_completed) return;
             var failures = new List<Exception>();
             for (int index = _entries.Count - 1; index >= 0; index--)
             {

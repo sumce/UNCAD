@@ -149,6 +149,60 @@ namespace UNCAD.Tests
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         }
 
+        [Fact]
+        public void Rollback_AfterCompleteKeepsCompletedWriteAndReportsNothing()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_batch_completed_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, "target.txt");
+            try
+            {
+                File.WriteAllText(path, "original");
+                using (var batch = new FileBatchRollback(new[] { path }))
+                {
+                    batch.BeginWrite(path);
+                    File.WriteAllText(path, "uncad");
+                    batch.MarkWritten(path);
+                    batch.Complete();
+
+                    // Complete() 已删除备份。此时再回滚不得伪造"无法完整恢复"，
+                    // 也不得用已删除的备份覆盖已经提交的输出。
+                    batch.Rollback();
+                    batch.Rollback();
+                }
+
+                Assert.Equal("uncad", File.ReadAllText(path));
+                Assert.Empty(Directory.GetFiles(folder, "*.bak"));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void Rollback_RestoresOnlyOnceAndStaysQuietOnRepeat()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_batch_repeat_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, "target.txt");
+            try
+            {
+                File.WriteAllText(path, "original");
+                using (var batch = new FileBatchRollback(new[] { path }))
+                {
+                    batch.BeginWrite(path);
+                    File.WriteAllText(path, "uncad");
+                    batch.MarkWritten(path);
+                    batch.Rollback();
+                    // 第二次回滚必须是空操作：第一次已经恢复并删除备份。
+                    batch.Rollback();
+                }
+
+                Assert.Equal("original", File.ReadAllText(path));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
         private static byte[] Fingerprint(string path)
         {
             using (var stream = File.OpenRead(path))

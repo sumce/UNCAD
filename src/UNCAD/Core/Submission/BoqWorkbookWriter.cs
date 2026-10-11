@@ -214,11 +214,11 @@ namespace UNCAD.Core.Submission
                 .Where(value => value.Length > 0)
                 .Distinct(IdentityTextNormalizer.Comparer).ToArray();
             if (machineIds.Length > 1)
-                throw new InvalidDataException("One BOQ workbook cannot mix multiple machine IDs.");
+                throw new InvalidDataException("一个 BOQ 工作簿不能混入多个机台ID，本次未写入。");
             if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.MachineId)))
-                throw new InvalidDataException("BOQ machine ID is required for quantity attribution.");
+                throw new InvalidDataException("BOQ 材料行缺少机台ID，无法归属工程量。");
             if (sourceRecords.Any(record => string.IsNullOrWhiteSpace(record.DeviceName)))
-                throw new InvalidDataException("BOQ device name is required for quantity attribution.");
+                throw new InvalidDataException("BOQ 材料行缺少设备名称，无法创建设备列。");
             if (!allowEmptyMaterials
                 && !sourceRecords.Any(record => record.Materials != null
                     && record.Materials.Count > 0))
@@ -496,8 +496,9 @@ namespace UNCAD.Core.Submission
                         throw new InvalidDataException("BOQ 项目 " + code + " 的工程量不是有效数字："
                             + (material.Quantity ?? ""));
                     if (quantity < 0m)
-                        throw new InvalidDataException("BOQ material quantity cannot be negative: "
-                            + code + " = " + material.Quantity);
+                        throw new InvalidDataException("BOQ 项目 " + code
+                            + " 的工程量不能为负数：" + material.Quantity
+                            + "。请先在图框清单中改正数量。");
                     quantities[code] = quantities.TryGetValue(code, out decimal old)
                         ? old + quantity : quantity;
                 }
@@ -614,7 +615,9 @@ namespace UNCAD.Core.Submission
                 throw new BoqExternalModificationException(
                     "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
 
-            string backup = target + ".bak";
+            // 备份名必须唯一：曾经用 target+".bak"，既会覆盖并删除用户自己的
+            // .bak，又会让下面的 File.Move 降级分支在 .bak 已存在时直接失败。
+            string backup = target + ".uncad-replace-" + Guid.NewGuid().ToString("N") + ".bak";
             try
             {
                 File.Replace(temporary, target, backup, true);

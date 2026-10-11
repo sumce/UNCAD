@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The current 2.4.13 build has 33 commands and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The current 2.6.2 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,13 @@ The current 2.4.13 build has 33 commands and does not include the removed `U1X` 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.6.2
+
+- 修复批次输出回滚不幂等：批次收尾后再回滚会拿已删除的备份覆盖输出文件，把完好现场误报成“BOQ 文件回滚不完整”。
+- 修复 BOQ 输出阶段没有模块标识：读图框记录、写 BOQ 工作簿现在经模块运行器执行，日志与失败提示都带 `BOQ-XLSX/清单输出`，可按模块定位问题。
+- 修复 BOQ 工程量为负数等异常提示为英文的问题，统一改为中文。
+- 修复安装/加载横幅漏列 UNL/UNR/UNQ1/UNQ2/UNQ4；修复 U1DT/U1L3D/U13D 空选择时没有任何提示。
 
 ## v2.4.13
 

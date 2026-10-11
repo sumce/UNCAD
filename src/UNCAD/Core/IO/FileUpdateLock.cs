@@ -49,6 +49,7 @@ namespace UNCAD.Core.IO
                 return new Lease(lockPath);
             }
 
+            Exception lastError = null;
             for (int attempt = 0; attempt < 20; attempt++)
             {
                 try
@@ -64,14 +65,18 @@ namespace UNCAD.Core.IO
                     owned[lockPath] = new LockState { Stream = stream, Count = 1 };
                     return new Lease(lockPath);
                 }
-                catch (IOException) when (attempt < 19)
+                catch (IOException ex)
                 {
+                    // 第 20 次也要吃掉异常：以前用 when (attempt < 19) 过滤，
+                    // 最后一次 IOException 直接穿出方法，4 个调用点的中文忙提示
+                    // 全部变成原始系统异常。
+                    lastError = ex;
                     Thread.Sleep(150);
                 }
             }
             throw new IOException(string.IsNullOrWhiteSpace(busyMessage)
                 ? "文件正在被另一个 UNCAD 进程更新，请稍后重试。"
-                : busyMessage);
+                : busyMessage, lastError);
         }
 
         private static void Release(string lockPath)

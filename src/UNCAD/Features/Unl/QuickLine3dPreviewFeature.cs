@@ -45,7 +45,11 @@ namespace UNCAD.Features.Unl
             ProductMetadata.EnsureCommandAllowed(CommandIds.Line3dPreview);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
                 "\n[U1L3D] 框选一个完整图框: ", new TypedValue(0, "INSERT"));
-            if (selected == null || selected.Length == 0) return;
+            if (selected == null || selected.Length == 0)
+            {
+                ctx.Write("\n[U1L3D] 未选择图框，未生成预览。");
+                return;
+            }
 
             FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
                 selected);
@@ -119,7 +123,11 @@ namespace UNCAD.Features.Unl
             ProductMetadata.EnsureCommandAllowed(CommandIds.Line3dBatchPreview);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
                 "\n[U13D] 框选多个完整图框: ", new TypedValue(0, "INSERT"));
-            if (selected == null || selected.Length == 0) return;
+            if (selected == null || selected.Length == 0)
+            {
+                ctx.Write("\n[U13D] 未选择图框，未生成预览。");
+                return;
+            }
 
             FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
                 selected);

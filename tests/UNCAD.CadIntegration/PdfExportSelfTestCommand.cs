@@ -77,6 +77,7 @@ namespace UNCAD.CadIntegration
                 // 同一个图框再出一遍：确认可重复出图（不会第二次就卡住/报错）。
                 PlotOne(ctx, tempRoot, 62000d, 30000d, 420d, 297d, "SELFTEST-REPEAT");
 
+
                 using (Transaction transaction = document.Database.TransactionManager
                     .StartTransaction())
                 {

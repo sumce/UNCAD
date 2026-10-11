@@ -346,7 +346,9 @@ namespace UNCAD.Features.DwgExport
                 File.Move(temporary, target);
                 return;
             }
-            string backup = target + ".bak";
+            // 同 BoqWorkbookWriter：唯一备份名，避免吃掉用户自己的 .bak，
+            // 也避免降级分支 File.Move 因目标已存在而必然失败。
+            string backup = target + ".uncad-replace-" + Guid.NewGuid().ToString("N") + ".bak";
             try
             {
                 File.Replace(temporary, target, backup, true);

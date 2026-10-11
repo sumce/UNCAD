@@ -112,8 +112,9 @@ namespace UNCAD.Features.Submit
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("Excel 自动记录文件路径为空。", nameof(filePath));
 
-            List<SubmissionRecord> records = ReadRecords(ctx, transaction, sourceGroups,
-                inferLegacySocketPanels);
+            List<SubmissionRecord> records = ModuleRunner.Run(BoqOutputModule.Descriptor,
+                "读取图框记录", () => ReadRecords(ctx, transaction, sourceGroups,
+                    inferLegacySocketPanels));
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
 
@@ -197,7 +198,8 @@ namespace UNCAD.Features.Submit
             };
             if (externalBatch != null)
             {
-                writeRecords(externalBatch);
+                ModuleRunner.Run(BoqOutputModule.Descriptor, "写入 BOQ 工作簿",
+                    () => writeRecords(externalBatch));
             }
             else
             {
@@ -207,7 +209,8 @@ namespace UNCAD.Features.Submit
                 {
                     try
                     {
-                        writeRecords(batch);
+                        ModuleRunner.Run(BoqOutputModule.Descriptor, "写入 BOQ 工作簿",
+                            () => writeRecords(batch));
                         batch.Complete();
                     }
                     catch

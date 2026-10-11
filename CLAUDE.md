@@ -10,7 +10,7 @@ documents assume you already know.
 
 1. `AGENTS.md` — hard constraints, layer rules, change protocol.
 2. `docs/PROJECT_CONTEXT.md` — module and command map.
-3. `docs/DECISIONS.md` — accepted decisions (D-001…D-016) that are not open for
+3. `docs/DECISIONS.md` — accepted decisions (D-001…D-027) that are not open for
    re-litigation. Check `docs/KNOWN-ISSUES.md` before "fixing" deferred behavior.
 4. The relevant section of `docs/DEVELOPMENT.md` (bilingual, Chinese; the
    engineering rules live here).
@@ -136,8 +136,11 @@ an existing table (D-004).
   boundary tests live here; string-matching tests over source files only verify
   registration metadata.
 - `tests/UNCAD.CadIntegration` is **not** run by `dotnet test` — it builds
-  self-test commands (`*SelfTestCommand.cs`) that must be `NETLOAD`ed into a live
-  AutoCAD 2022 session for manual verification.
+  self-test commands (`*SelfTestCommand.cs`). They run headless through
+  `tests/UNCAD.CadIntegration/run.ps1`, which copies a drawing to a temp folder and
+  drives `accoreconsole.exe /i /s` with `SECURELOAD 0` + `NETLOAD` + the self-test
+  command, asserting a `PASS`/`FAIL` result file. Interactive behaviour without a
+  self-test command still needs a live AutoCAD 2022 session.
 - Every non-trivial behavior change gets one focused regression test; per
   `docs/DEVELOPMENT.md`, each new command also needs a registration test, a Core
   rule test, and a failure-branch test.

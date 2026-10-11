@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.4.13.</summary>
+    /// <summary>Public AutoCAD command contract for v2.6.2.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -52,15 +52,18 @@ namespace UNCAD.Infra
         public const string SubmitFeatureCommands = Submit;
         public const string ConduitFeatureCommands = Conduit + ";" + Conduit20 + ";"
             + Conduit25 + ";" + Conduit38 + ";" + Conduit51;
-        public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400;
-        public const string LineFeatureCommands = Line;
+        // 每个 Feature 的 Commands 必须覆盖它实际注册的全部命令名，包括兼容旧名：
+        // 加载横幅（FeatureRegistry.Summary）直接拼接这些字符串，漏一个就等于对用户隐瞒一条命令。
+        public const string TrayFeatureCommands = Tray100 + ";" + Tray200 + ";" + Tray400
+            + ";" + LegacyTray100 + ";" + LegacyTray200 + ";" + LegacyTray400;
+        public const string LineFeatureCommands = Line + ";" + LegacyLine;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
         public const string QuickLine3dPreviewFeatureCommands = Line3dPreview + ";" + Line3dBatchPreview;
         public const string DimensionTextFeatureCommands = DimensionText;
         public const string DataRefreshFeatureCommands = DataRefresh;
         public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
         public const string PdfExportFeatureCommands = PdfExport;
-        public const string ArchFeatureCommands = Arch;
+        public const string ArchFeatureCommands = Arch + ";" + LegacyArch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
         public const string XstsFeatureCommands = Statistics;

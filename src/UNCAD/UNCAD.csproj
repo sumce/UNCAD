@@ -15,9 +15,9 @@
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
     <AssemblyCompany>UNSIAO.Ltd</AssemblyCompany>
-    <AssemblyVersion>2.6.1.0</AssemblyVersion>
-    <FileVersion>2.6.1.0</FileVersion>
-    <Version>2.6.1</Version>
+    <AssemblyVersion>2.6.2.0</AssemblyVersion>
+    <FileVersion>2.6.2.0</FileVersion>
+    <Version>2.6.2</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
     <InformationalVersion>2.6.1+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

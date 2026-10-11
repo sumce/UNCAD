@@ -73,7 +73,8 @@ namespace UNCAD.Features.PdfExport
                     if (!TryResolvePlotLayout(ctx.Db, transaction, out ObjectId layoutId,
                         out string layoutName, out bool isModel, out string layoutError))
                     {
-                        transaction.Commit();
+                        // 失败分支一律不提交：本次调用对布局打印设置的所有改动都随事务
+                        // 回滚丢弃。提交点只有下面成功路径的一个（见文件末尾 Commit）。
                         return PdfRenderResult.Fail(layoutError);
                     }
 
@@ -82,12 +83,15 @@ namespace UNCAD.Features.PdfExport
                     {
                         if (session == null)
                         {
-                            transaction.Commit();
+                            // 会话建立失败时可能已经改过设备/介质，同样靠回滚还原。
                             return PdfRenderResult.Fail(sessionError);
                         }
                         if (!PdfPlotPipeline.Run(session, circuitName, file, window, diagnostics))
                         {
-                            transaction.Commit();
+                            // 真机教训：这里曾经先 transaction.Commit() 再 return，于是
+                            // session.Dispose() 的"还原用户布局打印设置"发生在提交之后
+                            // ——临时设备/纸张/旋转/窗口被永久写进用户图纸，还原被
+                            // AutoCAD 拒绝且只记日志。失败路径必须整体回滚，不提交。
                             ReportFailure(circuitName, diagnostics);
                             TryDelete(file);
                             return PdfRenderResult.Fail(diagnostics.FailureReason, diagnostics.Lines);

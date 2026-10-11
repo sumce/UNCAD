@@ -95,6 +95,9 @@ namespace UNCAD.Features.PdfExport
 
             PdfExportRun run = coordinator.Run(targets);
             if (queued.Count > 0) QueueUploads(queued, directory);
+            // 一份都没排上队（全部出图失败或被跳过）时也要清理临时目录，
+            // 否则每失败一次就在 %TEMP% 里留下一个 pdf-<guid> 目录。
+            else TryDeleteDirectory(directory);
             ctx.Write("\n[U1PDF] " + run.BuildSummary());
             if (run.Failed > 0 && run.FirstFailureDetails.Count > 0)
             {
@@ -178,6 +181,13 @@ namespace UNCAD.Features.PdfExport
         /// 后台逐份上传 PDF（kind=pdf，circuits 恰好一个）：失败只记日志+命令行提示
         /// （由 Bootstrap 的 Idle 循环输出），随后删除临时文件与目录。
         /// </summary>
+        /// <summary>删除本次出图的临时目录；失败只记日志（残留目录不影响出图结果）。</summary>
+        private static void TryDeleteDirectory(string directory)
+        {
+            try { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+            catch (System.Exception ex) { Log.Warn("删除 PDF 临时目录失败: " + ex.Message); }
+        }
+
         private static void QueueUploads(List<KeyValuePair<PdfExportTarget, string>> queued,
             string directory)
         {
@@ -201,8 +211,7 @@ namespace UNCAD.Features.PdfExport
                         catch (System.Exception ex) { Log.Warn("删除临时 PDF 失败: " + ex.Message); }
                     }
                 }
-                try { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
-                catch (System.Exception ex) { Log.Warn("删除 PDF 临时目录失败: " + ex.Message); }
+                TryDeleteDirectory(directory);
             });
         }
     }

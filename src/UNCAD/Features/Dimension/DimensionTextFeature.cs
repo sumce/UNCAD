@@ -22,7 +22,11 @@ namespace UNCAD.Features.Dimension
             ObjectId[] ids = SelectionService.PickFirstOrPrompt(ctx,
                 "请选择需要转换的对齐标注: ",
                 new TypedValue(0, "DIMENSION"));
-            if (ids == null || ids.Length == 0) return;
+            if (ids == null || ids.Length == 0)
+            {
+                ctx.Write("\n[U1DT] 未选择对齐标注，未执行转换。");
+                return;
+            }
 
             double textHeight = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
             DimensionTextConversionResult result;

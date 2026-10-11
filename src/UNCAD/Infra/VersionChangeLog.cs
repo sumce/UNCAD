@@ -31,6 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.2", "2026-10-11",
+                    "修复批次输出回滚不幂等：批次已经正常收尾后再回滚，会拿已删除的备份去恢复输出文件，把完好的现场误报成“BOQ 文件回滚不完整”。现在回滚幂等，收尾后不再改动任何文件。",
+                    "修复 BOQ 输出阶段没有模块标识：读取图框记录与写入 BOQ 工作簿两个阶段现在经 ModuleRunner 执行，日志新增 MODULE BOQ-XLSX/清单输出 的阶段与耗时；失败提示为“模块[BOQ-XLSX/清单输出]在[阶段]阶段失败”，可直接按模块定位。",
+                    "修复 BOQ 工程量为负数等异常提示为英文的问题，统一改为中文并说明下一步动作。",
+                    "修复安装/加载横幅命令清单漂移：U1L/U1R/U1Q 系列现在会把各自的兼容旧命令名（UNL/UNR/UNQ1/UNQ2/UNQ4）一并列出。",
+                    "修复 U1DT/U1L3D/U13D 空选择时静默退出：现在会明确提示“未选择…，未执行”。"),
                 new VersionChangeLogEntry("2.6.1", "2026-10-11",
                     "修复命令行被重复提示刷屏：同一条通知被反复写入命令行（通知取走后未清空，而 AutoCAD 的 Idle 事件会持续触发）。现在一条通知只提示一次。",
                     "修复 U1PDF 出图失败（eInvalidInput）：改为自研出图内核，按图框窗口直接输出 A3 彩色 PDF，不依赖任何第三方批量打印插件，不会接管 AutoCAD 界面。",

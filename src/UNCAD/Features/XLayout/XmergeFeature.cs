@@ -22,7 +22,11 @@ namespace UNCAD.Features.XLayout
             {
                 if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)
                     != System.Windows.Forms.DialogResult.OK) return;
-                if (form.Files.Count == 0) return;
+                if (form.Files.Count == 0)
+                {
+                    ctx.Write("\n[Xmerge] 未选择要合并的 DWG，未执行合并。");
+                    return;
+                }
                 XmergeResult result = XmergeService.Merge(ctx, form.Files);
                 // Cloned AutoCAD tables can keep a stale display cache until the next REGEN.
                 // Refresh now so a successful merge is immediately visible to the user.

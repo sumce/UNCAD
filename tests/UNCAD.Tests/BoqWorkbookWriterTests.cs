@@ -60,6 +60,87 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Write_KeepsTheUsersOwnBakAndNeverFailsOnAStaleOne()
+        {
+            string root = Path.Combine(Path.GetTempPath(),
+                "uncad_boq_bak_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string template = Path.Combine(root, "template.xlsx");
+            string target = Path.Combine(root, "machine", "[BOQ]MACHINE01.xlsx");
+            try
+            {
+                var workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                sheet.CreateRow(0).CreateCell(0).SetCellValue("1.1");
+                using (var stream = new FileStream(template, FileMode.CreateNew))
+                    workbook.Write(stream);
+
+                SubmissionRecord[] Records(string quantity) => new[]
+                {
+                    new SubmissionRecord
+                    {
+                        MachineId = "MACHINE01",
+                        DeviceName = "设备A",
+                        Materials = new List<SubmissionMaterial>
+                        {
+                            new SubmissionMaterial { Code = "1.1", Quantity = quantity }
+                        }
+                    }
+                };
+
+                // 第一次写入建立目标文件，模拟客户目录里已存在 AutoCAD 风格的 .bak。
+                BoqWorkbookWriter.Write(target, template, Records("1"));
+                string userBackup = target + ".bak";
+                File.WriteAllText(userBackup, "USER-BACKUP");
+
+                BoqWorkbookWriter.Write(target, template, Records("7"));
+
+                // 固定名备份会吃掉用户自己的 .bak；降级分支还会因它已存在而直接失败。
+                Assert.Equal("USER-BACKUP", File.ReadAllText(userBackup));
+                Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(target)!,
+                    "*.uncad-replace-*.bak"));
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
+        public void Write_RejectsNegativeQuantityWithChineseMessageAndKeepsTargetUntouched()
+        {
+            string root = Path.Combine(Path.GetTempPath(),
+                "uncad_boq_negative_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            string template = Path.Combine(root, "template.xlsx");
+            string target = Path.Combine(root, "machine", "[BOQ]MACHINE01.xlsx");
+            try
+            {
+                var workbook = new XSSFWorkbook();
+                ISheet sheet = workbook.CreateSheet("Sheet1");
+                sheet.CreateRow(0).CreateCell(0).SetCellValue("1.1");
+                using (var stream = new FileStream(template, FileMode.CreateNew))
+                    workbook.Write(stream);
+
+                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
+                    BoqWorkbookWriter.Write(target, template, new[]
+                    {
+                        new SubmissionRecord
+                        {
+                            MachineId = "MACHINE01",
+                            DeviceName = "设备A",
+                            Materials = new List<SubmissionMaterial>
+                            {
+                                new SubmissionMaterial { Code = "1.1", Quantity = "-3" }
+                            }
+                        }
+                    }));
+
+                // 用户可见：必须是中文说明，且不能留下半个目标文件。
+                Assert.Contains("不能为负数", error.Message);
+                Assert.False(File.Exists(target));
+            }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        }
+
+        [Fact]
         public void Write_UpdatesOnlyMatchingTemplateQuantityRows()
         {
             string root = Path.Combine(Path.GetTempPath(), "uncad_boq_write_"
