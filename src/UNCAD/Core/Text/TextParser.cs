@@ -126,7 +126,20 @@ namespace UNCAD.Core.Text
                 grids = 0;
                 return false;
             }
-            spec = "桥架" + match.Groups[1].Value + "*" + match.Groups[2].Value;
+            // 与格数写法一样规范尺寸：图上写 "桥架200.0*100" 与 "桥架200*100" 是同一
+            // 规格，不做规范化就会拿 "200.0*100" 去查固定清单，导致整条 U1F/U1U 中止。
+            if (!double.TryParse(match.Groups[1].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double width)
+                || !double.TryParse(match.Groups[2].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out double height)
+                || width <= 0 || height <= 0)
+            {
+                spec = null;
+                grids = 0;
+                return false;
+            }
+            spec = "桥架" + width.ToString("0.##", CultureInfo.InvariantCulture)
+                + "*" + height.ToString("0.##", CultureInfo.InvariantCulture);
             grids = millimetres / mmPerGrid;
             return grids > 0 && !double.IsNaN(grids) && !double.IsInfinity(grids);
         }

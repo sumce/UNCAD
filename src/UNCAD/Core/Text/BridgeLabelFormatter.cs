@@ -104,6 +104,32 @@ namespace UNCAD.Core.Text
             return true;
         }
 
+        /// <summary>
+        /// 写入桥架标注前的规范化：优先毫米写法，但结果必须仍能被统计读出来，
+        /// 否则退回用户原来的写法（旧格数写法统计照样认）。
+        ///
+        /// 为什么不能直接用 <see cref="NormalizeOrDefault"/>：12.5 格 × 250 mm/格 =
+        /// 3125mm，统计只认"结尾 0"的长度，写上去这条桥架在下一次 U1F/U1U 里就静默消失。
+        /// </summary>
+        public static string NormalizeForWriting(string value, double mmPerGrid, string fallback)
+        {
+            string normalized = NormalizeOrDefault(value, mmPerGrid, fallback);
+            if (IsStatisticsReadable(normalized)) return normalized;
+            string original = (value ?? "").Trim();
+            return IsStatisticsReadable(original) ? original : normalized;
+        }
+
+        /// <summary>
+        /// 该写法能否被统计读出：旧格数写法直接可读；毫米写法还要求长度满足统计的
+        /// "裸长度"规则（10 的倍数），否则 U1Q 写上去的桥架下一次 U1F/U1U 读不回来。
+        /// </summary>
+        private static bool IsStatisticsReadable(string label)
+        {
+            if (TextParser.TryExtractBridgeLabel(label ?? "", out _, out _)) return true;
+            return TryParseMillimetreLabel(label, out _, out double millimetres)
+                && TextParser.IsBareLengthToken(FormatLengthText(millimetres));
+        }
+
         private static bool IsValidScale(double value)
             => !double.IsNaN(value) && !double.IsInfinity(value) && value > 0;
 

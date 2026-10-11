@@ -44,6 +44,27 @@ namespace UNCAD.Tests
             Assert.True(outlet.CatalogMatched);
         }
 
+        [Fact]
+        public void PreserveExisting_LeavesALegacyOutletWithoutCodeUnmatchedSoD016StopsEarly()
+        {
+            var legacy = new TableFillRow
+            {
+                Category = TableFillCategory.Manual,
+                Name = "插座",          // 老图行：编码列被清空，只能靠名字认出来
+                Quantity = "2",
+                Code = ""
+            };
+
+            List<TableFillRow> result = UpdateOutletPolicy.PreserveExisting(
+                PlannedWithOutlet("planned"), new[] { legacy });
+
+            TableFillRow outlet = Assert.Single(result, UpdateOutletPolicy.IsOutlet);
+            Assert.Equal("2", outlet.Quantity);
+            // 未编码的行必须保持 unmatched：D-016 要求在 CAD 事务之前拦住，
+            // 而不是写到 BOQ 阶段才整批中止（那时图纸表格已经改过）。
+            Assert.False(outlet.CatalogMatched);
+        }
+
         [Theory]
         [InlineData("8.11", "插座漏电相序检测仪", false)]  // 名字带“插座”，但不是插座
         [InlineData("8.9", "绝缘测试仪（数字式摇表）", false)]

@@ -70,11 +70,16 @@ namespace UNCAD.Core.Fill
             AnnotationModelIndex index)
         {
             var result = lines == null ? new List<string>() : new List<string>(lines);
-            if (index != null && result.Count == 2
-                && index.TryCollapse(result[0], result[1], out string collapsed))
+            if (index != null && result.Count == 2)
             {
-                result.Clear();
-                result.Add(collapsed);
+                // 两行在 MTEXT 编辑器里被换序（长度在前）时也必须还原成"型号 + 长度"：
+                // 否则长度行会漏进电缆合计，桥架/线管本身被静默丢弃（D-018）。
+                if (index.TryCollapse(result[0], result[1], out string collapsed)
+                    || index.TryCollapse(result[1], result[0], out collapsed))
+                {
+                    result.Clear();
+                    result.Add(collapsed);
+                }
             }
             return result;
         }
@@ -93,7 +98,19 @@ namespace UNCAD.Core.Fill
             List<string> result = CollapseLines(lines, index);
             if (result.Count <= 1 || !ContainsAnnotationLength(result)) return result;
 
-            return new List<string> { string.Join(" ", result).Trim() };
+            // 统计引擎只认“标题在前、长度在后”。用户在 MTEXT 编辑器里把两行换序
+            // （或复制粘贴）后，合并结果必须仍能被读成桥架/线管，否则裸长度会漏进
+            // 电缆合计、而桥架/线管本身被静默丢弃。
+            List<string> ordered = new List<string>(result);
+            int heading = ordered.FindIndex(IsBridgeOrConduitText);
+            int length = ordered.FindIndex(TextParser.IsBareLengthToken);
+            if (heading > 0 && length >= 0 && length < heading)
+            {
+                string headingLine = ordered[heading];
+                ordered.RemoveAt(heading);
+                ordered.Insert(0, headingLine);
+            }
+            return new List<string> { string.Join(" ", ordered).Trim() };
         }
 
         /// <summary>
@@ -122,13 +139,16 @@ namespace UNCAD.Core.Fill
 
         private static bool ContainsAnnotationLength(IReadOnlyList<string> lines)
         {
+            // 与顺序无关：同一 MTEXT 里只要有桥架/线管标题，又有独立的裸长度，
+            // 就必须当成一个整体（D-018），不能要求长度恰好排在标题之后。
             bool foundHeading = false;
+            bool foundLength = false;
             foreach (string line in lines)
             {
-                if (foundHeading && TextParser.IsBareLengthToken(line)) return true;
                 if (IsBridgeOrConduitText(line)) foundHeading = true;
+                else if (TextParser.IsBareLengthToken(line)) foundLength = true;
             }
-            return false;
+            return foundHeading && foundLength;
         }
     }
 }

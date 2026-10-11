@@ -336,8 +336,7 @@ namespace UNCAD.Features.Fill
                     {
                         string name = BlockNameNormalizer.RemoveMangledSuffix(definition.Name);
                         flags.IsFrame = FrameRegionCollector.IsSupportedFrameName(name);
-                        flags.IsRuanguan = string.Equals(name, "Ruanguan",
-                            StringComparison.OrdinalIgnoreCase);
+                        flags.IsRuanguan = BlockNameNormalizer.IsFlexibleConduitBlock(name);
                         flags.IsJson = name.IndexOf("frameinfo_json",
                             StringComparison.OrdinalIgnoreCase) >= 0;
                         flags.IsUpstream = IsUpstreamName(name);

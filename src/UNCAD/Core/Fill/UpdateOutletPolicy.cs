@@ -137,9 +137,12 @@ namespace UNCAD.Core.Fill
                 Description = row.Description ?? "",
                 Unit = row.Unit ?? "",
                 Quantity = row.Quantity ?? "",
-                Code = row.Code ?? "",
-                // Existing CAD content is preserved, not rematched or regenerated from the catalog.
-                CatalogMatched = true
+                Code = (row.Code ?? "").Trim(),
+                // Existing CAD content is preserved, not rematched or regenerated from the
+                // catalog. But "preserved" is not "matched": a legacy row without a fixed
+                // catalog code must stay unmatched so D-016 stops the command before the
+                // CAD transaction instead of letting BOQ export abort afterwards.
+                CatalogMatched = CatalogCode.IsMatch((row.Code ?? "").Trim())
             };
 
         private static TableFillRow CloneAsTrustedGeneratedOutlet(TableFillRow row)

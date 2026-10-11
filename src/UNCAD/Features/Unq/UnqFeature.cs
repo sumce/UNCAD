@@ -42,7 +42,9 @@ namespace UNCAD.Features.Unq
             double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
             if (double.IsNaN(mmPerGrid) || double.IsInfinity(mmPerGrid) || mmPerGrid <= 0)
                 mmPerGrid = 250.0;
-            string content = BridgeLabelFormatter.NormalizeOrDefault(requestedContent,
+            // 用"统计读得出"的写法：12.5 格 × 250 = 3125mm 这类长度统计读不出来，
+            // 写上去下一次 U1F/U1U 会静默丢掉这条桥架，此时保留原来的格数写法。
+            string content = BridgeLabelFormatter.NormalizeForWriting(requestedContent,
                 mmPerGrid, "桥架200*100 2500mm");
             if (!string.Equals((requestedContent ?? "").Trim(), content,
                 System.StringComparison.Ordinal))

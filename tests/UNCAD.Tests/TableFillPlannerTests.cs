@@ -233,6 +233,26 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("4.12", panel.Code);
         }
 
+        [Theory]
+        [InlineData("I-Line盘")]
+        [InlineData("Iline盘")]
+        [InlineData("I-Line 盘")]
+        public void Build_AcceptsEveryILinePanelSpellingFromTheWorkbook(string next)
+        {
+            // 同一上游类型在动态块（可见性）与清单规划里必须得到同一结论：
+            // 以前只有 "I-Line盘" 会生成电盘/断路器行，另外两种写法静默缺料。
+            var machine = new MachineRow { Next = next, Detail = "N480 3P4W 3P200A" };
+            List<ListItem> items = Items();
+            items.Add(ElectricalPanel("4.8", "200A"));
+
+            List<TableFillRow> rows = TableFillPlanner.Build(machine,
+                new BoqCatalogIndex(items), new CableStatResult(),
+                FillPlanningOptions.Default, AllAutoFill());
+
+            Assert.Single(rows, row => row.Category == TableFillCategory.Panel);
+            Assert.Single(rows, row => row.Category == TableFillCategory.Breaker);
+        }
+
         [Fact]
         public void Build_AddsMatchingBreakerForNextILinePanel()
         {

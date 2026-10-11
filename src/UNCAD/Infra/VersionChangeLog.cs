@@ -31,6 +31,11 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.3", "2026-10-11",
+                    "新增：支持 Ruanguan_GW 等软管块变体——与 Ruanguan 是同一个软管对象，读长度、写型号/长度、U1F/U1U/U1C 的软管逻辑完全一致。",
+                    "修复：两行标注被换序（长度在前）时长度漏进电缆合计、桥架/线管被静默丢弃；现在配对与顺序无关。",
+                    "修复：无编码的既有插座行不再被当作已匹配——以前会写到 BOQ 阶段才整批中止，此时图纸表格已经改过。",
+                    "修复：桥架尺寸带尾零（桥架200.0*100）不再导致整条命令中止；U1Q 不再写出统计读不出来的长度；Iline盘 等写法不再静默少生成电盘/断路器行。"),
                 new VersionChangeLogEntry("2.6.2", "2026-10-11",
                     "修复批次输出回滚不幂等：批次已经正常收尾后再回滚，会拿已删除的备份去恢复输出文件，把完好的现场误报成“BOQ 文件回滚不完整”。现在回滚幂等，收尾后不再改动任何文件。",
                     "修复 BOQ 输出阶段没有模块标识：读取图框记录与写入 BOQ 工作簿两个阶段现在经 ModuleRunner 执行，日志新增 MODULE BOQ-XLSX/清单输出 的阶段与耗时；失败提示为“模块[BOQ-XLSX/清单输出]在[阶段]阶段失败”，可直接按模块定位。",

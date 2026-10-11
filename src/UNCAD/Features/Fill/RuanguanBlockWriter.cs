@@ -226,9 +226,9 @@ namespace UNCAD.Features.Fill
                 {
                     var definition = transaction.GetObject(definitionId,
                         OpenMode.ForRead, true) as BlockTableRecord;
-                    if (definition != null && string.Equals(
-                        BlockNameNormalizer.RemoveMangledSuffix(definition.Name), "Ruanguan",
-                        StringComparison.OrdinalIgnoreCase)) return true;
+                    if (definition != null
+                        && BlockNameNormalizer.IsFlexibleConduitBlock(definition.Name))
+                        return true;
                 }
                 catch { }
             }

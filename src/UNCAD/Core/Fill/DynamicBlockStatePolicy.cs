@@ -41,7 +41,14 @@ namespace UNCAD.Core.Fill
             return "";
         }
 
-        private static string NormalizeName(string value)
+        /// <summary>
+        /// 下游是否为 I-Line 电盘。与动态块可见性使用同一套规范化，
+        /// 使 "I-Line盘"/"Iline盘"/"I-Line 盘" 在同一个命令里得到同一结论
+        /// （以前清单规划用精确比较，这三种写法只有第一种会生成电盘/断路器行）。
+        /// </summary>
+        public static bool IsILinePanel(string next) => NormalizeName(next) == "iline盘";
+
+        internal static string NormalizeName(string value)
             => new string(BlockNameNormalizer.RemoveMangledSuffix(value).Where(character =>
                 !char.IsWhiteSpace(character) && character != '_' && character != '-').ToArray())
                 .ToLowerInvariant();

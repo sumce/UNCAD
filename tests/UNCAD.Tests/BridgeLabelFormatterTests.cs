@@ -77,6 +77,17 @@ namespace UNCAD.Tests
             Assert.Equal("桥架200*100 3125mm", migrated);
         }
 
+        [Theory]
+        [InlineData("桥架200*100 12格", "桥架200*100 3000mm")]      // 3000 是 10 的倍数 → 迁移
+        [InlineData("桥架200*100 12.5格", "桥架200*100 12.5格")]    // 3125 统计读不出 → 保留原写法
+        public void NormalizeForWriting_OnlyMigratesWhenStatisticsCanStillReadIt(
+            string value, string expected)
+        {
+            // U1Q 写入前用的就是它：写出去的长度必须下一次 U1F/U1U 还能读回来。
+            Assert.Equal(expected, BridgeLabelFormatter.NormalizeForWriting(
+                value, 250.0, "桥架200*100 2500mm"));
+        }
+
         [Fact]
         public void TryMigrateLegacyGrid_RejectsInvalidScaleWithoutRewriting()
         {

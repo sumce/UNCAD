@@ -212,7 +212,7 @@ namespace UNCAD.Core.Fill
             string next = (machine.Next ?? "").Trim();
             TryExtractRating(machine.Detail, out int poles, out int amps);
 
-            if (string.Equals(next, "I-Line盘", StringComparison.OrdinalIgnoreCase))
+            if (DynamicBlockStatePolicy.IsILinePanel(next))
             {
                 if (autoFill.Panel)
                 {

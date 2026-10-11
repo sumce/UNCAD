@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Submission;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
@@ -40,6 +41,13 @@ namespace UNCAD.Features.Fill
                 // Only the exact range U1U will clear and rewrite is authoritative.
                 for (int rowIndex = startRow; rowIndex < endRow; rowIndex++)
                 {
+                    // 老图纸常把固定编码放在 NO. 列而留空"项次编码"。与
+                    // FillUpdateRowMerger/SubmissionRecordExtractor 一样回退取一次，
+                    // 否则这条行会被当成"无编码"，U1F/U1U 写到 BOQ 阶段才整批中止。
+                    string number = CellText(table, rowIndex, 0);
+                    string code = CellText(table, rowIndex, 5).Trim();
+                    string catalogCode = SubmissionRecordExtractor.IsCatalogCode(code) ? code
+                        : SubmissionRecordExtractor.IsCatalogCode(number) ? number.Trim() : "";
                     var row = new TableFillRow
                     {
                         Category = TableFillCategory.Manual,
@@ -48,8 +56,9 @@ namespace UNCAD.Features.Fill
                         Description = CellText(table, rowIndex, 2),
                         Unit = CellText(table, rowIndex, 3),
                         Quantity = CellText(table, rowIndex, 4),
-                        Code = CellText(table, rowIndex, 5),
-                        CatalogMatched = true
+                        Code = catalogCode,
+                        // 没有固定编码的既有行保持 unmatched，交给 D-016 在事务前拦住。
+                        CatalogMatched = catalogCode.Length > 0
                     };
                     if (UpdateOutletPolicy.IsOutlet(row)) outlets.Add(row);
                 }

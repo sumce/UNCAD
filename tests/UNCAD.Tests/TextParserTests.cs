@@ -9,6 +9,21 @@ namespace UNCAD.Tests
     public class TextParserTests
     {
         [Theory]
+        [InlineData("桥架200.0*100 2500mm", "桥架200*100")]
+        [InlineData("桥架200*100.000 2500mm", "桥架200*100")]
+        [InlineData("桥架200*100 2500mm", "桥架200*100")]
+        [InlineData("桥架 200.5 * 100.0 2500mm", "桥架200.5*100")]
+        public void TryExtractBridgeLabel_NormalizesTheMillimetreSpecLikeTheGridForm(
+            string text, string expected)
+        {
+            // 图上写 "桥架200.0*100" 与 "桥架200*100" 是同一规格；不规范化就会拿
+            // "200.0*100" 去查固定清单，导致整条 U1F/U1U 中止。
+            Assert.True(TextParser.TryExtractBridgeLabel(text, 250.0, out string spec, out _),
+                text);
+            Assert.Equal(expected, spec);
+        }
+
+        [Theory]
         [InlineData("1200mm", 1200.0)]
         [InlineData("2000mm", 2000.0)]
         [InlineData(" 2000mm ", 2000.0)]       // 首尾空格容忍

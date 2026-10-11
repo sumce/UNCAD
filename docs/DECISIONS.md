@@ -4,6 +4,32 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-028: U1L Labels Are Cable Length (2026-10-11)
+
+- Status: accepted
+- Decision: a bare millimetre label written by `U1L` (for example `2000mm`) is the
+  cable length of that segment and **is counted** in U1U/U1F cable statistics.
+  D-006 excludes only distances the user enters through `U1LX` as a separate data
+  source; it must not be read as "exclude U1L labels from the cable sum".
+- Consequence: do not add a "U1L/U1LX annotation is not cable" filter to the
+  statistics reader. `U1L` exists to draw the line and annotate its cable length;
+  `StatisticsTextReader` deliberately reads those DBText labels as cable sources,
+  and `AnnotationLabelPair` keeps two-line bridge/conduit labels from leaking into
+  that sum. A single-line `2000mm` stays cable.
+
+## D-029: Flexible-Conduit Block Family Includes Ruanguan Variants (2026-10-11)
+
+- Status: accepted
+- Decision: the flexible-conduit (`Ruanguan`) block family includes names derived
+  from it with a separator, such as `Ruanguan_GW`. Recognition is decided by the
+  first segment of the normalised block name, so `Ruanguan`, `Ruanguan_GW`,
+  `Ruanguan-GW` and `Ruanguan$0$` all belong to the family, while a glued name
+  like `RuanguanXYZ` does not. `BlockNameNormalizer.IsFlexibleConduitBlock` is the
+  single implementation used by frame selection and the Ruanguan writer.
+- Consequence: length reading, model/length writing, U1F/U1U hose handling and U1C
+  treat every family member identically. Adding another documented variant means a
+  new name that keeps `Ruanguan` as its first segment — no per-variant code.
+
 ## D-001: One Pro Distribution
 
 - Status: accepted

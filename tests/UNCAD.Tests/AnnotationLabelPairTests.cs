@@ -207,6 +207,30 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void CollapseStatisticsLines_ReversedBridgePairStillCountsAsBridge()
+        {
+            // 用户在 MTEXT 编辑器里把两行换序（长度在前）：必须还原成可统计的桥架，
+            // 否则裸长度漏进电缆、桥架本身被静默丢弃（D-018）。
+            List<string> collapsed = AnnotationLabelPair.CollapseStatisticsLines(
+                new List<string> { "2500mm", "梯形桥架200Wx100H" });
+
+            CableStatResult statistics = StatCalculator.Calculate(collapsed, 250.0);
+            Assert.NotEmpty(statistics.Bridges);
+            Assert.Equal(0d, statistics.CableSum);
+        }
+
+        [Fact]
+        public void CollapseStatisticsLines_ReversedConduitPairStillCountsAsConduit()
+        {
+            List<string> collapsed = AnnotationLabelPair.CollapseStatisticsLines(
+                new List<string> { "2000mm", "镀锌穿线管EMT PIPE 20mm(3/4\")" });
+
+            CableStatResult statistics = StatCalculator.Calculate(collapsed, 250.0);
+            Assert.NotEmpty(statistics.Conduits);
+            Assert.Equal(0d, statistics.CableSum);
+        }
+
+        [Fact]
         public void CollapseText_SingleLineLegacyLabelIsReturnedUnchanged()
         {
             Assert.Equal("桥架200*100 2500mm",
