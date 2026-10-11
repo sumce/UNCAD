@@ -203,6 +203,83 @@ namespace UNCAD.Tests
             finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         }
 
+        [Fact]
+        public void BeginWrite_ProtectsAPathThatWasNotInTheInitialBatch()
+        {
+            // U1U 批量用计划侧机台号建批次，实际写盘路径来自 CAD 读出的机台号；
+            // 两者文本可能不同（D-021 只差内部空白）。这种路径必须按需纳入备份与锁，
+            // 而不是抛"文件不属于当前回滚批次"。
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_batch_late_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string a = Path.Combine(folder, "a.txt");
+            string late = Path.Combine(folder, "late", "b.txt");
+            try
+            {
+                File.WriteAllText(a, "a-old");
+                using (var batch = new FileBatchRollback(new[] { a }))
+                {
+                    batch.BeginWrite(late);                 // 批次里没有这个路径
+                    File.WriteAllText(late, "b-new");
+                    batch.MarkWritten(late);
+                    batch.Rollback();
+                }
+
+                Assert.Equal("a-old", File.ReadAllText(a));
+                Assert.False(File.Exists(late));            // 写入前不存在 → 回滚后删除
+                // 目录不删：回滚只负责文件，删目录可能误伤用户目录或同目录其它文件。
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void BeginWrite_RestoresALatePathThatExistedBefore()
+        {
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_batch_late_existing_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            string a = Path.Combine(folder, "a.txt");
+            string late = Path.Combine(folder, "b.txt");
+            try
+            {
+                File.WriteAllText(a, "a-old");
+                File.WriteAllText(late, "b-old");
+                using (var batch = new FileBatchRollback(new[] { a }))
+                {
+                    batch.BeginWrite(late);
+                    File.WriteAllText(late, "b-written");
+                    batch.MarkWritten(late);
+                    batch.Rollback();
+                }
+
+                Assert.Equal("a-old", File.ReadAllText(a));
+                Assert.Equal("b-old", File.ReadAllText(late));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
+        [Fact]
+        public void Complete_CreatesMissingParentFoldersForItsEntries()
+        {
+            // 批次自己负责建目录：预期文件集现在不再提前建目录。
+            string folder = Path.Combine(Path.GetTempPath(),
+                "uncad_batch_folder_" + Guid.NewGuid().ToString("N"));
+            string target = Path.Combine(folder, "machine", "out.txt");
+            try
+            {
+                using (var batch = new FileBatchRollback(new[] { target }))
+                {
+                    batch.BeginWrite(target);
+                    File.WriteAllText(target, "written");
+                    batch.MarkWritten(target);
+                    batch.Complete();
+                }
+
+                Assert.True(File.Exists(target));
+            }
+            finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+        }
+
         private static byte[] Fingerprint(string path)
         {
             using (var stream = File.OpenRead(path))

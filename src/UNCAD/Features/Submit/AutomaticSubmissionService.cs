@@ -86,7 +86,9 @@ namespace UNCAD.Features.Submit
             => (machineIds ?? Enumerable.Empty<string>())
                 .GroupBy(machineId => (machineId ?? "").Trim(),
                     IdentityTextNormalizer.Comparer)
-                .Select(group => BoqWorkbookWriter.BuildTargetPath(outputRoot,
+                // 只拼路径：这是"预期文件集"（供批次备份与指纹快照），真正写盘时才建目录，
+                // 否则机台号写法变化会在客户输出目录里留下一个空的机台文件夹。
+                .Select(group => BoqWorkbookWriter.ComposeTargetPath(outputRoot,
                     group.First()))
                 .ToList();
 

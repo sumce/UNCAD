@@ -46,12 +46,15 @@ namespace UNCAD.Features.DwgExport
                 return;
             }
 
-            DwgExportResult result;
+            // 事务边界只覆盖身份读取：导出本身是纯磁盘 IO（Wblock 到独立库 +
+            // SaveAs + 原子替换），不能在只读事务里跑几分钟。
+            List<DwgExportFrame> frames;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                result = DwgFrameExportService.Export(ctx, transaction, regions.Groups);
+                frames = DwgFrameExportService.ReadFrames(ctx, transaction, regions.Groups);
                 transaction.Commit();
             }
+            DwgExportResult result = DwgFrameExportService.Export(ctx, frames);
             ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框，"
                 + result.MachineCount + " 个机台文件：" + result.FilePath);
             UploadExport(result);

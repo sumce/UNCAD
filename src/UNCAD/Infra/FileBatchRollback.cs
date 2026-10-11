@@ -36,22 +36,7 @@ namespace UNCAD.Infra
                 .ToArray();
             try
             {
-                foreach (string path in targets)
-                {
-                    var entry = new Entry
-                    {
-                        Target = path,
-                        UpdateLock = FileUpdateLock.Acquire(path),
-                        Existed = File.Exists(path)
-                    };
-                    _entries.Add(entry);
-                    if (entry.Existed)
-                    {
-                        entry.Backup = path + ".uncad-batch-" + Guid.NewGuid().ToString("N") + ".bak";
-                        File.Copy(path, entry.Backup, false);
-                        entry.InitialFingerprint = ComputeFingerprint(entry.Backup);
-                    }
-                }
+                foreach (string path in targets) _entries.Add(CreateEntry(path));
             }
             catch
             {
@@ -70,7 +55,11 @@ namespace UNCAD.Infra
 
         public void BeginWrite(string path)
         {
-            Entry entry = Find(path);
+            // 待写路径可能来自与建批次时不同的来源：U1U 批量用计划侧机台号建集合，
+            // 实际写盘路径却来自 CAD 读出的机台号（D-021 允许两者只差内部空白）。
+            // 这种文件必须按需纳入批次——否则它既没有备份也没有锁，回滚保护会漏掉它，
+            // 用户还会先看到一句没法照着做的"文件不属于当前回滚批次"。
+            Entry entry = FindOrAdd(path);
             ValidateInitialSnapshot(entry);
             entry.WriteStarted = true;
             entry.WriteCompleted = false;
@@ -187,13 +176,53 @@ namespace UNCAD.Infra
             }
         }
 
-        private Entry Find(string path)
+        /// <summary>把批次之外的输出路径按需纳入保护（备份 + 锁），返回批次内条目。</summary>
+        private Entry FindOrAdd(string path)
+        {
+            Entry entry = TryFind(path);
+            if (entry != null) return entry;
+            entry = CreateEntry(path);
+            _entries.Add(entry);
+            return entry;
+        }
+
+        private static Entry CreateEntry(string path)
         {
             string fullPath = Path.GetFullPath(path);
-            Entry entry = _entries.FirstOrDefault(item => string.Equals(item.Target,
+            string folder = Path.GetDirectoryName(fullPath);
+            // 批次负责为条目建目录：调用方不必先建，按需纳入的路径也不会因为目录
+            // 不存在而拿不到锁侧车文件。
+            if (!string.IsNullOrWhiteSpace(folder)) Directory.CreateDirectory(folder);
+            var entry = new Entry
+            {
+                Target = fullPath,
+                UpdateLock = FileUpdateLock.Acquire(fullPath),
+                Existed = File.Exists(fullPath)
+            };
+            if (entry.Existed)
+            {
+                entry.Backup = fullPath + ".uncad-batch-"
+                    + Guid.NewGuid().ToString("N") + ".bak";
+                File.Copy(fullPath, entry.Backup, false);
+                entry.InitialFingerprint = ComputeFingerprint(entry.Backup);
+            }
+            return entry;
+        }
+
+        private Entry TryFind(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+            return _entries.FirstOrDefault(item => string.Equals(item.Target,
                 fullPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private Entry Find(string path)
+        {
+            Entry entry = TryFind(path);
             if (entry == null)
-                throw new InvalidOperationException("文件不属于当前回滚批次：" + fullPath);
+                throw new InvalidOperationException("文件不属于当前回滚批次："
+                    + Path.GetFullPath(path) + "。批次内已知文件："
+                    + string.Join("、", _entries.Select(item => item.Target)));
             return entry;
         }
 

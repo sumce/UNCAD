@@ -46,18 +46,11 @@ namespace UNCAD.Features.DwgExport
     /// <summary>Exports selected frame contents without modifying the active source database.</summary>
     internal static class DwgFrameExportService
     {
-        public static DwgExportResult Export(CadContext ctx, IEnumerable<FrameRegionGroup> groups)
-        {
-            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
-            {
-                DwgExportResult result = Export(ctx, transaction, groups);
-                transaction.Commit();
-                return result;
-            }
-        }
-
-        internal static DwgExportResult Export(CadContext ctx, Transaction transaction,
+        /// <summary>
+        /// 读取每个图框的机台/设备身份。**必须在一个短只读事务里调用**：导出阶段的
+        /// 磁盘 IO（Wblock/SaveAs/哈希/替换）不再持有任何 CAD 事务与对象句柄。
+        /// </summary>
+        internal static List<DwgExportFrame> ReadFrames(CadContext ctx, Transaction transaction,
             IEnumerable<FrameRegionGroup> groups)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
@@ -78,6 +71,21 @@ namespace UNCAD.Features.DwgExport
             }
             if (frames.Count == 0)
                 throw new InvalidDataException("没有可导出的有效图框。");
+            return frames;
+        }
+
+        /// <summary>
+        /// 导出阶段：不接收事务，也不打开事务。
+        ///
+        /// 以前整个导出——包括全部磁盘 IO、Wblock、SaveAs 与大文件哈希——都在一个
+        /// 只对源库只读的 ctx.Db 事务里跑：Commit 没有语义，却把只读事务与全部对象
+        /// 句柄一直持有到导出结束。身份读取拆到 <see cref="ReadFrames"/> 的短事务里。
+        /// </summary>
+        internal static DwgExportResult Export(CadContext ctx,
+            IReadOnlyList<DwgExportFrame> frames)
+        {
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            if (frames == null) throw new ArgumentNullException(nameof(frames));
 
             string outputRoot = ResolveOutputRoot();
             var machineGroups = frames.GroupBy(frame => frame.MachineId,

@@ -108,11 +108,21 @@ namespace UNCAD.Core.Submission
 
         public static string BuildTargetPath(string outputRoot, string machineId)
         {
+            string path = ComposeTargetPath(outputRoot, machineId);
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            return path;
+        }
+
+        /// <summary>
+        /// 只拼路径、不建目录。给"预期文件集"用（批次备份与指纹快照）：
+        /// 预期路径未必真的会被写入，提前建目录会在客户输出目录里留下空的机台文件夹。
+        /// </summary>
+        public static string ComposeTargetPath(string outputRoot, string machineId)
+        {
             if (string.IsNullOrWhiteSpace(outputRoot))
                 throw new ArgumentException("BOQ 输出文件夹不能为空。", nameof(outputRoot));
             string fileName = BuildFileName(machineId);
             string machineFolder = Path.Combine(Path.GetFullPath(outputRoot), (machineId ?? "").Trim());
-            Directory.CreateDirectory(machineFolder);
             return Path.Combine(machineFolder, fileName);
         }
 
