@@ -62,6 +62,8 @@ namespace UNCAD.UI
                         "只读取一个或多个当前图框清单，提交项目、数量和米数到 BOQ Excel"),
                     RibbonItemDefinition.Button("U1DWG 导出", CommandIds.DwgExport,
                         "按机台 ID 导出图框内容，并将同机台图框横向排列"),
+                    RibbonItemDefinition.Button("U1PDF 出图", CommandIds.PdfExport,
+                        "按回路（一个图框一份）导出彩色 PDF 并上传，供服务端在线预览"),
                     RibbonItemDefinition.Button("XLAYOUT 排版", CommandIds.XLayout,
                         "按机台 ID 将当前图框分行排版，并统计回路数量"),
                     RibbonItemDefinition.Button("Xmerge 合并 DWG", CommandIds.Merge,

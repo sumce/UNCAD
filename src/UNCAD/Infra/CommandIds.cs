@@ -12,6 +12,8 @@ namespace UNCAD.Infra
         public const string DataRefresh = "U1DATA";
         public const string DwgExport = "U1DWG";
         public const string DwgExportShort = "U1D";
+        /// <summary>按**回路**（一个图框一份）导出彩色 PDF 并上传，供服务端在线预览。</summary>
+        public const string PdfExport = "U1PDF";
         public const string XLayout = "XLAYOUT";
         public const string Statistics = "XSTS";
         public const string Merge = "Xmerge";
@@ -57,6 +59,7 @@ namespace UNCAD.Infra
         public const string DimensionTextFeatureCommands = DimensionText;
         public const string DataRefreshFeatureCommands = DataRefresh;
         public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
+        public const string PdfExportFeatureCommands = PdfExport;
         public const string ArchFeatureCommands = Arch;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
@@ -88,6 +91,7 @@ namespace UNCAD.Infra
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
             About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
             ClientLogin,
+            PdfExport,
             DwgExportShort,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,
             LegacyTray400, LegacyStatistics

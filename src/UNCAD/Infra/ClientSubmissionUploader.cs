@@ -109,6 +109,12 @@ namespace UNCAD.Infra
         internal const string CircuitPath = "/api/client/submissions/circuit";
         internal const string DwgExportPath = "/api/client/submissions/dwg-export";
         internal const string UploadPath = "/api/client/submissions/file";
+        /// <summary>DWG 按机台导出（一份文件覆盖多个回路）。</summary>
+        internal const string KindDwg = "dwg";
+        /// <summary>PDF 按回路出图（一份文件恰好一个回路，服务端会强校验）。</summary>
+        internal const string KindPdf = "pdf";
+        /// <summary>PDF 文件扩展名（服务端要求以它结尾）。</summary>
+        internal const string PdfExtension = ".pdf";
         /// <summary>上报主机；由 OnlineLicenseMonitor.IsExpectedEndpoint 最终校验。</summary>
         internal const string ExpectedHost = "uncad.aosa.me";
         /// <summary>与服务端 SubmissionService.MaximumFileBytes 一致。</summary>
@@ -208,22 +214,45 @@ namespace UNCAD.Infra
         /// <summary>U1DWG 导出成功后上传该机台的 DWG 文件本体（原始字节流）。</summary>
         internal ClientSubmissionOutcome UploadDwgFile(string machineId, string filePath,
             IReadOnlyList<string> circuits)
+            => UploadFile(machineId, filePath, circuits, KindDwg, "DWG");
+
+        /// <summary>
+        /// U1PDF：**一个图框 = 一个回路 = 一份 PDF**。服务端对 kind=pdf 有硬规则
+        /// （必须且只能一个 circuits、文件名以 .pdf 结尾），因此这里先本地校验，
+        /// 不满足就不发请求（避免无谓往返与半成品上传）。
+        /// </summary>
+        internal ClientSubmissionOutcome UploadPdf(string machineId, string filePath,
+            string circuitName)
+        {
+            // 服务端按 ',' 拆分 circuits，因此"一个回路"必须不含逗号，否则会被当成多个回路。
+            List<string> circuits = NormalizeCircuits(new[] { (circuitName ?? "").Trim() });
+            if (circuits.Count != 1)
+                return Reject("PDF 必须指定且只能指定一个回路（一个图框一份）。", false, 0);
+            string fileName = Path.GetFileName((filePath ?? "").Trim());
+            if (!fileName.EndsWith(PdfExtension, StringComparison.OrdinalIgnoreCase))
+                return Reject("PDF 文件名必须以 " + PdfExtension + " 结尾，未上传。", false, 0);
+            return UploadFile(machineId, filePath, circuits, KindPdf, "PDF");
+        }
+
+        /// <summary>文件本体上传的共用实现（DWG 与 PDF 只差 kind/文案）。</summary>
+        private ClientSubmissionOutcome UploadFile(string machineId, string filePath,
+            IReadOnlyList<string> circuits, string kind, string label)
         {
             string machine = (machineId ?? "").Trim();
             string path = (filePath ?? "").Trim();
             if (machine.Length == 0)
-                return Reject("缺少机台 ID，DWG 未上传。", false, 0);
+                return Reject("缺少机台 ID，" + label + " 未上传。", false, 0);
             if (path.Length == 0)
-                return Reject("缺少 DWG 文件路径，未上传。", false, 0);
+                return Reject("缺少 " + label + " 文件路径，未上传。", false, 0);
             if (!File.Exists(path))
-                return Failure("DWG 文件不存在，未上传：" + path);
+                return Failure(label + " 文件不存在，未上传：" + path);
             long length;
             try { length = new FileInfo(path).Length; }
-            catch (Exception ex) { return Failure("无法读取 DWG 文件信息：" + ex.Message); }
+            catch (Exception ex) { return Failure("无法读取 " + label + " 文件信息：" + ex.Message); }
             if (length <= 0)
-                return Reject("DWG 文件为空，未上传：" + path, false, 0);
+                return Reject(label + " 文件为空，未上传：" + path, false, 0);
             if (IsOverFileLimit(length))
-                return Reject("DWG 文件 " + (length / 1024 / 1024)
+                return Reject(label + " 文件 " + (length / 1024 / 1024)
                     + " MB 超过服务端上限 200 MB，未上传。", false, 0);
             List<string> list = NormalizeCircuits(circuits);
             if (!TryCredentials(out ClientSubmissionCredentials credentials, out _))
@@ -231,16 +260,16 @@ namespace UNCAD.Infra
 
             string fileName = Path.GetFileName(path);
             ClientSubmissionOutcome outcome = Post(credentials, UploadPath,
-                BuildUploadQuery(credentials, machine, fileName, list), null, path);
+                BuildUploadQuery(credentials, machine, fileName, list, kind), null, path);
             if (outcome.Status == ClientSubmissionStatus.Accepted)
             {
-                Log.Info("DWG 已上传: " + machine + " " + fileName
+                Log.Info(label + " 已上传: " + machine + " " + fileName
                     + "（" + list.Count + " 个回路，" + (length / 1024) + " KB）");
                 outcome.Message = "";
             }
             else
             {
-                outcome.Message = "DWG 上传未完成（" + machine + " " + fileName + "）："
+                outcome.Message = label + " 上传未完成（" + machine + " " + fileName + "）："
                     + outcome.Message;
             }
             return outcome;
@@ -278,12 +307,14 @@ namespace UNCAD.Infra
                 + "&device=" + Uri.EscapeDataString((credentials?.DeviceId ?? "").Trim());
 
         internal static string BuildUploadQuery(ClientSubmissionCredentials credentials,
-            string machineId, string fileName, IReadOnlyList<string> circuits)
+            string machineId, string fileName, IReadOnlyList<string> circuits,
+            string kind = KindDwg)
         {
             var builder = new StringBuilder(BuildQuery(credentials));
             builder.Append("&machineId=").Append(Uri.EscapeDataString((machineId ?? "").Trim()));
             builder.Append("&fileName=").Append(Uri.EscapeDataString((fileName ?? "").Trim()));
-            builder.Append("&kind=dwg");
+            builder.Append("&kind=").Append(
+                string.IsNullOrWhiteSpace(kind) ? KindDwg : kind.Trim());
             List<string> list = NormalizeCircuits(circuits);
             if (list.Count > 0)
             {
@@ -316,13 +347,19 @@ namespace UNCAD.Infra
             return inventory;
         }
 
+        /// <summary>
+        /// 回路列表规范化：服务端按 ',' 拆分并 Trim，因此这里同样按逗号拆分再
+        /// 去空/去重——保证客户端对"几个回路"的判断与线上传输完全一致
+        /// （kind=pdf 的"恰好一个回路"校验依赖它）。
+        /// </summary>
         internal static List<string> NormalizeCircuits(IReadOnlyList<string> circuits)
         {
             var list = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (string circuit in circuits ?? new List<string>())
+            foreach (string part in (circuit ?? "").Split(','))
             {
-                string value = (circuit ?? "").Trim();
+                string value = part.Trim();
                 if (value.Length == 0) continue;
                 if (seen.Add(value)) list.Add(value);
             }

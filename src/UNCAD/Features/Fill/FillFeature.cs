@@ -577,6 +577,52 @@ namespace UNCAD.Features.Fill
             return "";
         }
 
+        /// <summary>
+        /// 图框 →（机台ID, 回路名）的**唯一推导**：与 U1U 上报清单/更新时完全同一套
+        /// （<see cref="FrameIdentityReader.ReadIdentity"/> 读图框持久身份 +
+        /// <see cref="ExistingFillIdentityResolver.MatchMachine"/> 匹配 SQLite 快照行）。
+        /// U1PDF 必须复用它：两处口径漂移会让 PDF 挂到错误的回路上。
+        /// </summary>
+        internal static bool TryResolveFrameCircuit(Transaction transaction,
+            FrameRegionGroup region, FillWorkbookSnapshot workbook,
+            CadBlockDefinitionReader definitions,
+            out string machineId, out string circuitName, out string error)
+        {
+            machineId = "";
+            circuitName = "";
+            error = "";
+            if (transaction == null || region == null || workbook == null)
+            {
+                error = "缺少图框或机台数据。";
+                return false;
+            }
+            ExistingFillIdentity identity;
+            try
+            {
+                identity = FrameIdentityReader.ReadIdentity(transaction, region, definitions);
+            }
+            catch (System.Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+            MachineRow machine = ExistingFillIdentityResolver.MatchMachine(identity,
+                workbook.FindRows(identity.MachineId), out string matchError);
+            if (machine == null)
+            {
+                error = matchError;
+                return false;
+            }
+            machineId = (machine.MachineId ?? "").Trim();
+            circuitName = (machine.CircuitName ?? "").Trim();
+            if (machineId.Length == 0 || circuitName.Length == 0)
+            {
+                error = "图框缺少机台ID或回路名。";
+                return false;
+            }
+            return true;
+        }
+
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
             int startRow, int configuredRows)
         {
