@@ -39,12 +39,19 @@ namespace UNCAD.Tests
             Assert.Contains("record.Materials.Count", submit);
             Assert.DoesNotContain("FillWorkbookSnapshot", submit);
             Assert.DoesNotContain("StartTransaction", submit);
-            Assert.Contains("Write(ctx, transaction", fill);
-            Assert.Contains("Write(ctx, transaction", batch);
+            // 2.6.4：BOQ 输出移到 CAD 提交之后（读真实 CAD 结果再写）。
+            Assert.Contains("Write(ctx, readTransaction", fill);
+            Assert.Contains("Write(ctx, readTransaction", batch);
             Assert.Contains("BatchFillConfirmationForm", batch);
             Assert.DoesNotContain("MessageBox.Show(Owner(), summary", batch);
-            Assert.DoesNotContain("after CAD commit", fill);
-            Assert.DoesNotContain("after CAD commit", batch);
+            int fillCommit = fill.IndexOf("transaction.Commit();", StringComparison.Ordinal);
+            Assert.True(fillCommit >= 0 && fill.IndexOf(
+                "AutomaticSubmissionService.Write", StringComparison.Ordinal) > fillCommit,
+                "U1F/U1U 单框：BOQ 输出必须在 CAD 提交之后。");
+            int batchCommit = batch.IndexOf("transaction.Commit();", StringComparison.Ordinal);
+            Assert.True(batchCommit >= 0 && batch.IndexOf(
+                "AutomaticSubmissionService.Write", StringComparison.Ordinal) > batchCommit,
+                "U1U 批量：BOQ 输出必须在 CAD 提交之后。");
             Assert.Contains("string outputRoot = Path.GetFullPath(filePath);", service);
             Assert.DoesNotContain("Path.GetDirectoryName(Path.GetFullPath(filePath))", service);
             Assert.DoesNotContain("批量图框包含重复的机台/设备", service);
@@ -67,7 +74,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("WriteBatchWithDefaults", service);
             Assert.DoesNotContain("AllowUnmatchedDefaults", batch);
             Assert.Contains("批量更新已取消", batch);
-            Assert.Contains("AutomaticSubmissionService.Write(ctx, transaction", batch);
+            // 2.6.4：批量也改成提交后用 readTransaction 读真实 CAD 结果写 BOQ。
+            Assert.Contains("AutomaticSubmissionService.Write(ctx, readTransaction", batch);
         }
 
         [Fact]

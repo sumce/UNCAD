@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.4", "2026-10-11",
+                    "修复：批量更新偶发的“文件不属于当前回滚批次”。计划的机台号与图纸里读出的机台号只差内部空白时，实际写出的文件没有进批次备份；现在这类文件会按需纳入备份与锁，回滚覆盖真正写过的每个文件。",
+                    "修复：DWG 导出（U1DWG）不再把整个磁盘 IO 过程放在只读事务里；身份读取用短事务，导出阶段不持有任何 CAD 事务。",
+                    "变更：BOQ 清单输出改到 CAD 提交之后执行（与开发规范一致）。提交后 BOQ 写入失败时图纸保持已更新，命令行与弹窗会明确提示重跑 U1S 重新导出清单。"),
                 new VersionChangeLogEntry("2.6.3", "2026-10-11",
                     "新增：支持 Ruanguan_GW 等软管块变体——与 Ruanguan 是同一个软管对象，读长度、写型号/长度、U1F/U1U/U1C 的软管逻辑完全一致。",
                     "修复：两行标注被换序（长度在前）时长度漏进电缆合计、桥架/线管被静默丢弃；现在配对与顺序无关。",

@@ -395,18 +395,21 @@ namespace UNCAD.Features.Fill
             int deviceColorBlocks, upstreamColorBlocks;
             short deviceColorIndex = FillColorSettings.DeviceColorIndex();
             short upstreamColorIndex = FillColorSettings.UpstreamColorIndex();
-            AutomaticSubmissionWriteResult automaticExcel;
-            // 阶段6：先清除模板数据区，再按连续顺序写入清单和块属性；
-            // 文件快照覆盖到 CAD Commit，任一失败都不留下单边更新。
+            string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
+            AutomaticSubmissionWriteResult automaticExcel = null;
+            // 阶段6：CAD 提交点——先清除模板数据区，再按连续顺序写入清单和块属性。
+            // BOQ xlsx 不在这里写：按 docs/DEVELOPMENT.md，Excel 输出在 CAD 提交之后、
+            // 读取真实 CAD 结果再写（见下面阶段7）。
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     new[] { picked.MachineId })))
+            {
+            // Recheck while the batch snapshot is held. BeginWrite then guards the
+            // remaining CAD-processing window against another external save.
+            AutomaticSubmissionService.ValidateTargetRevisions(
+                automaticExcelRevisions);
             try
             {
-                // Recheck while the batch snapshot is held. BeginWrite then guards the
-                // remaining CAD-processing window against another external save.
-                AutomaticSubmissionService.ValidateTargetRevisions(
-                    automaticExcelRevisions);
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
@@ -459,36 +462,68 @@ namespace UNCAD.Features.Fill
                             .Concat(selection.UpstreamAxisBlockIds)
                             .Concat(selection.UpstreamColorBlockIds),
                         upstreamColorIndex);
-                    // The reader uses this same transaction, so BOQ failure aborts all CAD writes.
-                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
-                        automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
-                    // Excel submission reads the modified table and can trigger
-                    // AutoCAD's lazy table regeneration.  Reapply the uniform row
-                    // geometry as the final native table operation before commit.
+                    // 读表会触发 AutoCAD 的懒重算，提交前先按固定行高回写一次，
+                    // 保证提交出去的图纸就是固定行高（D-027）。
                     CadTableFillWriter.FixGeneratedRowHeights(transaction,
                         selection.TableIds, startRow, clearRowCount);
                     transaction.Commit();
-                    outputBatch.Complete();
                 }
             }
             catch (System.Exception writeError)
             {
-                System.Exception reported = writeError;
-                string rollbackStatus = "图纸和 BOQ 修改均已回滚。";
+                // 事务没有提交 → CAD 全部自动回滚；BOQ 文件此时还没有 BeginWrite。
+                string status = "图纸和 BOQ 修改均已回滚。";
                 try { outputBatch.Rollback(); }
                 catch (System.Exception rollbackError)
                 {
-                    reported = new AggregateException(
-                        "写入失败；CAD 修改已回滚，但 BOQ 文件回滚不完整。",
-                        writeError, rollbackError);
-                    rollbackStatus = "CAD 修改已回滚，但 BOQ 文件回滚不完整；"
-                        + "已保留当前文件，请先检查错误再继续更新。";
+                    Log.Error(command + " batch rollback failed (CAD already rolled back)",
+                        rollbackError);
                 }
-                string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
-                Log.Error(command + " write failed", reported);
-                ctx.Write("\n[" + command + "] 写入失败；" + rollbackStatus + " "
-                    + reported.Message);
+                Log.Error(command + " write failed", writeError);
+                ctx.Write("\n[" + command + "] 写入失败；" + status + " "
+                    + writeError.Message);
                 return;
+            }
+
+            // 阶段7：CAD 已提交。按 docs/DEVELOPMENT.md 的顺序，现在才读取真实 CAD 结果
+            // 并写 BOQ —— 提交前写 Excel 会在"替换完成到 Commit 之间"留下新表+旧图的窗口。
+            // 代价：这一段失败不再回滚图纸，只回滚本批 BOQ 文件并明确要求重跑 U1S。
+            try
+            {
+                // 提交后窗口更短，但外部改动的可能性依然存在，再校验一次文件指纹。
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
+                using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    automaticExcel = AutomaticSubmissionService.Write(ctx, readTransaction,
+                        automaticExcelPath, new[] { selection.SourceIds }, outputBatch);
+                    readTransaction.Commit();
+                }
+                // 读清单表会让 AutoCAD 懒重算表几何，提交后必须再按固定行高回写一次，
+                // 否则用户图纸里的行高会被重算结果改掉。
+                using (Transaction fixTransaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    CadTableFillWriter.FixGeneratedRowHeights(fixTransaction,
+                        selection.TableIds, startRow, clearRowCount);
+                    fixTransaction.Commit();
+                }
+                outputBatch.Complete();
+            }
+            catch (System.Exception boqError)
+            {
+                string status = "本批 BOQ 文件已恢复为修改前的版本。";
+                try { outputBatch.Rollback(); }
+                catch (System.Exception rollbackError)
+                {
+                    status = "部分 BOQ 文件无法安全恢复，已保留当前文件。";
+                    Log.Error("图纸已提交，但 BOQ 文件回滚不完整。", new AggregateException(
+                        "图纸已提交，但 BOQ 文件回滚不完整。", boqError, rollbackError));
+                }
+                Log.Error(command + " BOQ 输出失败（CAD 已提交）", boqError);
+                ctx.Write("\n[" + command + "] 图纸已更新，但 BOQ 输出失败；" + status
+                    + " 请重跑 " + CommandIds.Submit + " 重新导出清单：" + boqError.Message);
+                return;
+            }
             }
 
             SelectionService.ClearPickFirst(ctx);

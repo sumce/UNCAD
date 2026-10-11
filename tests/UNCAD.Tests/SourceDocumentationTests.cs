@@ -11,7 +11,8 @@ namespace UNCAD.Tests
         {
             string feature = File.ReadAllText(RepoFile(
                 "src", "UNCAD", "Features", "Fill", "FillFeature.cs"));
-            for (int stage = 1; stage <= 6; stage++)
+            // 2.6.4 起 BOQ 输出独立成阶段7（CAD 提交之后再写），阶段数随之增加。
+            for (int stage = 1; stage <= 7; stage++)
                 Assert.Contains("阶段" + stage + "：", feature);
             Assert.Contains("Machine.Cable remains the source-device value", feature);
 

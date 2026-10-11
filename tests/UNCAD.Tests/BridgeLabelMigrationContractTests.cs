@@ -28,16 +28,17 @@ namespace UNCAD.Tests
             int migration = source.IndexOf(
                 "BridgeLabelMigrationWriter.Migrate(transaction,",
                 transaction, StringComparison.Ordinal);
-            int boq = source.IndexOf(
-                "AutomaticSubmissionService.Write(ctx, transaction,",
-                transaction, StringComparison.Ordinal);
             int commit = source.IndexOf("transaction.Commit()", transaction,
                 StringComparison.Ordinal);
+            int boq = source.IndexOf(
+                "AutomaticSubmissionService.Write(ctx, readTransaction,",
+                transaction, StringComparison.Ordinal);
 
             Assert.True(transaction >= 0);
             Assert.True(migration > transaction);
-            Assert.True(boq > migration);
-            Assert.True(commit > boq);
+            // 桥架标注迁移仍在最终 CAD 事务里；BOQ 输出(2.6.4 起)在提交之后。
+            Assert.True(commit > migration);
+            Assert.True(boq > commit);
         }
 
         [Fact]
@@ -53,17 +54,17 @@ namespace UNCAD.Tests
             int migration = source.IndexOf(
                 "BridgeLabelMigrationWriter.Migrate(", loop,
                 StringComparison.Ordinal);
-            int boq = source.IndexOf(
-                "AutomaticSubmissionService.Write(ctx, transaction,",
-                migration, StringComparison.Ordinal);
-            int commit = source.IndexOf("transaction.Commit()", boq,
+            int commit = source.IndexOf("transaction.Commit()", migration,
                 StringComparison.Ordinal);
+            int boq = source.IndexOf(
+                "AutomaticSubmissionService.Write(ctx, readTransaction,",
+                commit, StringComparison.Ordinal);
 
             Assert.True(transaction >= 0);
             Assert.True(loop > transaction);
             Assert.True(migration > loop);
-            Assert.True(boq > migration);
-            Assert.True(commit > boq);
+            Assert.True(commit > migration);
+            Assert.True(boq > commit, "批量 BOQ 输出必须在 CAD 提交之后。");
         }
 
         private static string RepoFile(params string[] parts)

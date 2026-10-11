@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The current 2.6.3 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The current 2.6.4 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,12 @@ The current 2.6.3 build has 35 commands (including `U1PDF` and the online-login 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.6.4
+
+- 修复：批量更新偶发报“文件不属于当前回滚批次”（机台号只差内部空白时，写出的文件没进回滚保护）。
+- 修复：DWG 导出不再把整个磁盘 IO 放在只读事务里。
+- 变更：BOQ 清单输出改到 CAD 提交之后；若 BOQ 写入失败，图纸保留已更新状态，并明确提示重跑 `U1S`。
 
 ## v2.6.3
 

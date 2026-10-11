@@ -242,7 +242,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            AutomaticSubmissionWriteResult automaticExcel;
+            AutomaticSubmissionWriteResult automaticExcel = null;
             int tableRows = 0;
             int frameBlocks = 0;
             int attributeValues = 0;
@@ -255,12 +255,13 @@ namespace UNCAD.Features.Fill
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
                     plans.Select(plan => plan.Machine.MachineId))))
+            {
+            // Close the gap between the post-confirmation check and batch snapshot.
+            // BeginWrite performs the final check after the CAD work is prepared.
+            AutomaticSubmissionService.ValidateTargetRevisions(
+                automaticExcelRevisions);
             try
             {
-                // Close the gap between the post-confirmation check and batch snapshot.
-                // BeginWrite performs the final check after the CAD work is prepared.
-                AutomaticSubmissionService.ValidateTargetRevisions(
-                    automaticExcelRevisions);
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
@@ -350,38 +351,73 @@ namespace UNCAD.Features.Fill
                             + upstreamInfo.Values
                             + upstreamState.Values + upstreamAxis.Values + downstreamAxis.Values;
                     }
-                    // Read the modified entities through the same transaction. If BOQ output
-                    // fails, disposing this transaction rolls back the whole CAD batch.
-                    automaticExcel = AutomaticSubmissionService.Write(ctx, transaction,
-                        automaticExcelPath, plans.Select(plan => plan.Selection.SourceIds),
-                        outputBatch);
+                    // 提交前只做 CAD：读表会让 AutoCAD 懒重算，提交前先按固定行高回写一次。
                     foreach (Plan plan in plans)
                         CadTableFillWriter.FixGeneratedRowHeights(transaction,
                             plan.Selection.TableIds, options.StartRow, options.ClearRows);
                     transaction.Commit();
-                    outputBatch.Complete();
                 }
             }
             catch (System.Exception ex)
             {
-                System.Exception reported = ex;
+                // 事务没有提交 → 全部图框自动回滚；BOQ 文件此时还没有 BeginWrite。
                 string rollbackStatus = "所有图框和 BOQ 修改均已回滚。";
                 try { outputBatch.Rollback(); }
                 catch (System.Exception rollbackError)
                 {
-                    reported = new AggregateException(
-                        "CAD 图框已回滚，但部分 BOQ 文件无法安全恢复。",
-                        ex, rollbackError);
-                    rollbackStatus = "CAD 图框已回滚，但部分 BOQ 文件无法安全恢复；"
-                        + "已保留当前文件，请先检查错误再继续更新。";
+                    rollbackStatus = "所有图框修改均已回滚；BOQ 文件未开始写入。";
+                    Log.Error("U1U batch rollback failed (CAD already rolled back)",
+                        rollbackError);
                 }
-                Log.Error("U1U batch write failed", reported);
-                ctx.Write("\n[U1U] 批量写入失败；" + rollbackStatus + " "
-                    + reported.Message);
+                Log.Error("U1U batch write failed", ex);
+                ctx.Write("\n[U1U] 批量写入失败；" + rollbackStatus + " " + ex.Message);
                 MessageBox.Show(Owner(), "批量写入失败；" + rollbackStatus
-                    + "\r\n\r\n" + reported.Message,
+                    + "\r\n\r\n" + ex.Message,
                     "U1U", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
+            }
+
+            // CAD 已提交：按 docs/DEVELOPMENT.md 的顺序，现在才读真实 CAD 结果并写 BOQ。
+            // 这一段失败不再回滚图纸，只回滚本批 BOQ 文件，并明确要求重跑 U1S。
+            try
+            {
+                AutomaticSubmissionService.ValidateTargetRevisions(
+                    automaticExcelRevisions);
+                using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    automaticExcel = AutomaticSubmissionService.Write(ctx, readTransaction,
+                        automaticExcelPath, plans.Select(plan => plan.Selection.SourceIds),
+                        outputBatch);
+                    readTransaction.Commit();
+                }
+                // 读清单表会触发 AutoCAD 懒重算，提交后必须再按固定行高回写一次。
+                using (Transaction fixTransaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    foreach (Plan plan in plans)
+                        CadTableFillWriter.FixGeneratedRowHeights(fixTransaction,
+                            plan.Selection.TableIds, options.StartRow, options.ClearRows);
+                    fixTransaction.Commit();
+                }
+                outputBatch.Complete();
+            }
+            catch (System.Exception ex)
+            {
+                string rollbackStatus = "本批 BOQ 文件已恢复为修改前的版本。";
+                try { outputBatch.Rollback(); }
+                catch (System.Exception rollbackError)
+                {
+                    rollbackStatus = "部分 BOQ 文件无法安全恢复，已保留当前文件。";
+                    Log.Error("图纸已提交，但部分 BOQ 文件回滚不完整。", new AggregateException(
+                        "图纸已提交，但部分 BOQ 文件回滚不完整。", ex, rollbackError));
+                }
+                Log.Error("U1U BOQ 输出失败（CAD 已提交）", ex);
+                ctx.Write("\n[U1U] 图纸已更新，但 BOQ 输出失败；" + rollbackStatus
+                    + " 请重跑 " + CommandIds.Submit + " 重新导出清单：" + ex.Message);
+                MessageBox.Show(Owner(), "图纸已更新，但 BOQ 输出失败；" + rollbackStatus
+                    + "\r\n\r\n请重跑 " + CommandIds.Submit + " 重新导出清单。\r\n\r\n"
+                    + ex.Message, "U1U", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             }
 
             SelectionService.ClearPickFirst(ctx);
