@@ -7,16 +7,25 @@ $ErrorActionPreference = 'Stop'
 $projectDir = $PSScriptRoot
 $repoRoot = (Resolve-Path (Join-Path $projectDir '..\..')).Path
 if ([string]::IsNullOrWhiteSpace($InputDrawing)) {
-    $InputDrawing = Join-Path $repoRoot 'UNCAD.dwg'
+    # 表格填充自检的夹具会"从当前图纸里取那张 13×6 的 BOQ 表"当模板用：
+    # 它必须在出厂图框模板上跑。默认的 UNCAD.dwg 是真实客户图纸，里面也可能有
+    # 13×6 的表，于是会走出误导性的"生成行高不对"报错（见 RELEASE-2.6.4）。
+    # 注意：PowerShell 5.1 不支持 "$x = if (...) {...} else {...}" 表达式写法。
+    if ($Command -eq 'UNCAD_TABLE_FILL_SELFTEST') {
+        $InputDrawing = Join-Path $repoRoot 'src\UNCAD\bin\Release\net48\Resources\XFrameTemplate.dwg'
+    } else {
+        $InputDrawing = Join-Path $repoRoot 'UNCAD.dwg'
+    }
 }
 $console = Join-Path $AutoCADDir 'accoreconsole.exe'
 $project = Join-Path $projectDir 'UNCAD.CadIntegration.csproj'
 $assembly = Join-Path $projectDir 'bin\Release\net48\UNCAD.CadIntegration.dll'
 if (!(Test-Path -LiteralPath $console)) { throw "AutoCAD Core Console not found: $console" }
-if (!(Test-Path -LiteralPath $InputDrawing)) { throw "Input drawing not found: $InputDrawing" }
 
 dotnet build $project -c Release --nologo
 if ($LASTEXITCODE -ne 0) { throw 'CAD integration fixture build failed.' }
+# 图纸存在性放在构建之后：图框模板来自 Release 构建输出，首次运行才拿得到。
+if (!(Test-Path -LiteralPath $InputDrawing)) { throw "Input drawing not found: $InputDrawing" }
 
 $runId = [Guid]::NewGuid().ToString('N')
 $tempDir = [System.IO.Path]::GetTempPath()
@@ -27,6 +36,7 @@ $consoleLog = Join-Path $tempDir "uncad-cad-$runId.console.txt"
 $consoleExitCode = -1
 $consoleOutput = ''
 $previousResult = $env:UNCAD_CAD_INTEGRATION_RESULT
+$succeeded = $false
 try {
     Copy-Item -LiteralPath $InputDrawing -Destination $drawingPath
     $commands = @(
@@ -70,10 +80,25 @@ try {
     if (!$resultExists -or $resultValue -ne 'PASS') {
         throw "AutoCAD integration test $Command did not report PASS (exit code $consoleExitCode).`n$resultValue`n$consoleOutput"
     }
+    $succeeded = $true
     Write-Host 'UNCAD AutoCAD integration: PASS'
 }
 finally {
     $env:UNCAD_CAD_INTEGRATION_RESULT = $previousResult
+    # 失败时保留现场：以前控制台日志与结果文件在 finally 里被删掉，调用方只看到
+    # "没有报 PASS"，真正的原生报错（例如 accoreconsole 崩溃）无从查起。
+    if (!$succeeded) {
+        try {
+            $keepDir = Join-Path $repoRoot 'tmp'
+            New-Item -ItemType Directory -Path $keepDir -Force | Out-Null
+            $keep = Join-Path $keepDir ($Command + '-' + $runId + '.cadlog.txt')
+            if (Test-Path -LiteralPath $consoleLog) {
+                Copy-Item -LiteralPath $consoleLog -Destination $keep -Force
+            }
+            Write-Host ('CAD 自检失败现场已保留：' + $keep)
+            Write-Host ('结果文件内容：[' + $resultValue + ']')
+        } catch { }
+    }
     Remove-Item -LiteralPath $scriptPath -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $resultPath -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $consoleLog -ErrorAction SilentlyContinue

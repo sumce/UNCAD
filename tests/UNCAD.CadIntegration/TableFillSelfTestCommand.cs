@@ -248,7 +248,21 @@ namespace UNCAD.CadIntegration
             {
                 var table = (Table)transaction.GetObject(id, OpenMode.ForWrite);
                 table.RecomputeTableBlock(true);
-                AssertFixedGeometry(table, widths, headerHeight);
+                try
+                {
+                    AssertFixedGeometry(table, widths, headerHeight);
+                }
+                catch (InvalidOperationException geometry)
+                {
+                    // 这条断言只会因为两件事失败：写出厂模板时坏了，或者夹具抓到的是
+                    // 别的普通清单表。后者在默认输入 UNCAD.dwg 上就会发生，必须说清楚，
+                    // 否则会被人当成"出厂模板行高坏了"（曾经就这样误导过一轮审计）。
+                    throw new InvalidOperationException(geometry.Message
+                        + "\r\n提示：本自检要求在出厂图框模板 XFrameTemplate.dwg 上运行；"
+                        + "当前输入图纸里的 13×6 表格不满足模板几何。"
+                        + "run.ps1 已把该命令的默认输入指向模板；若手动指定了 "
+                        + "-InputDrawing，请改回模板。", geometry);
+                }
                 if (!table.TextString(2, 2).Contains(@"\pxsm0.85;")
                     || !table.TextString(2, 2).Contains(rows[0].Description))
                     throw new InvalidOperationException("Template description changed.");
