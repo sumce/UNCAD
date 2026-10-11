@@ -28,8 +28,8 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-10-10";
-        public const string VersionLabel = "2.5.0";
+        public const string ReleaseDateUtc = "2026-10-11";
+        public const string VersionLabel = "2.5.1";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
         public const string VersionSuffix = "";
 
@@ -187,14 +187,33 @@ namespace UNCAD.Infra
             };
         }
 
+        /// <summary>
+        /// 被停用命令的提示文案。
+        /// 抽成独立方法是为了让测试能直接断言文案内容（文案本身就是行为契约的一部分：
+        /// 必须给出 UNC_LOGIN 出口，且必须说明不影响 AutoCAD 本身）。
+        /// </summary>
+        internal static string BuildBlockedCommandMessage(string reason, string command)
+        {
+            string detail = string.IsNullOrWhiteSpace(reason) ? "当前账号授权不可用。" : reason;
+            return detail
+                + "\n请在 AutoCAD 中运行 UNC_LOGIN 登录或注册账号，然后重新执行命令“"
+                + (command ?? "") + "”。"
+                + "\n（授权问题只停用 UNCAD 命令，不影响 AutoCAD 本身绘图与保存。）";
+        }
+
         public static void EnsureCommandAllowed(string command)
         {
             LicenseSnapshot license = CurrentLicense();
-            if (license.IsExpired)
-                throw new InvalidOperationException((string.IsNullOrWhiteSpace(license.BlockReason)
-                    ? "授权已于 " + license.ExpiryText + " 到期。" : license.BlockReason)
-                    + " 命令“" + (command ?? "") + "”已停止执行。请联系 " + CompanyName
-                    + "（" + Website + "）获取有效授权。");
+            if (!license.IsExpired) return;
+
+            string reason = string.IsNullOrWhiteSpace(license.BlockReason)
+                ? "授权已于 " + license.ExpiryText + " 到期。" : license.BlockReason;
+
+            // 用户主动执行了 UNCAD 命令 → 给出**可操作的**出口并唤起登录窗口。
+            // 这里弹窗不会打断用户（他本来就在用 UNCAD）；周期性心跳不会弹（见 OnlineLicenseMonitor）。
+            OnlineLicenseMonitor.RequestUserLogin(reason);
+
+            throw new InvalidOperationException(BuildBlockedCommandMessage(reason, command));
         }
 
         private static DateTimeOffset? ParseExpiry(string value)

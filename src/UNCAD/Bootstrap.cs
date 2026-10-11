@@ -255,6 +255,12 @@ namespace UNCAD
             WarmUp();
             if (!SupportsStartupUi() || _startupSplashIdleAttached) return;
             if (_licenseDialogOpen) return;
+
+            var document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
+                ?.MdiActiveDocument;
+            // 没有活动文档时先不取，避免把提示从队列里取走却没法显示（提示会丢）
+            if (document == null) return;
+
             if (OnlineLicenseMonitor.TryTakeActivationRequest(out string reason))
             {
                 try
@@ -263,7 +269,10 @@ namespace UNCAD
                     // v2：激活/被顶掉必须走 ClientLoginForm（WebView2 登录 → 设备绑定 → 令牌写回），
                     // 不能再用 OnlineLicenseForm（只输入账号 + 验证并保存，既没有设备标识也没有令牌，
                     // 被其它设备顶掉的用户在这个入口永远无法重新上线）。
-                    // reason 由通知弹窗（见下方 notice 分支）负责告知，这里不再需要传入。
+                    //
+                    // 只有**用户主动操作**（执行被停用的 UNCAD 命令，或运行 UNC_LOGIN）才会走到这里，
+                    // 因此这个模态窗口不会打断用户正在做的绘图工作；
+                    // 周期性心跳不再触发它（见 OnlineLicenseMonitor.Publish 的说明）。
                     _ = reason;
                     using (var form = new ClientLoginForm())
                         Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
@@ -271,14 +280,17 @@ namespace UNCAD
                 finally { _licenseDialogOpen = false; }
                 return;
             }
+
             if (!OnlineLicenseMonitor.TryTakeNotice(out OnlineLicenseNotice notice)) return;
-            MessageBoxIcon icon = notice.Level == "error" ? MessageBoxIcon.Error
-                : notice.Level == "info" ? MessageBoxIcon.Information
-                : MessageBoxIcon.Warning;
-            IntPtr handle = Autodesk.AutoCAD.ApplicationServices.Application.MainWindow?.Handle
-                ?? IntPtr.Zero;
-            MessageBox.Show(new WindowWrapper(handle), notice.Message, notice.Title,
-                MessageBoxButtons.OK, icon);
+
+            // **不要用 MessageBox**：它是应用程序模态的，弹出期间用户无法使用 AutoCAD。
+            // 授权问题只应停用 UNCAD 命令，不能连 CAD 本身一起挡住；
+            // 因此改成写到命令行（非阻塞），用户随时能看到，也不会被打断。
+            string title = string.IsNullOrWhiteSpace(notice.Title) ? "账号授权" : notice.Title;
+            string level = notice.Level == "error" ? "错误"
+                : notice.Level == "info" ? "提示" : "提醒";
+            document.Editor.WriteMessage("\n[" + title + "·" + level + "] " + notice.Message
+                + "\n（此提示不影响 AutoCAD 使用；如需登录或注册账号，请运行 UNC_LOGIN）");
         }
 
         public void Terminate()

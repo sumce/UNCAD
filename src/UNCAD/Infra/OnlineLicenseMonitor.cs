@@ -231,23 +231,40 @@ namespace UNCAD.Infra
             }
         }
 
+        /// <summary>
+        /// 用户主动操作时请求打开登录窗口（执行被停用的 UNCAD 命令、或运行 UNC_LOGIN）。
+        ///
+        /// **只有用户主动触发才弹窗**：周期性心跳绝不能自己弹模态窗口——
+        /// 应用程序模态窗口会让用户**连 AutoCAD 本身都用不了**，而用户明确要求
+        /// "不登录不能用 UNCAD，但不能因此不让用 CAD"。
+        ///
+        /// 这里**刻意不做去重**：每次用户主动操作都要给出登录入口。
+        /// 旧实现按 (账号, 原因) 去重，弹过一次之后登录窗口再也不出现，
+        /// 用户会被永久卡在"只能看到一句错误、却没有地方重新登录"的状态。
+        /// </summary>
+        internal static void RequestUserLogin(string reason)
+        {
+            lock (Sync)
+            {
+                _pendingActivationReason = string.IsNullOrWhiteSpace(reason)
+                    ? "当前账号授权不可用。" : reason;
+            }
+        }
+
         private static void Publish(OnlineLicenseState state, string account)
         {
             _current = state;
             QueueNotice(state);
             if (state.IsActive)
             {
+                // 恢复有效：清掉待处理的登录提示与去重痕迹
                 _pendingActivationReason = null;
                 _pendingActivationKey = null;
                 _lastActivationKey = null;
-                return;
             }
-            string reason = string.IsNullOrWhiteSpace(state.FailureReason)
-                ? "当前账号授权不可用。" : state.FailureReason;
-            string key = (account ?? "") + "\n" + reason;
-            if (key == _lastActivationKey || key == _pendingActivationKey) return;
-            _pendingActivationReason = reason;
-            _pendingActivationKey = key;
+            // 注意：这里**故意不**设置 _pendingActivationReason。
+            // 周期性心跳的结果只通过 QueueNotice 在命令行提示（见 Bootstrap.OnLicenseIdle），
+            // 绝不主动弹模态窗口。需要登录时由用户操作触发（见 RequestUserLogin）。
         }
 
         private static OnlineLicenseState Download(string account)

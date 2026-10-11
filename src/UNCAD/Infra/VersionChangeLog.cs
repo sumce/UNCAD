@@ -31,6 +31,11 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.5.1", "2026-10-11",
+                    "修复：授权异常时**不再弹出模态窗口挡住 AutoCAD**——启动与周期心跳只在命令行提示。",
+                    "修复：登录提示不再被永久去重。旧版弹过一次后登录窗口再也不会出现，用户卡在只剩一句错误的状态。",
+                    "修复：被停用的命令会明确提示运行 UNC_LOGIN 登录或注册，并主动唤起登录窗口；每次操作都可重新唤起。",
+                    "改进：提示文案明确说明授权问题只停用 UNCAD 命令，不影响 AutoCAD 本身的绘图与保存。"),
                 new VersionChangeLogEntry("2.5.0", "2026-10-10",
                     "新增：授权改为账号制，并用 WebView2 登录一次后自动续期，不再使用授权码。",
                     "新增：同一账号同一时刻只允许一台设备在线；新设备登录会顶掉上一台并立即停用其命令。",
