@@ -94,7 +94,11 @@ $update = @{ version = $Version; isEnabled = $true }
 if (!$NoLatest) { $update.isLatest = $true }
 if ($NotesPath) {
     if (!(Test-Path -LiteralPath $NotesPath)) { throw "找不到发布说明：$NotesPath" }
-    $update.notes = (Get-Content -LiteralPath $NotesPath -Raw).Trim()
+    # 必须显式按 UTF-8 读：Windows PowerShell 5.1 的 Get-Content 默认用 ANSI，
+    # 会把 UTF-8 的中文读成乱码并原样存进服务端（已踩过）。
+    $update.notes = [System.IO.File]::ReadAllText(
+        (Resolve-Path -LiteralPath $NotesPath).Path,
+        [System.Text.Encoding]::UTF8).Trim()
     if ($update.notes.Length -gt 4000) { $update.notes = $update.notes.Substring(0, 4000) }
 }
 $updated = (Send-Api -Path "/api/admin/releases/$($row.id)" -Method PUT -Json $update).Data
