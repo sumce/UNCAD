@@ -114,6 +114,10 @@ CAD 行为不能只靠纯单测；出图、写图这类必须真机验证：
 - `UNCAD_PLOTPROBE`（打印 API 探针）：复核 AutoCAD 打印接口的坑，
   例如**窗口区域必须先于 `SetPlotType(Window)`**、以及用
   `PlotInfo.OverrideSettings` 时校验器会把请求的介质换成布局自带的那一份。
+- `UNCAD_TXPROBE`（事务语义探针）：验证"不 `Commit` 直接 `Dispose`（或 `Abort`）
+  是否真的回滚"。U1PDF 失败路径靠回滚丢弃临时打印设置，这条修复的全部正确性都
+  建立在该前提上；探针同时用 `Commit` 作对照，避免出现"什么都没变"的假通过。
+  结论（AutoCAD 2022 实测）：`Dispose` 未提交 = 回滚，`Commit` = 落盘。
 
 ## 代码评审门槛
 
