@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
@@ -32,6 +33,8 @@ namespace UNCAD.Features.PdfExport
         private readonly PlotInfoValidator _infoValidator;
         private readonly PdfPlotSettingsSnapshot _original;
         private PlotEngine _engine;
+        private bool _restoreAttempted;
+        private bool _settingsRestored;
         private int _mediaCount;
         private PdfPlotWindow _window;
         private PdfPlotRotation _rotation;
@@ -269,6 +272,45 @@ namespace UNCAD.Features.PdfExport
                 + "  校验=" + (IsValidated ? "通过" : "未通过");
 
         /// <summary>
+        /// 把用户的布局打印设置还原成出图前的样子（幂等）。
+        /// 返回是否**全部**还原成功；失败时把明细留在 <see cref="RestoreProblems"/> 里。
+        ///
+        /// 调用方（<see cref="PdfExportService"/>）根据这个返回值决定事务提交还是回滚：
+        /// 还原不干净就整体回滚，用户设置由事务回滚保证原样（见
+        /// <see cref="PdfPlotCommitPolicy"/>、真机探针 UNCAD_TXPROBE）。
+        /// </summary>
+        internal bool RestoreUserSettings()
+        {
+            if (_restoreAttempted) return _settingsRestored;
+            _restoreAttempted = true;
+            if (_original == null || _layout == null)
+            {
+                _settingsRestored = true;
+                return true;
+            }
+            try
+            {
+                _original.Restore(_layout);
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("还原布局打印设置失败: " + ex.Message);
+                _settingsRestored = false;
+                return false;
+            }
+            _settingsRestored = _original.Problems.Count == 0;
+            if (!_settingsRestored)
+                Log.Warn("还原布局打印设置未全部成功：" + string.Join("；", _original.Problems));
+            return _settingsRestored;
+        }
+
+        /// <summary>还原过程中遇到的问题（未还原过或全部成功时为空）。</summary>
+        internal IReadOnlyList<string> RestoreProblems
+            => _original == null || _original.Problems.Count == 0
+                ? (IReadOnlyList<string>)Array.Empty<string>()
+                : _original.Problems;
+
+        /// <summary>
         /// 结束会话：先还原用户的布局打印设置，再释放打印对象。
         /// 还原失败只记日志（并在 <see cref="PdfPlotSettingsSnapshot.Problems"/> 里留证），
         /// 绝不抛出 —— 出图结果不能被清理阶段的异常改变。
@@ -281,14 +323,7 @@ namespace UNCAD.Features.PdfExport
                 catch (System.Exception ex) { Log.Warn("释放打印引擎失败: " + ex.Message); }
                 _engine = null;
             }
-            if (_original != null && _layout != null)
-            {
-                try { _original.Restore(_layout); }
-                catch (System.Exception ex)
-                {
-                    Log.Warn("还原布局打印设置失败: " + ex.Message);
-                }
-            }
+            RestoreUserSettings();
             TryDispose(_infoValidator);
             TryDispose(_info);
         }

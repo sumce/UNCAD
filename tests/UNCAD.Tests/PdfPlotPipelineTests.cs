@@ -364,8 +364,7 @@ namespace UNCAD.Tests
         }
 
         /// <summary>假打印会话：记录调用顺序，并可按需在指定步骤抛异常。</summary>
-        private sealed class FakePlotSession : IPlotSession
-        {
+        private sealed class FakePlotSession : IPlotSession        {
             internal List<string> Calls { get; } = new List<string>();
             internal string[] Devices { get; set; } = { PdfExportNaming.DeviceName };
             internal string[] Media { get; set; } = { A3Landscape, A4Landscape };

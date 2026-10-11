@@ -97,8 +97,21 @@ namespace UNCAD.Features.PdfExport
                             return PdfRenderResult.Fail(diagnostics.FailureReason, diagnostics.Lines);
                         }
                         note = session.Describe();
+                        // 还原用户设置 → 只在**还原干净**时提交；不干净就整体回滚
+                        // （出图只写文件，事务里没有别的改动需要保留）。
+                        bool restored = session.RestoreUserSettings();
+                        PdfPlotCommitDecision decision = PdfPlotCommitPolicy.Decide(
+                            restored, session.RestoreProblems);
+                        if (decision.Commit)
+                        {
+                            transaction.Commit();
+                        }
+                        else
+                        {
+                            transaction.Abort();
+                            Log.Warn("U1PDF " + decision.Reason);
+                        }
                     }
-                    transaction.Commit();
                 }
             }
             catch (System.Exception ex)

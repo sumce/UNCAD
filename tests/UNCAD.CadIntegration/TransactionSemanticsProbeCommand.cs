@@ -21,6 +21,7 @@ namespace UNCAD.CadIntegration
         public void Run()
         {
             var log = new List<string>();
+            bool ok = false;
             Document document = Application.DocumentManager.MdiActiveDocument;
             Database database = document.Database;
             try
@@ -68,6 +69,13 @@ namespace UNCAD.CadIntegration
                 Restore(database, layoutId, original);
                 log.Add("收尾：PlotPlotStyles=" + ReadFlag(database, layoutId, out _)
                     + "（应等于初始 " + original + "）");
+
+                // 这三条就是 U1PDF 收尾策略依赖的语义：不提交必须回滚，提交必须落盘。
+                // C 是对照组：没有它，"图里什么都没变"也可能假通过。
+                ok = afterDispose == original && afterAbort == original && afterCommit != original;
+                log.Add(ok
+                    ? "结论：PASS —— 不 Commit 直接 Dispose / Abort 都回滚，Commit 落盘"
+                    : "结论：FAIL —— 事务语义与 U1PDF 失败路径/回滚策略的前提不符！");
             }
             catch (System.Exception ex)
             {
@@ -75,12 +83,23 @@ namespace UNCAD.CadIntegration
             }
             finally
             {
-                string path = Environment.GetEnvironmentVariable("UNCAD_PLOT_PROBE_DUMP");
-                if (!string.IsNullOrWhiteSpace(path))
-                    try { File.WriteAllText(path, string.Join("\r\n", log.ToArray()), Encoding.UTF8); }
-                    catch { }
-                document.Editor.WriteMessage("\nUNCAD_TXPROBE:DONE\n");
+                Dump(log);
+                string resultPath = Environment.GetEnvironmentVariable(
+                    "UNCAD_CAD_INTEGRATION_RESULT");
+                if (!string.IsNullOrWhiteSpace(resultPath))
+                    File.WriteAllText(resultPath,
+                        ok ? "PASS" : "FAIL\r\n" + string.Join("\r\n", log.ToArray()));
+                document.Editor.WriteMessage(ok
+                    ? "\nUNCAD_TXPROBE:PASS\n" : "\nUNCAD_TXPROBE:FAIL\n");
             }
+        }
+
+        private static void Dump(List<string> log)
+        {
+            string path = Environment.GetEnvironmentVariable("UNCAD_PLOT_PROBE_DUMP");
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try { File.WriteAllText(path, string.Join("\r\n", log.ToArray()), Encoding.UTF8); }
+            catch { }
         }
 
         private static void Restore(Database database, ObjectId layoutId, bool value)

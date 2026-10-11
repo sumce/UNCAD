@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.5", "2026-10-11",
+                    "加固 U1PDF 出图收尾：出图后先逐字段还原用户的打印设置，只有全部还原成功才提交；只要有一步没还原成功就整体回滚，绝不把临时的设备/纸张/旋转留给用户。",
+                    "回滚只丢弃对布局的临时改动，不影响已经出好的 PDF 与自动上传。该行为的前提（不提交即回滚）已用真机探针 UNCAD_TXPROBE 验证。"),
                 new VersionChangeLogEntry("2.6.4", "2026-10-11",
                     "修复：批量更新偶发的“文件不属于当前回滚批次”。计划的机台号与图纸里读出的机台号只差内部空白时，实际写出的文件没有进批次备份；现在这类文件会按需纳入备份与锁，回滚覆盖真正写过的每个文件。",
                     "修复：DWG 导出（U1DWG）不再把整个磁盘 IO 过程放在只读事务里；身份读取用短事务，导出阶段不持有任何 CAD 事务。",
