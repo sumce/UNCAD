@@ -98,6 +98,23 @@
 - 命令、Ribbon、Bundle、帮助页面和测试必须从同一个命令注册契约校验；新增命令不得只改某一处清单。
 - 每个发布版本在更新记录中拥有独立页面；升级提示只列出未读版本，`U1A` 必须保留全部历史版本的详情入口。
 
+## AutoCAD 真机自检（accoreconsole）
+
+CAD 行为不能只靠纯单测；出图、写图这类必须真机验证：
+
+- 脚本：`tests/UNCAD.CadIntegration/run.ps1 -Command <命令> [-InputDrawing <dwg>]`。
+  它把图纸复制到临时目录，用 `accoreconsole.exe /i /s` 跑 `NETLOAD` + 自检命令，
+  自检命令把 `PASS`/`FAIL` 写到 `%UNCAD_CAD_INTEGRATION_RESULT%`。
+- **必须先 `SECURELOAD 0`**：否则 AutoCAD 会"加载成功但不注册命令"，脚本里只会看到
+  "未知命令"。`run.ps1` 已默认带上这一步。
+- `UNCAD_U1PDF_SELFTEST`（出图内核）：真机出图后逐项断言——页数 ≥ 1、
+  MediaBox = A3 横向（1190.55×841.89 pt）、PDF 内容流里有**非灰度**颜色算子、
+  出图**不改动**用户布局打印设置、结束后打印引擎回到 `NotPlotting`。
+  `%UNCAD_PLOT_KEEP_DIR%` 可保留产出的 PDF，`%UNCAD_PLOT_PROBE_DUMP%` 保留诊断文本。
+- `UNCAD_PLOTPROBE`（打印 API 探针）：复核 AutoCAD 打印接口的坑，
+  例如**窗口区域必须先于 `SetPlotType(Window)`**、以及用
+  `PlotInfo.OverrideSettings` 时校验器会把请求的介质换成布局自带的那一份。
+
 ## 代码评审门槛
 
 - 先证明需求和实体模型，再实现；不得根据名称猜测 AutoCAD 实体类型或把独立实体强行转换为其他类型。

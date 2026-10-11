@@ -153,6 +153,14 @@ namespace UNCAD.Infra
             }
         }
 
+        /// <summary>
+        /// 取出待显示的通知；**取走即清空**（与 <see cref="TryTakeActivationRequest"/> 同一约定）。
+        ///
+        /// 这里曾经漏了清空 `_pendingNotice`，后果是**命令行无限刷屏**：
+        /// 本方法由 `Bootstrap.OnLicenseIdle` 在每个 AutoCAD Idle 事件里调用，
+        /// 而 Idle 会持续触发，于是同一条通知被反复取出并写进命令行
+        /// （用户反馈"输入框一直刷屏这个"）。取走即清空才能保证"一条通知只播一次"。
+        /// </summary>
         internal static bool TryTakeNotice(out OnlineLicenseNotice notice)
         {
             lock (Sync)
@@ -160,6 +168,7 @@ namespace UNCAD.Infra
                 notice = _pendingNotice;
                 if (notice == null) return false;
                 _lastNoticeKey = NoticeKey(notice);
+                _pendingNotice = null;
                 return true;
             }
         }

@@ -96,6 +96,12 @@ namespace UNCAD.Features.PdfExport
             PdfExportRun run = coordinator.Run(targets);
             if (queued.Count > 0) QueueUploads(queued, directory);
             ctx.Write("\n[U1PDF] " + run.BuildSummary());
+            if (run.Failed > 0 && run.FirstFailureDetails.Count > 0)
+            {
+                ctx.Write("\n[U1PDF] 首个失败诊断（" + run.FirstFailureLabel + "，详见日志）：");
+                foreach (string line in run.FirstFailureDetails)
+                    ctx.Write("\n[U1PDF]   " + line);
+            }
             if (queued.Count > 0)
                 ctx.Write("\n[U1PDF] 已排队上传 " + queued.Count
                     + " 份 PDF（后台执行，失败不影响图纸）。");

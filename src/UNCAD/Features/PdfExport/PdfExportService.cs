@@ -1,22 +1,22 @@
 using System;
 using System.IO;
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.PlottingServices;
 using UNCAD.Cad;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.PdfExport
 {
     /// <summary>
-    /// 用 AutoCAD 的 PlotEngine 把一个图框（= 一个回路）打印成**彩色 PDF**。
+    /// U1PDF 的出图实现：把一个图框（= 一个回路）用 **AutoCAD 自带的 PlotEngine**
+    /// 打印成一份彩色 PDF。
     ///
-    /// - 打印设备固定为 AutoCAD 自带的 <c>DWG To PDF.pc3</c>；缺失时返回中文错误，
-    ///   由命令提示用户（绝不静默失败）；
-    /// - **彩色**：<c>PlotPlotStyles = false</c>，不套用任何打印样式表（尤其不是
-    ///   monochrome.ctb），因此保留图层颜色；
-    /// - 打印范围 = **图框窗口**（图框外包矩形的 WCS 坐标），缩放 = Fit，居中；
-    /// - 输出到调用方指定的临时目录，**出图完成后**再校验 <c>%PDF-</c> 文件头，
-    ///   确认是完整 PDF 才交给上传（半成品会被服务端拒绝）。
+    /// 为什么必须自己出图（不用第三方批量打印插件）：
+    /// 第三方批量打印会接管 AutoCAD 的界面与当前布局，用户正画着图会被打断；
+    /// 这里全程只用 PlotEngine 输出到文件，**不改动用户的布局打印设置**
+    /// （布局只读打开 + <c>PlotSettings.CopyFrom</c> + <c>PlotInfo.OverrideSettings</c>），
+    /// 无对话框、无 SendCommand、不切布局、不缩放视图。
+    ///
+    /// 具体设置与逐步诊断见 <see cref="PdfPlotPipeline"/> / <see cref="AutoCadPlotSession"/>。
     /// </summary>
     internal static class PdfExportService
     {
@@ -34,7 +34,8 @@ namespace UNCAD.Features.PdfExport
                     if (string.Equals(device, DeviceName, StringComparison.OrdinalIgnoreCase))
                         return true;
                 error = "找不到打印设备“" + DeviceName + "”。请在 AutoCAD 中确认已安装该设备"
-                    + "（打印 → 打印设备下拉列表），或安装后重试。";
+                    + "（打印 → 打印设备下拉列表），或安装后重试。当前可用设备："
+                    + Join(devices) + "。";
                 return false;
             }
             catch (System.Exception ex)
@@ -45,91 +46,151 @@ namespace UNCAD.Features.PdfExport
             }
         }
 
-        /// <summary>把图框窗口打印成一份彩色 PDF；失败返回中文原因，不抛异常。</summary>
+        /// <summary>把图框窗口打印成一份彩色 PDF；失败返回中文原因 + 逐步诊断，不抛异常。</summary>
         internal static PdfRenderResult Render(CadContext ctx, FrameRegionGroup region,
             string circuitName, string outputDirectory)
         {
             if (ctx == null) return PdfRenderResult.Fail("缺少图形上下文。");
-            if (region == null || region.Boundary == null) return PdfRenderResult.Fail("找不到图框边界。");
+            if (region == null || region.Boundary == null)
+                return PdfRenderResult.Fail("找不到图框边界。");
             if (string.IsNullOrWhiteSpace(outputDirectory))
                 return PdfRenderResult.Fail("缺少 PDF 临时输出目录。");
             if (!TryGetDeviceError(out string deviceError))
                 return PdfRenderResult.Fail(deviceError);
 
+            PdfPlotWindow window = PdfPlotWindow.FromBoundary(region.Boundary);
+            if (!PdfPlotPolicy.TryValidateWindow(window, out string windowError))
+                return PdfRenderResult.Fail(windowError);
+
             string file = Path.Combine(outputDirectory,
                 PdfExportNaming.BuildFileName(circuitName));
+            var diagnostics = new PdfPlotDiagnostics();
+            string note = "";
             try
             {
                 using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
                 {
-                    ObjectId layoutId = ResolveModelLayoutId(ctx.Db, transaction);
-                    if (layoutId.IsNull) return PdfRenderResult.Fail("找不到模型空间布局，无法出图。");
-
-                    using (PlotEngine engine = PlotFactory.CreatePublishEngine())
+                    if (!TryResolvePlotLayout(ctx.Db, transaction, out ObjectId layoutId,
+                        out string layoutName, out bool isModel, out string layoutError))
                     {
-                        var info = new PlotInfo { Layout = layoutId };
-                        var settings = new PlotSettings(true);
-                        PlotSettingsValidator validator = PlotSettingsValidator.Current;
-                        validator.SetPlotConfigurationName(settings, DeviceName, null);
-                        validator.SetPlotType(settings,
-                            Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
-                        validator.SetPlotWindowArea(settings, new Extents2d(
-                            region.Boundary.MinX, region.Boundary.MinY,
-                            region.Boundary.MaxX, region.Boundary.MaxY));
-                        validator.SetUseStandardScale(settings, true);
-                        validator.SetStdScaleType(settings, StdScaleType.ScaleToFit);
-                        validator.SetPlotCentered(settings, true);
-                        // 彩色：不套用打印样式表（保留图层颜色），指定单色 ctb 会失去颜色。
-                        settings.PlotPlotStyles = false;
-                        info.OverrideSettings = settings;
+                        transaction.Commit();
+                        return PdfRenderResult.Fail(layoutError);
+                    }
 
-                        var infoValidator = new PlotInfoValidator
+                    using (AutoCadPlotSession session = AutoCadPlotSession.Create(transaction,
+                        layoutId, out string sessionError))
+                    {
+                        if (session == null)
                         {
-                            MediaMatchingPolicy = MatchingPolicy.MatchEnabled
-                        };
-                        infoValidator.Validate(info);
-
-                        engine.BeginPlot(null, null);
-                        engine.BeginDocument(info, circuitName ?? "", null, 1, true, file);
-                        var pageInfo = new PlotPageInfo();
-                        engine.BeginPage(pageInfo, info, true, null);
-                        engine.BeginGenerateGraphics(null);
-                        engine.EndGenerateGraphics(null);
-                        engine.EndPage(null);
-                        engine.EndDocument(null);
-                        engine.EndPlot(null);
+                            transaction.Commit();
+                            return PdfRenderResult.Fail(sessionError);
+                        }
+                        if (!PdfPlotPipeline.Run(session, circuitName, file, window, diagnostics))
+                        {
+                            transaction.Commit();
+                            ReportFailure(circuitName, diagnostics);
+                            TryDelete(file);
+                            return PdfRenderResult.Fail(diagnostics.FailureReason, diagnostics.Lines);
+                        }
+                        note = session.Describe();
                     }
                     transaction.Commit();
                 }
             }
             catch (System.Exception ex)
             {
-                Log.Warn("U1PDF 出图失败（" + circuitName + "）: " + ex.Message);
-                return PdfRenderResult.Fail(ex.Message);
+                Log.Error("U1PDF 出图异常（" + circuitName + "）", ex);
+                diagnostics.Fail("出图（未预期的异常）", ex.GetType().Name + "：" + ex.Message);
+                ReportFailure(circuitName, diagnostics);
+                TryDelete(file);
+                return PdfRenderResult.Fail(diagnostics.FailureReason, diagnostics.Lines);
             }
 
-            if (!File.Exists(file))
-                return PdfRenderResult.Fail("打印引擎没有生成 PDF 文件。");
-            if (!PdfExportNaming.HasPdfMagic(file))
+            if (!PdfExportNaming.IsUsablePdf(file, out string pdfError))
             {
+                Log.Warn("U1PDF 出图产物不可用（" + circuitName + "）：" + pdfError);
                 TryDelete(file);
-                return PdfRenderResult.Fail("生成的文件不是有效的 PDF（缺少 %PDF- 文件头）。");
+                return PdfRenderResult.Fail(pdfError, diagnostics.Lines);
             }
-            return PdfRenderResult.Success(file);
+            Log.Info("U1PDF 出图完成（" + circuitName + "）：" + note
+                + " 文件=" + PdfExportNaming.DescribeFile(file));
+            return PdfRenderResult.Success(file, note + "  文件=" + PdfExportNaming.DescribeFile(file));
         }
 
-        /// <summary>找模型空间对应的布局：用 <c>Layout.ModelType</c> 判断，避免依赖布局名语言。</summary>
-        internal static ObjectId ResolveModelLayoutId(Database database, Transaction transaction)
+        /// <summary>
+        /// 找**当前空间**对应的布局：图框是在当前空间里收集的，出图窗口也必须是同一坐标系的
+        /// 布局，否则窗口坐标会落在图纸之外（真机上就表现为 eInvalidInput）。
+        /// 找不到时回退到模型空间布局。
+        /// </summary>
+        internal static bool TryResolvePlotLayout(Database database, Transaction transaction,
+            out ObjectId layoutId, out string layoutName, out bool isModel, out string error)
         {
-            if (database == null || transaction == null) return ObjectId.Null;
-            var layouts = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId,
-                OpenMode.ForRead);
-            foreach (DBDictionaryEntry entry in layouts)
+            layoutId = ObjectId.Null;
+            layoutName = "";
+            isModel = false;
+            error = "";
+            if (database == null || transaction == null)
             {
-                var layout = transaction.GetObject(entry.Value, OpenMode.ForRead) as Layout;
-                if (layout != null && layout.ModelType) return entry.Value;
+                error = "缺少图形数据库，无法出图。";
+                return false;
             }
-            return ObjectId.Null;
+
+            ObjectId spaceId = database.CurrentSpaceId;
+            ObjectId fallback = ObjectId.Null;
+            string fallbackName = "";
+            Layout layout;
+            try
+            {
+                var layouts = (DBDictionary)transaction.GetObject(database.LayoutDictionaryId,
+                    OpenMode.ForRead);
+                foreach (DBDictionaryEntry entry in layouts)
+                {
+                    layout = transaction.GetObject(entry.Value, OpenMode.ForRead) as Layout;
+                    if (layout == null) continue;
+                    if (layout.ModelType && fallback.IsNull)
+                    {
+                        fallback = entry.Value;
+                        fallbackName = layout.LayoutName ?? "";
+                    }
+                    if (!spaceId.IsNull && layout.BlockTableRecordId == spaceId)
+                    {
+                        layoutId = entry.Value;
+                        layoutName = layout.LayoutName ?? "";
+                        isModel = layout.ModelType;
+                        return true;
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                error = "读取布局字典失败：" + ex.Message;
+                return false;
+            }
+
+            if (!fallback.IsNull)
+            {
+                layoutId = fallback;
+                layoutName = fallbackName;
+                isModel = true;
+                return true;
+            }
+            error = "找不到与当前空间对应的布局，无法出图。";
+            return false;
+        }
+
+        private static void ReportFailure(string circuitName, PdfPlotDiagnostics diagnostics)
+        {
+            Log.Warn("U1PDF 出图失败（" + circuitName + "）：" + diagnostics.FailureReason);
+            foreach (string line in diagnostics.Lines)
+                Log.Warn("U1PDF 诊断 | " + line);
+        }
+
+        private static string Join(System.Collections.Specialized.StringCollection values)
+        {
+            if (values == null || values.Count == 0) return "(空)";
+            var items = new string[values.Count];
+            values.CopyTo(items, 0);
+            return string.Join("、", items);
         }
 
         private static void TryDelete(string path)

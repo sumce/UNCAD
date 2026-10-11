@@ -31,7 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
-                new VersionChangeLogEntry("2.6.0", "2026-10-11",
+                new VersionChangeLogEntry("2.6.1", "2026-10-11",
+                    "修复命令行被重复提示刷屏：同一条通知被反复写入命令行（通知取走后未清空，而 AutoCAD 的 Idle 事件会持续触发）。现在一条通知只提示一次。",
+                    "修复 U1PDF 出图失败（eInvalidInput）：改为自研出图内核，按图框窗口直接输出 A3 彩色 PDF，不依赖任何第三方批量打印插件，不会接管 AutoCAD 界面。",
+                    "U1PDF 改进：显式指定规范介质并自动匹配图框横竖方向、出图后把用户“页面设置”原样还原；出图产物先校验 %PDF-/%%EOF 才上传，失败时给出逐步诊断。",
+                    "授权提示仍在命令行出现、不弹模态窗口，不影响 AutoCAD 使用；需要登录时运行 UNC_LOGIN。"),
+            new VersionChangeLogEntry("2.6.0", "2026-10-11",
                     "新增：U1PDF 命令——框选图框后按**回路**（一个图框一份）输出彩色 PDF，并自动上传到服务端，可在回路详情页在线预览。",
                     "说明：PDF 与 DWG 的粒度不同——DWG 按机台（一份覆盖多个回路），PDF 按回路（一份对应一个图框）。",
                     "改进：U1PDF 出图使用 AutoCAD 自带“DWG To PDF.pc3”，保留图层颜色（不套用单色打印样式），批量出图时命令行逐份显示进度。",

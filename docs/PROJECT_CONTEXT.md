@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.4.13`.
+- Current release: `2.6.1`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -22,6 +22,7 @@ shorter than the historical release notes.
 | Layout | `Features/XLayout/`, `Core/Dwg/` | XLAYOUT arrangement, duplicate markers, and Xmerge |
 | Statistics | `Features/Stat/`, `Features/Unadd/`, `Core/Stat/` | XSTS and legacy UNADD reports |
 | Export/Submit | `Features/DwgExport/`, `Features/Submit/` | U1DWG and U1S outputs |
+| PDF export | `Features/PdfExport/` | U1PDF: one coloured PDF per frame/circuit via the built-in plot engine |
 | Host/Settings | `Infra/`, `Cad/`, `UI/` | registration, settings, licensing, dialogs, and AutoCAD adapters |
 
 ## Command Map
@@ -64,6 +65,13 @@ U13D
   select multiple complete frames -> collect each frame's U1L routes and U1Q
   bridge metadata -> align frames by workbook downstream axis -> show one
   read-only WebView2 scene with route/bridge meters and unassociated diagnostics
+
+U1PDF
+  select frames -> resolve machine/circuit identity (same resolver as U1F/U1U)
+  -> per frame: plot the frame window with the built-in engine (DWG To PDF.pc3,
+  A3, colours preserved) -> verify %PDF- + %%EOF -> upload one PDF per circuit
+  (the plot engine writes to the layout's own plot settings, then the user's
+  settings are restored field by field; no third-party batch-plot plugin)
 
 XLAYOUT/XSTS
   collect frame regions -> resolve machine identity -> arrange or compare

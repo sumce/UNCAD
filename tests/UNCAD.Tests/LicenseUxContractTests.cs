@@ -102,6 +102,64 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("EnsureCommandAllowed(", source);
         }
 
+        /// <summary>
+        /// **通知取走即清空**——否则命令行会无限刷屏。
+        ///
+        /// 背景（真实用户反馈）："怎么输入框一直刷屏这个"。
+        /// `TryTakeNotice` 由 `Bootstrap.OnLicenseIdle` 在**每个 AutoCAD Idle 事件**里调用，
+        /// 而 Idle 会持续触发。旧实现忘了清空 `_pendingNotice`，于是同一条通知
+        /// （例如一条"维护通知"公告）被反复取出、反复写进命令行，用户看到的是一屏又一屏的重复文字。
+        ///
+        /// 正确行为：取走一次之后就为空，第二次取必须返回 false。
+        /// 这条锁死的是**取走侧**；入队侧的去重（`QueueNotice`）另有一套。
+        /// </summary>
+        [Fact]
+        public void Notice_is_consumed_once_so_the_command_line_cannot_flood()
+        {
+            string source = System.IO.File.ReadAllText(
+                FindSource("src/UNCAD/Infra/OnlineLicenseMonitor.cs"));
+
+            int start = source.IndexOf("internal static bool TryTakeNotice",
+                StringComparison.Ordinal);
+            Assert.True(start >= 0, "找不到 TryTakeNotice 的实现");
+
+            // 取方法体（到下一个方法或文件末尾）
+            int end = source.IndexOf("/// <summary>", start + 1, StringComparison.Ordinal);
+            string body = end > start ? source.Substring(start, end - start)
+                                      : source.Substring(start);
+
+            // 必须把 _pendingNotice 置空，否则同一个通知会被无限取出
+            Assert.Contains("_pendingNotice = null", body);
+
+            // 与另一条同样"取走即清空"的路径保持一致（防止只改一处又漏一处）
+            int activationStart = source.IndexOf("internal static bool TryTakeActivationRequest",
+                StringComparison.Ordinal);
+            Assert.True(activationStart >= 0, "找不到 TryTakeActivationRequest 的实现");
+            int activationEnd = source.IndexOf("/// <summary>", activationStart + 1,
+                StringComparison.Ordinal);
+            string activationBody = activationEnd > activationStart
+                ? source.Substring(activationStart, activationEnd - activationStart)
+                : source.Substring(activationStart);
+            Assert.Contains("_pendingActivationReason = null", activationBody);
+        }
+
+        /// <summary>
+        /// 用户看到的那句提示必须点名 **UNC_LOGIN**（而不是别的拼写），
+        /// 否则用户照着敲会得到"未知命令"。
+        /// </summary>
+        [Fact]
+        public void Notice_text_names_the_real_login_command()
+        {
+            string source = System.IO.File.ReadAllText(
+                FindSource("src/UNCAD/Bootstrap.cs"));
+            int index = source.IndexOf("此提示不影响 AutoCAD 使用", StringComparison.Ordinal);
+            Assert.True(index >= 0, "找不到命令行提示文案");
+            string tail = source.Substring(index, Math.Min(120, source.Length - index));
+            Assert.Contains("UNC_LOGIN", tail);
+            // 常见误写：把字母 O 写成数字 0（用户实际报障里就出现了这种字样）
+            Assert.DoesNotContain("UNC_L0GIN", tail);
+        }
+
         private static string FindSource(string relativePath)
         {
             var directory = new System.IO.DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

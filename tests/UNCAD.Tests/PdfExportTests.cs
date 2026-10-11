@@ -408,6 +408,10 @@ namespace UNCAD.Tests
                 "PdfExportFeature.cs"));
             string service = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
                 "PdfExportService.cs"));
+            string session = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
+                "AutoCadPlotSession.cs"));
+            string pipeline = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
+                "PdfPlotSession.cs"));
 
             // 与 U1DWG 同一套图框识别
             Assert.Contains("FrameRegionCollector.CollectForExport(ctx, selected)", feature);
@@ -417,13 +421,44 @@ namespace UNCAD.Tests
             // 上传在后台，失败不影响图纸
             Assert.Contains("ThreadPool.QueueUserWorkItem", feature);
             Assert.Contains("UploadPdf(", feature);
-            // 出图：窗口 + Fit + 彩色（不套打印样式表）+ 完成后校验 %PDF-
-            Assert.Contains("SetPlotWindowArea", service);
-            Assert.Contains("StdScaleType.ScaleToFit", service);
-            Assert.Contains("PlotPlotStyles = false", service);
-            Assert.Contains("HasPdfMagic", service);
-            Assert.Contains("PlotFactory.CreatePublishEngine()", service);
-            Assert.Contains("DWG To PDF.pc3", service);
+            // 出图：窗口 + Fit + 彩色（不套打印样式表）+ 完成后校验 PDF 产物
+            Assert.Contains("SetPlotWindowArea", session);
+            Assert.Contains("StdScaleType.ScaleToFit", session);
+            Assert.Contains("PlotPlotStyles = false", session);
+            Assert.Contains("IsUsablePdf", service);
+            Assert.Contains("PlotFactory.CreatePublishEngine()", session);
+            Assert.Contains("PdfExportNaming.DeviceName", pipeline);
+
+            // 自研内核：不许调用 SendCommand（注释里提"不 SendCommand"是允许的，锁的是调用），
+            // 也不许依赖第三方批量打印插件（用户明确要求：第三方插件会接管界面、影响正在画图的人）。
+            foreach (string source in new[] { feature, service, session, pipeline })
+            {
+                Assert.DoesNotContain("SendCommand(", source);
+                Assert.DoesNotContain("M批打印", source);
+                Assert.DoesNotContain("M_PDF", source);
+            }
+
+            // 真机结论：必须把设备和介质设在**布局自身的**打印设置上（用 OverrideSettings
+            // 时 PlotInfoValidator 会把请求的 A3 重新匹配成布局自带的 A4），
+            // 并在出图后把用户设置原样还原。
+            Assert.Contains("OpenMode.ForWrite", session);
+            Assert.Contains("PdfPlotSettingsSnapshot.Capture", session);
+            Assert.Contains("_original.Restore(_layout)", session);
+        }
+
+        [Fact]
+        public void PlotWindowMustBeSetBeforeTheWindowPlotType()
+        {
+            // 真机根因锁：先 SetPlotType(Window) 再 SetPlotWindowArea，AutoCAD 抛 eInvalidInput
+            // （2.6.0 真机出图失败就是这个）。这里在源码接线层面再锁一次顺序。
+            string pipeline = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
+                "PdfPlotSession.cs"));
+            int window = pipeline.IndexOf("session.SetWindowArea(window)",
+                StringComparison.Ordinal);
+            int type = pipeline.IndexOf("session.SetPlotTypeWindow()", StringComparison.Ordinal);
+            Assert.True(window >= 0 && type >= 0, "打印窗口/打印范围必须都设置有");
+            Assert.True(window < type,
+                "PdfPlotPipeline 里 SetWindowArea 必须先于 SetPlotTypeWindow");
         }
 
         // ---- 辅助 ----
