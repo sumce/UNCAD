@@ -1,13 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
-    <!-- AutoCAD 2022 与本插件都是 x64-only；AnyCPU 会让测试宿主按 x86 启动，
-         加载 AcDbMgd 失败后测试被静默跳过（0 项）。 -->
+    <!-- AutoCAD 2022 涓庢湰鎻掍欢閮芥槸 x64-only锛汚nyCPU 浼氳娴嬭瘯瀹夸富鎸?x86 鍚姩锛?         鍔犺浇 AcDbMgd 澶辫触鍚庢祴璇曡闈欓粯璺宠繃锛? 椤癸級銆?-->
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>13</LangVersion>
     <IsPackable>false</IsPackable>
+    <!-- 见 tests.runsettings：本机默认宿主加载不了 x64 AcDbMgd，会让测试被静默跳过。 -->
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)\tests.runsettings</RunSettingsFilePath>
     <RootNamespace>UNCAD.Tests</RootNamespace>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>8.0</AnalysisLevel>
@@ -25,10 +26,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- UNCAD.dll 的 AutoCAD 依赖必须由测试项目自己保证 CopyLocal：
-         以前靠"输出目录里恰好有这几个 dll"，一旦别的构建清理过就会变成
-         could not find dependent assembly 'Acdbmgd'，测试静默跑 0 项。 -->
+    <!-- UNCAD.dll 鐨?AutoCAD 渚濊禆蹇呴』鐢辨祴璇曢」鐩嚜宸变繚璇?CopyLocal锛?         浠ュ墠闈?杈撳嚭鐩綍閲屾伆濂芥湁杩欏嚑涓?dll"锛屼竴鏃﹀埆鐨勬瀯寤烘竻鐞嗚繃灏变細鍙樻垚
+         could not find dependent assembly 'Acdbmgd'锛屾祴璇曢潤榛樿窇 0 椤广€?-->
+    <!-- UNCAD.dll 渚濊禆鐨?AutoCAD 鎵樼绋嬪簭闆嗗繀椤荤敱娴嬭瘯椤圭洰鑷繁 CopyLocal锛?         鍚﹀垯娴嬭瘯杈撳嚭鐩綍閲屾病鏈夊畠浠紝娴嬭瘯瀹夸富浼氭姤
+         "could not find dependent assembly 'Acdbmgd'" 骞舵妸鍏ㄩ儴娴嬭瘯闈欓粯璺宠繃
+         锛堣€?dotnet test 浠嶈繑鍥為€€鍑虹爜 0锛夈€備笉瑕佸姞 PlatformTarget锛氶偅浼氳瀹夸富
+         鎸夊彟涓€绉嶄綅鏁板惎鍔紝鍚屾牱瀵艰嚧璺宠繃銆?-->
     <Reference Include="AdWindows"><HintPath>$(AutoCADDir)\AdWindows.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>True</Private></Reference>
@@ -37,3 +44,4 @@
   </ItemGroup>
 
 </Project>
+

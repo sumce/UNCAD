@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <!-- 本机默认 VSTest 宿主在以独立 AppDomain 加载测试程序集时无法加载 x64 的 AcDbMgd
+         （"could not find dependent assembly Acdbmgd"），xunit 会把整个程序集静默跳过，
+         而 dotnet test 仍返回退出码 0 —— 发布门禁会假绿。
+         禁用 AppDomain 后测试在 testhost 默认域中加载，可以正常执行。
+
+         已知代价（未解决）：这种模式下发现 1046 项，而按源码统计应为 1058 项
+         （663 个 [Fact] + 395 个 [InlineData]），有 12 项未被发现，原因待查。
+         在查明之前这是“让门禁至少真跑”的权宜配置，不要当成完整覆盖。 -->
+    <DisableAppDomain>true</DisableAppDomain>
+  </RunConfiguration>
+</RunSettings>
