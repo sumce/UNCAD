@@ -24,8 +24,8 @@ namespace UNCAD.Tests
             {
                 string[] titles =
                 {
-                    "线段绘制", "桥架标注", "线管标注", "拱桥开洞",
-                    "统计汇总", "文字样式", "Excel 数据"
+                    "概览", "绘制标注", "统计汇总", "文字样式", "界面与启动",
+                    "机台数据", "清单与表格", "Downstream 自动添加", "颜色", "自动输出"
                 };
                 for (int index = 0; index < titles.Length; index++)
                 {
@@ -51,7 +51,7 @@ namespace UNCAD.Tests
         {
             RunSta(() =>
             {
-                using (var form = new UnifiedSettingsForm(4))
+                using (var form = new UnifiedSettingsForm(2))
                 {
                     form.Show();
                     form.Size = form.MinimumSize;
@@ -85,28 +85,41 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void TextStyleTab_ExposesStartupSplashSwitch()
+        public void StartupTab_ExposesSplashSwitchAndVersion()
         {
             RunSta(() =>
             {
-                using (var form = new UnifiedSettingsForm(5))
+                using (var form = new UnifiedSettingsForm(4))
                 {
                     form.Show();
+                    form.Size = form.MinimumSize;
                     Application.DoEvents();
                     TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    // 启动开关已从"文字样式"移到独立的"界面与启动"页。
+                    Assert.Equal("界面与启动", tabs.SelectedTab.Text);
+                    Assert.True(FindAll<CheckBox>(tabs.SelectedTab).Any(checkBox =>
+                        checkBox.Text.Contains("启动")), "启动页应包含启动动画开关");
+                    Assert.True(FindAll<Label>(tabs.SelectedTab).Any(label =>
+                        label.Text.Contains(UNCAD.Infra.ProductMetadata.VersionLabel)),
+                        "启动页应显示当前版本");
+                }
+
+                using (var style = new UnifiedSettingsForm(3))
+                {
+                    style.Show();
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(style, "SettingsNavigation");
                     Assert.Equal("文字样式", tabs.SelectedTab.Text);
-                    Assert.Contains(FindAll<CheckBox>(tabs.SelectedTab), checkBox =>
-                        checkBox.Text == "启动时显示全屏品牌动画");
+                    Assert.Empty(FindAll<CheckBox>(tabs.SelectedTab));
                 }
             });
         }
-
         [Fact]
         public void ConduitTab_ListsOnlyRigidCatalogModels()
         {
             RunSta(() =>
             {
-                using (var form = new UnifiedSettingsForm(2))
+                using (var form = new UnifiedSettingsForm(1))
                 {
                     form.Show();
                     Application.DoEvents();
@@ -121,7 +134,31 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ExcelTab_ShowsSnapshotTableOutputAndIndependentAutofillCategories()
+        public void MachineTab_ShowsDataSourceSnapshotAndPicker()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(5))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("机台数据", tabs.SelectedTab.Text);
+                    Assert.Empty(FindAll<GroupBox>(tabs.SelectedTab));
+                    Assert.Single(FindAll<UiCard>(tabs.SelectedTab));
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "浏览...");
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "刷新");
+                    Label snapshot = Find<Label>(tabs.SelectedTab, "MachineSnapshotStatus");
+                    Assert.NotNull(snapshot);
+                    Assert.False(string.IsNullOrWhiteSpace(snapshot.Text));
+                }
+            });
+        }
+
+        [Fact]
+        public void BomTab_ShowsTableParametersAndIndependentAutofillCategories()
         {
             RunSta(() =>
             {
@@ -130,48 +167,17 @@ namespace UNCAD.Tests
                     form.Show();
                     Application.DoEvents();
                     TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
-                    Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
-                    Assert.Empty(FindAll<GroupBox>(tabs.SelectedTab));
-                    // Excel 页现在多一块独立的“Downstream 自动添加”。
-                    Assert.Equal(5, FindAll<UiCard>(tabs.SelectedTab).Count);
+                    Assert.Equal("清单与表格", tabs.SelectedTab.Text);
+                    Assert.Equal(2, FindAll<UiCard>(tabs.SelectedTab).Count);
 
                     List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                    List<ComboBox> combos = FindAll<ComboBox>(tabs.SelectedTab);
-                    Assert.Equal(2, combos.Count);
-                    List<ComboBox> colors = combos.Where(color =>
-                        color.DrawMode == DrawMode.OwnerDrawFixed).ToList();
-                    Assert.Equal(2, colors.Count);
-                    Assert.All(colors, color =>
-                    {
-                        Assert.Equal(ComboBoxStyle.DropDownList, color.DropDownStyle);
-                        Assert.Contains(color.Items.Cast<object>(),
-                            item => item.ToString().Contains("ACI 3"));
-                        Assert.Contains(color.Items.Cast<object>(),
-                            item => item.ToString().Contains("ACI 6"));
-                    });
-                    Assert.Equal(6, numbers.Count);
-                    // 新增：下游插座箱额定电流（整数、1~1000A）。不能断言唯一匹配，
-                    // 因为"起始数据行"也是整数 1~1000。
-                    Assert.Contains(numbers, number => number.DecimalPlaces == 0
-                        && number.Minimum == 1m && number.Maximum == 1000m);
-                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
-                        label => label.Text == "插座箱额定电流（A）");
-                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
-                        label => label.Text == "电盘额定电流（A）");
-                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
-                        button => button.Text == "浏览...");
-                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
-                        button => button.Text == "刷新");
-                    NumericUpDown clearRows = Assert.Single(numbers, number =>
-                        number.DecimalPlaces == 0 && number.Minimum == 1m
-                            && number.Maximum == 100m);
+                    Assert.Equal(4, numbers.Count);
+                    Assert.Single(numbers, number => number.DecimalPlaces == 0
+                        && number.Minimum == 1m && number.Maximum == 100m);
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "每次清空数据行数");
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "软管手动数量（m）");
-                    Label snapshot = Find<Label>(tabs.SelectedTab, "MachineSnapshotStatus");
-                    Assert.NotNull(snapshot);
-                    Assert.False(string.IsNullOrWhiteSpace(snapshot.Text));
 
                     List<CheckBox> autoFill = FindAll<CheckBox>(tabs.SelectedTab);
                     Assert.Equal(new[]
@@ -181,6 +187,55 @@ namespace UNCAD.Tests
                     }, autoFill.Select(check => check.Text).ToArray());
                     Assert.DoesNotContain(autoFill,
                         check => check.Text.Contains("未匹配"));
+                }
+            });
+        }
+
+        [Fact]
+        public void DownstreamTab_KeepsRatingsAndRulesTogether()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(7))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("Downstream 自动添加", tabs.SelectedTab.Text);
+                    Assert.Equal(2, FindAll<UiCard>(tabs.SelectedTab).Count);
+                    Assert.Equal(2, FindAll<NumericUpDown>(tabs.SelectedTab).Count);
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "插座箱额定电流（A）");
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "电盘额定电流（A）");
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "I-line_Panel");
+                }
+            });
+        }
+
+        [Fact]
+        public void ColorTab_ShowsTwoAciPickers()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(8))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("颜色", tabs.SelectedTab.Text);
+                    List<ComboBox> colors = FindAll<ComboBox>(tabs.SelectedTab)
+                        .Where(color => color.DrawMode == DrawMode.OwnerDrawFixed).ToList();
+                    Assert.Equal(2, colors.Count);
+                    Assert.All(colors, color =>
+                    {
+                        Assert.Equal(ComboBoxStyle.DropDownList, color.DropDownStyle);
+                        Assert.Contains(color.Items.Cast<object>(),
+                            item => item.ToString().Contains("ACI 3"));
+                        Assert.Contains(color.Items.Cast<object>(),
+                            item => item.ToString().Contains("ACI 6"));
+                    });
                 }
             });
         }

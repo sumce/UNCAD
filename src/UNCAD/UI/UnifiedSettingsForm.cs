@@ -131,13 +131,17 @@ namespace UNCAD.UI
             ConfigureStatisticsToolTips();
             LoadValues();
 
-            _tabs.TabPages.Add(BuildUnlTab());
-            _tabs.TabPages.Add(BuildUnqTab());
-            _tabs.TabPages.Add(BuildConduitTab());
-            _tabs.TabPages.Add(BuildUnrTab());
+            // 侧边栏顺序：概览 → 绘制 → 统计/样式/启动 → 机台数据 → 清单 → Downstream → 颜色 → 输出
+            _tabs.TabPages.Add(BuildOverviewTab());
+            _tabs.TabPages.Add(BuildDrawTab());
             _tabs.TabPages.Add(BuildStatTab());
             _tabs.TabPages.Add(BuildStyleTab());
-            _tabs.TabPages.Add(BuildFillTab());
+            _tabs.TabPages.Add(BuildStartupTab());
+            _tabs.TabPages.Add(BuildMachineTab());
+            _tabs.TabPages.Add(BuildBomTab());
+            _tabs.TabPages.Add(BuildDownstreamTab());
+            _tabs.TabPages.Add(BuildColorTab());
+            _tabs.TabPages.Add(BuildOutputTab());
             _tabs.SelectedIndex = Math.Min(Math.Max(tabIndex, 0), _tabs.TabPages.Count - 1);
             StyleInteractiveControls(_tabs);
             _fillExcel.TextChanged += (sender, args) => UpdateMachineSnapshotStatus();
@@ -169,7 +173,7 @@ namespace UNCAD.UI
             if (_machineRefreshInProgress) return;
             if (!ConduitDiameter.TryNormalize(_conduitDia.Text, out string diameter))
             {
-                _tabs.SelectedIndex = 2;
+                _tabs.SelectedIndex = 1;
                 _conduitDia.Focus();
                 _conduitDia.SelectAll();
                 MessageBox.Show(this, "默认管径无效，请输入1到1000毫米之间的数值。",
@@ -181,7 +185,7 @@ namespace UNCAD.UI
             if (conduitItem == null
                 || BoqFeatureName.Extract(conduitItem.Feature).Length == 0)
             {
-                _tabs.SelectedIndex = 2;
+                _tabs.SelectedIndex = 1;
                 _conduitDia.Focus();
                 _conduitDia.SelectAll();
                 MessageBox.Show(this,
@@ -512,50 +516,64 @@ namespace UNCAD.UI
 
         // ---------- 页签构建 ----------
 
-        private TabPage BuildUnlTab()
+        /// <summary>概览：一眼看清版本、数据源与 Downstream 规则，再按需进入各页。</summary>
+        private TabPage BuildOverviewTab()
         {
-            var g = Grid(4);
-            AddField(g, 0, "占位文字", _unlText);
-            AddField(g, 1, "文字高度", _unlHgt);
+            var version = Grid(3);
+            AddField(version, 0, "产品", ReadOnly(ProductMetadata.ProductName));
+            AddField(version, 1, "版本", ReadOnly(ProductMetadata.VersionLabel
+                + "（" + ProductMetadata.ReleaseDateUtc + "）"));
+            AddField(version, 2, "机台数据", ReadOnly("只需提供机台/设备表；固定清单随插件内嵌"));
+
+            var rules = Grid(3);
+            AddField(rules, 0, "socket box", ReadOnly("额外一行 4.x 插座箱/盘（受“插座盘”开关控制）"));
+            AddField(rules, 1, "I-line_Panel", ReadOnly("额外一行电盘（受“电盘”开关控制，不带断路器）"));
+            AddField(rules, 2, "busbar connector", ReadOnly("只上色，不产生物料"));
+
+            var hint = Grid(2);
+            AddField(hint, 0, "参数在哪", ReadOnly("左侧按“绘制 / 清单 / 输出”分组，逐页调整"));
+            AddField(hint, 1, "设置何时生效", ReadOnly("保存后立即生效；命令运行时不读 Excel、不联网"));
+
+            return Page("概览", "版本、数据源与关键规则",
+                Section("版本", null, version),
+                Section("下游 Downstream 规则", "块名精确等于 Downstream（含 $0$ 后缀）时按可见性状态自动补清单。", rules),
+                Section("提示", null, hint));
+        }
+
+        /// <summary>绘制标注：U1L 线段、U1Q 桥架、U1R 拱桥、U1C 线管合并为一页四块。</summary>
+        private TabPage BuildDrawTab()
+        {
+            var unl = Grid(4);
+            AddField(unl, 0, "占位文字", _unlText);
+            AddField(unl, 1, "文字高度", _unlHgt);
             var posPanel = new FlowLayoutPanel { AutoSize = true };
             posPanel.Controls.Add(_unlCenter);
             posPanel.Controls.Add(_unlBelow);
             posPanel.Controls.Add(_unlAbove);
-            AddField(g, 2, "文字位置", posPanel);
-            AddField(g, 3, "偏移距离（0 = 贴线）", _unlOff);
-            return Page("线段绘制", "U1L 默认标注参数",
-                Section("线段文字", null, g));
-        }
+            AddField(unl, 2, "文字位置", posPanel);
+            AddField(unl, 3, "偏移距离（0 = 贴线）", _unlOff);
 
-        private TabPage BuildUnqTab()
-        {
-            var g = Grid(5);
-            AddField(g, 0, "默认规格", _unqText);
-            AddField(g, 1, "文字高度", _unqHgt);
-            AddField(g, 2, "红线距基线（0 = 15）", _unqLoff);
-            AddField(g, 3, "文字距红线（0 = 贴线）", _unqToff);
+            var unq = Grid(5);
+            AddField(unq, 0, "默认规格", _unqText);
+            AddField(unq, 1, "文字高度", _unqHgt);
+            AddField(unq, 2, "红线距基线（0 = 15）", _unqLoff);
+            AddField(unq, 3, "文字距红线（0 = 贴线）", _unqToff);
             var sidePanel = new FlowLayoutPanel { AutoSize = true };
             sidePanel.Controls.Add(_unqAbove);
             sidePanel.Controls.Add(_unqBelow);
-            AddField(g, 4, "标注侧", sidePanel);
-            return Page("桥架标注", "U1Q1 / U1Q2 / U1Q4 标注参数",
-                Section("桥架文字与位置", "成图文字使用固定 BOQ 清单中的桥架型号。", g));
-        }
+            AddField(unq, 4, "标注侧", sidePanel);
 
-        private TabPage BuildConduitTab()
-        {
-            var g = Grid(1);
-            AddField(g, 0, "默认管径", _conduitDia);
-            return Page("线管标注", "U1C 默认规格",
-                Section("线管规格", "文字高度、偏移距离和标注侧与桥架标注共用。", g));
-        }
+            var unr = Grid(1);
+            AddField(unr, 0, "拱桥直径", _unrDia);
 
-        private TabPage BuildUnrTab()
-        {
-            var g = Grid(1);
-            AddField(g, 0, "拱桥直径", _unrDia);
-            return Page("拱桥开洞", "U1R 几何参数",
-                Section("开洞尺寸", null, g));
+            var conduit = Grid(1);
+            AddField(conduit, 0, "默认管径", _conduitDia);
+
+            return Page("绘制标注", "U1L / U1Q / U1C / U1R 的默认标注参数",
+                Section("线段文字（U1L）", null, unl),
+                Section("桥架文字与位置（U1Q）", "成图文字使用固定 BOQ 清单中的桥架型号。", unq),
+                Section("线管规格（U1C）", "文字高度、偏移距离和标注侧与桥架标注共用。", conduit),
+                Section("拱桥开洞（U1R）", null, unr));
         }
 
         private TabPage BuildStatTab()
@@ -602,6 +620,13 @@ namespace UNCAD.UI
             AddField(style, 2, "大字体文件（空 = TTF）", _styleBigFont);
             AddField(style, 3, "宽高比", _styleWidth);
 
+            return Page("文字样式", "所有生成文字的公共样式",
+                Section("文字样式", "样式名与字体对所有生成文字生效；空字体表示使用当前样式。", style));
+        }
+
+        /// <summary>界面与启动：启动表现 + 版本信息（原来混在“文字样式”页里）。</summary>
+        private TabPage BuildStartupTab()
+        {
             var startup = new FlowLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -609,31 +634,38 @@ namespace UNCAD.UI
                 Margin = new Padding(0)
             };
             startup.Controls.Add(_splashEnabled);
-            return Page("文字样式", "所有生成文字的公共样式",
-                Section("文字样式", null, style),
-                Section("启动", null, startup));
+
+            var about = Grid(2);
+            AddField(about, 0, "产品", ReadOnly(ProductMetadata.ProductName));
+            AddField(about, 1, "版本", ReadOnly(ProductMetadata.VersionLabel
+                + "（" + ProductMetadata.ReleaseDateUtc + "）"));
+
+            return Page("界面与启动", "启动表现与版本信息",
+                Section("启动", "打开 CAD 时是否播放全屏品牌动画。", startup),
+                Section("关于", null, about));
         }
 
-        private TabPage BuildFillTab()
+        /// <summary>机台数据：数据源与快照状态（原“Excel 数据”页的第一块）。</summary>
+        private TabPage BuildMachineTab()
         {
             var source = Grid(2);
             // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
             AddField(source, 0, "机台数据 Excel", PathPicker(_fillExcel));
             AddField(source, 1, "快照状态", _snapshotStatus);
 
-            var table = Grid(7);
+            return Page("机台数据", "命令只读快照：运行时不读 Excel、不联网",
+                Section("数据源", "本地源手动刷新；远程链接在 CAD 启动时后台刷新。", source));
+        }
+
+        /// <summary>清单与表格：写表参数 + BOQ 自动填充类别。</summary>
+        private TabPage BuildBomTab()
+        {
+            var table = Grid(5);
             AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
             AddField(table, 3, "软管手动数量（m）", _fillFlexibleMeters);
             AddField(table, 4, "桥架信息（块属性）", _fillBridge);
-            AddField(table, 5, "设备端颜色", _fillDeviceColor);
-            AddField(table, 6, "上游端颜色", _fillUpstreamColor);
-
-            // Downstream 自动添加：单独一块，只放与"下游端自动补清单"直接相关的设置。
-            var downstream = Grid(2);
-            AddField(downstream, 0, "插座箱额定电流（A）", _fillDownstreamAmps);
-            AddField(downstream, 1, "电盘额定电流（A）", _fillDownstreamPanelAmps);
 
             var autoFill = new TableLayoutPanel
             {
@@ -657,20 +689,45 @@ namespace UNCAD.UI
             autoFill.Controls.Add(_autofillOutletPanel, 2, 1);
             autoFill.Controls.Add(_autofillBusPlugBox, 3, 1);
 
-            var output = Grid(1);
-            AddField(output, 0, "自动输出文件夹", FolderPicker(_submitFolder));
+            return Page("清单与表格", "U1F / U1U 写表参数与自动填充类别",
+                Section("表格参数", "写入图框表格的起始行与清空行数。", table),
+                Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill));
+        }
 
-            return Page("Excel 数据", "机台快照、BOQ 图框与自动输出",
-                Section("机台数据源", "本地源手动刷新；远程链接在 CAD 启动时后台刷新。", source),
-                Section("图框与表格", null, table),
-                Section("Downstream 自动添加",
-                    "下游端 Downstream 块按可见性状态自动补清单：socket box → 额外一行 4.x "
-                    + "插座箱/盘（受“插座盘”开关控制）；I-line_Panel → 额外一行电盘"
-                    + "（受“电盘”开关控制，不带断路器）；busbar connector 只上色。"
-                    + "两个额定电流都在这里设置，不从 U_配电信息 提取。",
-                    downstream),
-                Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
-                Section("自动输出", null, output));
+        /// <summary>Downstream 自动添加：单独一页，只放下游端相关设置与规则。</summary>
+        private TabPage BuildDownstreamTab()
+        {
+            var amps = Grid(2);
+            AddField(amps, 0, "插座箱额定电流（A）", _fillDownstreamAmps);
+            AddField(amps, 1, "电盘额定电流（A）", _fillDownstreamPanelAmps);
+
+            var rules = Grid(3);
+            AddField(rules, 0, "socket box", ReadOnly("额外一行 4.x 插座箱/盘（受“插座盘”开关控制）"));
+            AddField(rules, 1, "I-line_Panel", ReadOnly("额外一行电盘（受“电盘”开关控制，不带断路器）"));
+            AddField(rules, 2, "busbar connector", ReadOnly("只上色，不产生物料"));
+
+            return Page("Downstream 自动添加", "下游端 Downstream 块（精确块名）按可见性状态自动补清单",
+                Section("额定电流", "不从 U_配电信息 提取：那是盘柜主开关电流，会导致整行未匹配。", amps),
+                Section("三态规则", "与 upstream 共用同一套可见性状态。", rules));
+        }
+
+        /// <summary>颜色：设备端（含 Downstream）与上游端。</summary>
+        private TabPage BuildColorTab()
+        {
+            var g = Grid(2);
+            AddField(g, 0, "设备端颜色", _fillDeviceColor);
+            AddField(g, 1, "上游端颜色", _fillUpstreamColor);
+            return Page("颜色", "块的标注颜色（ACI 色号）",
+                Section("块颜色", "设备端包含 Downstream 块；修改后对所有后续命令生效。", g));
+        }
+
+        /// <summary>自动输出：BOQ 与提交文件的落盘位置。</summary>
+        private TabPage BuildOutputTab()
+        {
+            var g = Grid(1);
+            AddField(g, 0, "自动输出文件夹", FolderPicker(_submitFolder));
+            return Page("自动输出", "U1S / U1F / U1U 生成文件的落盘位置",
+                Section("输出位置", "留空表示与图纸同目录。", g));
         }
 
         private Control FolderPicker(TextBox target)
@@ -898,6 +955,15 @@ namespace UNCAD.UI
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
             return layout;
         }
+
+        /// <summary>只读值标签（概览/规则说明用）。</summary>
+        private static Label ReadOnly(string text) => new Label
+        {
+            Text = text,
+            AutoSize = true,
+            ForeColor = UiTheme.TextPrimary,
+            Margin = new Padding(0, 10, 0, 0)
+        };
 
         private static UiCard Section(string title, string subtitle, Control content)
         {
