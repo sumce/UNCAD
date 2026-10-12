@@ -4,6 +4,27 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-032: Version Numbering — Features Move X.Y.Z, Fixes Move The Fourth Part (2026-10-11)
+
+- Status: accepted
+- Decision: `X.Y.Z` (`ProductMetadata.VersionLabel`) identifies a **feature
+  release**. Adding a feature bumps it (fourth component resets to 0) with a new
+  tag, a new `docs/RELEASE-X.Y.Z.md`, and a `VersionChangeLog` entry.
+  Any change that does **not** add a feature (bug fix, test/build
+  infrastructure, docs, cleanup) must leave `X.Y.Z` untouched and bump only the
+  fourth component of `AssemblyVersion`, `FileVersion`, and
+  `PackageContents.xml AppVersion` — e.g. `2.6.9.0` → `2.6.9.1`. No new tag and
+  no new release note; the existing `RELEASE-X.Y.Z.md` covers the patch.
+- Rationale: rapid `X.Y.Z` bumps for fixes and chores made the shipped version
+  history unreadable (2.6.5/2.6.6/2.6.7/2.6.8/2.6.9 in one day, several for
+  non-features) and produced a stream of near-identical "releases".
+- Consequence: `release.ps1` and `BundleLoadingTests` compare only the first
+  three components; `installer.ps1` still requires the DLL `FileVersion` to equal
+  `AppVersion` exactly, so both must move together. Use
+  `scripts/Bump-Version.ps1 -Kind Patch` for a patch and
+  `-Kind Feature -Label X.Y.Z` for a feature. The historical 2.6.5–2.6.9 bumps
+  are not rewritten.
+
 ## D-030: Downstream Block Rules (2026-10-11, amended same day)
 
 - Status: accepted

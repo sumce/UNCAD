@@ -106,7 +106,8 @@ if (-not $labelMatch.Success) {
     throw "ProductMetadata.VersionLabel was not found in $metadataSource."
 }
 $versionLabel = $labelMatch.Groups[1].Value
-if ($version -ne $versionLabel -and $version -ne ($versionLabel + ".0")) {
+# D-032：前三段必须等于 VersionLabel；第四位是"同版本内的补丁号"，不加功能时递增。
+if ($version -ne $versionLabel -and -not $version.StartsWith($versionLabel + ".")) {
     throw "Release version mismatch: ProductMetadata.VersionLabel='$versionLabel' does not agree with PackageContents.xml AppVersion='$version'."
 }
 $releaseNote = Join-Path $root ("docs\RELEASE-" + $versionLabel + ".md")

@@ -46,21 +46,30 @@ dotnet test UNCAD.slnx --filter "FullyQualifiedName~BoqCatalogIndexTests.Categor
 - `release.ps1` gates on: build → bundle SHA-256 match → full test suite →
   `installer.ps1 -Mode VerifyPackage` → version-label agreement.
 
-## Version bumps are multi-file
+## Version numbering (D-032)
 
-`release.ps1` enforces agreement between `ProductMetadata.VersionLabel` and
-`PackageContents.xml AppVersion`, and requires a non-empty
-`docs\RELEASE-<version>.md`. A version bump touches:
+`X.Y.Z` is the **user-facing feature version**; the fourth component is the
+**patch counter inside that version**. Never mix the two:
 
-- `src/UNCAD/UNCAD.csproj` (AssemblyVersion / FileVersion / Version)
-- `src/UNCAD/Infra/ProductMetadata.cs` (`VersionLabel`, `ReleaseDateUtc`)
-- `src/UNCAD/Infra/VersionChangeLog.cs` (new entry)
-- `bundle/UNCAD.bundle/PackageContents.xml` (`AppVersion` as `x.y.z.0`)
-- `docs/RELEASE-<version>.md`
-- `tests/UNCAD.Tests/ConfigKeysTests.cs` (asserts the bare label vs `AboutInfo`)
+- **Adding a feature** → bump `X.Y.Z` (fourth component back to `0`), add a
+  new `docs/RELEASE-X.Y.Z.md`, a `VersionChangeLog` entry, and a tag.
+  Touches: `src/UNCAD/UNCAD.csproj` (AssemblyVersion / FileVersion / Version),
+  `src/UNCAD/Infra/ProductMetadata.cs` (`VersionLabel`, `ReleaseDateUtc`),
+  `src/UNCAD/Infra/VersionChangeLog.cs`, `bundle/UNCAD.bundle/PackageContents.xml`,
+  `docs/RELEASE-X.Y.Z.md`, `tests/UNCAD.Tests/ConfigKeysTests.cs`,
+  `README.md` / `docs/PROJECT_CONTEXT.md` / `AGENTS.md`.
+- **Everything else** (bug fix, test/infra, docs, cleanup) → **leave `X.Y.Z`
+  alone** and bump only the fourth component (`AssemblyVersion`, `FileVersion`,
+  `PackageContents.xml AppVersion`), e.g. `2.6.9.0` → `2.6.9.1`.
+  No new tag, no new `RELEASE` document, no new change-log heading; reuse the
+  release note of the current `X.Y.Z` and push the code.
 
-`ProductMetadata.VersionSuffix` must stay empty while that test asserts the bare
-version label.
+`release.ps1`, `BundleLoadingTests`, and `installer.ps1` only require that the
+first three components agree with `ProductMetadata.VersionLabel`; the fourth is
+free to move. Use `scripts/Bump-Version.ps1` for the mechanical part.
+
+`ProductMetadata.VersionSuffix` must stay empty while `ConfigKeysTests` asserts
+the bare version label.
 
 ## Architecture
 

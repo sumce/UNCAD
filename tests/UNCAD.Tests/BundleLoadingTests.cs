@@ -43,15 +43,15 @@ namespace UNCAD.Tests
             XElement package = LoadManifest();
             string appVersion = (string)package.Attribute("AppVersion");
             Assert.NotNull(appVersion);
-            // ProductMetadata.VersionLabel is the 3-part user-facing label; the
-            // bundle manifest carries the 4-part numeric version, so the label
-            // must be the first three components (or the whole value for a
-            // three-part package). installer.ps1 applies the same rule to the
-            // DLL FileVersion, so this is the join that keeps the running app
-            // and the shipped package on the same version (D-010).
-            string expected = ProductMetadata.VersionLabel + ".0";
+            // D-032 版本策略：X.Y.Z 只在**加功能**时递增；不加功能（修 bug、测试/基建、
+            // 文档、清理）保持前三段不变，只把第四位 +1，例如 2.6.9 → 2.6.9.1。
+            // 因此这里只要求 AppVersion 的前三段等于用户可见的 VersionLabel。
+            // installer.ps1 对 DLL FileVersion 用同一口径，这是保持"包 = 运行的程序"
+            // 同一版本的接合点（D-010）。
             Assert.True(
-                appVersion == ProductMetadata.VersionLabel || appVersion == expected,
+                appVersion == ProductMetadata.VersionLabel
+                    || appVersion.StartsWith(ProductMetadata.VersionLabel + ".",
+                        StringComparison.Ordinal),
                 "Package AppVersion='" + appVersion + "' does not agree with ProductMetadata.VersionLabel='" +
                 ProductMetadata.VersionLabel + "'.");
         }
