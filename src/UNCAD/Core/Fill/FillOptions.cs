@@ -85,11 +85,15 @@ namespace UNCAD.Core.Fill
         public const int MaximumClearRows = 100;
         public const double MaximumTextHeight = 100000.0;
         public const double MaximumMmPerGrid = 100000.0;
+        /// <summary>Downstream=socket box 生成的 4.x 插座盘默认额定电流（A）。</summary>
+        public const double DefaultDownstreamSocketAmps = 20.0;
+        public const double MaximumDownstreamSocketAmps = 1000.0;
 
         private FillRuntimeOptions(string machineWorkbookPath,
             int startRow, int clearRows,
             double textHeight, double mmPerGrid, string bridgeInfo,
-            FillPlanningOptions planning, FillAutoFillOptions autoFill)
+            FillPlanningOptions planning, FillAutoFillOptions autoFill,
+            double downstreamSocketAmps)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -99,6 +103,7 @@ namespace UNCAD.Core.Fill
             BridgeInfo = bridgeInfo;
             Planning = planning;
             AutoFill = autoFill;
+            DownstreamSocketAmps = downstreamSocketAmps;
         }
 
         public string MachineWorkbookPath { get; }
@@ -109,11 +114,19 @@ namespace UNCAD.Core.Fill
         public string BridgeInfo { get; }
         public FillPlanningOptions Planning { get; }
         public FillAutoFillOptions AutoFill { get; }
+        /// <summary>
+        /// Downstream 块状态为 socket box 时，额外那一行 4.x 插座盘使用的额定电流（A）。
+        ///
+        /// 为什么不用 U_配电信息 里的电流：那是盘柜主开关电流（例如 100A），
+        /// 和"插座箱"本身不是一回事，拿它去匹配 4.x 会匹配不到、整行变成未匹配。
+        /// </summary>
+        public double DownstreamSocketAmps { get; }
 
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             string bridgeInfo, FillPlanningOptions planning,
-            FillAutoFillOptions autoFill = null)
+            FillAutoFillOptions autoFill = null,
+            double downstreamSocketAmps = DefaultDownstreamSocketAmps)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -124,7 +137,9 @@ namespace UNCAD.Core.Fill
                 PositiveWithin(mmPerGrid, MaximumMmPerGrid, 250.0),
                 (bridgeInfo ?? "").Trim(),
                 planning ?? FillPlanningOptions.Default,
-                autoFill ?? FillAutoFillOptions.Default);
+                autoFill ?? FillAutoFillOptions.Default,
+                PositiveWithin(downstreamSocketAmps, MaximumDownstreamSocketAmps,
+                    DefaultDownstreamSocketAmps));
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)

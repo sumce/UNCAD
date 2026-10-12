@@ -44,12 +44,13 @@ namespace UNCAD.Tests
         public void ApplySocketBoxPanel_AddsExactlyOneOutletPanelRow()
         {
             List<TableFillRow> result = DownstreamStatePolicy.ApplySocketBoxPanel(BaseRows(),
-                Machine(), Catalog(), AllAutoFill(), true);
+                Catalog(), AllAutoFill(), true, 20.0);
 
             TableFillRow panel = Assert.Single(result,
                 row => row.Category == TableFillCategory.OutletPanel);
             Assert.Equal("4.11", panel.Code);
             Assert.Equal("插座盘", panel.Name);
+            Assert.True(panel.CatalogMatched);
             Assert.Equal(Enumerable.Range(1, result.Count),
                 result.Select(row => row.SortOrder));
         }
@@ -59,7 +60,7 @@ namespace UNCAD.Tests
         {
             // 断路器只由上游 U_上游类型=I-Line盘 产生；Downstream 即使状态异常也不许补断路器。
             List<TableFillRow> result = DownstreamStatePolicy.ApplySocketBoxPanel(BaseRows(),
-                Machine(), Catalog(), AllAutoFill(), true);
+                Catalog(), AllAutoFill(), true, 20.0);
 
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Breaker);
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Outlet
@@ -70,7 +71,7 @@ namespace UNCAD.Tests
         public void ApplySocketBoxPanel_DoesNothingWhenTheStateIsNotSocketBox()
         {
             List<TableFillRow> result = DownstreamStatePolicy.ApplySocketBoxPanel(BaseRows(),
-                Machine(), Catalog(), AllAutoFill(), false);
+                Catalog(), AllAutoFill(), false, 20.0);
 
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.OutletPanel);
             Assert.Equal(3, result.Count);
@@ -84,7 +85,7 @@ namespace UNCAD.Tests
                 true, false, true);
 
             List<TableFillRow> result = DownstreamStatePolicy.ApplySocketBoxPanel(BaseRows(),
-                Machine(), Catalog(), outletPanelOff, true);
+                Catalog(), outletPanelOff, true, 20.0);
 
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.OutletPanel);
         }
@@ -98,7 +99,27 @@ namespace UNCAD.Tests
                 Code = "8.2", SortOrder = 800 }
         };
 
-        private static MachineRow Machine() => new MachineRow { Detail = "U220 1P3W 1P20A" };
+        [Fact]
+        public void ApplySocketBoxPanel_UsesTheConfiguredRatingAgainstTheRealCatalog()
+        {
+            // 现场问题：以前拿 U_配电信息 的电流（例如 100A）去匹配 4.x，匹配不到，
+            // 整行变成 BOQ-CATALOG-MISSING。现在额定电流来自设置，默认 20A 必须匹配得上。
+            var catalog = new BoqCatalogIndex(ListItemReader.ReadEmbedded());
+
+            TableFillRow matched = Assert.Single(DownstreamStatePolicy.ApplySocketBoxPanel(
+                    BaseRows(), catalog, AllAutoFill(), true,
+                    FillRuntimeOptions.DefaultDownstreamSocketAmps),
+                row => row.Category == TableFillCategory.OutletPanel);
+            Assert.True(matched.CatalogMatched, "默认 20A 必须能在固定清单里匹配到插座盘");
+            Assert.False(string.IsNullOrEmpty(matched.Code));
+
+            // 换成清单里没有的电流 → 变成未匹配行交给用户确认（不猜型号，D-016）。
+            TableFillRow unmatched = Assert.Single(DownstreamStatePolicy.ApplySocketBoxPanel(
+                    BaseRows(), catalog, AllAutoFill(), true, 999.0),
+                row => row.Category == TableFillCategory.OutletPanel);
+            Assert.False(unmatched.CatalogMatched);
+            Assert.Equal("", unmatched.Code);
+        }
 
         private static BoqCatalogIndex Catalog() => new BoqCatalogIndex(new List<ListItem>
         {

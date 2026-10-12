@@ -33,7 +33,9 @@ namespace UNCAD.Infra
                 Settings.GetDouble(ConfigKeys.FillTextHeight,
                     TableFillFormatter.DefaultTextHeight),
                 Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0),
-                Settings.Get(ConfigKeys.FillBridge, ""), planning, autoFill);
+                Settings.Get(ConfigKeys.FillBridge, ""), planning, autoFill,
+                Settings.GetDouble(ConfigKeys.FillDownstreamSocketAmps,
+                    FillRuntimeOptions.DefaultDownstreamSocketAmps));
         }
 
         private static int SafeInt(double value, int fallback)

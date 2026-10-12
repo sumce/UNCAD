@@ -154,11 +154,14 @@ namespace UNCAD.CadIntegration
                 Info("  内嵌清单读取失败: " + ex.Message);
             }
             var rows = DownstreamStatePolicy.ApplySocketBoxPanel(new List<TableFillRow>(),
-                new MachineRow { Detail = "" }, new BoqCatalogIndex(new List<ListItem>()),
+                new BoqCatalogIndex(new List<ListItem>()),
                 FillAutoFillOptions.Create(true, true, true, true, true, true, true, true),
-                false);
+                false, FillRuntimeOptions.DefaultDownstreamSocketAmps);
             Info("  断路器规则: Downstream 永不添加断路器（规则由 DownstreamStatePolicy 锁定）");
-            Info("  4.x 规则: 仅当 Downstream 状态=socket box 且“插座盘”开关打开时才额外加一行"
+            Info("  4.x 规则: 仅当 Downstream 状态=socket box 且“插座盘”开关打开时才额外加一行；"
+                + "额定电流取 U1SET 的“下游插座箱额定电流”（默认 "
+                + FillRuntimeOptions.DefaultDownstreamSocketAmps.ToString("0.##") + "A），"
+                + "不再用 U_配电信息 的电流匹配"
                 + (hasOutletPanelInCatalog ? "（内嵌清单有 4.x 条目）" : "（内嵌清单没有 4.x 条目）"));
             Info("  基线行数（不触发时）: " + rows.Count);
         }

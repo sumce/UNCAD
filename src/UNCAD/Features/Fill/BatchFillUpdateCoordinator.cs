@@ -558,11 +558,14 @@ namespace UNCAD.Features.Fill
                     deviceOutlet, existingOutlets)
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
             socketRows = DownstreamStatePolicy.ApplySocketBoxPanel(socketRows,
-                machine, workbook.Catalog, options.AutoFill, downstreamSocketBox);
+                workbook.Catalog, options.AutoFill, downstreamSocketBox,
+                options.DownstreamSocketAmps);
             if (downstreamBlocks > 0)
                 ctx.Write("\n[U1U] " + prefix + "Downstream 状态: " + downstreamState
                     + "；插座箱清单: " + (downstreamSocketBox
-                        ? "额外输出一套（受“插座盘”自动填充开关控制）" : "不输出"));
+                        ? "额外输出一套（" + options.DownstreamSocketAmps.ToString("0.##")
+                            + "A，受“插座盘”自动填充开关控制）"
+                        : "不输出"));
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning,

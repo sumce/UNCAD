@@ -290,13 +290,27 @@ namespace UNCAD.Core.Fill
         public static TableFillRow BuildOutletPanelRow(string detail,
             BoqCatalogIndex catalog)
         {
+            TryExtractRating(detail, out _, out int amps);
+            return BuildOutletPanelRow((double)amps, catalog);
+        }
+
+        /// <summary>
+        /// 按**显式额定电流**构造 4.x 插座盘行（Downstream socket box 用固定电流）。
+        ///
+        /// 刻意不从 U_配电信息 提取：那是盘柜主开关电流，与插座箱本身无关，拿它去匹配
+        /// 4.x 会匹配不到、整行变成未匹配（现场已复现：Detail 100A vs 4.x 无 100A 条目）。
+        /// 匹配不到时仍返回未匹配行交给用户确认，不猜型号（D-016）。
+        /// </summary>
+        public static TableFillRow BuildOutletPanelRow(double amps, BoqCatalogIndex catalog)
+        {
             catalog = catalog ?? new BoqCatalogIndex(null);
             if (catalog.OutletPanels.Count == 0) return null;
 
-            TryExtractRating(detail, out _, out int amps);
-            ListItem item = catalog.FindOutletPanel(amps);
+            int rating = amps > 0 && !double.IsNaN(amps) && !double.IsInfinity(amps)
+                ? (int)Math.Round(amps) : 0;
+            ListItem item = rating > 0 ? catalog.FindOutletPanel(rating) : null;
             string description = "1.名称:插座盘"
-                + (amps > 0 ? @"\P2.额定电流:" + amps + "A" : "");
+                + (rating > 0 ? @"\P2.额定电流:" + rating + "A" : "");
             return FromItem(TableFillCategory.OutletPanel, 450, item,
                 "插座盘", description, "个", "1");
         }

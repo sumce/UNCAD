@@ -248,7 +248,8 @@ namespace UNCAD.Features.Fill
                         deviceHasOutlet, deviceOutlet);
             }
             socketAdjustedRows = DownstreamStatePolicy.ApplySocketBoxPanel(
-                socketAdjustedRows, picked, catalog, options.AutoFill, downstreamSocketBox);
+                socketAdjustedRows, catalog, options.AutoFill, downstreamSocketBox,
+                options.DownstreamSocketAmps);
             tablePlan = new TableGenerationOutput(socketAdjustedRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -258,7 +259,9 @@ namespace UNCAD.Features.Fill
             if (downstreamBlocks > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] Downstream 状态: " + downstreamState + "；插座箱清单: "
-                    + (downstreamSocketBox ? "额外输出一套（受“插座盘”自动填充开关控制）"
+                    + (downstreamSocketBox
+                        ? "额外输出一套（" + options.DownstreamSocketAmps.ToString("0.##")
+                            + "A，受“插座盘”自动填充开关控制）"
                         : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning,
@@ -1173,8 +1176,9 @@ namespace UNCAD.Features.Fill
             CadDynamicBlockStateService.TryReadDownstreamSocketBox(ctx,
                 selection?.DeviceBlockIds, out bool previewDownstreamSocketBox,
                 out _, out _, out _);
-            plannedRows = DownstreamStatePolicy.ApplySocketBoxPanel(plannedRows, row,
-                catalog, options.AutoFill, previewDownstreamSocketBox);
+            plannedRows = DownstreamStatePolicy.ApplySocketBoxPanel(plannedRows,
+                catalog, options.AutoFill, previewDownstreamSocketBox,
+                options.DownstreamSocketAmps);
             TableFillRow previewHose = plannedRows.FirstOrDefault(item =>
                 item.Category == TableFillCategory.FlexibleConduit);
             if (previewHose != null)

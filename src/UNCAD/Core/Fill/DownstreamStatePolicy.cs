@@ -15,12 +15,14 @@ namespace UNCAD.Core.Fill
     /// - **不添加 8.x 插座行**：那条由 Device_Build20260716 的状态负责。
     /// - **永不添加断路器**：断路器只由上游 U_上游类型=I-Line盘 产生。这条是用户明确
     ///   要求，别因为"看起来该成对出现"而补上。
+    /// - 这一行 4.x 用**固定额定电流**（U1SET：下游插座箱额定电流，默认 20A），
+    ///   不从 U_配电信息 提取——那是盘柜主开关电流，拿它匹配 4.x 会整行未匹配。
     /// </summary>
     public static class DownstreamStatePolicy
     {
         public static List<TableFillRow> ApplySocketBoxPanel(IEnumerable<TableFillRow> rows,
-            MachineRow machine, BoqCatalogIndex catalog, FillAutoFillOptions autoFill,
-            bool downstreamSocketBox)
+            BoqCatalogIndex catalog, FillAutoFillOptions autoFill,
+            bool downstreamSocketBox, double socketAmps)
         {
             List<TableFillRow> result = (rows ?? Enumerable.Empty<TableFillRow>())
                 .Where(row => row != null).ToList();
@@ -28,7 +30,8 @@ namespace UNCAD.Core.Fill
             autoFill = autoFill ?? FillAutoFillOptions.Default;
             if (!autoFill.OutletPanel) return result;
 
-            TableFillRow panel = TableFillPlanner.BuildOutletPanelRow(machine?.Detail, catalog);
+            // 固定额定电流（U1SET 可改，默认 20A）：不从 U_配电信息 猜。
+            TableFillRow panel = TableFillPlanner.BuildOutletPanelRow(socketAmps, catalog);
             if (panel == null) return result;
             result.Add(panel);
             // 稳定排序：与上游规则产生的行同 SortOrder 时保持原顺序，

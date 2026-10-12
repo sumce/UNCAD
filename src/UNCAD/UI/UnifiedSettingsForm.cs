@@ -91,6 +91,7 @@ namespace UNCAD.UI
         private readonly NumericUpDown _fillTextHeight = NumberBox(500m, 1m, 100000m);
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
+        private readonly NumericUpDown _fillDownstreamAmps = IntegerBox(20m, 1m, 1000m);
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
         private readonly ComboBox _fillDeviceColor = ColorBox();
         private readonly ComboBox _fillUpstreamColor = ColorBox();
@@ -267,6 +268,9 @@ namespace UNCAD.UI
             SetNumber(_fillFlexibleMeters, Settings.GetDouble(
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
+            SetNumber(_fillDownstreamAmps, Settings.GetDouble(
+                ConfigKeys.FillDownstreamSocketAmps,
+                FillRuntimeOptions.DefaultDownstreamSocketAmps));
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
             SelectColor(_fillDeviceColor, FillColorSettings.DeviceColorIndex());
             SelectColor(_fillUpstreamColor, FillColorSettings.UpstreamColorIndex());
@@ -340,6 +344,8 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillTextHeight, Value(_fillTextHeight));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
+            Settings.Set(ConfigKeys.FillDownstreamSocketAmps,
+                ((int)_fillDownstreamAmps.Value).ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
             Settings.Set(ConfigKeys.FillDeviceColorIndex,
                 SelectedColorIndex(_fillDeviceColor,
@@ -378,6 +384,8 @@ namespace UNCAD.UI
                 "严格格式示例：Φ20线管 2000mm；兼容旧图的“线管20 2000mm”。");
             _toolTips.SetToolTip(_statMm, "只用于把桥架格数换算成毫米。");
             _toolTips.SetToolTip(_fillFlexibleMeters, "仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。");
+            _toolTips.SetToolTip(_fillDownstreamAmps, "下游 Downstream 块状态为 socket box 时，"
+                + "额外那一行 4.x 插座盘使用的额定电流（默认 20A；与 U_配电信息里的盘柜电流无关）。");
             _toolTips.SetToolTip(_fillDeviceColor,
                 "U1F/U1U 用于设备块和设备轴位块（DS）的 AutoCAD ACI 颜色。");
             _toolTips.SetToolTip(_fillUpstreamColor,
@@ -605,7 +613,7 @@ namespace UNCAD.UI
             AddField(source, 0, "机台数据 Excel", PathPicker(_fillExcel));
             AddField(source, 1, "快照状态", _snapshotStatus);
 
-            var table = Grid(7);
+            var table = Grid(8);
             AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
@@ -613,6 +621,7 @@ namespace UNCAD.UI
             AddField(table, 4, "桥架信息（块属性）", _fillBridge);
             AddField(table, 5, "设备端颜色", _fillDeviceColor);
             AddField(table, 6, "上游端颜色", _fillUpstreamColor);
+            AddField(table, 7, "下游插座箱额定电流（A）", _fillDownstreamAmps);
 
             var autoFill = new TableLayoutPanel
             {

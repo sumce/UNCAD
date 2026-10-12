@@ -62,6 +62,9 @@ namespace UNCAD.Infra
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
+        // Downstream 块状态为 socket box 时，额外那一行 4.x 插座盘的额定电流（A，默认 20）
+        public const string FillDownstreamSocketAmps = "UNC_FILL_DOWNSTREAM_SOCKET_AMPS";
+
         // BOQ 自动填充类别开关（U1F/U1U 规划清单行时跳过关闭的类别）
         public const string FillAutofillCable = "UNC_FILL_AUTOFILL_CABLE";       // 电缆
         public const string FillAutofillBreaker = "UNC_FILL_AUTOFILL_BREAKER";   // 断路器

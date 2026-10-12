@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.8", "2026-10-11",
+                    "修复：下游 Downstream 块状态为 socket box 时，那一行 4.x 插座盘的型号匹配改用固定额定电流（U1SET 新增“下游插座箱额定电流（A）”，默认 20A）。以前沿用 U_配电信息 的盘柜主开关电流（例如 100A）去匹配固定清单，匹配不到就整行变成未匹配（BOQ-CATALOG-MISSING）。",
+                    "说明：只影响 Downstream 规则生成的那一行；上游 U_上游类型=插座盘 的规则不变；匹配不到时仍输出一行交给用户确认，不猜型号。永不添加断路器等既有规则不变。"),
                 new VersionChangeLogEntry("2.6.7", "2026-10-11",
                     "新增：支持下游端 Downstream 块（精确块名，含 Xmerge 的 $0$ 后缀）。它与 upstream 共用同一套三态（I-line_Panel / socket box / busbar connector），按设备侧颜色上色。",
                     "说明：Downstream 状态为 socket box 时，在上游规则之外**额外加一套 4.x 插座箱/插座盘**（受“插座盘”自动填充开关控制，默认关闭）；不重复添加 8.x 插座行，**也永不添加断路器**——断路器只由上游 U_上游类型=I-Line盘 产生。",
