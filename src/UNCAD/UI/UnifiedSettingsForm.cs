@@ -621,7 +621,7 @@ namespace UNCAD.UI
             AddField(source, 0, "机台数据 Excel", PathPicker(_fillExcel));
             AddField(source, 1, "快照状态", _snapshotStatus);
 
-            var table = Grid(9);
+            var table = Grid(7);
             AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
@@ -629,8 +629,11 @@ namespace UNCAD.UI
             AddField(table, 4, "桥架信息（块属性）", _fillBridge);
             AddField(table, 5, "设备端颜色", _fillDeviceColor);
             AddField(table, 6, "上游端颜色", _fillUpstreamColor);
-            AddField(table, 7, "下游插座箱额定电流（A）", _fillDownstreamAmps);
-            AddField(table, 8, "下游电盘额定电流（A）", _fillDownstreamPanelAmps);
+
+            // Downstream 自动添加：单独一块，只放与"下游端自动补清单"直接相关的设置。
+            var downstream = Grid(2);
+            AddField(downstream, 0, "插座箱额定电流（A）", _fillDownstreamAmps);
+            AddField(downstream, 1, "电盘额定电流（A）", _fillDownstreamPanelAmps);
 
             var autoFill = new TableLayoutPanel
             {
@@ -660,6 +663,12 @@ namespace UNCAD.UI
             return Page("Excel 数据", "机台快照、BOQ 图框与自动输出",
                 Section("机台数据源", "本地源手动刷新；远程链接在 CAD 启动时后台刷新。", source),
                 Section("图框与表格", null, table),
+                Section("Downstream 自动添加",
+                    "下游端 Downstream 块按可见性状态自动补清单：socket box → 额外一行 4.x "
+                    + "插座箱/盘（受“插座盘”开关控制）；I-line_Panel → 额外一行电盘"
+                    + "（受“电盘”开关控制，不带断路器）；busbar connector 只上色。"
+                    + "两个额定电流都在这里设置，不从 U_配电信息 提取。",
+                    downstream),
                 Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill),
                 Section("自动输出", null, output));
         }
@@ -881,7 +890,9 @@ namespace UNCAD.UI
                 Margin = new Padding(0),
                 Padding = new Padding(0)
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            // 标签列自适应：中文标签（如“下游插座箱额定电流（A）”）比固定 190px 宽，
+            // 固定宽度会被 EndEllipsis 裁掉，看起来就是“布局不对”。
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int row = 0; row < rows; row++)
                 layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));

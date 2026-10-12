@@ -132,7 +132,8 @@ namespace UNCAD.Tests
                     TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
                     Assert.Equal("Excel 数据", tabs.SelectedTab.Text);
                     Assert.Empty(FindAll<GroupBox>(tabs.SelectedTab));
-                    Assert.Equal(4, FindAll<UiCard>(tabs.SelectedTab).Count);
+                    // Excel 页现在多一块独立的“Downstream 自动添加”。
+                    Assert.Equal(5, FindAll<UiCard>(tabs.SelectedTab).Count);
 
                     List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
                     List<ComboBox> combos = FindAll<ComboBox>(tabs.SelectedTab);
@@ -154,9 +155,9 @@ namespace UNCAD.Tests
                     Assert.Contains(numbers, number => number.DecimalPlaces == 0
                         && number.Minimum == 1m && number.Maximum == 1000m);
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
-                        label => label.Text == "下游插座箱额定电流（A）");
+                        label => label.Text == "插座箱额定电流（A）");
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
-                        label => label.Text == "下游电盘额定电流（A）");
+                        label => label.Text == "电盘额定电流（A）");
                     Assert.Contains(FindAll<Button>(tabs.SelectedTab),
                         button => button.Text == "浏览...");
                     Assert.Contains(FindAll<Button>(tabs.SelectedTab),

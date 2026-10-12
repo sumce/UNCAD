@@ -439,7 +439,7 @@ namespace UNCAD.UI
             Alignment = TabAlignment.Left;
             Appearance = TabAppearance.Normal;
             DrawMode = TabDrawMode.OwnerDrawFixed;
-            ItemSize = new Size(UiTheme.NotAutoScaled(44), UiTheme.NotAutoScaled(176));
+            ItemSize = new Size(UiTheme.NotAutoScaled(52), UiTheme.NotAutoScaled(208));
             Multiline = true;
             SizeMode = TabSizeMode.Fixed;
             Font = UiTheme.FontBody;
@@ -449,15 +449,15 @@ namespace UNCAD.UI
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            ItemSize = new Size(UiTheme.NotAutoScaled(this, 44),
-                UiTheme.NotAutoScaled(this, 176));
+            ItemSize = new Size(UiTheme.NotAutoScaled(this, 52),
+                UiTheme.NotAutoScaled(this, 208));
         }
 
         protected override void OnDpiChangedAfterParent(EventArgs e)
         {
             base.OnDpiChangedAfterParent(e);
-            ItemSize = new Size(UiTheme.NotAutoScaled(this, 44),
-                UiTheme.NotAutoScaled(this, 176));
+            ItemSize = new Size(UiTheme.NotAutoScaled(this, 52),
+                UiTheme.NotAutoScaled(this, 208));
             Invalidate();
         }
 
