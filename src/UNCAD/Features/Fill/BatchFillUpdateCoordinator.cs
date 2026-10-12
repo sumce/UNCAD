@@ -528,11 +528,17 @@ namespace UNCAD.Features.Fill
             bool deviceHasOutlet;
             bool deviceOutletStateKnown;
             string deviceState;
+            bool downstreamSocketBox;
+            string downstreamState;
+            int downstreamBlocks;
             try
             {
                 CadDynamicBlockStateService.TryReadDeviceHasOutlet(readTransaction,
                     selection.DeviceBlockIds, out deviceHasOutlet,
                     out deviceOutletStateKnown, out deviceState);
+                CadDynamicBlockStateService.TryReadDownstreamSocketBox(readTransaction,
+                    selection.DeviceBlockIds, out downstreamSocketBox,
+                    out _, out downstreamState, out downstreamBlocks);
             }
             catch (Exception ex)
             {
@@ -551,6 +557,12 @@ namespace UNCAD.Features.Fill
                 ? DeviceOutletPolicy.ApplyForUpdate(plannedRows, deviceHasOutlet,
                     deviceOutlet, existingOutlets)
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
+            socketRows = DownstreamStatePolicy.ApplySocketBoxPanel(socketRows,
+                machine, workbook.Catalog, options.AutoFill, downstreamSocketBox);
+            if (downstreamBlocks > 0)
+                ctx.Write("\n[U1U] " + prefix + "Downstream 状态: " + downstreamState
+                    + "；插座箱清单: " + (downstreamSocketBox
+                        ? "额外输出一套（受“插座盘”自动填充开关控制）" : "不输出"));
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning,

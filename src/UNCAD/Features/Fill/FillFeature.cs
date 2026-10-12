@@ -224,6 +224,12 @@ namespace UNCAD.Features.Fill
             CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
                 selection.DeviceBlockIds, out bool deviceHasOutlet,
                 out bool deviceOutletStateKnown, out string deviceState);
+            // Downstream 块（精确名 Downstream）与 upstream 用同一套三态；只有 socket box
+            // 会额外加一套 4.x 插座箱/盘，且永不添加断路器（见 DownstreamStatePolicy）。
+            CadDynamicBlockStateService.TryReadDownstreamSocketBox(ctx,
+                selection.DeviceBlockIds, out bool downstreamSocketBox,
+                out bool downstreamStateKnown, out string downstreamState,
+                out int downstreamBlocks);
             TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
             List<TableFillRow> socketAdjustedRows;
             if (updateMode && !deviceOutletStateKnown)
@@ -241,12 +247,19 @@ namespace UNCAD.Features.Fill
                     : DeviceOutletPolicy.Apply(plannedRows,
                         deviceHasOutlet, deviceOutlet);
             }
+            socketAdjustedRows = DownstreamStatePolicy.ApplySocketBoxPanel(
+                socketAdjustedRows, picked, catalog, options.AutoFill, downstreamSocketBox);
             tablePlan = new TableGenerationOutput(socketAdjustedRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                 + "] Device 状态: " + deviceState + "；插座清单: "
                 + (deviceHasOutlet ? "输出 " + (deviceOutlet.Code.Length > 0
                     ? deviceOutlet.Code : "未匹配") : "不输出"));
+            if (downstreamBlocks > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] Downstream 状态: " + downstreamState + "；插座箱清单: "
+                    + (downstreamSocketBox ? "额外输出一套（受“插座盘”自动填充开关控制）"
+                        : "不输出"));
             string defaultCableMeters = tablePlan.DefaultCableMeters;
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning,
                 updateMode ? originalCableModel : null);
@@ -1157,6 +1170,11 @@ namespace UNCAD.Features.Fill
                 out _, out string previewDeviceState);
             plannedRows = DeviceOutletPolicy.Apply(plannedRows, previewHasOutlet,
                 TableFillPlanner.BuildOutletRow(row.Detail, catalog));
+            CadDynamicBlockStateService.TryReadDownstreamSocketBox(ctx,
+                selection?.DeviceBlockIds, out bool previewDownstreamSocketBox,
+                out _, out _, out _);
+            plannedRows = DownstreamStatePolicy.ApplySocketBoxPanel(plannedRows, row,
+                catalog, options.AutoFill, previewDownstreamSocketBox);
             TableFillRow previewHose = plannedRows.FirstOrDefault(item =>
                 item.Category == TableFillCategory.FlexibleConduit);
             if (previewHose != null)

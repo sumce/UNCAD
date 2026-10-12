@@ -8,12 +8,44 @@ namespace UNCAD.Core.Fill
     {
         public const string DeviceBlockName = "Device_Build20260716";
         public const string UpstreamBlockName = "upstream";
+        public const string DownstreamBlockName = "Downstream";
 
         public static bool IsDeviceBlock(string effectiveName)
             => NormalizeName(effectiveName) == NormalizeName(DeviceBlockName);
 
         public static bool IsUpstreamBlock(string effectiveName)
             => NormalizeName(effectiveName) == NormalizeName(UpstreamBlockName);
+
+        /// <summary>
+        /// 下游端块族：精确名 <c>Downstream</c>（含 Xmerge 的 <c>$0$</c> 后缀）。
+        /// 刻意不做前缀/模糊匹配：DS 轴位等以 ds 开头的块、upstream 块都不能卷进来。
+        /// </summary>
+        public static bool IsDownstreamBlock(string effectiveName)
+            => NormalizeName(effectiveName) == NormalizeName(DownstreamBlockName);
+
+        /// <summary>
+        /// Downstream 块的三态与 upstream 完全一致（I-line_Panel / socket box /
+        /// busbar connector，同一个可见性属性）。
+        ///
+        /// 只有 <c>socket box</c> 会产生物料行，见 <see cref="DownstreamStatePolicy"/>；
+        /// 另外两态只用于上色。<b>Downstream 永不产生断路器</b>——断路器只由
+        /// 上游 U_上游类型=I-Line盘 产生，这条是用户明确要求，不要"顺手补齐"。
+        /// </summary>
+        public static bool TryClassifyDownstreamState(string state, out bool socketBox)
+        {
+            socketBox = false;
+            switch (NormalizeName(state))
+            {
+                case "socketbox":
+                    socketBox = true;
+                    return true;
+                case "ilinepanel":
+                case "busbarconnector":
+                    return true;
+                default:
+                    return false;
+            }
+        }
 
         public static bool TryClassifyDeviceState(string state, out bool hasOutlet)
         {

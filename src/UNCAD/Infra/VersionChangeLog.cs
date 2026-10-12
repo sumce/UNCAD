@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.7", "2026-10-11",
+                    "新增：支持下游端 Downstream 块（精确块名，含 Xmerge 的 $0$ 后缀）。它与 upstream 共用同一套三态（I-line_Panel / socket box / busbar connector），按设备侧颜色上色。",
+                    "说明：Downstream 状态为 socket box 时，在上游规则之外**额外加一套 4.x 插座箱/插座盘**（受“插座盘”自动填充开关控制，默认关闭）；不重复添加 8.x 插座行，**也永不添加断路器**——断路器只由上游 U_上游类型=I-Line盘 产生。",
+                    "说明：同一图框内 Downstream 状态冲突会中止本次填充并提示，不会猜测；状态读不出来时不影响其它清单项。"),
                 new VersionChangeLogEntry("2.6.6", "2026-10-11",
                     "新增：执行 U1U/U1F 时，该图框（= 该回路）的**等轴测（3D）场景**随清单一起自动上传；在官网项目页的「ISO 图」里可以直接在线查看，用的是与客户端 U1L3D 完全相同的渲染器（同样的 4800mm 轴距、上下游轴位、路由与桥架长度）。",
                     "说明：3D 与本地 U1L3D 是同一份场景数据，只是多了一条上传链路；图框内没有带毫米标注的 U1L 线段时不会有 3D 数据，只上传清单（属正常情况，命令行不报错）。",

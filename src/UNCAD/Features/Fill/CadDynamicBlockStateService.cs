@@ -97,6 +97,92 @@ namespace UNCAD.Features.Fill
             return hasOutlet;
         }
 
+        /// <summary>
+        /// 读取 Downstream 块（精确名，含 XFree/Mangle 后缀）的可见性状态。
+        ///
+        /// 传进来的 id 是图框里的下游/设备端块集合（与 Device 状态读取同一来源：
+        /// FillSelectionCollector 把名字以 downstream 开头的块一并归入 DeviceBlockIds）。
+        /// 状态未知时返回 false，调用方不得据此删除任何既有行。
+        /// </summary>
+        public static bool TryReadDownstreamSocketBox(CadContext ctx, ObjectId[] blockIds,
+            out bool socketBox, out bool stateKnown, out string stateText, out int blockCount)
+        {
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                bool result = TryReadDownstreamSocketBox(transaction, blockIds, out socketBox,
+                    out stateKnown, out stateText, out blockCount);
+                transaction.Commit();
+                return result;
+            }
+        }
+
+        internal static bool TryReadDownstreamSocketBox(Transaction transaction,
+            ObjectId[] blockIds, out bool socketBox, out bool stateKnown, out string stateText,
+            out int blockCount)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            socketBox = false;
+            stateKnown = false;
+            blockCount = 0;
+            stateText = "未找到 Downstream 块（状态未知）";
+            var states = new List<KeyValuePair<string, bool>>();
+            bool unknown = false;
+            foreach (ObjectId id in blockIds ?? new ObjectId[0])
+            {
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block == null || !DynamicBlockStatePolicy.IsDownstreamBlock(
+                    EffectiveName(transaction, block))) continue;
+                blockCount++;
+                if (!block.IsDynamicBlock)
+                {
+                    unknown = true;
+                    stateText = "Downstream 不是动态块（状态未知）";
+                    continue;
+                }
+                bool found = false;
+                try
+                {
+                    foreach (DynamicBlockReferenceProperty property
+                        in block.DynamicBlockReferencePropertyCollection)
+                    {
+                        string value = Convert.ToString(property.Value) ?? "";
+                        if (!DynamicBlockStatePolicy.TryClassifyDownstreamState(value,
+                            out bool isSocketBox)) continue;
+                        states.Add(new KeyValuePair<string, bool>(value, isSocketBox));
+                        found = true;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    unknown = true;
+                    stateText = "Downstream 状态读取失败（状态未知）";
+                    Log.Warn("读取 Downstream 状态失败: " + ex.Message);
+                }
+                if (!found)
+                {
+                    unknown = true;
+                    stateText = "Downstream 未找到 I-line_Panel/socket box/busbar connector 状态（状态未知）";
+                }
+            }
+            if (states.Count > 0 && states.Any(state => state.Value != states[0].Value))
+                throw new InvalidOperationException("同一图框内 Downstream 状态冲突："
+                    + string.Join("、", states.Select(state => state.Key)) + "。图纸未修改。");
+            if (states.Count == 0 || unknown)
+            {
+                if (states.Count > 0)
+                    stateText = string.Join("、", states.Select(state => state.Key).Distinct())
+                        + "（部分状态未知）";
+                return false;
+            }
+            socketBox = states[0].Value;
+            stateKnown = true;
+            stateText = string.Join("、", states.Select(state => state.Key).Distinct())
+                + (socketBox ? "（Socket Box）" : "");
+            return socketBox;
+        }
+
         public static FillWriteResult FillUpstreamState(CadContext ctx,
             Transaction transaction, ObjectId[] blockIds, string next)
         {
@@ -173,7 +259,8 @@ namespace UNCAD.Features.Fill
                     if (fallback.Length == 0) fallback = name;
                     string normalized = BlockNameNormalizer.RemoveMangledSuffix(name);
                     if (DynamicBlockStatePolicy.IsDeviceBlock(normalized)
-                        || DynamicBlockStatePolicy.IsUpstreamBlock(normalized)) return name;
+                        || DynamicBlockStatePolicy.IsUpstreamBlock(normalized)
+                        || DynamicBlockStatePolicy.IsDownstreamBlock(normalized)) return name;
                 }
                 catch { }
             }
