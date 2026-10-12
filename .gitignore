@@ -8,6 +8,9 @@ coverage/
 *.coverage
 *.coveragexml
 
+# AutoCAD 崩溃/错误输出（accoreconsole/accoreconsole 的 stderr，运行期产物）
+*.err
+
 # IDE and user state
 .vs/
 .vscode/
