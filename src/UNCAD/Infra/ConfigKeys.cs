@@ -64,6 +64,8 @@ namespace UNCAD.Infra
 
         // Downstream 块状态为 socket box 时，额外那一行 4.x 插座盘的额定电流（A，默认 20）
         public const string FillDownstreamSocketAmps = "UNC_FILL_DOWNSTREAM_SOCKET_AMPS";
+        // Downstream 块状态为 I-line_Panel 时，额外那一行电盘的额定电流（A，默认 1000）
+        public const string FillDownstreamPanelAmps = "UNC_FILL_DOWNSTREAM_PANEL_AMPS";
 
         // BOQ 自动填充类别开关（U1F/U1U 规划清单行时跳过关闭的类别）
         public const string FillAutofillCable = "UNC_FILL_AUTOFILL_CABLE";       // 电缆

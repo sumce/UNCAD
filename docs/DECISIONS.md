@@ -4,6 +4,30 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-030: Downstream Block Rules (2026-10-11, amended same day)
+
+- Status: accepted
+- Block identity: the downstream end may be a block named exactly `Downstream`
+  (Xmerge-mangled `$0$` suffix allowed). No family/prefix matching: `DS` axis
+  blocks, `upstream` and `Downstream_GW` are not affected.
+- States: the block carries the same three visibility states as `upstream`
+  (`I-line_Panel` / `socket box` / `busbar connector`) and is colored with the
+  device-side color.
+- Material rules:
+  - `socket box` → one extra 4.x socket-panel/box row, gated by the `插座盘`
+    switch; rating from `U1SET` "下游插座箱额定电流" (default 20A).
+  - `I-line_Panel` → one extra electrical-panel row, gated by the `电盘` switch;
+    rating from `U1SET` "下游电盘额定电流" (default 1000A).
+  - `busbar connector` → color only, no material.
+- Never: no 8.x outlet row (the `Device_Build20260716` state owns it) and **no
+  breaker** — breakers come only from the upstream `U_上游类型 = I-Line盘` rule.
+  Do not "complete the symmetry".
+- Ratings always come from settings, never from `U_配电信息`: that value is the
+  switchboard main breaker current, and using it left the row unmatched
+  (`BOQ-CATALOG-MISSING`) in the field.
+- Conflicting states inside one frame abort the fill instead of guessing; an
+  unreadable state must not disturb the other rows.
+
 ## D-028: U1L Labels Are Cable Length (2026-10-11)
 
 - Status: accepted

@@ -3,6 +3,9 @@
 
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
+    <!-- AutoCAD 2022 与本插件都是 x64-only；AnyCPU 会让测试宿主按 x86 启动，
+         加载 AcDbMgd 失败后测试被静默跳过（0 项）。 -->
+    <PlatformTarget>x64</PlatformTarget>
     <LangVersion>13</LangVersion>
     <IsPackable>false</IsPackable>
     <RootNamespace>UNCAD.Tests</RootNamespace>
@@ -22,7 +25,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- UNCAD.dll 的 AutoCAD 依赖必须由测试项目自己保证 CopyLocal：
+         以前靠"输出目录里恰好有这几个 dll"，一旦别的构建清理过就会变成
+         could not find dependent assembly 'Acdbmgd'，测试静默跑 0 项。 -->
     <Reference Include="AdWindows"><HintPath>$(AutoCADDir)\AdWindows.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>True</Private></Reference>
+    <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>

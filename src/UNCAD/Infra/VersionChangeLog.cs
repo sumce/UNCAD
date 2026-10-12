@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.6.9", "2026-10-11",
+                    "新增：下游 Downstream 块状态为 I-line_Panel 时，自动追加一行电盘（默认 1000A，可在 U1SET 改）。仍然**不添加断路器**——断路器只由上游 U_上游类型=I-Line盘 产生。",
+                    "说明：Downstream 三态物料规则现在是 socket box → 一行 4.x 插座箱/盘（默认 20A）；I-line_Panel → 一行电盘（默认 1000A）；busbar connector → 只上色。两行额定电流都在 U1SET「Excel 数据」里可改，分别受「插座盘」「电盘」自动填充开关控制。"),
                 new VersionChangeLogEntry("2.6.8", "2026-10-11",
                     "修复：下游 Downstream 块状态为 socket box 时，那一行 4.x 插座盘的型号匹配改用固定额定电流（U1SET 新增“下游插座箱额定电流（A）”，默认 20A）。以前沿用 U_配电信息 的盘柜主开关电流（例如 100A）去匹配固定清单，匹配不到就整行变成未匹配（BOQ-CATALOG-MISSING）。",
                     "说明：只影响 Downstream 规则生成的那一行；上游 U_上游类型=插座盘 的规则不变；匹配不到时仍输出一行交给用户确认，不猜型号。永不添加断路器等既有规则不变。"),

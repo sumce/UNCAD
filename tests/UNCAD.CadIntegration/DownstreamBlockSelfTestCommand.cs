@@ -129,11 +129,11 @@ namespace UNCAD.CadIntegration
                 + "，upstream 参照数: " + upstreamIds.Count);
             using (Transaction tr = db.TransactionManager.StartTransaction())
             {
-                bool result = CadDynamicBlockStateService.TryReadDownstreamSocketBox(tr,
-                    downstreamIds.ToArray(), out bool socketBox, out bool stateKnown,
-                    out string stateText, out int blockCount);
-                Info("  TryReadDownstreamSocketBox -> 返回=" + result
-                    + "  socketBox=" + socketBox
+                bool result = CadDynamicBlockStateService.TryReadDownstreamState(tr,
+                    downstreamIds.ToArray(), out DownstreamState readState,
+                    out bool stateKnown, out string stateText, out int blockCount);
+                Info("  TryReadDownstreamState -> 返回=" + result
+                    + "  state=" + readState
                     + "  stateKnown=" + stateKnown
                     + "  命中块数=" + blockCount);
                 Info("  状态文字: " + stateText);
@@ -153,15 +153,18 @@ namespace UNCAD.CadIntegration
             {
                 Info("  内嵌清单读取失败: " + ex.Message);
             }
-            var rows = DownstreamStatePolicy.ApplySocketBoxPanel(new List<TableFillRow>(),
+            var rows = DownstreamStatePolicy.Apply(new List<TableFillRow>(),
                 new BoqCatalogIndex(new List<ListItem>()),
                 FillAutoFillOptions.Create(true, true, true, true, true, true, true, true),
-                false, FillRuntimeOptions.DefaultDownstreamSocketAmps);
+                DownstreamState.Unknown, FillRuntimeOptions.DefaultDownstreamSocketAmps,
+                FillRuntimeOptions.DefaultDownstreamPanelAmps);
             Info("  断路器规则: Downstream 永不添加断路器（规则由 DownstreamStatePolicy 锁定）");
-            Info("  4.x 规则: 仅当 Downstream 状态=socket box 且“插座盘”开关打开时才额外加一行；"
-                + "额定电流取 U1SET 的“下游插座箱额定电流”（默认 "
-                + FillRuntimeOptions.DefaultDownstreamSocketAmps.ToString("0.##") + "A），"
-                + "不再用 U_配电信息 的电流匹配"
+            Info("  附加清单规则: socket box → 额外一行 4.x 插座箱/盘（额定 "
+                + FillRuntimeOptions.DefaultDownstreamSocketAmps.ToString("0.##")
+                + "A，受“插座盘”开关控制）；I-line_Panel → 额外一行电盘（额定 "
+                + FillRuntimeOptions.DefaultDownstreamPanelAmps.ToString("0.##")
+                + "A，受“电盘”开关控制，**不加断路器**）；busbar connector → 只上色。"
+                + "两个额定电流都可 U1SET 修改，不再用 U_配电信息 的电流匹配"
                 + (hasOutletPanelInCatalog ? "（内嵌清单有 4.x 条目）" : "（内嵌清单没有 4.x 条目）"));
             Info("  基线行数（不触发时）: " + rows.Count);
         }

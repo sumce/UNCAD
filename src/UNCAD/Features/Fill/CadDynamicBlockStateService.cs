@@ -98,34 +98,35 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// 读取 Downstream 块（精确名，含 XFree/Mangle 后缀）的可见性状态。
+        /// 读取 Downstream 块（精确名，含 Xmerge 的 Mangle 后缀）的可见性状态，
         ///
         /// 传进来的 id 是图框里的下游/设备端块集合（与 Device 状态读取同一来源：
         /// FillSelectionCollector 把名字以 downstream 开头的块一并归入 DeviceBlockIds）。
         /// 状态未知时返回 false，调用方不得据此删除任何既有行。
         /// </summary>
-        public static bool TryReadDownstreamSocketBox(CadContext ctx, ObjectId[] blockIds,
-            out bool socketBox, out bool stateKnown, out string stateText, out int blockCount)
+        public static bool TryReadDownstreamState(CadContext ctx, ObjectId[] blockIds,
+            out DownstreamState state, out bool stateKnown, out string stateText,
+            out int blockCount)
         {
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                bool result = TryReadDownstreamSocketBox(transaction, blockIds, out socketBox,
+                bool result = TryReadDownstreamState(transaction, blockIds, out state,
                     out stateKnown, out stateText, out blockCount);
                 transaction.Commit();
                 return result;
             }
         }
 
-        internal static bool TryReadDownstreamSocketBox(Transaction transaction,
-            ObjectId[] blockIds, out bool socketBox, out bool stateKnown, out string stateText,
-            out int blockCount)
+        internal static bool TryReadDownstreamState(Transaction transaction,
+            ObjectId[] blockIds, out DownstreamState state, out bool stateKnown,
+            out string stateText, out int blockCount)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
-            socketBox = false;
+            state = DownstreamState.Unknown;
             stateKnown = false;
             blockCount = 0;
             stateText = "未找到 Downstream 块（状态未知）";
-            var states = new List<KeyValuePair<string, bool>>();
+            var states = new List<KeyValuePair<string, DownstreamState>>();
             bool unknown = false;
             foreach (ObjectId id in blockIds ?? new ObjectId[0])
             {
@@ -148,8 +149,8 @@ namespace UNCAD.Features.Fill
                     {
                         string value = Convert.ToString(property.Value) ?? "";
                         if (!DynamicBlockStatePolicy.TryClassifyDownstreamState(value,
-                            out bool isSocketBox)) continue;
-                        states.Add(new KeyValuePair<string, bool>(value, isSocketBox));
+                            out DownstreamState classified)) continue;
+                        states.Add(new KeyValuePair<string, DownstreamState>(value, classified));
                         found = true;
                         break;
                     }
@@ -176,11 +177,11 @@ namespace UNCAD.Features.Fill
                         + "（部分状态未知）";
                 return false;
             }
-            socketBox = states[0].Value;
+            state = states[0].Value;
             stateKnown = true;
-            stateText = string.Join("、", states.Select(state => state.Key).Distinct())
-                + (socketBox ? "（Socket Box）" : "");
-            return socketBox;
+            stateText = string.Join("、", states.Select(item => item.Key).Distinct())
+                + "（" + state + "）";
+            return state != DownstreamState.Unknown;
         }
 
         public static FillWriteResult FillUpstreamState(CadContext ctx,

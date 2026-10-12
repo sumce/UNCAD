@@ -270,12 +270,23 @@ namespace UNCAD.Core.Fill
         /// <summary>Builds the I-Line electrical-panel row independently from its breaker.</summary>
         public static TableFillRow BuildPanelRow(string detail, BoqCatalogIndex catalog)
         {
+            TryExtractRating(detail, out _, out int amps);
+            return BuildPanelRow((double)amps, catalog);
+        }
+
+        /// <summary>
+        /// 按**显式额定电流**构造电盘行（Downstream=I-line_Panel 用固定电流，
+        /// 默认 1000A，可在 U1SET 改）。匹配不到时仍返回未匹配行交给用户确认（D-016）。
+        /// </summary>
+        public static TableFillRow BuildPanelRow(double amps, BoqCatalogIndex catalog)
+        {
             catalog = catalog ?? new BoqCatalogIndex(null);
             if (catalog.Panels.Count == 0) return null;
 
-            TryExtractRating(detail, out _, out int amps);
-            ListItem item = catalog.FindPanel(amps);
-            string model = amps > 0 ? amps + "A" : "";
+            int rating = amps > 0 && !double.IsNaN(amps) && !double.IsInfinity(amps)
+                ? (int)Math.Round(amps) : 0;
+            ListItem item = rating > 0 ? catalog.FindPanel(rating) : null;
+            string model = rating > 0 ? rating + "A" : "";
             return FromItem(TableFillCategory.Panel, 450, item,
                 "电盘", "1.名称:电盘PANEL-" + model + "(I-LINE)", "个", "1");
         }

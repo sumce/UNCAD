@@ -148,13 +148,15 @@ namespace UNCAD.Tests
                         Assert.Contains(color.Items.Cast<object>(),
                             item => item.ToString().Contains("ACI 6"));
                     });
-                    Assert.Equal(5, numbers.Count);
+                    Assert.Equal(6, numbers.Count);
                     // 新增：下游插座箱额定电流（整数、1~1000A）。不能断言唯一匹配，
                     // 因为"起始数据行"也是整数 1~1000。
                     Assert.Contains(numbers, number => number.DecimalPlaces == 0
                         && number.Minimum == 1m && number.Maximum == 1000m);
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "下游插座箱额定电流（A）");
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "下游电盘额定电流（A）");
                     Assert.Contains(FindAll<Button>(tabs.SelectedTab),
                         button => button.Text == "浏览...");
                     Assert.Contains(FindAll<Button>(tabs.SelectedTab),

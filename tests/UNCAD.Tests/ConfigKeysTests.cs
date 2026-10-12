@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.6.8", info.Version);
+            Assert.Equal("2.6.9", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);
@@ -98,6 +98,8 @@ namespace UNCAD.Tests
                 ConfigKeys.FillUpstreamColorIndex);
             Assert.Equal("UNC_FILL_DOWNSTREAM_SOCKET_AMPS",
                 ConfigKeys.FillDownstreamSocketAmps);
+            Assert.Equal("UNC_FILL_DOWNSTREAM_PANEL_AMPS",
+                ConfigKeys.FillDownstreamPanelAmps);
             Assert.NotEqual(ConfigKeys.FillDownstreamSocketAmps,
                 ConfigKeys.FillAutofillOutletPanel);
             Assert.Equal("UNC_FILL_AUTOFILL_CABLE", ConfigKeys.FillAutofillCable);

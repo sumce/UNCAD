@@ -528,7 +528,7 @@ namespace UNCAD.Features.Fill
             bool deviceHasOutlet;
             bool deviceOutletStateKnown;
             string deviceState;
-            bool downstreamSocketBox;
+            DownstreamState downstreamEquipment;
             string downstreamState;
             int downstreamBlocks;
             try
@@ -536,8 +536,8 @@ namespace UNCAD.Features.Fill
                 CadDynamicBlockStateService.TryReadDeviceHasOutlet(readTransaction,
                     selection.DeviceBlockIds, out deviceHasOutlet,
                     out deviceOutletStateKnown, out deviceState);
-                CadDynamicBlockStateService.TryReadDownstreamSocketBox(readTransaction,
-                    selection.DeviceBlockIds, out downstreamSocketBox,
+                CadDynamicBlockStateService.TryReadDownstreamState(readTransaction,
+                    selection.DeviceBlockIds, out downstreamEquipment,
                     out _, out downstreamState, out downstreamBlocks);
             }
             catch (Exception ex)
@@ -557,15 +557,13 @@ namespace UNCAD.Features.Fill
                 ? DeviceOutletPolicy.ApplyForUpdate(plannedRows, deviceHasOutlet,
                     deviceOutlet, existingOutlets)
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
-            socketRows = DownstreamStatePolicy.ApplySocketBoxPanel(socketRows,
-                workbook.Catalog, options.AutoFill, downstreamSocketBox,
-                options.DownstreamSocketAmps);
+            socketRows = DownstreamStatePolicy.Apply(socketRows, workbook.Catalog,
+                options.AutoFill, downstreamEquipment, options.DownstreamSocketAmps,
+                options.DownstreamPanelAmps);
             if (downstreamBlocks > 0)
                 ctx.Write("\n[U1U] " + prefix + "Downstream 状态: " + downstreamState
-                    + "；插座箱清单: " + (downstreamSocketBox
-                        ? "额外输出一套（" + options.DownstreamSocketAmps.ToString("0.##")
-                            + "A，受“插座盘”自动填充开关控制）"
-                        : "不输出"));
+                    + "；附加清单: " + FillFeature.DescribeDownstreamExtra(
+                        downstreamEquipment, options));
             tablePlan = new TableGenerationOutput(socketRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning,

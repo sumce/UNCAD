@@ -4,6 +4,19 @@ using System.Linq;
 
 namespace UNCAD.Core.Fill
 {
+    /// <summary>Downstream 块的可见性状态（与 upstream 同一套）。</summary>
+    public enum DownstreamState
+    {
+        /// <summary>没有 Downstream 块、状态读不出来，或状态不是已知三态。</summary>
+        Unknown = 0,
+        /// <summary>socket box：额外加一行 4.x 插座箱/盘。</summary>
+        SocketBox = 1,
+        /// <summary>I-line_Panel：额外加一行电盘（**不加断路器**）。</summary>
+        ILinePanel = 2,
+        /// <summary>busbar connector：只上色，不产生物料。</summary>
+        BusbarConnector = 3
+    }
+
     public static class DynamicBlockStatePolicy
     {
         public const string DeviceBlockName = "Device_Build20260716";
@@ -27,22 +40,27 @@ namespace UNCAD.Core.Fill
         /// Downstream 块的三态与 upstream 完全一致（I-line_Panel / socket box /
         /// busbar connector，同一个可见性属性）。
         ///
-        /// 只有 <c>socket box</c> 会产生物料行，见 <see cref="DownstreamStatePolicy"/>；
-        /// 另外两态只用于上色。<b>Downstream 永不产生断路器</b>——断路器只由
-        /// 上游 U_上游类型=I-Line盘 产生，这条是用户明确要求，不要"顺手补齐"。
+        /// 物料规则见 <see cref="DownstreamStatePolicy"/>：
+        /// <c>socket box</c> → 额外一行 4.x 插座箱/盘；<c>I-line_Panel</c> → 额外一行电盘
+        /// （额定电流来自 U1SET，默认 1000A）；<c>busbar connector</c> 只上色。
+        /// <b>Downstream 永不产生断路器</b>——断路器只由上游 U_上游类型=I-Line盘 产生，
+        /// 这条是用户明确要求，不要"顺手补齐"。
         /// </summary>
-        public static bool TryClassifyDownstreamState(string state, out bool socketBox)
+        public static bool TryClassifyDownstreamState(string state, out DownstreamState result)
         {
-            socketBox = false;
             switch (NormalizeName(state))
             {
                 case "socketbox":
-                    socketBox = true;
+                    result = DownstreamState.SocketBox;
                     return true;
                 case "ilinepanel":
+                    result = DownstreamState.ILinePanel;
+                    return true;
                 case "busbarconnector":
+                    result = DownstreamState.BusbarConnector;
                     return true;
                 default:
+                    result = DownstreamState.Unknown;
                     return false;
             }
         }

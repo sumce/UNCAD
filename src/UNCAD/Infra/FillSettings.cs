@@ -35,7 +35,9 @@ namespace UNCAD.Infra
                 Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0),
                 Settings.Get(ConfigKeys.FillBridge, ""), planning, autoFill,
                 Settings.GetDouble(ConfigKeys.FillDownstreamSocketAmps,
-                    FillRuntimeOptions.DefaultDownstreamSocketAmps));
+                    FillRuntimeOptions.DefaultDownstreamSocketAmps),
+                Settings.GetDouble(ConfigKeys.FillDownstreamPanelAmps,
+                    FillRuntimeOptions.DefaultDownstreamPanelAmps));
         }
 
         private static int SafeInt(double value, int fallback)
