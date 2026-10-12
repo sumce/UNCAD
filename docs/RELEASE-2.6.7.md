@@ -40,6 +40,15 @@
 
 - `dotnet test UNCAD.slnx`：1054 项全部通过（本版新增 18 项针对 Downstream 规则的测试：
   精确块名匹配、三态判定、只加一行 4.x、受开关控制、**断言永不加断路器**）。
-- **真机验收待补**：现有 CAD 自检无法程序化创建带可见性状态的动态块定义，因此这条规则
-  没有真机自检覆盖。已请用户提供一张带 `Downstream` 块的真实图纸做专项验收
-  （预期：`socket box` 时多一行 4.x 插座箱；`I-line_Panel` 时只变色、不加断路器）。
+- **真机验收（已完成状态读取部分）**：用现场图纸 `插座箱.dwg`（129 个块定义、
+  59 个 `Downstream` 动态块、59 个 `upstream` 动态块、**0 个 `Device_Build20260716`**）
+  通过新增的只读诊断命令 `UNCAD_DOWNSTREAM_SELFTEST` 实测：
+  - `Downstream` 块的可见性属性 `可见性1` 允许值 = `[I-line_Panel | socket box | busbar connector]`，
+    与 upstream 完全一致；59 个参照全部处于 `socket box`。
+  - 产品代码读取：`TryReadDownstreamSocketBox → socketBox=True, stateKnown=True, 命中 59 块`；
+    59 块状态一致，未触发冲突中止。
+  - 内嵌固定清单有 6 条 4.x 插座盘条目，素材齐备。
+  - 该图纸没有任何 `Device_Build20260716`，正是"下游端改用 Downstream"的现场形态。
+
+  仍未覆盖：`socket box → 实际多写入一行 4.x` 的端到端（需要在 AutoCAD 里带图框与机台快照
+  跑一次 U1F/U1U，自检无法驱动交互式选择与评审窗口）。该步的规则本身由 18 项单元测试锁定。
