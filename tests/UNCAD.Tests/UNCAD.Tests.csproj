@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -42,6 +42,18 @@
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
+
+  <!-- 测试输出目录必须始终带着 AutoCAD 托管程序集：build.ps1 会先 clean，而
+       UNCAD.dll 对它们的引用是 Private=False（不复制），于是测试宿主会报
+       Acdbmgd.dll 找不到 —— 轻则整个程序集被静默跳过（门禁假绿），
+       重则 [FATAL ERROR] 直接中断发布。这里在测试项目构建后显式补齐。 -->
+  <Target Name="CopyAutoCadAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <AutoCadAssembly Include="$(AutoCADDir)\Ac*.dll" />
+      <AutoCADAssembly Include="$(AutoCADDir)\AdWindows.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(AutoCADAssembly)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
 
