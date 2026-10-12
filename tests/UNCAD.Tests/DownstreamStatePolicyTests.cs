@@ -47,7 +47,7 @@ namespace UNCAD.Tests
         public void SocketBox_AddsExactlyOneOutletPanelRow()
         {
             List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                AllAutoFill(), DownstreamState.SocketBox, 20.0, 1000.0);
+                true, true, DownstreamState.SocketBox, 20.0, 1000.0);
 
             TableFillRow panel = Assert.Single(result,
                 row => row.Category == TableFillCategory.OutletPanel);
@@ -62,7 +62,7 @@ namespace UNCAD.Tests
         {
             // 用户规则：Downstream=I-line_Panel → 自动加一个电盘（默认 1000A）。
             List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                AllAutoFill(), DownstreamState.ILinePanel, 20.0, 1000.0);
+                true, true, DownstreamState.ILinePanel, 20.0, 1000.0);
 
             TableFillRow panel = Assert.Single(result,
                 row => row.Category == TableFillCategory.Panel);
@@ -77,7 +77,7 @@ namespace UNCAD.Tests
         {
             // 断路器只由上游 U_上游类型=I-Line盘 产生；Downstream 的 I-line 态不带断路器。
             List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                AllAutoFill(), DownstreamState.ILinePanel, 20.0, 1000.0);
+                true, true, DownstreamState.ILinePanel, 20.0, 1000.0);
 
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Breaker);
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.OutletPanel);
@@ -87,7 +87,7 @@ namespace UNCAD.Tests
         public void SocketBox_NeverAddsABreaker()
         {
             List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                AllAutoFill(), DownstreamState.SocketBox, 20.0, 1000.0);
+                true, true, DownstreamState.SocketBox, 20.0, 1000.0);
 
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Breaker);
             Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Panel);
@@ -100,7 +100,7 @@ namespace UNCAD.Tests
                 { DownstreamState.BusbarConnector, DownstreamState.Unknown })
             {
                 List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                    AllAutoFill(), state, 20.0, 1000.0);
+                    true, true, state, 20.0, 1000.0);
                 Assert.Equal(3, result.Count);
                 Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Panel);
                 Assert.DoesNotContain(result, row =>
@@ -109,24 +109,30 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void SocketBox_RespectsTheOutletPanelSwitch()
+        public void SocketBox_IsControlledOnlyByItsOwnSwitch()
         {
-            // 默认设置里"插座盘"是关闭的：关掉时必须一行都不加。
-            List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                FillAutoFillOptions.Create(true, true, true, true, true, true, false, true),
-                DownstreamState.SocketBox, 20.0, 1000.0);
+            // 用户要求：只想开 Downstream、不想开上游 —— 所以通用「插座盘」开关
+            // 与本规则无关，这里根本不参与（Apply 不接受 FillAutoFillOptions）。
+            List<TableFillRow> on = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
+                true, true, DownstreamState.SocketBox, 20.0, 1000.0);
+            Assert.Contains(on, row => row.Category == TableFillCategory.OutletPanel);
 
-            Assert.DoesNotContain(result, row => row.Category == TableFillCategory.OutletPanel);
+            List<TableFillRow> off = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
+                false, true, DownstreamState.SocketBox, 20.0, 1000.0);
+            Assert.DoesNotContain(off, row => row.Category == TableFillCategory.OutletPanel);
         }
 
         [Fact]
-        public void ILinePanel_RespectsThePanelSwitch()
+        public void ILinePanel_IsControlledOnlyByItsOwnSwitch()
         {
-            List<TableFillRow> result = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
-                FillAutoFillOptions.Create(true, true, false, true, true, true, true, true),
-                DownstreamState.ILinePanel, 20.0, 1000.0);
+            List<TableFillRow> on = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
+                true, true, DownstreamState.ILinePanel, 20.0, 1000.0);
+            Assert.Contains(on, row => row.Category == TableFillCategory.Panel);
 
-            Assert.DoesNotContain(result, row => row.Category == TableFillCategory.Panel);
+            List<TableFillRow> off = DownstreamStatePolicy.Apply(BaseRows(), Catalog(),
+                true, false, DownstreamState.ILinePanel, 20.0, 1000.0);
+            Assert.DoesNotContain(off, row => row.Category == TableFillCategory.Panel);
+            Assert.DoesNotContain(off, row => row.Category == TableFillCategory.Breaker);
         }
 
         [Fact]
@@ -137,7 +143,7 @@ namespace UNCAD.Tests
             var catalog = new BoqCatalogIndex(ListItemReader.ReadEmbedded());
 
             TableFillRow matched = Assert.Single(DownstreamStatePolicy.Apply(BaseRows(),
-                    catalog, AllAutoFill(), DownstreamState.SocketBox,
+                    catalog, true, true, DownstreamState.SocketBox,
                     FillRuntimeOptions.DefaultDownstreamSocketAmps,
                     FillRuntimeOptions.DefaultDownstreamPanelAmps),
                 row => row.Category == TableFillCategory.OutletPanel);
@@ -145,7 +151,7 @@ namespace UNCAD.Tests
             Assert.False(string.IsNullOrEmpty(matched.Code));
 
             TableFillRow unmatched = Assert.Single(DownstreamStatePolicy.Apply(BaseRows(),
-                    catalog, AllAutoFill(), DownstreamState.SocketBox, 999.0,
+                    catalog, true, true, DownstreamState.SocketBox, 999.0,
                     FillRuntimeOptions.DefaultDownstreamPanelAmps),
                 row => row.Category == TableFillCategory.OutletPanel);
             Assert.False(unmatched.CatalogMatched);
@@ -178,7 +184,5 @@ namespace UNCAD.Tests
             }
         });
 
-        private static FillAutoFillOptions AllAutoFill()
-            => FillAutoFillOptions.Create(true, true, true, true, true, true, true, true);
     }
 }

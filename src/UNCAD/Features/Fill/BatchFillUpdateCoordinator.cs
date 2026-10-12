@@ -558,7 +558,8 @@ namespace UNCAD.Features.Fill
                     deviceOutlet, existingOutlets)
                 : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
             socketRows = DownstreamStatePolicy.Apply(socketRows, workbook.Catalog,
-                options.AutoFill, downstreamEquipment, options.DownstreamSocketAmps,
+                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
+                downstreamEquipment, options.DownstreamSocketAmps,
                 options.DownstreamPanelAmps);
             if (downstreamBlocks > 0)
                 ctx.Write("\n[U1U] " + prefix + "Downstream 状态: " + downstreamState

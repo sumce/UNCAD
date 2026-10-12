@@ -22,17 +22,18 @@ namespace UNCAD.Core.Fill
     public static class DownstreamStatePolicy
     {
         public static List<TableFillRow> Apply(IEnumerable<TableFillRow> rows,
-            BoqCatalogIndex catalog, FillAutoFillOptions autoFill, DownstreamState state,
-            double socketAmps, double panelAmps)
+            BoqCatalogIndex catalog, bool socketEnabled, bool panelEnabled,
+            DownstreamState state, double socketAmps, double panelAmps)
         {
             List<TableFillRow> result = (rows ?? Enumerable.Empty<TableFillRow>())
                 .Where(row => row != null).ToList();
-            autoFill = autoFill ?? FillAutoFillOptions.Default;
 
+            // 这里**不看** FillAutoFillOptions：「BOQ 自动填充类别」里的插座盘/电盘只管
+            // 上游规则；Downstream 有自己的开关，否则用户无法"只开 Downstream、不开上游"。
             TableFillRow extra = null;
-            if (state == DownstreamState.SocketBox && autoFill.OutletPanel)
+            if (state == DownstreamState.SocketBox && socketEnabled)
                 extra = TableFillPlanner.BuildOutletPanelRow(socketAmps, catalog);
-            else if (state == DownstreamState.ILinePanel && autoFill.Panel)
+            else if (state == DownstreamState.ILinePanel && panelEnabled)
                 extra = TableFillPlanner.BuildPanelRow(panelAmps, catalog);
             if (extra == null) return result;
 

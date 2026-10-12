@@ -93,6 +93,18 @@ namespace UNCAD.UI
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
         private readonly NumericUpDown _fillDownstreamAmps = IntegerBox(20m, 1m, 1000m);
         private readonly NumericUpDown _fillDownstreamPanelAmps = IntegerBox(1000m, 1m, 10000m);
+        // Downstream 自动添加的**独立**开关：与「BOQ 自动填充类别」里的通用类别开关解耦，
+        // 这样"只开 Downstream、不开上游"才做得到。
+        private readonly CheckBox _downstreamSocketEnabled = new CheckBox
+        {
+            Text = "socket box 时自动加一行 4.x 插座箱/盘",
+            AutoSize = true
+        };
+        private readonly CheckBox _downstreamPanelEnabled = new CheckBox
+        {
+            Text = "I-line_Panel 时自动加一行电盘（不带断路器）",
+            AutoSize = true
+        };
         private readonly TextBox _submitFolder = new TextBox { Width = 310 };
         private readonly ComboBox _fillDeviceColor = ColorBox();
         private readonly ComboBox _fillUpstreamColor = ColorBox();
@@ -279,6 +291,12 @@ namespace UNCAD.UI
             SetNumber(_fillDownstreamPanelAmps, Settings.GetDouble(
                 ConfigKeys.FillDownstreamPanelAmps,
                 FillRuntimeOptions.DefaultDownstreamPanelAmps));
+            _downstreamSocketEnabled.Checked = Settings.GetBool(
+                ConfigKeys.FillDownstreamSocketEnabled,
+                FillRuntimeOptions.DefaultDownstreamEnabled);
+            _downstreamPanelEnabled.Checked = Settings.GetBool(
+                ConfigKeys.FillDownstreamPanelEnabled,
+                FillRuntimeOptions.DefaultDownstreamEnabled);
             _submitFolder.Text = Settings.Get(ConfigKeys.SubmitFolder, "");
             SelectColor(_fillDeviceColor, FillColorSettings.DeviceColorIndex());
             SelectColor(_fillUpstreamColor, FillColorSettings.UpstreamColorIndex());
@@ -356,6 +374,10 @@ namespace UNCAD.UI
                 ((int)_fillDownstreamAmps.Value).ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillDownstreamPanelAmps,
                 ((int)_fillDownstreamPanelAmps.Value).ToString(CultureInfo.InvariantCulture));
+            Settings.SetBool(ConfigKeys.FillDownstreamSocketEnabled,
+                _downstreamSocketEnabled.Checked);
+            Settings.SetBool(ConfigKeys.FillDownstreamPanelEnabled,
+                _downstreamPanelEnabled.Checked);
             Settings.Set(ConfigKeys.SubmitFolder, _submitFolder.Text.Trim());
             Settings.Set(ConfigKeys.FillDeviceColorIndex,
                 SelectedColorIndex(_fillDeviceColor,
@@ -691,7 +713,10 @@ namespace UNCAD.UI
 
             return Page("清单与表格", "U1F / U1U 写表参数与自动填充类别",
                 Section("表格参数", "写入图框表格的起始行与清空行数。", table),
-                Section("BOQ 自动填充类别", "电盘、断路器与插座盘独立控制；软管长度读取 Ruanguan 动态块。", autoFill));
+                Section("BOQ 自动填充类别",
+                    "这里控制的是上游/通用类别；Downstream 块的自动添加有自己的独立开关"
+                    + "（见「Downstream 自动添加」页），两者互不影响。",
+                    autoFill));
         }
 
         /// <summary>Downstream 自动添加：单独一页，只放下游端相关设置与规则。</summary>
@@ -706,7 +731,22 @@ namespace UNCAD.UI
             AddField(rules, 1, "I-line_Panel", ReadOnly("额外一行电盘（受“电盘”开关控制，不带断路器）"));
             AddField(rules, 2, "busbar connector", ReadOnly("只上色，不产生物料"));
 
+            var switches = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                Margin = new Padding(0)
+            };
+            switches.Controls.Add(_downstreamSocketEnabled);
+            switches.Controls.Add(_downstreamPanelEnabled);
+
             return Page("Downstream 自动添加", "下游端 Downstream 块（精确块名）按可见性状态自动补清单",
+                Section("自动添加开关（独立）",
+                    "这两项只控制 Downstream 块自己的自动添加，与「清单与表格」里的通用类别开关"
+                    + "互不影响：通用开关只管上游规则。所以可以做到“只开 Downstream、不开上游”。",
+                    switches),
                 Section("额定电流", "不从 U_配电信息 提取：那是盘柜主开关电流，会导致整行未匹配。", amps),
                 Section("三态规则", "与 upstream 共用同一套可见性状态。", rules));
         }

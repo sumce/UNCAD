@@ -202,8 +202,13 @@ namespace UNCAD.Tests
                     Application.DoEvents();
                     TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
                     Assert.Equal("Downstream 自动添加", tabs.SelectedTab.Text);
-                    Assert.Equal(2, FindAll<UiCard>(tabs.SelectedTab).Count);
+                    Assert.Equal(3, FindAll<UiCard>(tabs.SelectedTab).Count);
                     Assert.Equal(2, FindAll<NumericUpDown>(tabs.SelectedTab).Count);
+                    // 独立开关（与通用类别开关解耦）
+                    List<CheckBox> switches = FindAll<CheckBox>(tabs.SelectedTab);
+                    Assert.Equal(2, switches.Count);
+                    Assert.Contains(switches, check => check.Text.Contains("socket box"));
+                    Assert.Contains(switches, check => check.Text.Contains("I-line_Panel"));
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "插座箱额定电流（A）");
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),

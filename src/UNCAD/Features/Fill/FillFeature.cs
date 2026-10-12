@@ -248,7 +248,8 @@ namespace UNCAD.Features.Fill
                         deviceHasOutlet, deviceOutlet);
             }
             socketAdjustedRows = DownstreamStatePolicy.Apply(socketAdjustedRows, catalog,
-                options.AutoFill, downstreamEquipment, options.DownstreamSocketAmps,
+                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
+                downstreamEquipment, options.DownstreamSocketAmps,
                 options.DownstreamPanelAmps);
             tablePlan = new TableGenerationOutput(socketAdjustedRows,
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
@@ -1193,7 +1194,8 @@ namespace UNCAD.Features.Fill
                 selection?.DeviceBlockIds, out DownstreamState previewDownstream,
                 out _, out _, out _);
             plannedRows = DownstreamStatePolicy.Apply(plannedRows, catalog,
-                options.AutoFill, previewDownstream, options.DownstreamSocketAmps,
+                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
+                previewDownstream, options.DownstreamSocketAmps,
                 options.DownstreamPanelAmps);
             TableFillRow previewHose = plannedRows.FirstOrDefault(item =>
                 item.Category == TableFillCategory.FlexibleConduit);

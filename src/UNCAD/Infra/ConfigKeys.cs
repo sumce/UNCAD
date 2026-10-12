@@ -66,6 +66,10 @@ namespace UNCAD.Infra
         public const string FillDownstreamSocketAmps = "UNC_FILL_DOWNSTREAM_SOCKET_AMPS";
         // Downstream 块状态为 I-line_Panel 时，额外那一行电盘的额定电流（A，默认 1000）
         public const string FillDownstreamPanelAmps = "UNC_FILL_DOWNSTREAM_PANEL_AMPS";
+        // Downstream 自动添加：**独立开关**，与「BOQ 自动填充类别」里的通用类别开关解耦。
+        // 这样"只开 Downstream、不开上游"才做得到（用户明确要求）。
+        public const string FillDownstreamSocketEnabled = "UNC_FILL_DOWNSTREAM_SOCKET_ENABLED";
+        public const string FillDownstreamPanelEnabled = "UNC_FILL_DOWNSTREAM_PANEL_ENABLED";
 
         // BOQ 自动填充类别开关（U1F/U1U 规划清单行时跳过关闭的类别）
         public const string FillAutofillCable = "UNC_FILL_AUTOFILL_CABLE";       // 电缆

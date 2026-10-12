@@ -31,6 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.7.0", "2026-10-11",
+                    "新增：Downstream 自动添加的**独立开关**（U1SET → Downstream 自动添加）。以前它借用「BOQ 自动填充类别」里的通用插座盘/电盘开关，做不到“只开 Downstream、不开上游”；现在两者完全解耦（新键 UNC_FILL_DOWNSTREAM_SOCKET_ENABLED / UNC_FILL_DOWNSTREAM_PANEL_ENABLED，默认开）。",
+                    "新增：U1SET 配置中心重构为 10 页侧边栏（新增概览页；绘制标注合并 U1L/U1Q/U1C/U1R；启动、颜色、机台数据、清单与表格、Downstream、自动输出各自独立成页），并修复字段标签列被写死 190px 导致中文标签被裁切的布局问题。",
+                    "说明：断路器规则不变——Downstream 永不添加断路器（只由上游 U_上游类型=I-Line盘 产生）；通用类别开关继续只控制上游规则。"),
                 new VersionChangeLogEntry("2.6.9", "2026-10-11",
                     "新增：下游 Downstream 块状态为 I-line_Panel 时，自动追加一行电盘（默认 1000A，可在 U1SET 改）。仍然**不添加断路器**——断路器只由上游 U_上游类型=I-Line盘 产生。",
                     "说明：Downstream 三态物料规则现在是 socket box → 一行 4.x 插座箱/盘（默认 20A）；I-line_Panel → 一行电盘（默认 1000A）；busbar connector → 只上色。两行额定电流都在 U1SET「Excel 数据」里可改，分别受「插座盘」「电盘」自动填充开关控制。"),

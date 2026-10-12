@@ -37,7 +37,12 @@ namespace UNCAD.Infra
                 Settings.GetDouble(ConfigKeys.FillDownstreamSocketAmps,
                     FillRuntimeOptions.DefaultDownstreamSocketAmps),
                 Settings.GetDouble(ConfigKeys.FillDownstreamPanelAmps,
-                    FillRuntimeOptions.DefaultDownstreamPanelAmps));
+                    FillRuntimeOptions.DefaultDownstreamPanelAmps),
+                // Downstream 自动添加的独立开关（默认开）；与上面的通用类别开关互不影响。
+                Settings.GetBool(ConfigKeys.FillDownstreamSocketEnabled,
+                    FillRuntimeOptions.DefaultDownstreamEnabled),
+                Settings.GetBool(ConfigKeys.FillDownstreamPanelEnabled,
+                    FillRuntimeOptions.DefaultDownstreamEnabled));
         }
 
         private static int SafeInt(double value, int fallback)

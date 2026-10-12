@@ -42,8 +42,9 @@ function Replace-Once([string]$Path, [string]$Pattern, [string]$Replacement, [st
     Write-Host ("  {0} -> {1}" -f $What, $Replacement)
 }
 
-$label = ([regex]::Match((Read-Text $metadataPath), 'VersionLabel\s*=\s*"([^"]+)"')).Groups[1].Value
-if (-not $label) { throw "无法从 ProductMetadata.cs 读取 VersionLabel。" }
+# 注意：PowerShell 变量不区分大小写，这里不能叫 $label，否则会覆盖参数 $Label。
+$currentLabel = ([regex]::Match((Read-Text $metadataPath), 'VersionLabel\s*=\s*"([^"]+)"')).Groups[1].Value
+if (-not $currentLabel) { throw "无法从 ProductMetadata.cs 读取 VersionLabel。" }
 $current = ([regex]::Match((Read-Text $csprojPath), '<AssemblyVersion>([^<]+)</AssemblyVersion>')).Groups[1].Value
 if (-not $current) { throw "无法从 UNCAD.csproj 读取 AssemblyVersion。" }
 $parts = $current.Split('.')
@@ -51,16 +52,16 @@ if ($parts.Count -ne 4) { throw "AssemblyVersion 不是四段（$current）。" 
 
 if ($Kind -eq "Patch") {
     $nextVersion = "{0}.{1}.{2}.{3}" -f $parts[0], $parts[1], $parts[2], ([int]$parts[3] + 1)
-    $nextLabel = $label
+    $nextLabel = $currentLabel
 } else {
     if ($Label -notmatch '^\d+\.\d+\.\d+$') { throw "Feature 需要 -Label X.Y.Z，例如 -Label 2.7.0。" }
     $nextLabel = $Label
     $nextVersion = "$nextLabel.0"
 }
 
-if ($nextVersion -eq $current -and $nextLabel -eq $label) { throw "版本没有变化（当前 $current / $label）。" }
+if ($nextVersion -eq $current -and $nextLabel -eq $currentLabel) { throw "版本没有变化（当前 $current / $currentLabel）。" }
 
-Write-Host ("版本：{0}（label {1}） -> {2}（label {3}）" -f $current, $label, $nextVersion, $nextLabel) -ForegroundColor Cyan
+Write-Host ("版本：{0}（label {1}） -> {2}（label {3}）" -f $current, $currentLabel, $nextVersion, $nextLabel) -ForegroundColor Cyan
 
 Replace-Once $csprojPath '<AssemblyVersion>[^<]+</AssemblyVersion>' ("<AssemblyVersion>" + $nextVersion + "</AssemblyVersion>") "csproj AssemblyVersion"
 Replace-Once $csprojPath '<FileVersion>[^<]+</FileVersion>' ("<FileVersion>" + $nextVersion + "</FileVersion>") "csproj FileVersion"
@@ -71,7 +72,7 @@ if ($Kind -eq "Feature") {
     Replace-Once $csprojPath '<Version>[^<]+</Version>' ("<Version>" + $nextLabel + "</Version>") "csproj Version"
     Replace-Once $metadataPath 'VersionLabel\s*=\s*"[^"]+"' ('VersionLabel = "' + $nextLabel + '"') "ProductMetadata VersionLabel"
     Replace-Once $metadataPath 'ReleaseDateUtc\s*=\s*"[^"]+"' ('ReleaseDateUtc = "' + $today + '"') "ProductMetadata ReleaseDateUtc"
-    Replace-Once $configTestsPath ('Assert\.Equal\("' + [regex]::Escape($label) + '", info\.Version\);') ('Assert.Equal("' + $nextLabel + '", info.Version);') "ConfigKeysTests 期望值"
+    Replace-Once $configTestsPath ('Assert\.Equal\("' + [regex]::Escape($currentLabel) + '", info\.Version\);') ('Assert.Equal("' + $nextLabel + '", info.Version);') "ConfigKeysTests 期望值"
 
     $releaseNote = Join-Path $root ("docs\RELEASE-" + $nextLabel + ".md")
     if (-not (Test-Path -LiteralPath $releaseNote)) {
@@ -99,5 +100,5 @@ if ($Kind -eq "Feature") {
 } else {
     Write-Host ""
     Write-Host "不加功能（D-032）：不要新开 tag，也不要新建 RELEASE 文档；" -ForegroundColor Yellow
-    Write-Host "复用 docs\RELEASE-$label.md，出包后直接推送即可。"
+    Write-Host "复用 docs\RELEASE-$currentLabel.md，出包后直接推送即可。"
 }

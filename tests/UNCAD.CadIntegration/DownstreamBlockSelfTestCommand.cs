@@ -154,8 +154,7 @@ namespace UNCAD.CadIntegration
                 Info("  内嵌清单读取失败: " + ex.Message);
             }
             var rows = DownstreamStatePolicy.Apply(new List<TableFillRow>(),
-                new BoqCatalogIndex(new List<ListItem>()),
-                FillAutoFillOptions.Create(true, true, true, true, true, true, true, true),
+                new BoqCatalogIndex(new List<ListItem>()), true, true,
                 DownstreamState.Unknown, FillRuntimeOptions.DefaultDownstreamSocketAmps,
                 FillRuntimeOptions.DefaultDownstreamPanelAmps);
             Info("  断路器规则: Downstream 永不添加断路器（规则由 DownstreamStatePolicy 锁定）");

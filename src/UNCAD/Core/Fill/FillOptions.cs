@@ -91,12 +91,15 @@ namespace UNCAD.Core.Fill
         /// <summary>Downstream=I-line_Panel 生成的电盘默认额定电流（A）。</summary>
         public const double DefaultDownstreamPanelAmps = 1000.0;
         public const double MaximumDownstreamPanelAmps = 10000.0;
+        /// <summary>Downstream 自动添加默认开启（用户可单独关闭，不影响上游规则）。</summary>
+        public const bool DefaultDownstreamEnabled = true;
 
         private FillRuntimeOptions(string machineWorkbookPath,
             int startRow, int clearRows,
             double textHeight, double mmPerGrid, string bridgeInfo,
             FillPlanningOptions planning, FillAutoFillOptions autoFill,
-            double downstreamSocketAmps, double downstreamPanelAmps)
+            double downstreamSocketAmps, double downstreamPanelAmps,
+            bool downstreamSocketEnabled, bool downstreamPanelEnabled)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -108,6 +111,8 @@ namespace UNCAD.Core.Fill
             AutoFill = autoFill;
             DownstreamSocketAmps = downstreamSocketAmps;
             DownstreamPanelAmps = downstreamPanelAmps;
+            DownstreamSocketEnabled = downstreamSocketEnabled;
+            DownstreamPanelEnabled = downstreamPanelEnabled;
         }
 
         public string MachineWorkbookPath { get; }
@@ -132,12 +137,26 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public double DownstreamPanelAmps { get; }
 
+        /// <summary>
+        /// Downstream=socket box 时是否额外加一行 4.x 插座箱/盘。
+        /// **独立于**「BOQ 自动填充类别」里的插座盘开关：那条只管上游规则。
+        /// </summary>
+        public bool DownstreamSocketEnabled { get; }
+
+        /// <summary>
+        /// Downstream=I-line_Panel 时是否是否额外加一行电盘。
+        /// **独立于**「BOQ 自动填充类别」里的电盘开关：那条只管上游规则。
+        /// </summary>
+        public bool DownstreamPanelEnabled { get; }
+
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             string bridgeInfo, FillPlanningOptions planning,
             FillAutoFillOptions autoFill = null,
             double downstreamSocketAmps = DefaultDownstreamSocketAmps,
-            double downstreamPanelAmps = DefaultDownstreamPanelAmps)
+            double downstreamPanelAmps = DefaultDownstreamPanelAmps,
+            bool downstreamSocketEnabled = DefaultDownstreamEnabled,
+            bool downstreamPanelEnabled = DefaultDownstreamEnabled)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -152,7 +171,8 @@ namespace UNCAD.Core.Fill
                 PositiveWithin(downstreamSocketAmps, MaximumDownstreamSocketAmps,
                     DefaultDownstreamSocketAmps),
                 PositiveWithin(downstreamPanelAmps, MaximumDownstreamPanelAmps,
-                    DefaultDownstreamPanelAmps));
+                    DefaultDownstreamPanelAmps),
+                downstreamSocketEnabled, downstreamPanelEnabled);
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)
