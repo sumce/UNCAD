@@ -295,6 +295,9 @@ namespace UNCAD.Core.Submission
                     // (including WPS preview/data_only readers) still see the real total.
                     totalCell.SetCellValue((double)ReadDeviceTotal(row, deviceColumns.Values));
                 }
+                // DATA 工作表：一行一个回路（电缆/软管/桥架/线管/轴位/更新时间）。
+                // 与 BOQ 设备列相同的更新语义：按「机台ID+回路」定位，有则更新、无则追加。
+                BoqDataSheet.Write(workbook, sourceRecords, DateTime.Now);
                 ((XSSFWorkbook)workbook).SetForceFormulaRecalculation(true);
 
                 using (var stream = new FileStream(temporary, FileMode.CreateNew,

@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.8.0", "2026-10-26",
+                    "新增：生成的 BOQ 工作簿里增加 DATA 工作表——一行一个回路，记录电缆型号/长度、软管管径/长度、桥架信息/长度、线管信息/长度、上下游轴位、材料行数与更新时间，便于按回路追溯数据来源。",
+                    "说明：DATA 表与 BOQ 同文件（[BOQ]机台ID.xlsx），不改模板、写入时自动创建；更新语义与 BOQ 设备列一致——按「机台ID+回路名」有则更新、无则追加，重复执行不会累积重复行；长度字段能解析为数字时写数值。"),
                 new VersionChangeLogEntry("2.7.0", "2026-10-11",
                     "新增：Downstream 自动添加的**独立开关**（U1SET → Downstream 自动添加）。以前它借用「BOQ 自动填充类别」里的通用插座盘/电盘开关，做不到“只开 Downstream、不开上游”；现在两者完全解耦（新键 UNC_FILL_DOWNSTREAM_SOCKET_ENABLED / UNC_FILL_DOWNSTREAM_PANEL_ENABLED，默认开）。",
                     "新增：U1SET 配置中心重构为 10 页侧边栏（新增概览页；绘制标注合并 U1L/U1Q/U1C/U1R；启动、颜色、机台数据、清单与表格、Downstream、自动输出各自独立成页），并修复字段标签列被写死 190px 导致中文标签被裁切的布局问题。",
