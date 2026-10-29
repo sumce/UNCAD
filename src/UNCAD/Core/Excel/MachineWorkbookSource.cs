@@ -135,6 +135,7 @@ namespace UNCAD.Core.Excel
                 {
                     if (File.Exists(cachePath)) File.Replace(downloadPath, cachePath, null);
                     else File.Move(downloadPath, cachePath);
+                    CleanupStaleDownloads(Path.GetDirectoryName(cachePath));
                 }
                 catch (Exception ex)
                 {
@@ -156,6 +157,28 @@ namespace UNCAD.Core.Excel
                 try { if (File.Exists(downloadPath)) File.Delete(downloadPath); }
                 catch { }
             }
+        }
+
+        /// <summary>
+        /// 清理历史失败下载残留（<c>*.download-*</c>）。下载中途崩溃时 finally 跑不到，
+        /// 残留会长期累积（现场曾堆到 30+ 个、约 100MB）。只删 1 天前的文件，成功路径才调用。
+        /// </summary>
+        internal static void CleanupStaleDownloads(string directory, DateTime? nowUtc = null)
+        {
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
+            DateTime cutoff = (nowUtc ?? DateTime.UtcNow).AddDays(-1);
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(directory, "*.download-*"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
 
         internal static void ValidateWorkbook(string path)

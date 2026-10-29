@@ -33,8 +33,49 @@ namespace UNCAD.Tests
             Action work = Assert.Single(queued);
             work();
 
+            // 启动时的成功刷新只写日志，不再往命令行刷提示。
+            Assert.False(coordinator.TryTakeNotice(out _));
+        }
+
+        [Fact]
+        public void StartupFailure_IsLogOnly_ButManualRefreshStillReports()
+        {
+            var queued = new List<Action>();
+            var coordinator = new MachineDataRefreshCoordinator(
+                _ => throw new IOException("无法解析远程名称"), queued.Add,
+                MachineLedgerReporter.None, _ => true);
+
+            Assert.Equal(MachineDataRefreshStartStatus.Started,
+                coordinator.TryStartStartupRefresh("https://example.test/m.xlsx"));
+            Assert.Single(queued)();
+            Assert.False(coordinator.TryTakeNotice(out _));
+
+            Assert.Equal(MachineDataRefreshStartStatus.Started,
+                coordinator.TryStartManualRefresh("https://example.test/m.xlsx"));
+            queued[1]();
             Assert.True(coordinator.TryTakeNotice(out string message));
-            Assert.Contains("12 行", message);
+            Assert.Contains("无法解析远程名称", message);
+            Assert.Contains("U1SET", message);
+        }
+
+        [Fact]
+        public void DuplicateNotices_AreAnnouncedOnlyOnce()
+        {
+            var queued = new List<Action>();
+            var coordinator = new MachineDataRefreshCoordinator(_ =>
+                new MachineWorkbookSourceResult
+                {
+                    Updated = true,
+                    Snapshot = new MachineWorkbookSnapshotInfo { RowCount = 12 }
+                }, queued.Add, MachineLedgerReporter.None);
+
+            coordinator.TryStartManualRefresh(@"C:\data\machines.xlsx");
+            queued[0]();
+            coordinator.TryStartManualRefresh(@"C:\data\machines.xlsx");
+            queued[1]();
+
+            Assert.True(coordinator.TryTakeNotice(out _));
+            Assert.False(coordinator.TryTakeNotice(out _));
         }
 
         [Fact]
