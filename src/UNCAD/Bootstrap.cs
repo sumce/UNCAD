@@ -72,11 +72,32 @@ namespace UNCAD
 
         private static void OnMachineDataRefreshIdle(object sender, EventArgs args)
         {
+            // 命令/选择进行中绝对不能写命令行：Application.Idle 在等输入时也会触发，
+            // 此时 WriteMessage 会打断用户正在进行的框选或命令输入（现场"提示正好堵住命令"）。
+            if (IsCommandActive()) return;
             var document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
                 ?.MdiActiveDocument;
             if (document == null) return;
             while (MachineDataRefreshCoordinator.Default.TryTakeNotice(out string message))
                 document.Editor.WriteMessage("\n[U1DATA] " + message);
+        }
+
+        /// <summary>
+        /// AutoCAD 的 CMDACTIVE 非 0 表示有命令正在执行（1=命令、2=选择对象、4=脚本…）。
+        /// 读不到系统变量时按"进行中"处理：宁可推迟提示，也绝不打断用户输入。
+        /// </summary>
+        private static bool IsCommandActive()
+        {
+            try
+            {
+                object value = Autodesk.AutoCAD.ApplicationServices.Application
+                    .GetSystemVariable("CMDACTIVE");
+                return Convert.ToInt32(value) != 0;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         private static void DetachMachineDataRefreshIdle()

@@ -108,6 +108,9 @@ namespace UNCAD.Tests
             Assert.Contains("TryStartStartupRefresh(source)", source);
             Assert.Contains("Application.Idle += OnMachineDataRefreshIdle", source);
             Assert.DoesNotContain("MachineWorkbookSource.Refresh", source);
+            // 命令进行中绝不写命令行：Idle 在等输入时也会触发，写入会打断框选/命令。
+            Assert.Contains("IsCommandActive()", source);
+            Assert.Contains("CMDACTIVE", source);
         }
     }
 }
