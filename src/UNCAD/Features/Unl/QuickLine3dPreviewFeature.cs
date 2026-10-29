@@ -100,6 +100,15 @@ namespace UNCAD.Features.Unl
         private static Dictionary<string, object> BuildRegionEnvelope(CadContext ctx,
             FrameRegionGroup region, IReadOnlyList<QuickLineCadSegment> scanned,
             out string issue)
+            => BuildRegionEnvelope(ctx, region, scanned, null, out issue);
+
+        /// <summary>
+        /// 同上的重载：<paramref name="knownMachine"/> 非空时直接复用调用方已解析好的
+        /// 机台行，避免每个图框都去查一次 SQLite 快照（批量 U1F/U1U 的每帧固定开销）。
+        /// </summary>
+        private static Dictionary<string, object> BuildRegionEnvelope(CadContext ctx,
+            FrameRegionGroup region, IReadOnlyList<QuickLineCadSegment> scanned,
+            MachineRow knownMachine, out string issue)
         {
             issue = "";
             if (ctx == null || region == null)
@@ -142,7 +151,8 @@ namespace UNCAD.Features.Unl
             IReadOnlyDictionary<string, QuickLineSpatialPoint> routeAnchors =
                 ResolveRouteAnchorPositions(labelled, scene, downstreamAnchor,
                     upstreamAnchor, anchorDiagnostics);
-            MachineRow machine = ReadMachine(identity, out List<string> diagnostics);
+            List<string> diagnostics = new List<string>();
+            MachineRow machine = knownMachine ?? ReadMachine(identity, out diagnostics);
             diagnostics.AddRange(anchorDiagnostics);
             QuickLineAxisGrid axes = QuickLineAxisGridPlanner.Plan(
                 machine?.UpstreamAxis, machine?.DownstreamAxis);
@@ -214,6 +224,14 @@ namespace UNCAD.Features.Unl
         internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
             IReadOnlyList<QuickLineCadSegment> scanned,
             out string sceneJson, out string issue)
+            => TryBuildSceneJson(ctx, region, scanned, null, out sceneJson, out issue);
+
+        /// <summary>
+        /// 用整批只扫一次的 U1L 线段 + 调用方已解析的机台行构建场景。
+        /// </summary>
+        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
+            IReadOnlyList<QuickLineCadSegment> scanned, MachineRow knownMachine,
+            out string sceneJson, out string issue)
         {
             sceneJson = "";
             issue = "";
@@ -228,7 +246,7 @@ namespace UNCAD.Features.Unl
                 return false;
             }
             Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region, scanned,
-                out issue);
+                knownMachine, out issue);
             if (envelope == null) return false;
             sceneJson = new System.Web.Script.Serialization.JavaScriptSerializer
             {

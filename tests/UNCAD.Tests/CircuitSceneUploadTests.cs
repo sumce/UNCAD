@@ -150,6 +150,10 @@ namespace UNCAD.Tests
             // 逐框调用就是 O(N²)（现场 236 框 → 每帧 5~7 秒）。
             Assert.Contains("new FillFeature.SceneScanCache()", batch);
             Assert.Contains("sceneScan.Get(ctx)", fill);
+            // 已解析的 MachineRow 直接复用（避免每帧查一次 SQLite 快照）。
+            Assert.Contains("knownMachine ?? ReadMachine(", preview);
+            // 整图没有 U1L 线段时整批跳过场景构建（现场 1276 框全是这种情况）。
+            Assert.Contains("sceneScan.IsEmpty(ctx)", fill);
             Assert.Contains("IReadOnlyList<QuickLineCadSegment> scanned,", preview);
             Assert.Contains("BuildRegionEnvelope(ctx, region, scanned,", preview);
 

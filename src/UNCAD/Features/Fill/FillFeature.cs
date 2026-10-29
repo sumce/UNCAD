@@ -603,6 +603,8 @@ namespace UNCAD.Features.Fill
             private bool _loaded;
             private IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> _segments;
 
+            private bool _emptyAnnounced;
+
             public IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> Get(CadContext ctx)
             {
                 if (_loaded) return _segments;
@@ -610,6 +612,17 @@ namespace UNCAD.Features.Fill
                     new Cad.QuickLine.QuickLineScanOptions { IncludeUnlabelled = true });
                 _loaded = true;
                 return _segments;
+            }
+
+            /// <summary>整张图没有任何 U1L 线段（此时逐帧构建场景纯属浪费）。</summary>
+            public bool IsEmpty(CadContext ctx) => Get(ctx).Count == 0;
+
+            /// <summary>空图提示只记一次日志。</summary>
+            public bool TryAnnounceEmpty()
+            {
+                if (_emptyAnnounced) return false;
+                _emptyAnnounced = true;
+                return true;
             }
         }
 
@@ -663,10 +676,18 @@ namespace UNCAD.Features.Fill
                 return false;
             }
             string sceneJson = "";
-            if (sceneBudget == null || sceneBudget.CanBuildScene)
+            bool allowScene = sceneBudget == null || sceneBudget.CanBuildScene;
+            // 整图没有 U1L 线段时，逐帧进事务构建场景纯属浪费（现场 236 框全是这种情况）。
+            if (allowScene && sceneScan != null && sceneScan.IsEmpty(ctx))
+            {
+                if (sceneScan.TryAnnounceEmpty())
+                    Log.Info("整张图没有带毫米标注的 U1L 线段：本批跳过等轴测场景构建。");
+                allowScene = false;
+            }
+            if (allowScene)
             {
                 sceneJson = BuildSceneJson(ctx, machineId, circuitName,
-                    selection?.FrameBlockIds, selection?.Region, sceneScan);
+                    selection?.FrameBlockIds, selection?.Region, sceneScan, picked);
                 sceneBudget?.Consume(sceneJson.Length);
             }
             else
@@ -699,7 +720,7 @@ namespace UNCAD.Features.Fill
         /// </summary>
         private static string BuildSceneJson(CadContext ctx, string machineId,
             string circuitName, ObjectId[] frameBlockIds, FrameRegionGroup region = null,
-            SceneScanCache sceneScan = null)
+            SceneScanCache sceneScan = null, MachineRow knownMachine = null)
         {
             if (ctx == null || frameBlockIds == null || frameBlockIds.Length == 0) return "";
             try
@@ -711,7 +732,7 @@ namespace UNCAD.Features.Fill
                 bool built;
                 if (region != null && sceneScan != null)
                     built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
-                        sceneScan.Get(ctx), out sceneJson, out issue);
+                        sceneScan.Get(ctx), knownMachine, out sceneJson, out issue);
                 else if (region != null)
                     built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
                         out sceneJson, out issue);
