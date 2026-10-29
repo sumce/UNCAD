@@ -39,6 +39,8 @@ namespace UNCAD.Features.Fill
             public string CableRequestKey { get; set; }
             public string BusPlugBoxRequestKey { get; set; }
             public bool HoseWasMissingBeforeCableChoice { get; set; }
+            /// <summary>预检阶段（在预检读事务里）算好的表格可写行数；-1 表示未计算。</summary>
+            public int Capacity { get; set; } = -1;
         }
 
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
@@ -73,14 +75,20 @@ namespace UNCAD.Features.Fill
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var definitions = new CadBlockDefinitionReader(readTransaction);
+                int preflightDone = 0;
                 foreach (FrameRegionGroup region in regions)
                 {
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     Preflight(ctx, readTransaction, region, options, workbook, plans,
                         errors, catalogRequests, definitions, statisticsSettings);
                     clock.Stop();
+                    preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
                         + clock.ElapsedMilliseconds + " ms");
+                    // 上千个图框时没有进度输出会被误认为卡死。
+                    if (preflightDone % 25 == 0 || preflightDone == regions.Count)
+                        ReportProgress(ctx, "\n[U1U] 批量预检 " + preflightDone + "/"
+                            + regions.Count + " 个图框…");
                 }
                 readTransaction.Commit();
             }
@@ -168,8 +176,10 @@ namespace UNCAD.Features.Fill
                     continue;
                 }
                 plan.Rows = plan.Review.SelectedRows();
-                int capacity = FillFeature.ResolveTableWriteCapacity(ctx,
-                    plan.Selection.TableIds, options.StartRow, options.ClearRows);
+                int capacity = plan.Capacity >= 0
+                    ? plan.Capacity
+                    : FillFeature.ResolveTableWriteCapacity(ctx,
+                        plan.Selection.TableIds, options.StartRow, options.ClearRows);
                 if (plan.Rows.Count > capacity)
                     errors.Add("机台 " + plan.Machine.MachineId + "；设备 "
                         + plan.Machine.CircuitName + "；图框 " + plan.Region.Handle
@@ -283,8 +293,13 @@ namespace UNCAD.Features.Fill
                     FrameInfoJsonBlockWriter.MetadataBlockIndex metadataIndex =
                         FrameInfoJsonBlockWriter.MetadataBlockIndex.Scan(ctx, transaction);
                     var normalizedDefinitions = new HashSet<ObjectId>();
+                    int writeDone = 0;
                     foreach (Plan plan in plans)
                     {
+                        writeDone++;
+                        if (writeDone % 20 == 0 || writeDone == plans.Count)
+                            ReportProgress(ctx, "\n[U1U] 写入图纸 " + writeDone + "/"
+                                + plans.Count + " 个图框…");
                         migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
                             transaction, plan.Selection.TextIds, options.MmPerGrid);
                         int filled = FillTableModule.Write(ctx, transaction,
@@ -441,9 +456,22 @@ namespace UNCAD.Features.Fill
             // 批量 U1U 同样是"以回路为最小单位"：每个图框各自上传自己的清单内容与等轴测场景。
             // 上传在后台执行，失败只记日志+命令行提示，绝不影响已提交的批量写入。
             int queued = 0;
+            // 场景要在 CAD 线程同步构建（单个上限 1MB），一次批量上千个会堆出上百 MB。
+            // 用总预算兜底：超出的回路只上传清单，跳过场景并汇总提示。
+            var sceneBudget = new FillFeature.SceneUploadBudget(64L * 1024 * 1024);
+            int uploadDone = 0;
             foreach (Plan plan in plans)
+            {
+                uploadDone++;
                 if (FillFeature.UploadCircuitSubmission(ctx, plan.Machine, plan.Rows, true,
-                    plan.Selection)) queued++;
+                        plan.Selection, sceneBudget)) queued++;
+                if (uploadDone % 50 == 0 || uploadDone == plans.Count)
+                    ReportProgress(ctx, "\n[U1U] 上传回路数据 " + uploadDone + "/"
+                        + plans.Count + " 个…");
+            }
+            if (sceneBudget.Skipped > 0)
+                ctx.Write("\n[U1U] 图框较多：" + sceneBudget.Skipped
+                    + " 个回路的等轴测场景未上传（清单照常上传；分批执行可补传场景）。");
             if (queued > 0)
                 ctx.Write("\n[U1U] 已排队上传 " + queued
                     + " 个回路的清单与等轴测数据（后台执行，失败不影响图纸）。");
@@ -459,6 +487,8 @@ namespace UNCAD.Features.Fill
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
                 region.EntityIds.ToArray(), true, definitions);
+            // 复用分区结果：上传等轴测场景时不再做一次全空间扫描（批量 O(N²) 的主因）。
+            selection.Region = region;
             if (selection.FrameBlockIds.Length != 1)
             {
                 errors.Add(prefix + "没有读取到唯一图框块。");
@@ -638,8 +668,26 @@ namespace UNCAD.Features.Fill
                 ExistingRows = FillRowDiffBuilder.ReadRows(
                     CadSubmissionReader.Read(readTransaction, selection.TableIds)),
                 LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
-                    readTransaction, selection)
+                    readTransaction, selection),
+                // 容量在预检读事务里算一次；以前每个图框在此后还各开一个写事务重算。
+                Capacity = FillFeature.ResolveTableWriteCapacity(readTransaction,
+                    selection.TableIds, options.StartRow, options.ClearRows)
             });
+        }
+
+        /// <summary>进度提示：命令行输出 + 刷新界面，避免大批量时被误认为卡死。</summary>
+        private static void ReportProgress(CadContext ctx, string message)
+        {
+            try
+            {
+                ctx.Write(message);
+                ctx.Ed.UpdateScreen();
+            }
+            catch (System.Exception ex)
+            {
+                // 进度提示绝不影响真正的写入。
+                Log.Warn("U1U 进度提示失败: " + ex.Message);
+            }
         }
 
         private static WindowWrapper Owner()

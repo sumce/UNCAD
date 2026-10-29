@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Infra;
 using Xunit;
@@ -113,6 +114,42 @@ namespace UNCAD.Tests
             // 超限/构建失败/无 U1L 都只记日志，清单照常上传
             Assert.Contains("构建等轴测场景失败（已忽略，清单照常上传）", fill);
             Assert.Contains("未上传等轴测场景（", fill);
+        }
+
+        [Fact]
+        public void Batch_scene_build_reuses_known_frame_region_and_reports_progress()
+        {
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            string preview = File.ReadAllText(Repo("src", "UNCAD", "Features", "Unl",
+                "QuickLine3dPreviewFeature.cs"));
+            string selection = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillSelection.cs"));
+
+            // 批量场景构建复用分区结果：CollectForLayout 是全空间扫描，每框调一次就是 O(N²)。
+            Assert.Contains("public FrameRegionGroup Region { get; set; }", selection);
+            Assert.Contains("selection.Region = region;", batch);
+            Assert.Contains("TryBuildSceneJson(ctx, region,", fill);
+            Assert.Contains(
+                "internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,",
+                preview);
+
+            // 上千图框时场景总量有预算，超出只跳过场景、清单照常上传。
+            Assert.Contains("SceneUploadBudget", fill);
+            Assert.Contains("new FillFeature.SceneUploadBudget(64L * 1024 * 1024)", batch);
+            Assert.Contains("个回路的等轴测场景未上传", batch);
+
+            // 表格容量在预检读事务里算一次，不再每个图框各开一个事务重算。
+            Assert.Contains("Capacity = FillFeature.ResolveTableWriteCapacity(readTransaction,",
+                batch);
+            Assert.Contains("plan.Capacity >= 0", batch);
+
+            // 大批量时必须有进度输出 + 界面刷新，否则会被误认为卡死。
+            Assert.Contains("ReportProgress(ctx,", batch);
+            Assert.Contains("ReportBoqProgress(ctx", File.ReadAllText(Repo("src", "UNCAD",
+                "Features", "Submit", "AutomaticSubmissionService.cs")));
         }
 
         private static ClientSubmissionCredentials Credentials()

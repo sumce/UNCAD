@@ -170,10 +170,30 @@ namespace UNCAD.Features.Unl
                 return false;
             }
 
-            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx,
-                regions.Groups[0], out issue);
-            if (envelope == null) return false;
+            return TryBuildSceneJson(ctx, regions.Groups[0], out sceneJson, out issue);
+        }
 
+        /// <summary>
+        /// 用**已经算好的图框区域**构建场景，跳过 CollectForLayout（那是全空间扫描，
+        /// 批量 U1U 每个图框调一次就是 O(N²)，正是大批量卡死的主因）。
+        /// </summary>
+        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
+            out string sceneJson, out string issue)
+        {
+            sceneJson = "";
+            issue = "";
+            if (ctx == null)
+            {
+                issue = "缺少图形上下文。";
+                return false;
+            }
+            if (region == null)
+            {
+                issue = "缺少图框区域。";
+                return false;
+            }
+            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region, out issue);
+            if (envelope == null) return false;
             sceneJson = new System.Web.Script.Serialization.JavaScriptSerializer
             {
                 MaxJsonLength = 16 * 1024 * 1024

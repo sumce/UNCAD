@@ -167,10 +167,18 @@ namespace UNCAD.Features.Submit
             }
             Action<FileBatchRollback> writeRecords = batch =>
             {
-                foreach (IGrouping<string, SubmissionRecord> machineGroup in recordsToWrite
+                List<IGrouping<string, SubmissionRecord>> machineGroups = recordsToWrite
                     .GroupBy(record => record.MachineId.Trim(),
-                        IdentityTextNormalizer.Comparer))
+                        IdentityTextNormalizer.Comparer)
+                    .ToList();
+                int machineDone = 0;
+                foreach (IGrouping<string, SubmissionRecord> machineGroup in machineGroups)
                 {
+                    machineDone++;
+                    // 上千个机台时逐个重写工作簿很慢，必须有进度输出。
+                    if (machineGroups.Count > 50
+                        && (machineDone % 50 == 0 || machineDone == machineGroups.Count))
+                        ReportBoqProgress(ctx, machineDone, machineGroups.Count);
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
                     bool existed = File.Exists(target);
                     var progress = new BoqWorkbookWriteProgress();
@@ -223,6 +231,20 @@ namespace UNCAD.Features.Submit
                 }
             }
             return result;
+        }
+
+        /// <summary>BOQ 逐机台写入的进度提示（大批量 U1U 时避免误以为卡死）。</summary>
+        private static void ReportBoqProgress(CadContext ctx, int done, int total)
+        {
+            try
+            {
+                ctx.Write("\n[BOQ] 清单输出 " + done + "/" + total + " 个机台…");
+                ctx.Ed.UpdateScreen();
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("BOQ 进度提示失败: " + ex.Message);
+            }
         }
 
         private static List<SubmissionRecord> ReadRecords(CadContext ctx,

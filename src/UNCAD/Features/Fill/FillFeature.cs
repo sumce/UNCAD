@@ -70,6 +70,7 @@ namespace UNCAD.Features.Fill
                 FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selection.SourceIds);
                 stageClock.Stop();
                 Log.Info("U1U 图框分区: " + stageClock.ElapsedMilliseconds + " ms");
+                if (regions.Groups.Count == 1) selection.Region = regions.Groups[0];
                 if (regions.SelectedFrameCount > 1)
                 {
                     if (regions.Errors.Count > 0)
@@ -588,6 +589,36 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
+        /// 批量 U1F/U1U 的等轴测场景总预算（字符数）。
+        ///
+        /// 场景必须在 CAD 线程上同步构建，单个上限 1,000,000 字符；一次批量上千个图框时
+        /// 全部构建完再上传会堆出上百 MB 的内存（表现为卡顿/卡死）。用预算限制总量，
+        /// 超出的回路只上传清单、跳过场景，并在命令行汇总提示。
+        /// </summary>
+        internal sealed class SceneUploadBudget
+        {
+            private long _remaining;
+
+            public SceneUploadBudget(long totalChars)
+            {
+                _remaining = Math.Max(0L, totalChars);
+            }
+
+            public long Remaining => _remaining;
+            public int Skipped { get; private set; }
+
+            public bool CanBuildScene => _remaining > 0;
+
+            public void Consume(int chars)
+            {
+                if (chars <= 0) return;
+                _remaining = Math.Max(0L, _remaining - chars);
+            }
+
+            public void CountSkipped() => Skipped++;
+        }
+
+        /// <summary>
         /// U1F/U1U 成功后的数据上传：最小单位是**回路**（= 一个图框），提交该回路的
         /// 清单编号/名称/数量/单位，**以及该图框的等轴测（3D）场景**（U1L3D 用的同一份
         /// envelope，网页端的「ISO 图」就是它）。不提交 frameinfo_json、BOQ 全量或任何图纸大对象。
@@ -597,7 +628,8 @@ namespace UNCAD.Features.Fill
         /// 返回是否已排队（缺机台/回路标识时不排队）。单图框与批量 U1U 共用本方法。
         /// </summary>
         internal static bool UploadCircuitSubmission(CadContext ctx, MachineRow picked,
-            List<TableFillRow> rows, bool updateMode, FillSelection selection)
+            List<TableFillRow> rows, bool updateMode, FillSelection selection,
+            SceneUploadBudget sceneBudget = null)
         {
             if (picked == null) return false;
             string machineId = (picked.MachineId ?? "").Trim();
@@ -605,8 +637,18 @@ namespace UNCAD.Features.Fill
             if (machineId.Length == 0 || circuitName.Length == 0) return false;
             string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
-            string sceneJson = BuildSceneJson(ctx, machineId, circuitName,
-                selection?.FrameBlockIds);
+            string sceneJson = "";
+            if (sceneBudget == null || sceneBudget.CanBuildScene)
+            {
+                sceneJson = BuildSceneJson(ctx, machineId, circuitName,
+                    selection?.FrameBlockIds, selection?.Region);
+                sceneBudget?.Consume(sceneJson.Length);
+            }
+            else
+            {
+                sceneBudget.CountSkipped();
+                Log.Info("批量过大，跳过等轴测场景上传：" + machineId + " " + circuitName);
+            }
             var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -629,14 +671,20 @@ namespace UNCAD.Features.Fill
         /// 此时只上传清单，不影响主流程）。扫描耗时写日志，便于真机上发现批量 U1U 的退化。
         /// </summary>
         private static string BuildSceneJson(CadContext ctx, string machineId,
-            string circuitName, ObjectId[] frameBlockIds)
+            string circuitName, ObjectId[] frameBlockIds, FrameRegionGroup region = null)
         {
             if (ctx == null || frameBlockIds == null || frameBlockIds.Length == 0) return "";
             try
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                bool built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
-                    out string sceneJson, out string issue);
+                string sceneJson;
+                string issue;
+                // 已知图框区域时直接复用：CollectForLayout 是全空间扫描，批量里再调一次就是 O(N²)。
+                bool built = region != null
+                    ? Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
+                        out sceneJson, out issue)
+                    : Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
+                        out sceneJson, out issue);
                 watch.Stop();
                 if (!built)
                 {
