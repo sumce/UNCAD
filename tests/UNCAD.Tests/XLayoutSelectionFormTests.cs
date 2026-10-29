@@ -53,7 +53,10 @@ namespace UNCAD.Tests
                     form.ApplyFilter("不存在");
                     Assert.Equal(0, form.VisibleCircuitCount);
                     Assert.Empty(form.ComputeSelectedItems());
-                    Assert.Empty(form.Tree.Nodes.Cast<TreeNode>());
+                    // 空结果给一个提示节点（不可勾选），避免用户以为窗口坏了。
+                    TreeNode hint = Assert.Single(form.Tree.Nodes.Cast<TreeNode>());
+                    Assert.Null(hint.Tag);
+                    Assert.Contains("没有匹配", hint.Text);
                 }
             });
         }

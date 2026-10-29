@@ -8,8 +8,8 @@ namespace UNCAD.Core.Dwg
     /// XLAYOUT 排版前的机台/回路筛选表达式。
     ///
     /// 用户在筛选框输入文本，用空格、半角/全角逗号、分号、顿号或竖线分隔多个关键词，
-    /// 每个关键词都必须命中（AND 语义），命中范围为"机台ID + 回路名称"，忽略大小写。
-    /// 关键词为空时命中全部。
+    /// **任一关键词命中即保留**（OR 语义，与 Excel 多选筛选一致——粘一串机台ID 就能只留这些机台），
+    /// 命中范围为"机台ID + 回路名称"，忽略大小写。关键词为空时命中全部。
     /// </summary>
     public static class XLayoutSelectionFilter
     {
@@ -26,30 +26,34 @@ namespace UNCAD.Core.Dwg
                 .Where(term => term.Length > 0)
                 .ToArray();
 
-        /// <summary>机台ID 是否命中全部关键词（用于判断机台节点是否显示）。</summary>
+        /// <summary>机台ID 是否命中任一关键词（用于判断机台节点是否显示）。</summary>
         public static bool MatchesMachine(string machineId, IReadOnlyList<string> terms)
-            => MatchesAll(machineId, terms);
+            => MatchesAny(machineId, terms);
 
-        /// <summary>回路是否命中全部关键词（机台ID 与回路名称都参与匹配）。</summary>
+        /// <summary>回路是否命中任一关键词（机台ID 与回路名称都参与匹配）。</summary>
         public static bool MatchesCircuit(string machineId, string deviceName,
             IReadOnlyList<string> terms)
-            => MatchesAll((machineId ?? "") + " " + (deviceName ?? ""), terms);
+            => MatchesAny((machineId ?? "") + " " + (deviceName ?? ""), terms);
 
         public static bool MatchesCircuit(string machineId, string deviceName, string filterText)
             => MatchesCircuit(machineId, deviceName, SplitTerms(filterText));
 
-        public static bool MatchesAll(string value, IReadOnlyList<string> terms)
+        /// <summary>任一关键词命中即为真；关键词全为空时视为命中（不做筛选）。</summary>
+        public static bool MatchesAny(string value, IReadOnlyList<string> terms)
         {
             if (terms == null || terms.Count == 0) return true;
             string text = value ?? "";
+            bool hasTerm = false;
             for (int index = 0; index < terms.Count; index++)
             {
                 string term = terms[index];
                 if (string.IsNullOrWhiteSpace(term)) continue;
-                if (text.IndexOf(term.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
-                    return false;
+                hasTerm = true;
+                if (text.IndexOf(term.Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
             }
-            return true;
+            // 全是空白词等于没筛选。
+            return !hasTerm;
         }
     }
 }

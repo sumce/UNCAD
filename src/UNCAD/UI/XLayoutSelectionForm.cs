@@ -25,6 +25,7 @@ namespace UNCAD.UI
         private readonly HashSet<XLayoutFrameItem> _checked = new HashSet<XLayoutFrameItem>();
         private readonly HashSet<string> _expanded = new HashSet<string>(
             IdentityTextNormalizer.Comparer);
+        private readonly Timer _filterTimer = new Timer { Interval = 250 };
         private IReadOnlyList<string> _terms = Array.Empty<string>();
         private bool _updatingChecks;
 
@@ -38,7 +39,7 @@ namespace UNCAD.UI
                 new Size(720, 620), new Size(560, 460));
 
             var header = UiTheme.Header("选择要排版的机台/回路",
-                "勾选后只重排这些回路；筛选框支持空格或逗号分隔多个关键词（同时命中）");
+                "勾选后只重排这些回路；筛选框支持空格/逗号分隔多个关键词（任一命中即可，可整段粘贴机台ID）");
 
             var filterRow = new TableLayoutPanel
             {
@@ -134,7 +135,18 @@ namespace UNCAD.UI
             Controls.Add(filterRow);
             Controls.Add(header);
 
-            _filter.TextChanged += (sender, args) => ApplyFilter(_filter.Text);
+            // 1276 个回路时每敲一个字都重建树会明显卡顿：输入停顿 250ms 再筛选。
+            _filterTimer.Tick += (sender, args) =>
+            {
+                _filterTimer.Stop();
+                ApplyFilter(_filter.Text);
+            };
+            _filter.TextChanged += (sender, args) =>
+            {
+                _filterTimer.Stop();
+                _filterTimer.Start();
+            };
+            FormClosed += (sender, args) => _filterTimer.Dispose();
             RebuildTree();
             UpdateStatus();
         }
@@ -257,6 +269,16 @@ namespace UNCAD.UI
                     if (machineMatches) machineNode.Checked =
                         machine.All(item => _checked.Contains(item));
                     machineNode.Expand();
+                }
+                if (_tree.Nodes.Count == 0)
+                {
+                    _tree.Nodes.Add(new TreeNode(_terms.Count == 0
+                        ? "（没有可排版的回路）"
+                        : "（没有匹配的机台/回路：多个关键词是“任一命中”，请检查拼写或用逗号/空格分隔）")
+                    {
+                        Tag = null,
+                        ForeColor = UiTheme.TextSecondary
+                    });
                 }
             }
             finally { _tree.EndUpdate(); }
