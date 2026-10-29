@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.9.0", "2026-10-29",
+                    "新增：XLAYOUT 排版前的机台/回路选择窗——机台→回路两级树、两级复选框、关键词筛选（空格/逗号/分号/顿号分隔，AND 语义，机台ID+回路名匹配），只重排勾选且命中筛选的回路，其余图框保持原位。",
+                    "说明：全选/全不选/反选只作用于当前筛选可见的回路；机台标签颜色与完成统计窗只反映本次重排的子集（相对台账应有回路仍会提示缺少回路）；不筛选直接确定与旧行为一致。"),
                 new VersionChangeLogEntry("2.8.0", "2026-10-26",
                     "新增：生成的 BOQ 工作簿里增加 DATA 工作表——一行一个回路，记录电缆型号/长度、软管管径/长度、桥架信息/长度、线管信息/长度、上下游轴位、材料行数与更新时间，便于按回路追溯数据来源。",
                     "说明：DATA 表与 BOQ 同文件（[BOQ]机台ID.xlsx），不改模板、写入时自动创建；更新语义与 BOQ 设备列一致——按「机台ID+回路名」有则更新、无则追加，重复执行不会累积重复行；长度字段能解析为数字时写数值。"),

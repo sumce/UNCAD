@@ -139,7 +139,32 @@ namespace UNCAD.Features.XLayout
             HashSet<string> duplicateHandles = FindDuplicateCircuits(items, summaries,
                 expectedCircuits);
 
-            IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(items);
+            // 排版前让用户挑选机台/回路：树形勾选 + 关键词筛选（空格/逗号分隔，AND）。
+            // 只有"勾选且命中当前筛选"的回路参与重排，其余图框保持原位。
+            IReadOnlyList<XLayoutFrameItem> arrangedItems = items;
+            if (items.Count > 1)
+            {
+                using (var selector = new XLayoutSelectionForm(items))
+                {
+                    if (Autodesk.AutoCAD.ApplicationServices.Application
+                        .ShowModalDialog(selector) != System.Windows.Forms.DialogResult.OK)
+                    {
+                        SelectionService.ClearPickFirst(ctx);
+                        ctx.Write("\n[XLAYOUT] 已取消，未执行排版。");
+                        return;
+                    }
+                    arrangedItems = selector.SelectedItems;
+                }
+            }
+            if (arrangedItems.Count == 0)
+            {
+                SelectionService.ClearPickFirst(ctx);
+                ctx.Write("\n[XLAYOUT] 没有选择任何回路，未执行排版。");
+                return;
+            }
+            Dictionary<string, XLayoutMachineSummary> arrangedSummaries =
+                BuildArrangedSummaries(arrangedItems, summaries);
+            IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(arrangedItems);
             if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
             {
                 SelectionService.ClearPickFirst(ctx);
@@ -192,7 +217,7 @@ namespace UNCAD.Features.XLayout
                     DBText label = EntityFactory.DBText(ctx, first.Item.MachineId,
                         labelAnchor, MachineLabelTextHeight, 0d,
                         AttachmentPoint.BaseLeft,
-                        colorIndex: MachineLabelColor(summaries, first.Item.MachineId),
+                        colorIndex: MachineLabelColor(arrangedSummaries, first.Item.MachineId),
                         textStyleId: textStyle);
                     ctx.AddToCurrentSpace(transaction, label);
                 }
@@ -206,10 +231,42 @@ namespace UNCAD.Features.XLayout
             }
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[XLAYOUT] 排版完成：" + regions.Groups.Count
-                + " 个图框，" + summaries.Count + " 个机台；图框间距 10000。");
-            using (var form = new XLayoutSummaryForm(summaries.Values.ToList(), regions.Groups.Count))
+            ctx.Write("\n[XLAYOUT] 排版完成：" + arrangedItems.Count
+                + " 个图框，" + arrangedSummaries.Count + " 个机台；图框间距 10000。");
+            using (var form = new XLayoutSummaryForm(arrangedSummaries.Values.ToList(),
+                arrangedItems.Count))
                 Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+        }
+
+        /// <summary>
+        /// 按"实际参与排版"的回路重建机台统计：机台标签颜色与完成统计窗只反映本次
+        /// 重排的图框，避免勾选子集后仍显示整机回路数造成误导。
+        /// </summary>
+        private static Dictionary<string, XLayoutMachineSummary> BuildArrangedSummaries(
+            IReadOnlyList<XLayoutFrameItem> arrangedItems,
+            IDictionary<string, XLayoutMachineSummary> all)
+        {
+            var result = new Dictionary<string, XLayoutMachineSummary>(
+                IdentityTextNormalizer.Comparer);
+            if (arrangedItems == null) return result;
+            foreach (IGrouping<string, XLayoutFrameItem> machine in arrangedItems
+                .GroupBy(item => (item.MachineId ?? "").Trim(),
+                    IdentityTextNormalizer.Comparer))
+            {
+                int count = machine.Count();
+                var summary = new XLayoutMachineSummary(machine.Key) { CircuitCount = count };
+                if (all != null
+                    && all.TryGetValue(machine.Key, out XLayoutMachineSummary full))
+                {
+                    summary.ExpectedCircuitCount = full.ExpectedCircuitCount;
+                    summary.DuplicateCircuitCount = full.DuplicateCircuitCount;
+                    summary.StatusKnown = full.StatusKnown;
+                    // 只排了一部分回路时，相对于应有回路仍然算"缺少回路"，这是正确信号。
+                    summary.IsComplete = full.IsComplete && count == full.CircuitCount;
+                }
+                result[machine.Key] = summary;
+            }
+            return result;
         }
 
         private static short MachineLabelColor(
