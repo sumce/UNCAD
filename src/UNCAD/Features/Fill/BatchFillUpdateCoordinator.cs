@@ -459,6 +459,7 @@ namespace UNCAD.Features.Fill
             // 场景要在 CAD 线程同步构建（单个上限 1MB），一次批量上千个会堆出上百 MB。
             // 用总预算兜底：超出的回路只上传清单，跳过场景并汇总提示。
             var sceneBudget = new FillFeature.SceneUploadBudget(64L * 1024 * 1024);
+            int droppedBefore = BackgroundUploadQueue.Shared.Dropped;
             int uploadDone = 0;
             foreach (Plan plan in plans)
             {
@@ -472,6 +473,14 @@ namespace UNCAD.Features.Fill
             if (sceneBudget.Skipped > 0)
                 ctx.Write("\n[U1U] 图框较多：" + sceneBudget.Skipped
                     + " 个回路的等轴测场景未上传（清单照常上传；分批执行可补传场景）。");
+            int droppedUploads = BackgroundUploadQueue.Shared.Dropped - droppedBefore;
+            if (BackgroundUploadQueue.Shared.Suspended)
+                ctx.Write("\n[U1U] 上传服务连续失败：本批剩余回路上传已暂停（丢弃 "
+                    + droppedUploads + " 个排队项）。图纸与 BOQ 不受影响；"
+                    + "网络恢复后可重跑 " + CommandIds.Submit + " 重新上报。");
+            else if (droppedUploads > 0)
+                ctx.Write("\n[U1U] 上传队列繁忙：超过上限的 " + droppedUploads
+                    + " 个回路上传被丢弃（图纸与 BOQ 不受影响）。");
             if (queued > 0)
                 ctx.Write("\n[U1U] 已排队上传 " + queued
                     + " 个回路的清单与等轴测数据（后台执行，失败不影响图纸）。");

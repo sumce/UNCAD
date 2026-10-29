@@ -393,7 +393,9 @@ namespace UNCAD.Tests
                 "U1F/U1U 的数据上传必须在提交事务与 BOQ 输出完成之后才排队");
             Assert.True(upload > lastRollback,
                 "上传只能排在成功路径上：位于所有回滚分支之后");
-            Assert.Contains("ThreadPool.QueueUserWorkItem", source);
+            // 上传机制由 ThreadPool 改为"单线程串行队列 + 有界 + 熔断"，
+            // 但契约不变：提交/BOQ 完成之后才排队、后台执行、失败不影响图纸。
+            Assert.Contains("BackgroundUploadQueue.Shared.Enqueue(", source);
             Assert.Contains("ClientSubmissionUploader.Default.SubmitCircuit(", source);
         }
 

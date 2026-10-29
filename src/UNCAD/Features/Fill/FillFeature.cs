@@ -638,6 +638,9 @@ namespace UNCAD.Features.Fill
             string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
             string sceneJson = "";
+            BackgroundUploadQueue uploadQueue = BackgroundUploadQueue.Shared;
+            bool uploaderUsable = !uploadQueue.Suspended
+                && uploadQueue.Pending < uploadQueue.Limit;
             if (sceneBudget == null || sceneBudget.CanBuildScene)
             {
                 sceneJson = BuildSceneJson(ctx, machineId, circuitName,
@@ -649,21 +652,29 @@ namespace UNCAD.Features.Fill
                 sceneBudget.CountSkipped();
                 Log.Info("批量过大，跳过等轴测场景上传：" + machineId + " " + circuitName);
             }
+            if (!uploaderUsable)
+            {
+                // 上传服务已经熔断/队列满：连场景都不构建，直接跳过本回路上传。
+                Log.Info("上传队列繁忙或已熔断，跳过本回路上传：" + machineId + " " + circuitName);
+                return false;
+            }
             var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
-            ThreadPool.QueueUserWorkItem(_ =>
+            // 单线程串行队列 + 有界 + 连续失败熔断：避免上千个阻塞上传把线程池和内存打爆。
+            return BackgroundUploadQueue.Shared.Enqueue(() =>
             {
                 try
                 {
                     ClientSubmissionUploader.Default.SubmitCircuit(machineId, circuitName,
                         command, frameHandle, captured, sceneJson);
+                    return true;
                 }
                 catch (System.Exception ex)
                 {
                     // 上传链路的任何异常都不得影响已完成的写入结果。
                     Log.Warn("U1F/U1U 上传异常（已忽略）: " + ex.Message);
+                    return false;
                 }
             });
-            return true;
         }
 
         /// <summary>
