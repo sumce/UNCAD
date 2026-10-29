@@ -595,6 +595,24 @@ namespace UNCAD.Features.Fill
         /// 全部构建完再上传会堆出上百 MB 的内存（表现为卡顿/卡死）。用预算限制总量，
         /// 超出的回路只上传清单、跳过场景，并在命令行汇总提示。
         /// </summary>
+        /// <summary>
+        /// 批量 U1F/U1U 的 U1L 线段扫描缓存：整批只扫一次，避免每个图框都扫全图（O(N²)）。
+        /// </summary>
+        internal sealed class SceneScanCache
+        {
+            private bool _loaded;
+            private IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> _segments;
+
+            public IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> Get(CadContext ctx)
+            {
+                if (_loaded) return _segments;
+                _segments = Cad.QuickLine.QuickLineCadService.Scan(ctx,
+                    new Cad.QuickLine.QuickLineScanOptions { IncludeUnlabelled = true });
+                _loaded = true;
+                return _segments;
+            }
+        }
+
         internal sealed class SceneUploadBudget
         {
             private long _remaining;
@@ -629,7 +647,7 @@ namespace UNCAD.Features.Fill
         /// </summary>
         internal static bool UploadCircuitSubmission(CadContext ctx, MachineRow picked,
             List<TableFillRow> rows, bool updateMode, FillSelection selection,
-            SceneUploadBudget sceneBudget = null)
+            SceneUploadBudget sceneBudget = null, SceneScanCache sceneScan = null)
         {
             if (picked == null) return false;
             string machineId = (picked.MachineId ?? "").Trim();
@@ -637,26 +655,24 @@ namespace UNCAD.Features.Fill
             if (machineId.Length == 0 || circuitName.Length == 0) return false;
             string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
-            string sceneJson = "";
+            // 上传队列已熔断/已满时，连场景都不要构建（构建才是这里最贵的一步）。
             BackgroundUploadQueue uploadQueue = BackgroundUploadQueue.Shared;
-            bool uploaderUsable = !uploadQueue.Suspended
-                && uploadQueue.Pending < uploadQueue.Limit;
+            if (uploadQueue.Suspended || uploadQueue.Pending >= uploadQueue.Limit)
+            {
+                Log.Info("上传队列繁忙或已熔断，跳过本回路上传：" + machineId + " " + circuitName);
+                return false;
+            }
+            string sceneJson = "";
             if (sceneBudget == null || sceneBudget.CanBuildScene)
             {
                 sceneJson = BuildSceneJson(ctx, machineId, circuitName,
-                    selection?.FrameBlockIds, selection?.Region);
+                    selection?.FrameBlockIds, selection?.Region, sceneScan);
                 sceneBudget?.Consume(sceneJson.Length);
             }
             else
             {
                 sceneBudget.CountSkipped();
                 Log.Info("批量过大，跳过等轴测场景上传：" + machineId + " " + circuitName);
-            }
-            if (!uploaderUsable)
-            {
-                // 上传服务已经熔断/队列满：连场景都不构建，直接跳过本回路上传。
-                Log.Info("上传队列繁忙或已熔断，跳过本回路上传：" + machineId + " " + circuitName);
-                return false;
             }
             var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
             // 单线程串行队列 + 有界 + 连续失败熔断：避免上千个阻塞上传把线程池和内存打爆。
@@ -682,7 +698,8 @@ namespace UNCAD.Features.Fill
         /// 此时只上传清单，不影响主流程）。扫描耗时写日志，便于真机上发现批量 U1U 的退化。
         /// </summary>
         private static string BuildSceneJson(CadContext ctx, string machineId,
-            string circuitName, ObjectId[] frameBlockIds, FrameRegionGroup region = null)
+            string circuitName, ObjectId[] frameBlockIds, FrameRegionGroup region = null,
+            SceneScanCache sceneScan = null)
         {
             if (ctx == null || frameBlockIds == null || frameBlockIds.Length == 0) return "";
             try
@@ -691,10 +708,15 @@ namespace UNCAD.Features.Fill
                 string sceneJson;
                 string issue;
                 // 已知图框区域时直接复用：CollectForLayout 是全空间扫描，批量里再调一次就是 O(N²)。
-                bool built = region != null
-                    ? Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
-                        out sceneJson, out issue)
-                    : Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
+                bool built;
+                if (region != null && sceneScan != null)
+                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
+                        sceneScan.Get(ctx), out sceneJson, out issue);
+                else if (region != null)
+                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
+                        out sceneJson, out issue);
+                else
+                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
                         out sceneJson, out issue);
                 watch.Stop();
                 if (!built)

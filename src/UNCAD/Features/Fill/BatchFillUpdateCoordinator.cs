@@ -459,13 +459,15 @@ namespace UNCAD.Features.Fill
             // 场景要在 CAD 线程同步构建（单个上限 1MB），一次批量上千个会堆出上百 MB。
             // 用总预算兜底：超出的回路只上传清单，跳过场景并汇总提示。
             var sceneBudget = new FillFeature.SceneUploadBudget(64L * 1024 * 1024);
+            // 整批只扫一次 U1L 线段：以前每个图框的 BuildRegionEnvelope 都扫全图 → O(N²)。
+            var sceneScan = new FillFeature.SceneScanCache();
             int droppedBefore = BackgroundUploadQueue.Shared.Dropped;
             int uploadDone = 0;
             foreach (Plan plan in plans)
             {
                 uploadDone++;
                 if (FillFeature.UploadCircuitSubmission(ctx, plan.Machine, plan.Rows, true,
-                        plan.Selection, sceneBudget)) queued++;
+                        plan.Selection, sceneBudget, sceneScan)) queued++;
                 if (uploadDone % 50 == 0 || uploadDone == plans.Count)
                     ReportProgress(ctx, "\n[U1U] 上传回路数据 " + uploadDone + "/"
                         + plans.Count + " 个…");

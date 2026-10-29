@@ -146,6 +146,13 @@ namespace UNCAD.Tests
                 batch);
             Assert.Contains("plan.Capacity >= 0", batch);
 
+            // U1L 线段整批只扫一次：BuildRegionEnvelope 里的 Scan 不带图框过滤、扫的是全图，
+            // 逐框调用就是 O(N²)（现场 236 框 → 每帧 5~7 秒）。
+            Assert.Contains("new FillFeature.SceneScanCache()", batch);
+            Assert.Contains("sceneScan.Get(ctx)", fill);
+            Assert.Contains("IReadOnlyList<QuickLineCadSegment> scanned,", preview);
+            Assert.Contains("BuildRegionEnvelope(ctx, region, scanned,", preview);
+
             // 大批量时必须有进度输出 + 界面刷新，否则会被误认为卡死。
             Assert.Contains("ReportProgress(ctx,", batch);
             Assert.Contains("ReportBoqProgress(ctx", File.ReadAllText(Repo("src", "UNCAD",

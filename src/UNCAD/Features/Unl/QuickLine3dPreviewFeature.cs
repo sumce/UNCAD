@@ -84,6 +84,22 @@ namespace UNCAD.Features.Unl
         /// </summary>
         private static Dictionary<string, object> BuildRegionEnvelope(CadContext ctx,
             FrameRegionGroup region, out string issue)
+            => BuildRegionEnvelope(ctx, region,
+                QuickLineCadService.Scan(ctx, new QuickLineScanOptions
+                {
+                    IncludeUnlabelled = true
+                }), out issue);
+
+        /// <summary>
+        /// 用**已扫描的 U1L 线段**构建 envelope。
+        ///
+        /// 批量 U1F/U1U 每次上传都要为每个图框调一次场景构建；QuickLineCadService.Scan
+        /// 不带图框过滤、扫的是整个空间，逐框调用就是 O(N²)（现场 236 个图框 → 每帧
+        /// 5~7 秒、整批 20 分钟）。批量侧改为整批只扫一次，再按图框过滤。
+        /// </summary>
+        private static Dictionary<string, object> BuildRegionEnvelope(CadContext ctx,
+            FrameRegionGroup region, IReadOnlyList<QuickLineCadSegment> scanned,
+            out string issue)
         {
             issue = "";
             if (ctx == null || region == null)
@@ -110,9 +126,8 @@ namespace UNCAD.Features.Unl
             }
 
             HashSet<ObjectId> frameEntityIds = new HashSet<ObjectId>(region.EntityIds);
-            IReadOnlyList<QuickLineCadSegment> scanned = QuickLineCadService.Scan(ctx,
-                new QuickLineScanOptions { IncludeUnlabelled = true });
-            List<QuickLineCadSegment> labelled = scanned
+            List<QuickLineCadSegment> labelled = (scanned
+                    ?? (IReadOnlyList<QuickLineCadSegment>)Array.Empty<QuickLineCadSegment>())
                 .Where(item => frameEntityIds.Contains(item.LineId))
                 .Where(item => item.HasMillimetreLabel)
                 .ToList();
@@ -180,6 +195,26 @@ namespace UNCAD.Features.Unl
         internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
             out string sceneJson, out string issue)
         {
+            if (region == null)
+            {
+                sceneJson = "";
+                issue = "缺少图框区域。";
+                return false;
+            }
+            return TryBuildSceneJson(ctx, region,
+                QuickLineCadService.Scan(ctx, new QuickLineScanOptions
+                {
+                    IncludeUnlabelled = true
+                }), out sceneJson, out issue);
+        }
+
+        /// <summary>
+        /// 用**整批只扫一次**的 U1L 线段构建场景（批量 U1F/U1U 专用，避免 O(N²)）。
+        /// </summary>
+        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
+            IReadOnlyList<QuickLineCadSegment> scanned,
+            out string sceneJson, out string issue)
+        {
             sceneJson = "";
             issue = "";
             if (ctx == null)
@@ -192,7 +227,8 @@ namespace UNCAD.Features.Unl
                 issue = "缺少图框区域。";
                 return false;
             }
-            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region, out issue);
+            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region, scanned,
+                out issue);
             if (envelope == null) return false;
             sceneJson = new System.Web.Script.Serialization.JavaScriptSerializer
             {
