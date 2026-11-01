@@ -30,6 +30,22 @@ namespace UNCAD.Features.Fill
             }
         }
 
+        /// <summary>
+        /// 读取 frameinfo_json 时要一起看的块：独立 JSON 块 + 图框块本身（旧图框内嵌
+        /// FRAMEINFO_JSON）。XFrameMigrationService 在写入事务里会把这些旧属性从图框块上
+        /// 移除，所以调用方**必须在迁移前**用本方法读出 previous 记录，否则旧图框的
+        /// 身份/替代型号/预留/历史会在首次 U1F/U1U 时丢失。
+        /// </summary>
+        internal static ObjectId[] ReadSources(FillSelection selection)
+        {
+            if (selection == null) return Array.Empty<ObjectId>();
+            return (selection.FrameInfoJsonBlockIds ?? Array.Empty<ObjectId>())
+                .Concat(selection.FrameBlockIds ?? Array.Empty<ObjectId>())
+                .Where(id => !id.IsNull)
+                .Distinct()
+                .ToArray();
+        }
+
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds)
         {

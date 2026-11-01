@@ -191,16 +191,13 @@ namespace UNCAD.Features.Fill
 
             string automaticExcelPath = null;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
-            FrameInfoJsonRecord frameInfoPrevious = null;
-            CableReserveInfo cableReserve = null;
-            if (updateMode)
-            {
-                // U1U: 首次执行时读取 frameinfo_json；设备内预留只在没有记录时问一次，
-                // 之后一律复用 JSON 里保存的值（0 表示已确认不预留）。
-                frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
-                    selection.FrameInfoJsonBlockIds);
-                cableReserve = ResolveCableReserve(frameInfoPrevious, picked, statistics);
-            }
+            // 迁移会从旧图框块参照上移除内嵌 FRAMEINFO_JSON，因此必须在迁移前读出
+            // 独立 JSON 块 + 图框块上的记录；U1F 也要读，否则旧图框首次 U1F 会丢身份/历史。
+            FrameInfoJsonRecord frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
+                FrameInfoJsonBlockWriter.ReadSources(selection));
+            CableReserveInfo cableReserve = updateMode
+                ? ResolveCableReserve(frameInfoPrevious, picked, statistics)
+                : null;
             if (updateMode)
             {
                 try

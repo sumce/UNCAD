@@ -31,10 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.9.1", "2026-11-01",
+                    "新增：图框模板升级为 xframe_v2（旧 frame_20260812/frame/xframe 自动迁移，移除新定义里没有的旧属性）；frameinfo_json 升级 v2（嵌套结构、changes 最多 20 条、整份上限 6000 字符、旧 v1 兼容读取）；U1U 电缆预留（盘内按上游类型 3400/1200/500mm + 设备内在清单确认窗填写，总长计入预留并写回 JSON）。",
+                    "说明：CABLE_INFO 全部改为 mm 标注（含盘内/设备预留明细，多行属性自动换行）；批量 U1U 的设备内预留是统一一个值，只询问本批还没有记录的图框；迁移移除 BRIDGE_FRAME_INFO/CONDUIT_INFO 后图框不再显示旧文本（数据仍按统计重算并进清单/BOQ）；旧内嵌 FRAMEINFO_JSON 会在迁移前读出并迁移，不再丢失替代型号与历史。"),
                 new VersionChangeLogEntry("2.9.0", "2026-10-29",
                     "新增：XLAYOUT 排版前的机台/回路选择窗——机台→回路两级树、两级复选框、关键词筛选（空格/逗号/分号/顿号分隔，AND 语义，机台ID+回路名匹配），只重排勾选且命中筛选的回路，其余图框保持原位。",
-                    "说明：全选/全不选/反选只作用于当前筛选可见的回路；机台标签颜色与完成统计窗只反映本次重排的子集（相对台账应有回路仍会提示缺少回路）；不筛选直接确定与旧行为一致。",
-                    "图框：新版图框模板改为 xframe_v2 动态块；旧 frame_20260812/frame/xframe 图框在 U1F/U1U 时自动迁移，旧图框专有属性（FRAMEINFO_JSON/BRIDGE_FRAME_INFO/CONDUIT_INFO）不再保留在块参照上，JSON 身份由独立 frameinfo_json 块维护。"),
+                    "说明：全选/全不选/反选只作用于当前筛选可见的回路；机台标签颜色与完成统计窗只反映本次重排的子集（相对台账应有回路仍会提示缺少回路）；不筛选直接确定与旧行为一致。"),
                 new VersionChangeLogEntry("2.8.0", "2026-10-26",
                     "新增：生成的 BOQ 工作簿里增加 DATA 工作表——一行一个回路，记录电缆型号/长度、软管管径/长度、桥架信息/长度、线管信息/长度、上下游轴位、材料行数与更新时间，便于按回路追溯数据来源。",
                     "说明：DATA 表与 BOQ 同文件（[BOQ]机台ID.xlsx），不改模板、写入时自动创建；更新语义与 BOQ 设备列一致——按「机台ID+回路名」有则更新、无则追加，重复执行不会累积重复行；长度字段能解析为数字时写数值。"),

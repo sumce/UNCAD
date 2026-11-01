@@ -577,8 +577,9 @@ namespace UNCAD.Features.Fill
                     + "存在未启用或不完整的统计类别，仅这些类别保留旧值。");
 
             // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
+            // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                selection.FrameInfoJsonBlockIds);
+                FrameInfoJsonBlockWriter.ReadSources(selection));
             CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
                 machine, statistics);
 
