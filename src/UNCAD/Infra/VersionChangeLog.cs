@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.9.2", "2026-11-01",
+                    "修复：U1F（新建填充）也支持电缆预留——盘内预留按上游类型（I-Line 3400 / 插座盘 1200 / 插接接口 500mm）、设备内预留从 frameinfo_json 复用或在清单确认窗填写；CABLE_INFO 与清单总长都计入预留，命令行汇总显示实测+盘内+设备=总长。",
+                    "说明：2.9.1 只在 U1U 接入了预留，U1F 会漏掉；清单表表格本身的长度列仍是米（M）。批量 U1U 的设备内预留仍是一次 GUI 统一填写。"),
                 new VersionChangeLogEntry("2.9.1", "2026-11-01",
                     "新增：图框模板升级为 xframe_v2（旧 frame_20260812/frame/xframe 自动迁移，移除新定义里没有的旧属性）；frameinfo_json 升级 v2（嵌套结构、changes 最多 20 条、整份上限 6000 字符、旧 v1 兼容读取）；U1U 电缆预留（盘内按上游类型 3400/1200/500mm + 设备内在清单确认窗填写，总长计入预留并写回 JSON）。",
                     "说明：CABLE_INFO 全部改为 mm 标注（含盘内/设备预留明细，多行属性自动换行）；批量 U1U 的设备内预留是统一一个值，只询问本批还没有记录的图框；迁移移除 BRIDGE_FRAME_INFO/CONDUIT_INFO 后图框不再显示旧文本（数据仍按统计重算并进清单/BOQ）；旧内嵌 FRAMEINFO_JSON 会在迁移前读出并迁移，不再丢失替代型号与历史。"),

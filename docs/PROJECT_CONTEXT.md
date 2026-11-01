@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.9.1`.
+- Current release: `2.9.2`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -98,10 +98,10 @@ XLAYOUT/XSTS
 - Old frames and `xframe`/`xframe_v2` are supported. `XFrameTemplate.dwg`
   contains only `xframe_v2`; legacy frames migrate on the next U1F/U1U write,
   and attributes absent from the new definition are removed.
-- U1U cable total = measured drawing length + panel reserve (I-Line 3400mm /
+- U1F/U1U cable total = measured drawing length + panel reserve (I-Line 3400mm /
   socket panel 1200mm / busbar connector 500mm) + device reserve. The device
-  reserve is entered in the U1U review GUI (not on the command line), written
-  to `frameinfo_json`, and prefilled from there on later runs.
+  reserve is entered in the review GUI (not on the command line), written to
+  `frameinfo_json`, and prefilled from there on later runs.
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is
   revisited.

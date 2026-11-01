@@ -195,9 +195,10 @@ namespace UNCAD.Features.Fill
             // 独立 JSON 块 + 图框块上的记录；U1F 也要读，否则旧图框首次 U1F 会丢身份/历史。
             FrameInfoJsonRecord frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
                 FrameInfoJsonBlockWriter.ReadSources(selection));
-            CableReserveInfo cableReserve = updateMode
-                ? ResolveCableReserve(frameInfoPrevious, picked, statistics)
-                : null;
+            // U1F（新建）与 U1U（更新）共用同一套电缆预留：盘内预留按上游类型，
+            // 设备内预留从 frameinfo_json 复用；没有记录时在清单确认窗里填写。
+            CableReserveInfo cableReserve = ResolveCableReserve(frameInfoPrevious,
+                picked, statistics);
             if (updateMode)
             {
                 try
@@ -276,7 +277,7 @@ namespace UNCAD.Features.Fill
                 review.RestoreBusPlugBoxChoice(frameInfoPrevious
                     ?? FrameInfoJsonBlockWriter.Read(ctx,
                         selection.FrameInfoJsonBlockIds), catalog);
-            if (updateMode && cableReserve != null)
+            if (cableReserve != null)
                 InitializeReserveReview(review, cableReserve);
             ResolveMissingCableCatalog(review, catalog);
             // Resolve a replacement before reading Ruanguan so an initially unknown
@@ -297,7 +298,7 @@ namespace UNCAD.Features.Fill
                     != DialogResult.OK) return;
                 review = form.Data;
             }
-            if (updateMode && cableReserve != null)
+            if (cableReserve != null)
                 ApplyReviewReserve(statistics, cableReserve, review);
             Log.Info("U1F 审阅窗后清单: " + Describe(review));
             if (updateMode && (!IdentityTextNormalizer.Equals(updateMachineId,
@@ -596,6 +597,14 @@ namespace UNCAD.Features.Fill
                 + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
                 + " 条，覆盖文件 " + automaticExcel.ReplacedCount
                 + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
+            if (cableReserve != null
+                && (cableReserve.PanelReserveMillimeters > 0d
+                    || cableReserve.DeviceReserveMillimeters > 0d))
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 电缆预留：实测 " + TextFormatter.FormatNum(cableReserve.MeasuredMeters)
+                    + " m + 盘内 " + TextFormatter.FormatNum(cableReserve.PanelReserveMillimeters)
+                    + " mm + 设备 " + TextFormatter.FormatNum(cableReserve.DeviceReserveMillimeters)
+                    + " mm = 总长 " + TextFormatter.FormatNum(cableReserve.TotalMeters) + " m。");
             // 阶段6 之后：把**该回路（=该图框）**的清单内容 + 等轴测（3D）场景交给后台线程上传。
             // 上传失败只记日志+命令行提示，绝不回滚已经提交的 CAD 事务与 BOQ 输出。
             if (UploadCircuitSubmission(ctx, picked, tableRows, updateMode, selection))
