@@ -108,10 +108,14 @@ rewrite an existing entry.
 ## D-005: `frameinfo_json` Is the Identity Record
 
 - Status: accepted
-- Decision: frame identity, last update, and replacement history are persisted
-  in the `frameinfo_json` block.
+- Decision: frame identity, last update, cable reserve breakdown, and
+  replacement history are persisted in the standalone `frameinfo_json` block
+  (schema v2). Legacy embedded `FRAMEINFO_JSON` attributes are read for
+  migration and then cleared.
 - Consequence: U1U should use this record to preserve user-selected
-  substitutions instead of rediscovering them from incomplete labels.
+  substitutions and the confirmed device reserve instead of rediscovering them
+  from incomplete labels or asking again on every run. Payload validity and
+  length are enforced before writing; never persist a truncated JSON.
 
 ## D-006: U1LX Is Not a Quantity Source
 

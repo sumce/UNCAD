@@ -22,6 +22,8 @@ namespace UNCAD.Core.Submission
             @"名称\s*[:：]\s*(.+?)mm(?:²|2)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex EqualsMeters = new Regex(
             @"=\s*([0-9]+(?:\.[0-9]+)?)\s*[mM](?:\b|$)", RegexOptions.Compiled);
+        private static readonly Regex EqualsMillimeters = new Regex(
+            @"=\s*([0-9]+(?:\.[0-9]+)?)\s*mm", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex MeterValue = new Regex(
             @"([0-9]+(?:\.[0-9]+)?)\s*[mM](?:\b|$)", RegexOptions.Compiled);
         private static readonly Regex DetailRating = new Regex(
@@ -254,10 +256,27 @@ namespace UNCAD.Core.Submission
                 StringSplitOptions.RemoveEmptyEntries);
             foreach (string part in parts)
             {
-                Match equals = EqualsMeters.Match(part);
-                if (equals.Success)
+                // v2 CABLE_INFO 全部用 mm：优先取最后一个 =xxxmm（最终总长），
+                // 其次兼容旧 =xx.xM 写法，最后才按 mm 分段兜底。
+                MatchCollection millimetreEquals = EqualsMillimeters.Matches(part);
+                if (millimetreEquals.Count > 0)
                 {
-                    total += ParseMeters(equals.Groups[1].Value);
+                    total += ParseMillimeters(millimetreEquals[
+                        millimetreEquals.Count - 1].Groups[1].Value) / 1000d;
+                    continue;
+                }
+                MatchCollection meterEquals = EqualsMeters.Matches(part);
+                if (meterEquals.Count > 0)
+                {
+                    total += ParseMeters(meterEquals[meterEquals.Count - 1]
+                        .Groups[1].Value);
+                    continue;
+                }
+                MatchCollection millimetres = MillimeterValue.Matches(part);
+                if (millimetres.Count > 0 && part.IndexOf(':') >= 0)
+                {
+                    total += ParseMillimeters(millimetres[millimetres.Count - 1]
+                        .Groups[1].Value) / 1000d;
                     continue;
                 }
                 MatchCollection meters = MeterValue.Matches(part);
@@ -265,6 +284,15 @@ namespace UNCAD.Core.Submission
                     total += ParseMeters(meters[meters.Count - 1].Groups[1].Value);
             }
             return total;
+        }
+
+        private static double ParseMillimeters(string value)
+        {
+            string text = (value ?? "").Trim();
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out double invariant)) return invariant;
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture,
+                out double current) ? current : 0;
         }
 
         private static double ParseMeters(string value)

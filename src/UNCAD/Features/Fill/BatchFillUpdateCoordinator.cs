@@ -31,6 +31,7 @@ namespace UNCAD.Features.Fill
             public CableStatResult Statistics { get; set; }
             public List<TableFillRow> Rows { get; set; }
             public FillReviewData Review { get; set; }
+            public CableReserveInfo Reserve { get; set; }
             public Core.Fill.FrameInfoJsonRecord PreviousRecord { get; set; }
             public List<TableFillRow> ExistingRows { get; set; }
             public string LegacyLastUpdated { get; set; } = "";
@@ -93,6 +94,32 @@ namespace UNCAD.Features.Fill
                 readTransaction.Commit();
             }
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
+
+            // 首次使用的图框：在 GUI 里统一填写设备内预留；已有 frameinfo_json 记录的
+            // 图框保持原值，不再询问。命令行不出现任何输入提示。
+            List<Plan> reserveMissing = plans.Where(plan => plan.Reserve != null
+                && (plan.PreviousRecord == null
+                    || string.IsNullOrWhiteSpace(plan.PreviousRecord.DeviceReserveMm)))
+                .ToList();
+            if (reserveMissing.Count > 0)
+            {
+                using (var reserveForm = new DeviceReserveForm(reserveMissing.Count))
+                {
+                    if (AcApplication.ShowModalDialog(reserveForm) != DialogResult.OK)
+                    {
+                        ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
+                        return;
+                    }
+                    foreach (Plan plan in reserveMissing)
+                    {
+                        FillFeature.ApplyDeviceReserve(plan.Statistics, plan.Reserve,
+                            reserveForm.ReserveMillimeters);
+                        plan.Review.DeviceReserveMm = UNCAD.Core.Text.TextFormatter.FormatNum(
+                            reserveForm.ReserveMillimeters);
+                        plan.Review.SyncCableReserveMeters();
+                    }
+                }
+            }
 
             if (errors.Count > 0)
             {
@@ -330,7 +357,8 @@ namespace UNCAD.Features.Fill
                         FillWriteResult frameInfo = FrameInfoJsonBlockWriter.FillOrMigrate(ctx,
                             transaction, plan.Selection.FrameBlockIds,
                             plan.Selection.FrameInfoJsonBlockIds, plan.Machine,
-                            plan.Review, CommandIds.FillUpdate, metadataIndex);
+                            plan.Review, CommandIds.FillUpdate, metadataIndex,
+                            plan.Reserve, plan.PreviousRecord);
                         FillWriteResult upstreamInfo = CadBlockAttributeWriter.FillTagged(ctx,
                             transaction, plan.Selection.UpstreamInfoBlockIds,
                             ConnectionBlockFiller.TagUpstreamInfo,
@@ -438,7 +466,7 @@ namespace UNCAD.Features.Fill
             SelectionService.ClearPickFirst(ctx);
             if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
                 || xframeMigration.DrawingInfoTables > 0)
-                ctx.Write("\n[U1U] 图框已升级：xframe " + xframeMigration.Frames
+                ctx.Write("\n[U1U] 图框已升级：xframe_v2 " + xframeMigration.Frames
                     + " 个，BOQ 表替换 " + xframeMigration.BoqTables
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             if (deviceColorBlocks + upstreamColorBlocks > 0)
@@ -548,6 +576,12 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[U1U] " + prefix
                     + "存在未启用或不完整的统计类别，仅这些类别保留旧值。");
 
+            // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
+            FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
+                selection.FrameInfoJsonBlockIds);
+            CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
+                machine, statistics);
+
             try
             {
                 // Batch U1U must use the current CAD table as the cable fallback before planning.
@@ -610,8 +644,8 @@ namespace UNCAD.Features.Fill
                 tablePlan.DefaultCableMeters, tablePlan.AutoFill);
             FillReviewData review = tablePlan.CreateReview(machine, options.Planning,
                 originalCableModel);
-            FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                selection.FrameInfoJsonBlockIds);
+            if (reserve != null) FillFeature.InitializeReserveReview(review, reserve);
+            FillFeature.SyncCableReserveTotal(reserve, review.CableMeters);
             review.RestoreBusPlugBoxChoice(previousRecord, workbook.Catalog);
             try
             {
@@ -669,6 +703,7 @@ namespace UNCAD.Features.Fill
                 Summation = summation,
                 Statistics = statistics,
                 Review = review,
+                Reserve = reserve,
                 Rows = review.SelectedRows(),
                 CableRequestKey = cableRequestKey,
                 BusPlugBoxRequestKey = busPlugBoxRequestKey,

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UNCAD.Core.Excel;
 
@@ -11,16 +12,22 @@ namespace UNCAD.Core.Fill
         {
             "MachineId", "DeviceName", "Region", "OriginalCableModel", "BoqCableModel", "BoqBusPlugBoxCode",
             "Fr", "Detail", "Seq", "HoseDiameter", "Next", "UpstreamAxis",
-            "DownstreamAxis", "DeviceFloor", "PanelFloor", "FacilitySwitch"
+            "DownstreamAxis", "DeviceFloor", "PanelFloor", "FacilitySwitch",
+            "MeasuredCableM", "PanelReserveMm", "DeviceReserveMm", "TotalCableM"
         };
 
         public static FrameInfoJsonRecord Update(FrameInfoJsonRecord previous,
             MachineRow machine, FillReviewData review, string commandName, DateTime utcNow)
-            => Update(previous, machine, review, commandName, utcNow, null);
+            => Update(previous, machine, review, commandName, utcNow, null, null);
 
+        /// <summary>
+        /// Builds the next v2 record. <paramref name="reserve"/> is optional: when
+        /// supplied the cable reserve fields are refreshed; otherwise the previous
+        /// values are preserved (same policy as the cable-model override).
+        /// </summary>
         public static FrameInfoJsonRecord Update(FrameInfoJsonRecord previous,
             MachineRow machine, FillReviewData review, string commandName, DateTime utcNow,
-            string updateUser)
+            string updateUser, CableReserveInfo reserve = null)
         {
             if (machine == null) throw new ArgumentNullException(nameof(machine));
             previous = previous ?? new FrameInfoJsonRecord();
@@ -31,7 +38,7 @@ namespace UNCAD.Core.Fill
             FillReviewItem busPlugBox = review?.BusPlugBoxItem();
             var next = new FrameInfoJsonRecord
             {
-                SchemaVersion = "1",
+                SchemaVersion = FrameInfoJsonCodec.CurrentSchemaVersion,
                 MachineId = machine.MachineId ?? "",
                 DeviceName = machine.CircuitName ?? "",
                 Region = machine.Region ?? "",
@@ -53,13 +60,28 @@ namespace UNCAD.Core.Fill
                 LastModifiedUtc = utcNow.ToUniversalTime().ToString("o"),
                 LastModifiedUser = FirstNonEmpty(updateUser, Environment.UserName,
                     Environment.MachineName),
+                MeasuredCableM = reserve == null
+                    ? (previous.MeasuredCableM ?? "")
+                    : FormatDouble(reserve.MeasuredMeters),
+                PanelReserveMm = reserve == null
+                    ? (previous.PanelReserveMm ?? "")
+                    : FormatDouble(reserve.PanelReserveMillimeters),
+                DeviceReserveMm = reserve == null
+                    ? (previous.DeviceReserveMm ?? "")
+                    : FormatDouble(reserve.DeviceReserveMillimeters),
+                TotalCableM = reserve == null
+                    ? (previous.TotalCableM ?? "")
+                    : FormatDouble(reserve.TotalMeters),
                 Changes = (previous.Changes ?? new List<FrameInfoJsonChange>())
                     .Select(CloneChange).ToList()
             };
             foreach (string field in TrackedFields)
                 AddChange(previous, next, field, commandName);
-            if (next.Changes.Count > 200)
-                next.Changes = next.Changes.Skip(next.Changes.Count - 200).ToList();
+            if (next.Changes.Count > FrameInfoJsonCodec.MaxChanges)
+            {
+                next.Changes = next.Changes
+                    .Skip(next.Changes.Count - FrameInfoJsonCodec.MaxChanges).ToList();
+            }
             return next;
         }
 
@@ -116,9 +138,19 @@ namespace UNCAD.Core.Fill
                 case "DeviceFloor": return record.DeviceFloor ?? "";
                 case "PanelFloor": return record.PanelFloor ?? "";
                 case "FacilitySwitch": return record.FacilitySwitch ?? "";
+                case "MeasuredCableM": return record.MeasuredCableM ?? "";
+                case "PanelReserveMm": return record.PanelReserveMm ?? "";
+                case "DeviceReserveMm": return record.DeviceReserveMm ?? "";
+                case "TotalCableM": return record.TotalCableM ?? "";
                 case "LastModifiedUser": return record.LastModifiedUser ?? "";
                 default: return "";
             }
+        }
+
+        private static string FormatDouble(double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value)) return "";
+            return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         private static string FirstNonEmpty(params string[] values)

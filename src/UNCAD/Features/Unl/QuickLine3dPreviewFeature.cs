@@ -57,7 +57,7 @@ namespace UNCAD.Features.Unl
                 throw new InvalidOperationException(string.Join("\n", regions.Errors));
             if (regions.SelectedFrameCount != 1 || regions.Groups.Count != 1)
             {
-                ctx.Write("\n[U1L3D] 请只框选一个完整的 frame/frame_20260812/xframe 图框，"
+                ctx.Write("\n[U1L3D] 请只框选一个完整的 frame/frame_20260812/xframe/xframe_v2 图框，"
                     + "并确保图框块本身包含在选择集中。");
                 return;
             }
@@ -282,7 +282,7 @@ namespace UNCAD.Features.Unl
                 throw new InvalidOperationException(string.Join("\n", regions.Errors));
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[U13D] 未找到完整的 frame/frame_20260812/xframe 图框。");
+                ctx.Write("\n[U13D] 未找到完整的 frame/frame_20260812/xframe/xframe_v2 图框。");
                 return;
             }
 

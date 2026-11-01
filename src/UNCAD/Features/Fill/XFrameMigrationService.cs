@@ -73,10 +73,10 @@ namespace UNCAD.Features.Fill
                 {
                     BlockTable sourceBlocks = (BlockTable)source.GetObject(
                         template.BlockTableId, OpenMode.ForRead);
-                    if (!sourceBlocks.Has(FrameRegionCollector.XFrameName))
-                        throw new InvalidDataException("新版图框模板中缺少 xframe 定义。");
+                    if (!sourceBlocks.Has(FrameRegionCollector.CurrentFrameName))
+                        throw new InvalidDataException("新版图框模板中缺少 xframe_v2 定义。");
                     ObjectId sourceDefinitionId = sourceBlocks[
-                        FrameRegionCollector.XFrameName];
+                        FrameRegionCollector.CurrentFrameName];
                     ObjectId targetDefinitionId = EnsureDefinition(ctx.Db, transaction,
                         template, sourceDefinitionId);
                     FindTemplateTables(source, sourceBlocks, out ObjectId sourceBoqTableId,
@@ -160,8 +160,8 @@ namespace UNCAD.Features.Fill
         {
             BlockTable blocks = (BlockTable)transaction.GetObject(target.BlockTableId,
                 OpenMode.ForRead);
-            if (blocks.Has(FrameRegionCollector.XFrameName))
-                return blocks[FrameRegionCollector.XFrameName];
+            if (blocks.Has(FrameRegionCollector.CurrentFrameName))
+                return blocks[FrameRegionCollector.CurrentFrameName];
 
             var ids = new ObjectIdCollection { sourceDefinitionId };
             var mapping = new IdMapping();
@@ -169,7 +169,7 @@ namespace UNCAD.Features.Fill
                 DuplicateRecordCloning.Ignore, false);
             ObjectId cloned = mapping[sourceDefinitionId].Value;
             if (cloned.IsNull)
-                throw new InvalidOperationException("无法导入 xframe 图框定义。");
+                throw new InvalidOperationException("无法导入 xframe_v2 图框定义。");
             return cloned;
         }
 
@@ -315,13 +315,15 @@ namespace UNCAD.Features.Fill
             frame.BlockTableRecord = targetDefinitionId;
             BlockTableRecord definition = transaction.GetObject(targetDefinitionId,
                 OpenMode.ForRead) as BlockTableRecord;
+            var definitionTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ObjectId id in definition)
             {
                 AttributeDefinition attributeDefinition = transaction.GetObject(id,
                     OpenMode.ForRead, true) as AttributeDefinition;
                 if (attributeDefinition == null || attributeDefinition.Constant) continue;
-                if (existing.TryGetValue(attributeDefinition.Tag ?? "",
-                    out AttributeReference attribute))
+                string tag = attributeDefinition.Tag ?? "";
+                definitionTags.Add(tag);
+                if (existing.TryGetValue(tag, out AttributeReference attribute))
                 {
                     string value = AttributeText(attribute);
                     attribute.UpgradeOpen();
@@ -337,6 +339,16 @@ namespace UNCAD.Features.Fill
                 created.SetAttributeFromBlock(attributeDefinition, frame.BlockTransform);
                 frame.AttributeCollection.AppendAttribute(created);
                 transaction.AddNewlyCreatedDBObject(created, true);
+            }
+
+            // 新图框只保留自己定义的属性。旧图框独有的 FRAMEINFO_JSON /
+            // BRIDGE_FRAME_INFO / CONDUIT_INFO 等没有对应定义，迁移时必须从块参照
+            // 上移除，避免残留过期 JSON/统计文本（JSON 身份由独立 frameinfo_json 块维护）。
+            foreach (KeyValuePair<string, AttributeReference> stale in existing)
+            {
+                if (definitionTags.Contains(stale.Key)) continue;
+                stale.Value.UpgradeOpen();
+                stale.Value.Erase();
             }
             frame.RecordGraphicsModified(true);
         }

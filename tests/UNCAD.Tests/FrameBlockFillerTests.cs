@@ -107,7 +107,48 @@ namespace UNCAD.Tests
             }, 250.0);
             var v = FrameBlockFiller.BuildValues(Row(), "", stat);
 
-            Assert.Equal("ZB-YJV-3*70+1*35mm²: 2+3+3+4+4.4=16.4M",
+            Assert.Equal("ZB-YJV-3*70+1*35mm²: 2000+3000+3000+4000+4400=16400mm",
+                v[FrameBlockFiller.TagCable]);
+        }
+
+        [Fact]
+        public void BuildValues_AppendsReserveLabelsInMillimeters()
+        {
+            var stat = StatCalculator.Calculate(new[]
+            {
+                "2000mm", "3000mm"
+            }, 250.0);
+            CableReservePolicy.Apply(stat, "I-Line盘", 500d);
+            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+
+            Assert.Equal(
+                "ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm（盘内预留）+3400mm"
+                + "（设备预留）+500mm=8900mm",
+                v[FrameBlockFiller.TagCable]);
+        }
+
+        [Fact]
+        public void BuildValues_SingleMeasuredCableUsesMillimeters()
+        {
+            var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
+            CableReservePolicy.Apply(stat, "插座盘", 500d);
+            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+
+            Assert.Equal(
+                "ZB-YJV-3*70+1*35mm²: 2000mm（盘内预留）+1200mm"
+                + "（设备预留）+500mm=3700mm",
+                v[FrameBlockFiller.TagCable]);
+        }
+
+        [Fact]
+        public void BuildValues_OmitsDeviceReserveWhenNotReserved()
+        {
+            var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
+            CableReservePolicy.Apply(stat, "I-Line盘", 0d);
+            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+
+            Assert.Equal(
+                "ZB-YJV-3*70+1*35mm²: 2000mm（盘内预留）+3400mm=5400mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -123,7 +164,7 @@ namespace UNCAD.Tests
             var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
             var v = FrameBlockFiller.BuildValues(row, "", stat);
 
-            Assert.Equal(expected + "mm²: 2M", v[FrameBlockFiller.TagCable]);
+            Assert.Equal(expected + "mm²: 2000mm", v[FrameBlockFiller.TagCable]);
         }
 
         [Fact]

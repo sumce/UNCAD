@@ -77,6 +77,23 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Extract_ReadsMillimeterCableInfoWithReserves()
+        {
+            var source = new SubmissionSourceData();
+            source.AddAttribute(FrameBlockFiller.TagPower, "MQBAN01-POWER");
+            source.AddAttribute(FrameBlockFiller.TagDevice, "MQBAN01-中央实验台1-1");
+            source.AddAttribute(DeviceBlockFiller.TagDeviceName, "中央实验台1-1");
+            source.AddAttribute(FrameBlockFiller.TagCable,
+                "ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
+                + "（盘内预留）+3400mm（设备预留）+0mm=8400mm");
+
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
+
+            Assert.Equal("ZB-YJV-3*70+1*35", record.OriginalCable);
+            Assert.Equal("8.4", record.CableMeters);
+        }
+
+        [Fact]
         public void Extract_InfersPanelFromTableWhenDynamicStateMissing()
         {
             var source = new SubmissionSourceData();

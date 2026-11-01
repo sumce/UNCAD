@@ -23,6 +23,11 @@ namespace UNCAD.Features.Fill
 
     internal static class CadBlockAttributeWriter
     {
+        /// <summary>
+        /// CABLE_INFO 已改为多行属性：文本箱宽度固定 78300 图形单位，超过自动换行。
+        /// 这是图框版式要求（每行最大 78300），不要在写入时把宽度重置为 0。
+        /// </summary>
+        internal const double CableInfoMTextWidth = 78300d;
         public static FillWriteResult FillDeviceName(CadContext ctx, ObjectId[] blockIds,
             string circuitName)
             => RunStandalone(ctx, transaction =>
@@ -155,7 +160,10 @@ namespace UNCAD.Features.Fill
                         as AttributeReference;
                     if (attribute == null
                         || !values.TryGetValue(attribute.Tag, out string newValue)) continue;
-                    SetAttributeValue(ctx, attribute, newValue, attribute.IsMTextAttribute);
+                    bool cableInfo = string.Equals(attribute.Tag, FrameBlockFiller.TagCable,
+                        StringComparison.OrdinalIgnoreCase);
+                    SetAttributeValue(ctx, attribute, newValue, attribute.IsMTextAttribute,
+                        cableInfo ? CableInfoMTextWidth : 0d);
                     attributes++;
                     touched = true;
                 }
@@ -165,7 +173,7 @@ namespace UNCAD.Features.Fill
         }
 
         private static void SetAttributeValue(CadContext ctx, AttributeReference attribute,
-            string value, bool multiline)
+            string value, bool multiline, double mtextWidth = 0d)
         {
             string text = value ?? "";
             attribute.UpgradeOpen();
@@ -176,6 +184,8 @@ namespace UNCAD.Features.Fill
                 {
                     if (mtext != null)
                     {
+                        // Width > 0 才会按文本框自动换行；CABLE_INFO 固定用 78300。
+                        if (mtextWidth > 0d) mtext.Width = mtextWidth;
                         mtext.Contents = text;
                         attribute.MTextAttribute = mtext;
                     }

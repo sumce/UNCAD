@@ -118,5 +118,97 @@ namespace UNCAD.Tests
             Assert.All(updated.Changes, change => Assert.Equal(
                 updated.LastModifiedUtc, change.TimestampUtc));
         }
+
+        [Fact]
+        public void Update_WritesV2CableReserveFieldsAndCapsHistory()
+        {
+            var previous = new FrameInfoJsonRecord
+            {
+                MachineId = "M1",
+                DeviceName = "A"
+            };
+            for (int index = 0; index < 25; index++)
+                previous.Changes.Add(new FrameInfoJsonChange { Field = "Old" + index });
+            var machine = new MachineRow { MachineId = "M1", CircuitName = "A" };
+            var reserve = new CableReserveInfo
+            {
+                MeasuredMeters = 10d,
+                PanelReserveMillimeters = 1200d,
+                DeviceReserveMillimeters = 500d,
+                TotalMeters = 11.7d
+            };
+            DateTime now = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            FrameInfoJsonRecord updated = FrameInfoJsonRecordUpdater.Update(previous,
+                machine, null, "U1U", now, "tester", reserve);
+
+            Assert.Equal("2", updated.SchemaVersion);
+            Assert.Equal("10", updated.MeasuredCableM);
+            Assert.Equal("1200", updated.PanelReserveMm);
+            Assert.Equal("500", updated.DeviceReserveMm);
+            Assert.Equal("11.7", updated.TotalCableM);
+            Assert.Equal(FrameInfoJsonCodec.MaxChanges, updated.Changes.Count);
+            Assert.Contains(updated.Changes, change => change.Field == "MeasuredCableM"
+                && change.Before == "" && change.After == "10");
+            Assert.Equal(25, previous.Changes.Count);
+            Assert.Equal("tester", updated.LastModifiedUser);
+
+            FrameInfoJsonRecord roundTripped = FrameInfoJsonCodec.Parse(
+                FrameInfoJsonCodec.Serialize(updated));
+            Assert.NotNull(roundTripped);
+            Assert.Equal("2", roundTripped.SchemaVersion);
+            Assert.Equal("10", roundTripped.MeasuredCableM);
+            Assert.Equal("1200", roundTripped.PanelReserveMm);
+            Assert.Equal("500", roundTripped.DeviceReserveMm);
+            Assert.Equal("11.7", roundTripped.TotalCableM);
+            Assert.True(roundTripped.Changes.Count <= FrameInfoJsonCodec.MaxChanges);
+        }
+
+        [Fact]
+        public void Update_WithoutReserveKeepsPreviousCableReserveValues()
+        {
+            var previous = new FrameInfoJsonRecord
+            {
+                MachineId = "M1",
+                DeviceName = "A",
+                MeasuredCableM = "3.5",
+                PanelReserveMm = "3400",
+                DeviceReserveMm = "800",
+                TotalCableM = "7.7"
+            };
+            var machine = new MachineRow { MachineId = "M1", CircuitName = "A" };
+
+            FrameInfoJsonRecord updated = FrameInfoJsonRecordUpdater.Update(previous,
+                machine, null, "U1U", new DateTime(2026, 10, 1, 0, 0, 0,
+                    DateTimeKind.Utc));
+
+            Assert.Equal("3.5", updated.MeasuredCableM);
+            Assert.Equal("3400", updated.PanelReserveMm);
+            Assert.Equal("800", updated.DeviceReserveMm);
+            Assert.Equal("7.7", updated.TotalCableM);
+            Assert.Empty(updated.Changes);
+        }
+
+        [Fact]
+        public void Update_FormatsReserveNumbersWithInvariantCulture()
+        {
+            var machine = new MachineRow { MachineId = "M1" };
+            var reserve = new CableReserveInfo
+            {
+                MeasuredMeters = 12.3456d,
+                PanelReserveMillimeters = 0d,
+                DeviceReserveMillimeters = 500.5d,
+                TotalMeters = 12.8461d
+            };
+
+            FrameInfoJsonRecord updated = FrameInfoJsonRecordUpdater.Update(null,
+                machine, null, "U1U", new DateTime(2026, 10, 1, 0, 0, 0,
+                    DateTimeKind.Utc), null, reserve);
+
+            Assert.Equal("12.346", updated.MeasuredCableM);
+            Assert.Equal("0", updated.PanelReserveMm);
+            Assert.Equal("500.5", updated.DeviceReserveMm);
+            Assert.Equal("12.846", updated.TotalCableM);
+        }
     }
 }

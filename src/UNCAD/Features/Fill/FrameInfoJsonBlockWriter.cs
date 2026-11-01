@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -65,7 +66,8 @@ namespace UNCAD.Features.Fill
 
         internal static FillWriteResult Fill(CadContext ctx, Transaction transaction,
             ObjectId[] blockIds, MachineRow machine, FillReviewData review,
-            string commandName)
+            string commandName, FrameInfoJsonRecord previousRecord = null,
+            CableReserveInfo reserve = null, ObjectId[] legacyFrameIds = null)
         {
             if (ctx == null || transaction == null || blockIds == null
                 || blockIds.Length == 0 || machine == null) return FillWriteResult.Empty;
@@ -79,33 +81,32 @@ namespace UNCAD.Features.Fill
                 if (!visited.Add(id)) continue;
                 BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
                     as BlockReference;
-                if (!IsJsonHostBlock(transaction, block)) continue;
+                if (!IsFrameInfoJsonBlock(transaction, block)) continue;
 
-                // Older drawings may contain a frameinfo_json insert created from a
-                // definition that had no attribute reference. Adding the definition alone
-                // does not retrofit existing inserts, so create the missing JSON reference
-                // before reading/writing the payload.
-                if (IsFrameInfoJsonBlock(transaction, block))
-                    EnsureJsonAttributeReference(ctx.Db, transaction, block);
-
+                // Older standalone metadata inserts may predate the JSON attribute
+                // definition; retrofit only the standalone block itself.
+                EnsureJsonAttributeReference(ctx.Db, transaction, block);
                 targets.Add(id);
             }
 
-            // A frame can temporarily contain both an embedded and a standalone metadata
-            // insert. Read them as one source of truth before writing so a stale second copy
-            // cannot silently overwrite a user's confirmed replacement.
-            FrameInfoJsonRecord previousRecord = null;
-            foreach (ObjectId id in targets)
+            // A frame can temporarily contain both a standalone metadata insert and a
+            // legacy embedded FRAMEINFO_JSON attribute. Read them as one source of truth
+            // (newest record wins) before writing so a stale second copy cannot silently
+            // overwrite a user's confirmed replacement.
+            if (previousRecord == null)
             {
-                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
-                    as BlockReference;
-                FrameInfoJsonRecord current = ReadBlock(transaction, block);
-                if (current != null)
-                    previousRecord = Merge(previousRecord, current, id);
+                foreach (ObjectId id in targets)
+                {
+                    BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as BlockReference;
+                    FrameInfoJsonRecord current = ReadBlock(transaction, block);
+                    if (current != null)
+                        previousRecord = Merge(previousRecord, current, id);
+                }
             }
 
             FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previousRecord,
-                machine, review, commandName, DateTime.UtcNow);
+                machine, review, commandName, DateTime.UtcNow, null, reserve);
             string payload = FrameInfoJsonCodec.Serialize(next);
             foreach (ObjectId id in targets)
             {
@@ -170,6 +171,10 @@ namespace UNCAD.Features.Fill
                 else if (jsonAttributes.Count == 0)
                     ctx.Write("\n[U1F/U1U] frameinfo_json 块没有可写入的 JSON 属性，已跳过。");
             }
+
+            // 旧图框内嵌的 FRAMEINFO_JSON 属性已迁移到独立块：清空旧值，避免同一图框
+            // 留下两份 JSON（新图框模板已删除该属性，不能再往图框定义里补）。
+            values += ClearEmbeddedJson(transaction, legacyFrameIds);
             return new FillWriteResult(blocks, values);
         }
 
@@ -235,16 +240,37 @@ namespace UNCAD.Features.Fill
         internal static FillWriteResult FillOrMigrate(CadContext ctx, Transaction transaction,
             ObjectId[] frameBlockIds, ObjectId[] blockIds, MachineRow machine,
             FillReviewData review, string commandName,
-            MetadataBlockIndex sharedIndex)
+            MetadataBlockIndex sharedIndex, CableReserveInfo reserve = null,
+            FrameInfoJsonRecord previousRecord = null)
         {
-            var targets = new List<ObjectId>(blockIds ?? Array.Empty<ObjectId>());
-            var seen = new HashSet<ObjectId>(targets);
+            var targets = new List<ObjectId>();
+            var seen = new HashSet<ObjectId>();
+            // 只写独立 frameinfo_json 块；旧图框内嵌的 FRAMEINFO_JSON 属性在下面迁移并清空。
+            foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
+            {
+                if (id.IsNull || !seen.Add(id)) continue;
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block != null && IsFrameInfoJsonBlock(transaction, block))
+                    targets.Add(id);
+            }
+
+            var legacyFrames = new List<ObjectId>();
+            FrameInfoJsonRecord previous = previousRecord;
             foreach (ObjectId frameId in frameBlockIds ?? Array.Empty<ObjectId>())
             {
-                if (frameId.IsNull || !seen.Add(frameId)) continue;
+                if (frameId.IsNull) continue;
                 BlockReference frame = transaction.GetObject(frameId, OpenMode.ForRead, true)
                     as BlockReference;
                 if (frame == null) continue;
+
+                if (HasJsonAttribute(transaction, frame))
+                {
+                    legacyFrames.Add(frameId);
+                    FrameInfoJsonRecord embedded = ReadBlock(transaction, frame);
+                    if (embedded != null)
+                        previous = Merge(previous, embedded, frameId);
+                }
 
                 // Prefer an existing standalone metadata insert so legacy drawings that
                 // already carry one do not gain a second JSON source of truth.
@@ -252,23 +278,27 @@ namespace UNCAD.Features.Fill
                     sharedIndex ?? MetadataBlockIndex.Scan(ctx, transaction));
                 if (!existing.IsNull)
                 {
-                    targets.Add(existing);
+                    if (seen.Add(existing)) targets.Add(existing);
                     continue;
                 }
 
-                // Newer frame definitions store JSON as an invisible attribute directly on
-                // frame_20260812. Reuse it when present; otherwise retrofit the legacy frame
-                // definition and selected insert before falling back to a standalone block.
-                if (HasJsonAttribute(transaction, frame)
-                    || EnsureFrameJsonAttribute(ctx.Db, transaction, frame))
-                {
-                    targets.Add(frameId);
-                    continue;
-                }
                 ObjectId created = CreateMetadataBlock(ctx, transaction, frame);
-                if (!created.IsNull) targets.Add(created);
+                if (!created.IsNull && seen.Add(created)) targets.Add(created);
             }
-            return Fill(ctx, transaction, targets.ToArray(), machine, review, commandName);
+
+            if (previous == null)
+            {
+                foreach (ObjectId id in targets)
+                {
+                    BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as BlockReference;
+                    FrameInfoJsonRecord record = block == null ? null : ReadBlock(transaction, block);
+                    if (record != null) previous = Merge(previous, record, id);
+                }
+            }
+
+            return Fill(ctx, transaction, targets.ToArray(), machine, review, commandName,
+                previous, reserve, legacyFrames.ToArray());
         }
 
         internal static bool IsFrameInfoJsonBlock(Transaction transaction,
@@ -333,73 +363,67 @@ namespace UNCAD.Features.Fill
             FrameInfoJsonRecord next, ObjectId id)
         {
             if (current == null) return next;
-            if (!string.Equals(FrameInfoJsonCodec.Serialize(current),
+            if (next == null) return current;
+            if (string.Equals(FrameInfoJsonCodec.Serialize(current),
                 FrameInfoJsonCodec.Serialize(next), StringComparison.Ordinal))
-                throw new InvalidDataException("图框中存在多个不一致的 frameinfo_json 记录（块 "
-                    + id.Handle + "）。请只保留一个有效记录后重试。");
+                return current;
+
+            // 旧图框可能同时有内嵌 FRAMEINFO_JSON 和独立 frameinfo_json 块，且两份内容
+            // 因历史写入时间不同并不一致。这里以 lastModifiedUtc 较新的一份为准，避免
+            // 以前的“多个记录不一致就整体失败”把整个 U1U 卡死。
+            bool currentParsed = DateTimeOffset.TryParse(current.LastModifiedUtc,
+                CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                out DateTimeOffset currentTime);
+            bool nextParsed = DateTimeOffset.TryParse(next.LastModifiedUtc,
+                CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                out DateTimeOffset nextTime);
+            if (nextParsed && (!currentParsed || nextTime > currentTime)) return next;
             return current;
         }
 
-        private static bool EnsureFrameJsonAttribute(Database database,
-            Transaction transaction, BlockReference frame)
+        /// <summary>清空旧图框内嵌的 JSON 属性/动态属性，避免同一图框保留两份 JSON。</summary>
+        private static int ClearEmbeddedJson(Transaction transaction, ObjectId[] frameIds)
         {
-            if (frame == null || HasJsonAttribute(transaction, frame)) return true;
-
-            List<BlockTableRecord> definitions = Definitions(transaction, frame).ToList();
-            if (definitions.Count == 0) return false;
-            // Add new attributes to the named definition when possible so all dynamic states
-            // inherit the metadata; read an existing attribute from either definition.
-            BlockTableRecord definition = definitions.Last();
-            AttributeDefinition jsonDefinition = null;
-            foreach (BlockTableRecord candidateDefinition in definitions)
+            int cleared = 0;
+            foreach (ObjectId id in frameIds ?? Array.Empty<ObjectId>())
             {
-                foreach (ObjectId entityId in candidateDefinition)
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block == null) continue;
+                foreach (AttributeReference attribute in Attributes(transaction, block))
                 {
-                    AttributeDefinition candidate = transaction.GetObject(entityId,
-                        OpenMode.ForRead, true) as AttributeDefinition;
-                    if (candidate != null && !candidate.Constant && IsJsonTag(candidate.Tag))
+                    if (!IsJsonTag(attribute.Tag)) continue;
+                    if (string.IsNullOrEmpty(attribute.TextString)
+                        && !attribute.IsMTextAttribute) continue;
+                    attribute.UpgradeOpen();
+                    attribute.TextString = "";
+                    if (attribute.IsMTextAttribute)
                     {
-                        jsonDefinition = candidate;
-                        break;
+                        using (MText mtext = attribute.MTextAttribute)
+                        {
+                            if (mtext != null)
+                            {
+                                mtext.Contents = "";
+                                attribute.MTextAttribute = mtext;
+                            }
+                        }
+                        attribute.UpdateMTextAttribute();
                     }
+                    cleared++;
                 }
-                if (jsonDefinition != null) break;
-            }
-            try
-            {
-                if (jsonDefinition == null)
+                if (!block.IsDynamicBlock) continue;
+                foreach (DynamicBlockReferenceProperty property
+                    in block.DynamicBlockReferencePropertyCollection)
                 {
-                    definition.UpgradeOpen();
-                    jsonDefinition = new AttributeDefinition
-                    {
-                        Tag = "FRAMEINFO_JSON",
-                        Prompt = "frameinfo_json",
-                        TextString = "",
-                        Position = Point3d.Origin,
-                        Invisible = true,
-                        Constant = false,
-                        Preset = true
-                    };
-                    jsonDefinition.SetDatabaseDefaults(database);
-                    definition.AppendEntity(jsonDefinition);
-                    transaction.AddNewlyCreatedDBObject(jsonDefinition, true);
+                    if (property.ReadOnly || !IsJsonTag(property.PropertyName)
+                        || !(property.Value is string)) continue;
+                    if (string.IsNullOrEmpty(Convert.ToString(property.Value))) continue;
+                    block.UpgradeOpen();
+                    property.Value = "";
+                    cleared++;
                 }
-
-                frame.UpgradeOpen();
-                var reference = new AttributeReference();
-                reference.SetDatabaseDefaults(database);
-                reference.SetAttributeFromBlock(jsonDefinition, frame.BlockTransform);
-                reference.TextString = "";
-                frame.AttributeCollection.AppendAttribute(reference);
-                transaction.AddNewlyCreatedDBObject(reference, true);
-                return true;
             }
-            catch
-            {
-                // Some legacy frames are read-only/xref-backed. FillOrMigrate will use a
-                // standalone metadata block in that case rather than changing the frame.
-                return false;
-            }
+            return cleared;
         }
 
         private static ObjectId FindExistingNearFrame(CadContext ctx,

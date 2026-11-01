@@ -4,9 +4,15 @@ using System.Collections.Generic;
 namespace UNCAD.Core.Fill
 {
     /// <summary>Persisted metadata for one drawing frame's frameinfo_json block.</summary>
+    /// <remarks>
+    /// Schema v2 (see <see cref="FrameInfoJsonCodec"/>): the persisted JSON is a nested
+    /// document with identity/upstream/downstream/cable/drawing/meta/changes sections.
+    /// This record stays flat because CAD-side consumers read the fields directly.
+    /// v1 flat payloads are still accepted by <see cref="FrameInfoJsonCodec.Parse"/>.
+    /// </remarks>
     public sealed class FrameInfoJsonRecord
     {
-        public string SchemaVersion { get; set; } = "1";
+        public string SchemaVersion { get; set; } = FrameInfoJsonCodec.CurrentSchemaVersion;
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
         public string Region { get; set; } = "";
@@ -25,6 +31,13 @@ namespace UNCAD.Core.Fill
         public string FacilitySwitch { get; set; } = "";
         public string LastModifiedUtc { get; set; } = "";
         public string LastModifiedUser { get; set; } = "";
+
+        // v2 cable reserve fields (all persisted as strings, empty when unknown).
+        public string MeasuredCableM { get; set; } = "";
+        public string PanelReserveMm { get; set; } = "";
+        public string DeviceReserveMm { get; set; } = "";
+        public string TotalCableM { get; set; } = "";
+
         public List<FrameInfoJsonChange> Changes { get; set; }
             = new List<FrameInfoJsonChange>();
     }

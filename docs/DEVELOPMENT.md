@@ -44,6 +44,12 @@
 
 设备原电缆型号与清单替代型号是两个字段。替代型号只更新 `BOQ-TABLE` 行，不得修改图框/块属性；自动 Excel 记录同时保存两者和完整材料明细。
 
+### 图框与 frameinfo_json（v2）
+
+- 当前模板只有动态块 `xframe_v2`；旧 `frame_20260812` / `frame` / `xframe` 仍可读，U1F/U1U 首次写入时迁移到 `xframe_v2`，并移除新定义里不存在的旧属性（`FRAMEINFO_JSON` / `BRIDGE_FRAME_INFO` / `CONDUIT_INFO`），不再往图框定义补这些属性。
+- JSON 只写独立 `frameinfo_json` 块（按图框就近复用；旧图框内嵌的 `FRAMEINFO_JSON` 读出后迁移并清空）。v2 结构为 `identity/upstream/downstream/cable/drawing/meta/changes` 的嵌套文档，所有键必出，`changes` 最多 20 条，整份 JSON 上限 6000 字符；超限先裁最旧 history，仍超限必须中止写入而不是写截断 JSON。旧 v1 扁平 JSON 仍可解析用于迁移。
+- `cable` 段保存 `measuredM`（图上实测）、`panelReserveMm`（按上游类型）、`deviceReserveMm`（用户确认）、`totalM`。U1U 电缆总长 = 实测 + 盘内预留（I-Line 盘 3400mm / 插座盘 1200mm / 母线插接口 500mm）+ 设备内预留；设备内预留不在命令行询问，而是在 U1U 清单确认窗口/GUI 中填写：首次默认 0，用户可改，确认后写入 JSON，后续 U1U 自动预填该值（不再有命令行交互）。CABLE_INFO 必须全部用 mm 标注：`实测分段=实测合计mm（盘内预留）+xxxmm（设备预留）+xxxmm=总长mm`，不能再出现 `=26.2M` 这类米制写法；盘内预留或设备预留为 0 时对应段落直接省略（设备不预留就不显示设备预留）。CABLE_INFO 是**多行属性**，写入时必须把 MText 文本框宽度设为 **78300** 图形单位，让 AutoCAD 自动换行（不能把宽度写成 0）。
+
 ## 代码契约
 
 - 命令开始后使用不可变运行时配置快照；预览和最终写入必须使用同一份参数。

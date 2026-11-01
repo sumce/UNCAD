@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Stat;
@@ -11,7 +13,7 @@ namespace UNCAD.Core.Fill
     /// 标签与 TEXTS.dwg 图框（frame_20260812）一致：
     ///   MACHINEID-DEVICE   机台ID-设备名称
     ///   MACHINEID-POWER    机台ID-POWER，例如 "MDAPT01-POWER"
-    ///   CABLE_INFO         电缆型号mm²: 分段长度求和公式=总长度
+    ///   CABLE_INFO         电缆型号mm²: 实测分段(mm)=实测合计mm（盘内预留）+xxxmm（设备预留）+xxxmm=总长mm
     ///   BRIDGE_FRAME_INFO  UNADD 桥架规格 + 总长度（无统计结果时回退配置）
     ///   CONDUIT_INFO       各管径线管总长度，多个用中文逗号分隔
     /// 可选统计标签始终返回；无数据时写空字符串，避免保留上一次填充内容。
@@ -87,10 +89,40 @@ namespace UNCAD.Core.Fill
             string cable = (row.Cable ?? "").Trim();
             if (stat != null && stat.CableSum > 0)
             {
-                string total = TextFormatter.FormatNum(stat.CableSum);
-                string formula = stat.CableFormatted.Count > 1
-                    ? TextFormatter.Join(stat.CableFormatted, "+") + "=" + total + "M"
-                    : total + "M";
+                // 全部用 mm 标：分段长度、实测合计、盘内预留、设备预留、最终总长。
+                // U1U 的总长包含预留，所以预留单独列在实测合计之后，不能混进分段里。
+                double measuredMm = (stat.CableReserveApplied
+                    ? stat.MeasuredCableSum : stat.CableSum) * 1000d;
+                string formula;
+                if (stat.CableFormatted.Count > 1)
+                {
+                    string segments = string.Join("+", stat.CableFormatted.Select(value =>
+                        FormatMillimeters(ParseMeters(value) * 1000d)));
+                    formula = segments + "=" + FormatMillimeters(measuredMm) + "mm";
+                }
+                else
+                {
+                    formula = FormatMillimeters(measuredMm) + "mm";
+                }
+                if (stat.CableReserveApplied)
+                {
+                    // 设备不预留（0）就不追加设备预留；盘内预留为 0 时同样不追加。
+                    bool appended = false;
+                    if (stat.PanelReserveMillimeters > 0)
+                    {
+                        formula += "（盘内预留）+"
+                            + FormatMillimeters(stat.PanelReserveMillimeters) + "mm";
+                        appended = true;
+                    }
+                    if (stat.DeviceReserveMillimeters > 0)
+                    {
+                        formula += "（设备预留）+"
+                            + FormatMillimeters(stat.DeviceReserveMillimeters) + "mm";
+                        appended = true;
+                    }
+                    if (appended)
+                        formula += "=" + FormatMillimeters(stat.CableSum * 1000d) + "mm";
+                }
                 // 图框显示带工程前缀的完整型号（ZB-YJV- / ZB-YJVR-，由型号是否含
                 // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目
                 // 特征继续使用不带前缀的清单别名，两者不得互相污染。
@@ -123,6 +155,20 @@ namespace UNCAD.Core.Fill
                 d[TagConduit] = "";
 
             return d;
+        }
+
+        private static string FormatMillimeters(double millimetres)
+            => TextFormatter.FormatNum(Math.Round(millimetres, 0,
+                MidpointRounding.AwayFromZero));
+
+        private static double ParseMeters(string value)
+        {
+            string text = (value ?? "").Trim();
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out double invariant))
+                return invariant;
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture,
+                out double current) ? current : 0d;
         }
 
         private static string BridgeDisplayModel(BridgeStat bridge)

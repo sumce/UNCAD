@@ -53,6 +53,9 @@ namespace UNCAD.UI
         };
         private readonly TextBox _cable = Field();
         private readonly TextBox _cableMeters = Field();
+        private readonly TextBox _measuredCable = Field();
+        private readonly TextBox _deviceReserve = Field();
+        private readonly TextBox _panelReserve = Field();
         private readonly TextBox _diameter = Field();
         private readonly TextBox _downstream = Field();
         private readonly TextBox _upstream = Field();
@@ -154,6 +157,7 @@ namespace UNCAD.UI
             PopulateRows(Data.Items);
             _cable.TextChanged += CableModelChanged;
             _cableMeters.TextChanged += CableMetersChanged;
+            _deviceReserve.TextChanged += DeviceReserveChanged;
             _diameter.TextChanged += FlexibleConduitDiameterChanged;
             _grid.CurrentCellDirtyStateChanged += (sender, args) =>
             {
@@ -173,7 +177,7 @@ namespace UNCAD.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 7,
+                RowCount = 9,
                 Padding = new Padding(16, 16, 16, 8),
                 AutoScroll = true
             };
@@ -185,20 +189,18 @@ namespace UNCAD.UI
             AddPair(layout, 1, "设备 / 回路:", _circuit, "盘柜类型:", _panel);
             AddPair(layout, 2, "FR:", _fr, "项目序号:", _seq);
             AddPair(layout, 3, "设备原电缆:", _originalCable, "清单电缆:", _cable);
-            AddPair(layout, 4, "电缆长度 (m):", _cableMeters, "软管直径:", _diameter);
-            AddPair(layout, 5, "下游轴位:", _downstream, "上游轴位:", _upstream);
+            AddPair(layout, 4, "实测电缆 (m):", _measuredCable, "电缆长度 (m):", _cableMeters);
+            AddPair(layout, 5, "设备内预留 (mm):", _deviceReserve, "盘内预留 (mm):", _panelReserve);
+            AddPair(layout, 6, "软管直径:", _diameter, "", new Label());
+            AddPair(layout, 7, "下游轴位:", _downstream, "上游轴位:", _upstream);
             Label detailLabel = LabelFor("配电详情:");
             detailLabel.TextAlign = ContentAlignment.TopRight;
             detailLabel.Padding = new Padding(0, 6, 0, 0);
-            layout.Controls.Add(detailLabel, 0, 6);
-            layout.Controls.Add(_detail, 1, 6);
+            layout.Controls.Add(detailLabel, 0, 8);
+            layout.Controls.Add(_detail, 1, 8);
             layout.SetColumnSpan(_detail, 3);
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            for (int row = 0; row < 8; row++)
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             var page = new TabPage("基础信息") { Padding = new Padding(4) };
             page.Controls.Add(layout);
@@ -258,6 +260,16 @@ namespace UNCAD.UI
             _originalCable.Text = data.OriginalCableModel ?? "";
             _cable.Text = data.BoqCableModel ?? "";
             _cableMeters.Text = data.CableMeters ?? "";
+            _measuredCable.Text = data.MeasuredCableMeters ?? "";
+            _deviceReserve.Text = data.DeviceReserveMm ?? "";
+            _panelReserve.Text = data.PanelReserveMm ?? "";
+            _measuredCable.ReadOnly = true;
+            _measuredCable.BackColor = UiTheme.SurfaceAlt;
+            _panelReserve.ReadOnly = true;
+            _panelReserve.BackColor = UiTheme.SurfaceAlt;
+            _deviceReserve.Enabled = data.CableReserveEditable;
+            _deviceReserve.BackColor = data.CableReserveEditable
+                ? UiTheme.Surface : UiTheme.SurfaceAlt;
             _diameter.Text = data.Machine.Dia ?? "";
             _downstream.Text = data.Machine.DownstreamAxis ?? "";
             _upstream.Text = data.Machine.UpstreamAxis ?? "";
@@ -295,6 +307,18 @@ namespace UNCAD.UI
         {
             if (_synchronizing) return;
             Data.SetCableMeters(_cableMeters.Text);
+            FillReviewItem cable = Data.CableItem();
+            if (cable != null) RefreshItem(cable);
+        }
+
+        private void DeviceReserveChanged(object sender, EventArgs e)
+        {
+            if (_synchronizing) return;
+            Data.DeviceReserveMm = _deviceReserve.Text;
+            Data.SyncCableReserveMeters();
+            _synchronizing = true;
+            _cableMeters.Text = Data.CableMeters ?? "";
+            _synchronizing = false;
             FillReviewItem cable = Data.CableItem();
             if (cable != null) RefreshItem(cable);
         }
@@ -477,6 +501,20 @@ namespace UNCAD.UI
                 _tabs.SelectedIndex = 0;
                 _cableMeters.Focus();
                 MessageBox.Show(this, "电缆长度必须是非负数字或留空。", "U1F",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            Data.DeviceReserveMm = (_deviceReserve.Text ?? "").Trim();
+            if (Data.CableReserveEditable && Data.DeviceReserveMm.Length > 0
+                && (!double.TryParse(Data.DeviceReserveMm,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double reserve)
+                    || reserve < 0d || reserve > 100000d))
+            {
+                _tabs.SelectedIndex = 0;
+                _deviceReserve.Focus();
+                _deviceReserve.SelectAll();
+                MessageBox.Show(this, "设备内预留必须是 0~100000 的毫米数。", "U1U",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }

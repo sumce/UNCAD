@@ -191,6 +191,16 @@ namespace UNCAD.Features.Fill
 
             string automaticExcelPath = null;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
+            FrameInfoJsonRecord frameInfoPrevious = null;
+            CableReserveInfo cableReserve = null;
+            if (updateMode)
+            {
+                // U1U: 首次执行时读取 frameinfo_json；设备内预留只在没有记录时问一次，
+                // 之后一律复用 JSON 里保存的值（0 表示已确认不预留）。
+                frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
+                    selection.FrameInfoJsonBlockIds);
+                cableReserve = ResolveCableReserve(frameInfoPrevious, picked, statistics);
+            }
             if (updateMode)
             {
                 try
@@ -266,8 +276,11 @@ namespace UNCAD.Features.Fill
             FillReviewData review = tablePlan.CreateReview(picked, options.Planning,
                 updateMode ? originalCableModel : null);
             if (updateMode)
-                review.RestoreBusPlugBoxChoice(FrameInfoJsonBlockWriter.Read(ctx,
-                    selection.FrameInfoJsonBlockIds), catalog);
+                review.RestoreBusPlugBoxChoice(frameInfoPrevious
+                    ?? FrameInfoJsonBlockWriter.Read(ctx,
+                        selection.FrameInfoJsonBlockIds), catalog);
+            if (updateMode && cableReserve != null)
+                InitializeReserveReview(review, cableReserve);
             ResolveMissingCableCatalog(review, catalog);
             // Resolve a replacement before reading Ruanguan so an initially unknown
             // cable can still create the correctly mapped hose row.
@@ -287,6 +300,8 @@ namespace UNCAD.Features.Fill
                     != DialogResult.OK) return;
                 review = form.Data;
             }
+            if (updateMode && cableReserve != null)
+                ApplyReviewReserve(statistics, cableReserve, review);
             Log.Info("U1F 审阅窗后清单: " + Describe(review));
             if (updateMode && (!IdentityTextNormalizer.Equals(updateMachineId,
                     review.Machine?.MachineId)
@@ -382,6 +397,8 @@ namespace UNCAD.Features.Fill
                 && !ApplyCableLengthOverride(statistics, reviewedCableMeters))
                 ctx.Write("\n[U1F/U1U] 电缆米数 \"" + reviewedCableMeters
                     + "\" 无法识别，已保留图上实测值。");
+            if (cableReserve != null)
+                SyncCableReserveTotal(cableReserve, reviewedCableMeters);
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
@@ -462,7 +479,8 @@ namespace UNCAD.Features.Fill
                         selection.RuanguanBlockIds, picked.Dia);
                     frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
                         selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
-                        updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
+                        updateMode ? CommandIds.FillUpdate : CommandIds.Fill, null,
+                        cableReserve, frameInfoPrevious);
                     upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                         selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
                         ConnectionBlockFiller.UpstreamInfo(picked), true);
@@ -551,7 +569,7 @@ namespace UNCAD.Features.Fill
             if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
                 || xframeMigration.DrawingInfoTables > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 图框已升级：xframe " + xframeMigration.Frames
+                    + "] 图框已升级：xframe_v2 " + xframeMigration.Frames
                     + " 个，BOQ 表替换 " + xframeMigration.BoqTables
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -1183,6 +1201,82 @@ namespace UNCAD.Features.Fill
                 statistics.CableState = MeasurementState.ConfirmedEmpty;
             }
             return true;
+        }
+
+        internal static void SyncCableReserveTotal(CableReserveInfo reserve, string cableMeters)
+        {
+            if (reserve == null) return;
+            string text = (cableMeters ?? "").Trim();
+            if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double total)
+                || total < 0d) return;
+            reserve.TotalMeters = total;
+            reserve.MeasuredMeters = Math.Max(0d, total
+                - (reserve.PanelReserveMillimeters + reserve.DeviceReserveMillimeters) / 1000d);
+        }
+
+        /// <summary>
+        /// U1U 电缆预留：盘内预留按上游类型固定（I-Line 3400 / 插座盘 1200 / 插接口 500mm），
+        /// 设备内预留从 frameinfo_json 读取；首次没有值时按 0 进入清单确认窗口，
+        /// 由用户在 GUI 里填写（不再走命令行输入）。
+        /// </summary>
+        internal static CableReserveInfo ResolveCableReserve(FrameInfoJsonRecord previous,
+            MachineRow machine, CableStatResult statistics)
+        {
+            // 没有实测电缆长度时不要凭预留凭空生成电缆清单；等有测量值的那次 U1U 再处理。
+            if (statistics == null || statistics.CableSum <= 0d)
+                return null;
+            double device = 0d;
+            if (previous != null && !string.IsNullOrWhiteSpace(previous.DeviceReserveMm))
+            {
+                double.TryParse(previous.DeviceReserveMm,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out device);
+            }
+            return CableReservePolicy.Apply(statistics, machine?.Next, device);
+        }
+
+        /// <summary>清单确认窗口：把预留明细交给 GUI 显示/编辑，并让电缆长度先按明细同步。</summary>
+        internal static void InitializeReserveReview(FillReviewData review,
+            CableReserveInfo reserve)
+        {
+            if (review == null || reserve == null) return;
+            review.CableReserveEditable = true;
+            review.MeasuredCableMeters = TextFormatter.FormatNum(reserve.MeasuredMeters);
+            review.PanelReserveMm = TextFormatter.FormatNum(reserve.PanelReserveMillimeters);
+            review.DeviceReserveMm = TextFormatter.FormatNum(reserve.DeviceReserveMillimeters);
+            review.SyncCableReserveMeters();
+        }
+
+        /// <summary>
+        /// 用户在 GUI 里改完设备内预留后，把最终值同步回统计结果与 JSON 预留信息。
+        /// 电缆长度若被用户手工改过，后续 ApplyCableLengthOverride / SyncCableReserveTotal 会再校准。
+        /// </summary>
+        internal static void ApplyReviewReserve(CableStatResult statistics,
+            CableReserveInfo reserve, FillReviewData review)
+        {
+            if (statistics == null || reserve == null || review == null) return;
+            double device = reserve.DeviceReserveMillimeters;
+            string text = (review.DeviceReserveMm ?? "").Trim();
+            if (text.Length > 0
+                && double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double parsed)
+                && parsed >= 0d && parsed <= 100000d)
+                device = parsed;
+            ApplyDeviceReserve(statistics, reserve, device);
+            review.DeviceReserveMm = TextFormatter.FormatNum(device);
+        }
+
+        internal static void ApplyDeviceReserve(CableStatResult statistics,
+            CableReserveInfo reserve, double deviceReserveMillimeters)
+        {
+            if (statistics == null || reserve == null) return;
+            double measured = statistics.MeasuredCableSum;
+            reserve.DeviceReserveMillimeters = deviceReserveMillimeters;
+            reserve.TotalMeters = measured
+                + (reserve.PanelReserveMillimeters + deviceReserveMillimeters) / 1000d;
+            statistics.DeviceReserveMillimeters = deviceReserveMillimeters;
+            statistics.CableSum = reserve.TotalMeters;
         }
 
         private static void WriteMeasurementState(CadContext ctx, CableStatResult statistics)

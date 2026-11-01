@@ -35,7 +35,15 @@ namespace UNCAD.Cad
         public const string SupportedFrameName = "frame_20260812";
         public const string LegacyFrameName = "frame";
         public const string XFrameName = "xframe";
-        public const string SupportedFrameDescription = "frame_20260812/frame/xframe";
+
+        /// <summary>
+        /// 当前 XFrameTemplate.dwg 中的新版动态块名。旧 frame/frame_20260812/xframe
+        /// 图框仍可读取，执行 U1F/U1U 时由 XFrameMigrationService 迁移到该定义。
+        /// </summary>
+        public const string CurrentFrameName = "xframe_v2";
+
+        public const string SupportedFrameDescription =
+            "frame_20260812/frame/xframe/xframe_v2";
 
         internal static bool IsSupportedFrameName(string name)
         {
@@ -43,7 +51,8 @@ namespace UNCAD.Cad
             string normalized = BlockNameNormalizer.RemoveMangledSuffix(name);
             return string.Equals(normalized, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(normalized, LegacyFrameName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalized, XFrameName, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(normalized, XFrameName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, CurrentFrameName, StringComparison.OrdinalIgnoreCase);
         }
 
         internal static bool IsLegacyFrameName(string name)
@@ -51,7 +60,8 @@ namespace UNCAD.Cad
             if (string.IsNullOrEmpty(name)) return false;
             string normalized = BlockNameNormalizer.RemoveMangledSuffix(name);
             return string.Equals(normalized, SupportedFrameName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalized, LegacyFrameName, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(normalized, LegacyFrameName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, XFrameName, StringComparison.OrdinalIgnoreCase);
         }
 
         private sealed class FrameBorderBounds
