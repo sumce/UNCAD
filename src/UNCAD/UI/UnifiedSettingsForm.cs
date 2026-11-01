@@ -91,6 +91,7 @@ namespace UNCAD.UI
         private readonly NumericUpDown _fillTextHeight = NumberBox(500m, 1m, 100000m);
         private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
+        private readonly NumericUpDown _fillOwnerReserve = NumberBox(3000m, 0m, 100000m);
         private readonly NumericUpDown _fillDownstreamAmps = IntegerBox(20m, 1m, 1000m);
         private readonly NumericUpDown _fillDownstreamPanelAmps = IntegerBox(1000m, 1m, 10000m);
         // Downstream 自动添加的**独立**开关：与「BOQ 自动填充类别」里的通用类别开关解耦，
@@ -285,6 +286,8 @@ namespace UNCAD.UI
             SetNumber(_fillFlexibleMeters, Settings.GetDouble(
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
+            SetNumber(_fillOwnerReserve, Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
+                FillRuntimeOptions.DefaultCableOwnerReserveMillimeters));
             SetNumber(_fillDownstreamAmps, Settings.GetDouble(
                 ConfigKeys.FillDownstreamSocketAmps,
                 FillRuntimeOptions.DefaultDownstreamSocketAmps));
@@ -370,6 +373,7 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.FillTextHeight, Value(_fillTextHeight));
             Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
+            Settings.Set(ConfigKeys.FillCableOwnerReserve, Value(_fillOwnerReserve));
             Settings.Set(ConfigKeys.FillDownstreamSocketAmps,
                 ((int)_fillDownstreamAmps.Value).ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillDownstreamPanelAmps,
@@ -682,12 +686,13 @@ namespace UNCAD.UI
         /// <summary>清单与表格：写表参数 + BOQ 自动填充类别。</summary>
         private TabPage BuildBomTab()
         {
-            var table = Grid(5);
+            var table = Grid(6);
             AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
             AddField(table, 3, "软管手动数量（m）", _fillFlexibleMeters);
             AddField(table, 4, "桥架信息（块属性）", _fillBridge);
+            AddField(table, 5, "电缆业主预留（mm）", _fillOwnerReserve);
 
             var autoFill = new TableLayoutPanel
             {

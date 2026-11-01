@@ -89,51 +89,51 @@ namespace UNCAD.Core.Fill
             string cable = (row.Cable ?? "").Trim();
             if (stat != null && stat.CableSum > 0)
             {
-                // 全部用 mm 标：分段长度、实测合计、盘内预留、设备预留、最终总长。
-                // U1U 的总长包含预留，所以预留单独列在实测合计之后，不能混进分段里。
+                // 与现场约定一致：全部 mm，明细统一写成「数值（说明）」，最后 =总长mm。
+                // 例：电缆ZB-YJVR-5*4mm²: 1000+700+3400（盘内）+2000（设备内）+3000（预留）=93300mm
                 double measuredMm = (stat.CableReserveApplied
                     ? stat.MeasuredCableSum : stat.CableSum) * 1000d;
-                string formula;
+                var parts = new List<string>();
                 if (stat.CableFormatted.Count > 1)
                 {
-                    string segments = string.Join("+", stat.CableFormatted.Select(value =>
-                        FormatMillimeters(ParseMeters(value) * 1000d)));
-                    formula = segments + "=" + FormatMillimeters(measuredMm) + "mm";
+                    foreach (string value in stat.CableFormatted)
+                        parts.Add(FormatMillimeters(ParseMeters(value) * 1000d));
                 }
                 else
                 {
-                    formula = FormatMillimeters(measuredMm) + "mm";
+                    parts.Add(FormatMillimeters(measuredMm));
                 }
+                string formula;
                 if (stat.CableReserveApplied)
                 {
-                    // 设备不预留（0）就不追加设备预留；盘内预留为 0 时同样不追加。
-                    bool appended = false;
                     if (stat.PanelReserveMillimeters > 0)
-                    {
-                        formula += "（盘内预留）+"
-                            + FormatMillimeters(stat.PanelReserveMillimeters) + "mm";
-                        appended = true;
-                    }
+                        parts.Add(FormatMillimeters(stat.PanelReserveMillimeters) + "（"
+                            + (string.IsNullOrWhiteSpace(stat.PanelReserveLabel)
+                                ? "盘内" : stat.PanelReserveLabel) + "）");
                     if (stat.DeviceReserveMillimeters > 0)
-                    {
-                        formula += "（设备预留）+"
-                            + FormatMillimeters(stat.DeviceReserveMillimeters) + "mm";
-                        appended = true;
-                    }
-                    if (appended)
-                        formula += "=" + FormatMillimeters(stat.CableSum * 1000d) + "mm";
+                        parts.Add(FormatMillimeters(stat.DeviceReserveMillimeters) + "（设备内）");
+                    if (stat.OwnerReserveMillimeters > 0)
+                        parts.Add(FormatMillimeters(stat.OwnerReserveMillimeters) + "（预留）");
+                    formula = string.Join("+", parts) + "="
+                        + FormatMillimeters(stat.CableSum * 1000d) + "mm";
+                }
+                else
+                {
+                    formula = string.Join("+", parts) + "mm";
                 }
                 // 图框显示带工程前缀的完整型号（ZB-YJV- / ZB-YJVR-，由型号是否含
                 // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目
                 // 特征继续使用不带前缀的清单别名，两者不得互相污染。
                 d[TagCable] = cable.Length > 0
-                    ? CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
+                    ? "电缆" + CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
                     : formula;
             }
             else
             {
                 if (!preserveCable)
-                    d[TagCable] = CableModelDisplay.WithTypePrefix(cable);
+                    d[TagCable] = cable.Length > 0
+                        ? "电缆" + CableModelDisplay.WithTypePrefix(cable)
+                        : "";
             }
 
             if (stat != null && stat.Bridges.Count > 0)

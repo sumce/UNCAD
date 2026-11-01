@@ -42,7 +42,9 @@ namespace UNCAD.Infra
                 Settings.GetBool(ConfigKeys.FillDownstreamSocketEnabled,
                     FillRuntimeOptions.DefaultDownstreamEnabled),
                 Settings.GetBool(ConfigKeys.FillDownstreamPanelEnabled,
-                    FillRuntimeOptions.DefaultDownstreamEnabled));
+                    FillRuntimeOptions.DefaultDownstreamEnabled),
+                Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
+                    FillRuntimeOptions.DefaultCableOwnerReserveMillimeters));
         }
 
         private static int SafeInt(double value, int fallback)

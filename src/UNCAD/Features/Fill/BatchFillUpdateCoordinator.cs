@@ -581,7 +581,7 @@ namespace UNCAD.Features.Fill
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
                 FrameInfoJsonBlockWriter.ReadSources(selection));
             CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
-                machine, statistics);
+                machine, statistics, options.CableOwnerReserveMillimeters);
 
             try
             {

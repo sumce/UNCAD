@@ -161,7 +161,11 @@ namespace UNCAD.Core.Submission
             string cable = cableInfo ?? "";
             int separator = cable.IndexOfAny(new[] { ':', '：' });
             if (separator >= 0) cable = cable.Substring(0, separator);
-            return CableSuffix.Replace(cable.Trim(), "");
+            cable = cable.Trim();
+            // 图框显示格式以「电缆」开头（现场约定），反向解析必须剥掉后再匹配清单型号。
+            if (cable.StartsWith("电缆", StringComparison.Ordinal))
+                cable = cable.Substring(2).Trim();
+            return CableSuffix.Replace(cable, "");
         }
 
         /// <summary>Reads the full cable project feature from the existing BOQ table.</summary>

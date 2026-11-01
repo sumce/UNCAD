@@ -46,11 +46,13 @@ namespace UNCAD.Core.Fill
         public string CableMeters { get; set; } = "";
         /// <summary>U1U：图上实测电缆（米），不含盘内/设备内预留。</summary>
         public string MeasuredCableMeters { get; set; } = "";
-        /// <summary>U1U：盘内预留（毫米，按上游类型自动计算，只读展示）。</summary>
+        /// <summary>盘内/箱内预留（毫米，按上游类型自动计算，只读展示）。</summary>
         public string PanelReserveMm { get; set; } = "";
-        /// <summary>U1U：设备内预留（毫米，用户在清单确认窗口修改）。</summary>
+        /// <summary>设备内预留（毫米，用户在清单确认窗口修改）。</summary>
         public string DeviceReserveMm { get; set; } = "";
-        /// <summary>清单确认窗口是否显示电缆预留输入（仅 U1U）。</summary>
+        /// <summary>业主统一预留（毫米，全局配置，只读）。</summary>
+        public string OwnerReserveMm { get; set; } = "";
+        /// <summary>清单确认窗口是否显示电缆预留输入（U1F/U1U）。</summary>
         public bool CableReserveEditable { get; set; }
         public FillAutoFillOptions AutoFill { get; private set; } =
             FillAutoFillOptions.Default;
@@ -129,6 +131,7 @@ namespace UNCAD.Core.Fill
                 MeasuredCableMeters = MeasuredCableMeters,
                 PanelReserveMm = PanelReserveMm,
                 DeviceReserveMm = DeviceReserveMm,
+                OwnerReserveMm = OwnerReserveMm,
                 CableReserveEditable = CableReserveEditable,
                 AutoFill = AutoFill
             };
@@ -319,16 +322,17 @@ namespace UNCAD.Core.Fill
         }
 
         /// <summary>
-        /// 按「实测 + 盘内预留 + 设备内预留」重新计算清单电缆长度（米）。
-        /// 只有 U1U 的清单确认窗口会调用；解析失败时不动 CableMeters。
+        /// 按「实测 + 盘内/箱内 + 设备内 + 业主预留」重新计算清单电缆长度（米）。
+        /// U1F/U1U 的清单确认窗口会调用；解析失败时不动 CableMeters。
         /// </summary>
         public void SyncCableReserveMeters()
         {
             if (!CableReserveEditable) return;
             if (!TryParse(MeasuredCableMeters, out double measured)
                 || !TryParse(PanelReserveMm, out double panel)
-                || !TryParse(DeviceReserveMm, out double device)) return;
-            double total = measured + (panel + device) / 1000d;
+                || !TryParse(DeviceReserveMm, out double device)
+                || !TryParse(OwnerReserveMm, out double owner)) return;
+            double total = measured + (panel + device + owner) / 1000d;
             if (total < 0d) return;
             SetCableMeters(TextFormatter.FormatNum(total));
         }

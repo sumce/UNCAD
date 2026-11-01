@@ -36,7 +36,8 @@ namespace UNCAD.Tests
             Assert.NotNull(reserve);
             Assert.Equal(3400d, reserve.PanelReserveMillimeters);
             Assert.Equal(500d, reserve.DeviceReserveMillimeters);
-            Assert.Equal(13.9d, reserve.TotalMeters, 3);
+            Assert.Equal(3000d, reserve.OwnerReserveMillimeters);
+            Assert.Equal(16.9d, reserve.TotalMeters, 3);
             Assert.True(statistics.CableReserveApplied);
         }
 
@@ -48,9 +49,9 @@ namespace UNCAD.Tests
                 Stats(2d));
 
             Assert.NotNull(reserve);
-            Assert.Equal(1200d, reserve.PanelReserveMillimeters);
+            Assert.Equal(1000d, reserve.PanelReserveMillimeters);
             Assert.Equal(0d, reserve.DeviceReserveMillimeters);
-            Assert.Equal(3.2d, reserve.TotalMeters, 3);
+            Assert.Equal(6d, reserve.TotalMeters, 3);
         }
 
         [Fact]
@@ -68,16 +69,19 @@ namespace UNCAD.Tests
             {
                 MeasuredMeters = 10d,
                 PanelReserveMillimeters = 3400d,
+                PanelReserveLabel = "盘内",
                 DeviceReserveMillimeters = 500d,
-                TotalMeters = 13.9d
+                OwnerReserveMillimeters = 3000d,
+                TotalMeters = 16.9d
             };
 
             FillFeature.InitializeReserveReview(review, reserve);
 
             Assert.True(review.CableReserveEditable);
-            Assert.Equal("13.9", review.CableMeters);
+            Assert.Equal("16.9", review.CableMeters);
             Assert.Equal("3400", review.PanelReserveMm);
             Assert.Equal("500", review.DeviceReserveMm);
+            Assert.Equal("3000", review.OwnerReserveMm);
         }
 
         [Fact]
@@ -95,9 +99,10 @@ namespace UNCAD.Tests
                 FrameBlockFiller.BuildValues(machine, "", statistics);
             string info = values[FrameBlockFiller.TagCable];
 
-            Assert.Contains("（盘内预留）+1200mm", info);
-            Assert.Contains("（设备预留）+500mm", info);
-            Assert.Contains("=11700mm", info);
+            Assert.Contains("1000（盘内）", info);
+            Assert.Contains("500（设备内）", info);
+            Assert.Contains("3000（预留）", info);
+            Assert.Contains("=14500mm", info);
         }
     }
 }

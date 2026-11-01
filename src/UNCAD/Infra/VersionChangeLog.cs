@@ -31,6 +31,9 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("2.9.3", "2026-11-01",
+                    "变更：CABLE_INFO 改为现场样式——全部 mm、明细统一写成「数值（说明）」（如 3400（盘内）+2000（设备内）+3000（预留）=总长mm）；预留规则按现场口径：I-Line 3400（盘内）、插座盘 1000（盘内）、插接箱 500（箱内），并新增业主统一预留 3000（预留），U1SET「清单与表格」可改。",
+                    "说明：U1F/U1U 一致；清单与 BOQ 数量仍按米（总长含预留）；旧 CABLE_INFO 写法仍可读取，重跑 U1F/U1U 后改写为新样式；「电缆」前缀只用于图框显示，反向解析会剥掉，不影响清单匹配。"),
                 new VersionChangeLogEntry("2.9.2", "2026-11-01",
                     "修复：U1F（新建填充）也支持电缆预留——盘内预留按上游类型（I-Line 3400 / 插座盘 1200 / 插接接口 500mm）、设备内预留从 frameinfo_json 复用或在清单确认窗填写；CABLE_INFO 与清单总长都计入预留，命令行汇总显示实测+盘内+设备=总长。",
                     "说明：2.9.1 只在 U1U 接入了预留，U1F 会漏掉；清单表表格本身的长度列仍是米（M）。批量 U1U 的设备内预留仍是一次 GUI 统一填写。"),

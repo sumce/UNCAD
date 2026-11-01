@@ -198,7 +198,8 @@ namespace UNCAD.Features.Fill
             // U1F（新建）与 U1U（更新）共用同一套电缆预留：盘内预留按上游类型，
             // 设备内预留从 frameinfo_json 复用；没有记录时在清单确认窗里填写。
             CableReserveInfo cableReserve = ResolveCableReserve(frameInfoPrevious,
-                picked, statistics);
+                picked, statistics, Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
+                    CableReservePolicy.DefaultOwnerReserveMillimeters));
             if (updateMode)
             {
                 try
@@ -1218,18 +1219,20 @@ namespace UNCAD.Features.Fill
                 || total < 0d) return;
             reserve.TotalMeters = total;
             reserve.MeasuredMeters = Math.Max(0d, total
-                - (reserve.PanelReserveMillimeters + reserve.DeviceReserveMillimeters) / 1000d);
+                - (reserve.PanelReserveMillimeters + reserve.DeviceReserveMillimeters
+                    + reserve.OwnerReserveMillimeters) / 1000d);
         }
 
         /// <summary>
-        /// U1U 电缆预留：盘内预留按上游类型固定（I-Line 3400 / 插座盘 1200 / 插接口 500mm），
-        /// 设备内预留从 frameinfo_json 读取；首次没有值时按 0 进入清单确认窗口，
-        /// 由用户在 GUI 里填写（不再走命令行输入）。
+        /// U1F/U1U 电缆预留：盘内/箱内按上游类型固定（I-Line 3400 盘内 / 插座盘 1000 盘内 /
+        /// 插接箱 500 箱内），设备内预留从 frameinfo_json 读取（首次按 0 进清单确认窗口填写），
+        /// 业主统一预留默认 3000（U1SET 可改）。
         /// </summary>
         internal static CableReserveInfo ResolveCableReserve(FrameInfoJsonRecord previous,
-            MachineRow machine, CableStatResult statistics)
+            MachineRow machine, CableStatResult statistics,
+            double ownerReserveMillimeters = CableReservePolicy.DefaultOwnerReserveMillimeters)
         {
-            // 没有实测电缆长度时不要凭预留凭空生成电缆清单；等有测量值的那次 U1U 再处理。
+            // 没有实测电缆长度时不要凭预留凭空生成电缆清单；等有测量值的那次再处理。
             if (statistics == null || statistics.CableSum <= 0d)
                 return null;
             double device = 0d;
@@ -1239,7 +1242,8 @@ namespace UNCAD.Features.Fill
                     System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out device);
             }
-            return CableReservePolicy.Apply(statistics, machine?.Next, device);
+            return CableReservePolicy.Apply(statistics, machine?.Next, device,
+                ownerReserveMillimeters);
         }
 
         /// <summary>清单确认窗口：把预留明细交给 GUI 显示/编辑，并让电缆长度先按明细同步。</summary>
@@ -1251,6 +1255,7 @@ namespace UNCAD.Features.Fill
             review.MeasuredCableMeters = TextFormatter.FormatNum(reserve.MeasuredMeters);
             review.PanelReserveMm = TextFormatter.FormatNum(reserve.PanelReserveMillimeters);
             review.DeviceReserveMm = TextFormatter.FormatNum(reserve.DeviceReserveMillimeters);
+            review.OwnerReserveMm = TextFormatter.FormatNum(reserve.OwnerReserveMillimeters);
             review.SyncCableReserveMeters();
         }
 
@@ -1279,9 +1284,10 @@ namespace UNCAD.Features.Fill
             if (statistics == null || reserve == null) return;
             double measured = statistics.MeasuredCableSum;
             reserve.DeviceReserveMillimeters = deviceReserveMillimeters;
-            reserve.TotalMeters = measured
-                + (reserve.PanelReserveMillimeters + deviceReserveMillimeters) / 1000d;
+            reserve.TotalMeters = measured + (reserve.PanelReserveMillimeters
+                + deviceReserveMillimeters + reserve.OwnerReserveMillimeters) / 1000d;
             statistics.DeviceReserveMillimeters = deviceReserveMillimeters;
+            statistics.OwnerReserveMillimeters = reserve.OwnerReserveMillimeters;
             statistics.CableSum = reserve.TotalMeters;
         }
 

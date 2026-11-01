@@ -55,6 +55,8 @@ namespace UNCAD.Infra
         public const string FillBridge = "UNC_FILL_BRIDGE";      // 图框块 BRIDGE_FRAME_INFO 内容（空=不写）
         public const string FillFlexibleConduitMeters =
             "UNC_FILL_FLEXIBLE_CONDUIT_METERS"; // 软管默认长度，单位米
+        // 电缆业主统一预留（毫米），默认 3000；CABLE_INFO 中标注为「（预留）」。
+        public const string FillCableOwnerReserve = "UNC_FILL_CABLE_OWNER_RESERVE_MM";
         public const string FillDeviceColorIndex = "UNC_FILL_DEVICE_COLOR_INDEX";
         public const string FillUpstreamColorIndex = "UNC_FILL_UPSTREAM_COLOR_INDEX";
         public const string FillIncludeUnmatchedConduits =

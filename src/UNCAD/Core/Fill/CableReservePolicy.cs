@@ -4,67 +4,85 @@ using UNCAD.Core.Stat;
 namespace UNCAD.Core.Fill
 {
     /// <summary>
-    /// 电缆预留规则（U1U）：
-    /// 总长 = 图上实测长度 + 盘内预留（按 U_上游类型）+ 设备内预留（用户首次确认后写入 frameinfo_json）。
-    /// 盘内预留：I-Line 盘 3400mm、插座盘 1200mm、母线插接口 500mm。
+    /// 电缆预留规则（U1F/U1U）：
+    /// 总长 = 图上实测 + 盘内/箱内预留（按 U_上游类型）+ 设备内预留 + 业主统一预留。
+    /// 盘内/箱内：I-Line 盘 3400（盘内）、插座盘 1000（盘内）、母线插接箱 500（箱内）；
+    /// 业主统一预留：所有回路默认 3000（U1SET 可改）。
     /// </summary>
     public static class CableReservePolicy
     {
         public const double ILinePanelReserveMillimeters = 3400d;
-        public const double SocketPanelReserveMillimeters = 1200d;
+        public const double SocketPanelReserveMillimeters = 1000d;
         public const double BusbarConnectorReserveMillimeters = 500d;
+        public const double DefaultOwnerReserveMillimeters = 3000d;
 
-        /// <summary>按 U_上游类型返回盘内预留（毫米）；未知类型返回 0。</summary>
+        /// <summary>按 U_上游类型返回盘内/箱内预留（毫米）；未知类型返回 0。</summary>
         public static double PanelReserveMillimeters(string next)
         {
             string value = Normalize(next);
             if (value.Length == 0) return 0d;
-            if (value.IndexOf("iline", StringComparison.Ordinal) >= 0
-                || value.IndexOf("i-line", StringComparison.Ordinal) >= 0)
-                return ILinePanelReserveMillimeters;
+            if (IsILine(value)) return ILinePanelReserveMillimeters;
             if (value.IndexOf("插座盘", StringComparison.Ordinal) >= 0)
                 return SocketPanelReserveMillimeters;
-            if (value.IndexOf("母线插接", StringComparison.Ordinal) >= 0
-                || value.IndexOf("插接口", StringComparison.Ordinal) >= 0
-                || value.IndexOf("busbar", StringComparison.Ordinal) >= 0)
-                return BusbarConnectorReserveMillimeters;
+            if (IsBusbar(value)) return BusbarConnectorReserveMillimeters;
             return 0d;
         }
 
+        /// <summary>盘内/箱内标签：I-Line、插座盘=盘内；母线插接箱=箱内。</summary>
+        public static string PanelReserveLabel(string next)
+        {
+            string value = Normalize(next);
+            if (value.Length == 0) return "";
+            if (IsILine(value) || value.IndexOf("插座盘", StringComparison.Ordinal) >= 0)
+                return "盘内";
+            if (IsBusbar(value)) return "箱内";
+            return "";
+        }
+
+        private static bool IsILine(string value)
+            => value.IndexOf("iline", StringComparison.Ordinal) >= 0
+                || value.IndexOf("i-line", StringComparison.Ordinal) >= 0;
+
+        private static bool IsBusbar(string value)
+            => value.IndexOf("母线插接", StringComparison.Ordinal) >= 0
+                || value.IndexOf("插接口", StringComparison.Ordinal) >= 0
+                || value.IndexOf("busbar", StringComparison.Ordinal) >= 0;
+
         /// <summary>
-        /// 把盘内预留和设备内预留追加到统计结果（CableFormatted 同步追加分段，保证
-        /// CABLE_INFO 的「分段和=总长」仍然成立），并返回结构化预留信息供 JSON 记录。
+        /// 计算并把预留写入统计结果：CABLE_INFO 统一由 FrameBlockFiller 格式化为
+        /// 「分段 + 盘内/箱内 + 设备内 + 预留 = 总长」。
         /// </summary>
         public static CableReserveInfo Apply(CableStatResult statistics, string next,
-            double deviceReserveMillimeters)
+            double deviceReserveMillimeters,
+            double ownerReserveMillimeters = DefaultOwnerReserveMillimeters)
         {
             double measured = statistics == null ? 0d : statistics.CableSum;
             double panel = PanelReserveMillimeters(next);
-            double device = double.IsNaN(deviceReserveMillimeters)
-                || double.IsInfinity(deviceReserveMillimeters)
-                || deviceReserveMillimeters < 0
-                ? 0d
-                : deviceReserveMillimeters;
+            double device = ClampReserve(deviceReserveMillimeters);
+            double owner = ClampReserve(ownerReserveMillimeters);
             var reserve = new CableReserveInfo
             {
                 MeasuredMeters = measured,
                 PanelReserveMillimeters = panel,
+                PanelReserveLabel = PanelReserveLabel(next),
                 DeviceReserveMillimeters = device,
-                TotalMeters = measured + (panel + device) / 1000d
+                OwnerReserveMillimeters = owner,
+                TotalMeters = measured + (panel + device + owner) / 1000d
             };
             if (statistics == null) return reserve;
 
-            // CABLE_INFO 由 FrameBlockFiller 单独格式化为「实测 + 盘内预留 + 设备预留」，
-            // 因此这里只把明细和总长写到统计结果，不往 CableFormatted 里塞隐藏分段。
             statistics.MeasuredCableSum = measured;
             statistics.PanelReserveMillimeters = panel;
+            statistics.PanelReserveLabel = reserve.PanelReserveLabel;
             statistics.DeviceReserveMillimeters = device;
+            statistics.OwnerReserveMillimeters = owner;
             statistics.CableReserveApplied = true;
             statistics.CableSum = reserve.TotalMeters;
             return reserve;
         }
 
-        /// <summary>把同一统计结果上的预留恢复到实测值（避免同一命令里重复叠加）。</summary>
+        private static double ClampReserve(double value)
+            => double.IsNaN(value) || double.IsInfinity(value) || value < 0d ? 0d : value;
         private static string Normalize(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "";

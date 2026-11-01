@@ -190,7 +190,7 @@ namespace UNCAD.UI
             AddPair(layout, 2, "FR:", _fr, "项目序号:", _seq);
             AddPair(layout, 3, "设备原电缆:", _originalCable, "清单电缆:", _cable);
             AddPair(layout, 4, "实测电缆 (m):", _measuredCable, "电缆长度 (m):", _cableMeters);
-            AddPair(layout, 5, "设备内预留 (mm):", _deviceReserve, "盘内预留 (mm):", _panelReserve);
+            AddPair(layout, 5, "设备内预留 (mm):", _deviceReserve, "盘内/箱内 (mm):", _panelReserve);
             AddPair(layout, 6, "软管直径:", _diameter, "", new Label());
             AddPair(layout, 7, "下游轴位:", _downstream, "上游轴位:", _upstream);
             Label detailLabel = LabelFor("配电详情:");

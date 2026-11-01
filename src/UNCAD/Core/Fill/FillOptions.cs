@@ -94,12 +94,17 @@ namespace UNCAD.Core.Fill
         /// <summary>Downstream 自动添加默认开启（用户可单独关闭，不影响上游规则）。</summary>
         public const bool DefaultDownstreamEnabled = true;
 
+        /// <summary>业主统一预留（毫米）：所有回路的电缆总长默认加 3000。</summary>
+        public const double DefaultCableOwnerReserveMillimeters = 3000.0;
+        public const double MaximumCableOwnerReserveMillimeters = 100000.0;
+
         private FillRuntimeOptions(string machineWorkbookPath,
             int startRow, int clearRows,
             double textHeight, double mmPerGrid, string bridgeInfo,
             FillPlanningOptions planning, FillAutoFillOptions autoFill,
             double downstreamSocketAmps, double downstreamPanelAmps,
-            bool downstreamSocketEnabled, bool downstreamPanelEnabled)
+            bool downstreamSocketEnabled, bool downstreamPanelEnabled,
+            double cableOwnerReserveMillimeters)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -113,6 +118,7 @@ namespace UNCAD.Core.Fill
             DownstreamPanelAmps = downstreamPanelAmps;
             DownstreamSocketEnabled = downstreamSocketEnabled;
             DownstreamPanelEnabled = downstreamPanelEnabled;
+            CableOwnerReserveMillimeters = cableOwnerReserveMillimeters;
         }
 
         public string MachineWorkbookPath { get; }
@@ -149,6 +155,9 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public bool DownstreamPanelEnabled { get; }
 
+        /// <summary>业主统一预留（毫米）：所有回路电缆总长默认加 3000，U1SET 可改。</summary>
+        public double CableOwnerReserveMillimeters { get; }
+
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             string bridgeInfo, FillPlanningOptions planning,
@@ -156,7 +165,8 @@ namespace UNCAD.Core.Fill
             double downstreamSocketAmps = DefaultDownstreamSocketAmps,
             double downstreamPanelAmps = DefaultDownstreamPanelAmps,
             bool downstreamSocketEnabled = DefaultDownstreamEnabled,
-            bool downstreamPanelEnabled = DefaultDownstreamEnabled)
+            bool downstreamPanelEnabled = DefaultDownstreamEnabled,
+            double cableOwnerReserveMillimeters = DefaultCableOwnerReserveMillimeters)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -172,7 +182,8 @@ namespace UNCAD.Core.Fill
                     DefaultDownstreamSocketAmps),
                 PositiveWithin(downstreamPanelAmps, MaximumDownstreamPanelAmps,
                     DefaultDownstreamPanelAmps),
-                downstreamSocketEnabled, downstreamPanelEnabled);
+                downstreamSocketEnabled, downstreamPanelEnabled,
+                ReserveWithin(cableOwnerReserveMillimeters));
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)
@@ -181,5 +192,11 @@ namespace UNCAD.Core.Fill
         private static double PositiveWithin(double value, double maximum, double fallback)
             => value > 0 && value <= maximum && !double.IsNaN(value)
                 && !double.IsInfinity(value) ? value : fallback;
+
+        // 预留允许为 0（不额外预留），负值/NaN/超大值回退默认 3000。
+        private static double ReserveWithin(double value)
+            => value >= 0 && value <= MaximumCableOwnerReserveMillimeters
+                && !double.IsNaN(value) && !double.IsInfinity(value)
+                ? value : DefaultCableOwnerReserveMillimeters;
     }
 }

@@ -171,7 +171,7 @@ namespace UNCAD.Tests
                     Assert.Equal(2, FindAll<UiCard>(tabs.SelectedTab).Count);
 
                     List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                    Assert.Equal(4, numbers.Count);
+                    Assert.Equal(5, numbers.Count);
                     Assert.Single(numbers, number => number.DecimalPlaces == 0
                         && number.Minimum == 1m && number.Maximum == 100m);
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),

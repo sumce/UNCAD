@@ -49,8 +49,12 @@ namespace UNCAD.Core.Stat
         public double MeasuredCableSum { get; set; }
         /// <summary>U1U：盘内预留（毫米，按 U_上游类型）。</summary>
         public double PanelReserveMillimeters { get; set; }
+        /// <summary>盘内/箱内（I-Line、插座盘=盘内；母线插接箱=箱内）。</summary>
+        public string PanelReserveLabel { get; set; } = "";
         /// <summary>U1U：设备内预留（毫米，首次询问后写入 frameinfo_json）。</summary>
         public double DeviceReserveMillimeters { get; set; }
+        /// <summary>业主统一预留（毫米，全局配置，默认 3000）。</summary>
+        public double OwnerReserveMillimeters { get; set; }
         /// <summary>是否已经应用 U1U 预留（CABLE_INFO 需要单独标注预留）。</summary>
         public bool CableReserveApplied { get; set; }
         public List<BridgeStat> Bridges { get; } = new List<BridgeStat>();
