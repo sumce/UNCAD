@@ -46,6 +46,12 @@ namespace UNCAD.Core.QuickLine
         private readonly Dictionary<string, QuickLineSegment> _segments;
         private readonly Dictionary<string, List<QuickLineConnection>> _connections;
         private readonly ReadOnlyCollection<QuickLineSegment> _segmentList;
+        // 连接表在构造后不再变化。按线段/端点预包装只读视图，避免遍历算法
+        // （CountReachableFrom、CollectComponent、U1LX 逐步前进）每次调用都新建
+        // ReadOnlyCollection（整条路线遍历时可产生数十万次短命分配）。
+        private readonly Dictionary<string, IReadOnlyList<QuickLineConnection>> _connectionViews;
+        private readonly Dictionary<string, IReadOnlyList<QuickLineConnection>> _startConnectionViews;
+        private readonly Dictionary<string, IReadOnlyList<QuickLineConnection>> _endConnectionViews;
 
         private QuickLineGraph(List<QuickLineSegment> segments, double endpointTolerance)
         {
@@ -64,6 +70,25 @@ namespace UNCAD.Core.QuickLine
 
             _segmentList = new ReadOnlyCollection<QuickLineSegment>(segments);
             BuildConnections(segments);
+            _connectionViews = new Dictionary<string, IReadOnlyList<QuickLineConnection>>(
+                StringComparer.OrdinalIgnoreCase);
+            _startConnectionViews = new Dictionary<string, IReadOnlyList<QuickLineConnection>>(
+                StringComparer.OrdinalIgnoreCase);
+            _endConnectionViews = new Dictionary<string, IReadOnlyList<QuickLineConnection>>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, List<QuickLineConnection>> pair in _connections)
+            {
+                _connectionViews[pair.Key] = pair.Value.AsReadOnly();
+                var start = new List<QuickLineConnection>();
+                var end = new List<QuickLineConnection>();
+                foreach (QuickLineConnection connection in pair.Value)
+                {
+                    if (connection.Endpoint == QuickLineEndpoint.Start) start.Add(connection);
+                    else if (connection.Endpoint == QuickLineEndpoint.End) end.Add(connection);
+                }
+                _startConnectionViews[pair.Key] = start.AsReadOnly();
+                _endConnectionViews[pair.Key] = end.AsReadOnly();
+            }
         }
 
         public IReadOnlyList<QuickLineSegment> Segments => _segmentList;
@@ -104,23 +129,23 @@ namespace UNCAD.Core.QuickLine
             if (segmentId == null || endpoint == QuickLineEndpoint.None)
                 return EmptyConnections;
 
-            List<QuickLineConnection> connections;
-            if (!_connections.TryGetValue(segmentId, out connections))
-                return EmptyConnections;
-
-            var filtered = new List<QuickLineConnection>();
-            foreach (QuickLineConnection connection in connections)
-                if (connection.Endpoint == endpoint) filtered.Add(connection);
-            return new ReadOnlyCollection<QuickLineConnection>(filtered);
+            IReadOnlyList<QuickLineConnection> connections;
+            if (endpoint == QuickLineEndpoint.Start
+                && _startConnectionViews.TryGetValue(segmentId, out connections))
+                return connections;
+            if (endpoint == QuickLineEndpoint.End
+                && _endConnectionViews.TryGetValue(segmentId, out connections))
+                return connections;
+            return EmptyConnections;
         }
 
         public IReadOnlyList<QuickLineConnection> GetConnections(string segmentId)
         {
             if (segmentId == null) return EmptyConnections;
-            List<QuickLineConnection> connections;
-            if (!_connections.TryGetValue(segmentId, out connections))
+            IReadOnlyList<QuickLineConnection> connections;
+            if (!_connectionViews.TryGetValue(segmentId, out connections))
                 return EmptyConnections;
-            return new ReadOnlyCollection<QuickLineConnection>(connections);
+            return connections;
         }
 
         /// <summary>

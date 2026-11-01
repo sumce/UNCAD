@@ -32,7 +32,7 @@ namespace UNCAD.Tests
             Assert.Contains("回滚", decision.Reason);
             Assert.Contains("还原“打印设备/介质”失败", decision.Reason);
             Assert.Contains("还原“打印窗口”失败", decision.Reason);
-            // 回滚只丢弃布局改动，不影响已经出好的 PDF 与上传。
+            // 回滚只丢弃布局改动，不影响已经出好的 PDF 文件。
             Assert.Contains("PDF 已生成", decision.Reason);
         }
 

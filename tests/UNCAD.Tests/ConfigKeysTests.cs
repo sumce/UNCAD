@@ -35,7 +35,7 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
-            Assert.Equal("2.9.3", info.Version);
+            Assert.Equal("2.10.0", info.Version);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);
@@ -86,10 +86,12 @@ namespace UNCAD.Tests
         {
             Assert.Equal("UNC_FILL_FLEXIBLE_CONDUIT_METERS",
                 ConfigKeys.FillFlexibleConduitMeters);
-            Assert.Equal("UNC_FILL_INCLUDE_UNMATCHED_CONDUITS",
-                ConfigKeys.FillIncludeUnmatchedConduits);
-            Assert.NotEqual(ConfigKeys.FillFlexibleConduitMeters,
-                ConfigKeys.FillIncludeUnmatchedConduits);
+            // 2.10.0：不可匹配的线管行永远禁止输出，旧配置键已删除。
+            Assert.Null(typeof(ConfigKeys).GetField("FillIncludeUnmatchedConduits"));
+            Assert.Equal("UNC_FILL_REQUIRE_ALL_CIRCUITS", ConfigKeys.FillRequireAllCircuits);
+            Assert.Equal("UNC_CABLE_RESERVE_ILINE_MM", ConfigKeys.CableReserveILine);
+            Assert.Equal("UNC_CABLE_RESERVE_SOCKET_MM", ConfigKeys.CableReserveSocket);
+            Assert.Equal("UNC_CABLE_RESERVE_BUSBAR_MM", ConfigKeys.CableReserveBusbar);
             Assert.NotEqual(ConfigKeys.FillClearRows,
                 ConfigKeys.FillFlexibleConduitMeters);
             Assert.Equal("UNC_FILL_DEVICE_COLOR_INDEX", ConfigKeys.FillDeviceColorIndex);

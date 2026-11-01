@@ -8,61 +8,93 @@ namespace UNCAD.UI
     /// <summary>
     /// 统一 UI 主题:色板、字体、间距与控件工厂。
     /// 所有窗体必须从这里取样式,禁止直接 <c>Color.FromArgb</c>。
+    ///
+    /// 设计方向（2.10.0 商务体系）：
+    /// - 主色是深墨蓝 Ink，只用于“要执行的动作”（主按钮、选中标记），不铺大面积；
+    /// - 强调色是钢蓝 Accent，用于链接、信息强调和图标；
+    /// - 中性面是暖灰，比纯灰更稳重，卡片用白色 + 1px 描边形成层次；
+    /// - 语义色（警告/危险/成功/信息）必须成对使用底色与前景色，禁止只改前景。
     /// </summary>
     internal static class UiTheme
     {
-        // ---- 中性面 ----
-        public static readonly Color WindowBg = Color.FromArgb(0xF6, 0xF6, 0xF6);
+        // ---- 中性面（暖灰）----
+        public static readonly Color WindowBg = Color.FromArgb(0xF4, 0xF4, 0xF2);
         public static readonly Color Surface = Color.White;
-        public static readonly Color SurfaceAlt = Color.FromArgb(0xFA, 0xFA, 0xFA);
-        public static readonly Color Border = Color.FromArgb(0xE7, 0xE7, 0xE7);
-        public static readonly Color BorderStrong = Color.FromArgb(0xD4, 0xD4, 0xD4);
+        public static readonly Color SurfaceAlt = Color.FromArgb(0xF8, 0xF8, 0xF6);
+        public static readonly Color SurfaceSunken = Color.FromArgb(0xEF, 0xEF, 0xEB);
+        public static readonly Color Border = Color.FromArgb(0xE4, 0xE2, 0xDD);
+        public static readonly Color BorderStrong = Color.FromArgb(0xCF, 0xCC, 0xC4);
 
         // ---- 文本 ----
-        public static readonly Color TextPrimary = Color.FromArgb(0x17, 0x17, 0x17);
-        public static readonly Color TextSecondary = Color.FromArgb(0x66, 0x66, 0x66);
-        public static readonly Color TextDisabled = Color.FromArgb(0xA3, 0xA3, 0xA3);
+        public static readonly Color TextPrimary = Color.FromArgb(0x1B, 0x1F, 0x24);
+        public static readonly Color TextSecondary = Color.FromArgb(0x5B, 0x64, 0x6D);
+        public static readonly Color TextDisabled = Color.FromArgb(0xA3, 0xA7, 0xAB);
 
-        // ---- 强调色 ----
-        public static readonly Color Accent = Color.FromArgb(0x25, 0x63, 0xEB);
-        public static readonly Color AccentHover = Color.FromArgb(0x1D, 0x4E, 0xD8);
-        public static readonly Color AccentSoft = Color.FromArgb(0xEF, 0xF6, 0xFF);
-        public static readonly Color Action = Color.FromArgb(0x17, 0x17, 0x17);
-        public static readonly Color ActionHover = Color.FromArgb(0x33, 0x33, 0x33);
+        // ---- 主色：深墨蓝（动作层）----
+        public static readonly Color Ink = Color.FromArgb(0x14, 0x30, 0x4A);
+        public static readonly Color InkHover = Color.FromArgb(0x1D, 0x41, 0x62);
+        public static readonly Color Action = Ink;
+        public static readonly Color ActionHover = InkHover;
+        public static readonly Color SelectSoft = Color.FromArgb(0xE9, 0xEE, 0xF3);
+
+        // ---- 强调色：钢蓝（信息层）----
+        public static readonly Color Accent = Color.FromArgb(0x2E, 0x6B, 0x96);
+        public static readonly Color AccentHover = Color.FromArgb(0x23, 0x5A, 0x80);
+        public static readonly Color AccentSoft = Color.FromArgb(0xEA, 0xF2, 0xF8);
         /// <summary>Accent 的深色变体，供 Ribbon 图标区分同色系命令。</summary>
-        public static readonly Color AccentDark = Color.FromArgb(0x0B, 0x5A, 0xAB);
+        public static readonly Color AccentDark = Color.FromArgb(0x16, 0x4B, 0x6E);
+        /// <summary>聚焦描边：输入框、开关和按钮获得焦点时的唯一高亮色。</summary>
+        public static readonly Color FocusBorder = Color.FromArgb(0x6E, 0x9C, 0xC0);
 
         // ---- 语义色 ----
-        public static readonly Color WarningBg = Color.FromArgb(0xFF, 0xF6, 0xDD);
-        public static readonly Color WarningFg = Color.FromArgb(0x8A, 0x53, 0x00);
-        public static readonly Color DangerBg = Color.FromArgb(0xFD, 0xEC, 0xE9);
-        public static readonly Color DangerFg = Color.FromArgb(0xB4, 0x30, 0x2B);
-        public static readonly Color SuccessFg = Color.FromArgb(0x1E, 0x7A, 0x45);
+        public static readonly Color WarningBg = Color.FromArgb(0xFB, 0xF2, 0xDF);
+        public static readonly Color WarningFg = Color.FromArgb(0x8A, 0x5A, 0x12);
+        public static readonly Color WarningBorder = Color.FromArgb(0xEB, 0xD9, 0xB4);
+        public static readonly Color DangerBg = Color.FromArgb(0xFB, 0xED, 0xEB);
+        public static readonly Color DangerFg = Color.FromArgb(0xA3, 0x2B, 0x27);
+        public static readonly Color DangerBorder = Color.FromArgb(0xEF, 0xCF, 0xCA);
+        public static readonly Color SuccessFg = Color.FromArgb(0x1F, 0x7A, 0x4C);
+        public static readonly Color SuccessBg = Color.FromArgb(0xEA, 0xF5, 0xEE);
+        public static readonly Color SuccessBorder = Color.FromArgb(0xC9, 0xE3, 0xD4);
+        public static readonly Color InfoFg = Color.FromArgb(0x23, 0x55, 0x6E);
+        public static readonly Color InfoBg = AccentSoft;
+        public static readonly Color InfoBorder = Color.FromArgb(0xC9, 0xDC, 0xEA);
+        /// <summary>卡片投影（极轻，仅用于卡片浮层感，不做发光）。</summary>
+        public static readonly Color Shadow = Color.FromArgb(16, 0x20, 0x2C, 0x3A);
 
         // ---- 品牌(仅 AboutForm / BrandMarkControl)----
         public static readonly Color BrandBlue = Color.FromArgb(0x00, 0x70, 0xAD);
         public static readonly Color BrandOrange = Color.FromArgb(0xEC, 0x7E, 0x22);
 
-        // ---- 字体 ----
+        // ---- 字体（字号阶梯）----
         private const string FontFamily = "微软雅黑";
         /// <summary>商标字标使用的西文字体：与中文正文分开，避免改变品牌外观。</summary>
         public const string BrandFontFamily = "Segoe UI";
         public static Font FontBody => new Font(FontFamily, 9.25f);
         public static Font FontBodyBold => new Font(FontFamily, 9.25f, FontStyle.Bold);
-        public static Font FontHeader => new Font(FontFamily, 12f, FontStyle.Bold);
         public static Font FontCaption => new Font(FontFamily, 8.25f);
+        public static Font FontSection => new Font(FontFamily, 10.5f, FontStyle.Bold);
         public static Font FontInput => new Font(FontFamily, 10.5f);
+        public static Font FontHeader => new Font(FontFamily, 12f, FontStyle.Bold);
         public static Font FontTitle => new Font(FontFamily, 14f, FontStyle.Bold);
         public static Font FontDisplay => new Font(FontFamily, 18f, FontStyle.Bold);
 
         // ---- 间距(4pt 基线)----
+        public const int SpaceXXS = 2;
         public const int SpaceXS = 4;
         public const int SpaceS = 8;
         public const int SpaceM = 12;
         public const int SpaceL = 16;
         public const int SpaceXL = 24;
+        public const int SpaceXXL = 32;
         public static Padding CardPadding => new Padding(18, 16, 18, 16);
         public static Padding FormPadding => new Padding(SpaceM);
+
+        // ---- 圆角 ----
+        public const int RadiusInput = 6;
+        public const int RadiusCard = 8;
+        public const int RadiusCardLarge = 14;
+        public const int RadiusPill = 10;
 
         // ---- DPI 缩放 ----
         // 所有窗体经 DialogLayout.Apply 设置 AutoScaleMode.Dpi +
@@ -115,9 +147,59 @@ namespace UNCAD.UI
             }
         }
 
+        // ---- 通用绘制 ----
+
+        /// <summary>圆角矩形路径；所有自绘控件共用同一套圆角定义。</summary>
+        internal static GraphicsPath CreateRoundedPath(Rectangle rect, int radius)
+        {
+            var path = new GraphicsPath();
+            radius = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2);
+            if (radius <= 0)
+            {
+                path.AddRectangle(rect);
+                return path;
+            }
+            int diameter = radius * 2;
+            path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
+            path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
+            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        /// <summary>把一种颜色按比例混入另一种颜色，用于悬停/按下态，避免维护第二份色值。</summary>
+        internal static Color Blend(Color from, Color to, float amount)
+        {
+            amount = Math.Max(0f, Math.Min(1f, amount));
+            return Color.FromArgb(
+                (int)Math.Round(from.A + (to.A - from.A) * amount),
+                (int)Math.Round(from.R + (to.R - from.R) * amount),
+                (int)Math.Round(from.G + (to.G - from.G) * amount),
+                (int)Math.Round(from.B + (to.B - from.B) * amount));
+        }
+
+        /// <summary>
+        /// 给自绘或扁平控件加统一的键盘焦点描边。焦点态只允许一种表达：
+        /// 1px FocusBorder 内描边，不再叠加系统虚线框。
+        /// </summary>
+        public static void FocusHighlight(Control control)
+        {
+            if (control == null) return;
+            control.GotFocus += (sender, args) => control.Invalidate();
+            control.LostFocus += (sender, args) => control.Invalidate();
+            control.Paint += (sender, args) =>
+            {
+                if (!control.Focused || control.Width < 2 || control.Height < 2) return;
+                using (var pen = new Pen(FocusBorder))
+                    args.Graphics.DrawRectangle(pen, 0, 0,
+                        control.Width - 1, control.Height - 1);
+            };
+        }
+
         // ---- 按钮工厂 ----
 
-        /// <summary>扁平主按钮:Accent 底白字,Hover 加亮。</summary>
+        /// <summary>扁平主按钮:Ink 底白字,Hover 加亮。</summary>
         public static Button PrimaryButton(string text, DialogResult result = DialogResult.None)
         {
             var button = FlatButton(text, result);
@@ -145,6 +227,7 @@ namespace UNCAD.UI
             };
             button.EnabledChanged += (sender, args) => applyState();
             applyState();
+            FocusHighlight(button);
             return button;
         }
 
@@ -156,19 +239,21 @@ namespace UNCAD.UI
             button.ForeColor = TextPrimary;
             button.FlatAppearance.BorderColor = BorderStrong;
             button.FlatAppearance.MouseOverBackColor = SurfaceAlt;
-            button.FlatAppearance.MouseDownBackColor = SurfaceAlt;
+            button.FlatAppearance.MouseDownBackColor = SurfaceSunken;
+            FocusHighlight(button);
             return button;
         }
 
-        /// <summary>危险按钮:白底红字,Hover 浅红。</summary>
+        /// <summary>危险按钮:白底红字,Hover 浅红。危险动作必须与主按钮视觉隔离。</summary>
         public static Button DangerButton(string text)
         {
             var button = FlatButton(text);
             button.BackColor = Surface;
             button.ForeColor = DangerFg;
-            button.FlatAppearance.BorderColor = DangerBg;
+            button.FlatAppearance.BorderColor = DangerBorder;
             button.FlatAppearance.MouseOverBackColor = DangerBg;
             button.FlatAppearance.MouseDownBackColor = DangerBg;
+            FocusHighlight(button);
             return button;
         }
 
@@ -206,8 +291,8 @@ namespace UNCAD.UI
 
         // ---- 容器 ----
 
-        /// <summary>圆角白卡容器。</summary>
-        public static UiCard Card(int cornerRadius = 8)
+        /// <summary>圆角白卡容器（默认 8px 圆角，保持既有窗体视觉基线）。</summary>
+        public static UiCard Card(int cornerRadius = RadiusCard)
         {
             return new UiCard
             {
@@ -225,7 +310,7 @@ namespace UNCAD.UI
             {
                 Text = text,
                 AutoSize = true,
-                Font = FontBodyBold,
+                Font = FontSection,
                 ForeColor = TextPrimary,
                 Margin = new Padding(0, 0, 0, SpaceS)
             };
@@ -240,7 +325,7 @@ namespace UNCAD.UI
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BackColor = Surface,
-                Padding = new Padding(SpaceM, SpaceM, SpaceM, SpaceS),
+                Padding = new Padding(SpaceXL, SpaceM, SpaceXL, SpaceM),
                 ColumnCount = 1,
                 RowCount = subtitle == null ? 1 : 2,
                 Margin = new Padding(0)
@@ -260,11 +345,17 @@ namespace UNCAD.UI
                 {
                     Text = subtitle,
                     AutoSize = true,
-                    Font = FontCaption,
+                    Font = FontBody,
                     ForeColor = TextSecondary,
                     Margin = new Padding(0, SpaceXS, 0, 0)
                 });
             }
+            layout.Paint += (sender, args) =>
+            {
+                using (var pen = new Pen(Border))
+                    args.Graphics.DrawLine(pen, 0, layout.Height - 1,
+                        layout.Width, layout.Height - 1);
+            };
             return layout;
         }
 
@@ -287,6 +378,10 @@ namespace UNCAD.UI
             else if (control is NumericUpDown number)
             {
                 number.BorderStyle = BorderStyle.FixedSingle;
+            }
+            else if (control is ListBox listBox)
+            {
+                listBox.BorderStyle = BorderStyle.FixedSingle;
             }
         }
 
@@ -328,8 +423,9 @@ namespace UNCAD.UI
             grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             grid.DefaultCellStyle.BackColor = Surface;
             grid.DefaultCellStyle.ForeColor = TextPrimary;
-            grid.DefaultCellStyle.SelectionBackColor = AccentSoft;
+            grid.DefaultCellStyle.SelectionBackColor = SelectSoft;
             grid.DefaultCellStyle.SelectionForeColor = TextPrimary;
+            grid.AlternatingRowsDefaultCellStyle.BackColor = SurfaceAlt;
         }
 
         /// <summary>
@@ -362,7 +458,7 @@ namespace UNCAD.UI
                 AutoSize = true,
                 FlowDirection = FlowDirection.RightToLeft,
                 WrapContents = false,
-                Padding = new Padding(SpaceM, SpaceS, SpaceM, SpaceS),
+                Padding = new Padding(SpaceXL, SpaceS, SpaceXL, SpaceS),
                 BackColor = Surface
             };
         }
@@ -371,7 +467,7 @@ namespace UNCAD.UI
     /// <summary>圆角白卡 Panel，负责统一背景与软描边。</summary>
     internal class UiCard : Panel
     {
-        private int _cornerRadius = 8;
+        private int _cornerRadius = UiTheme.RadiusCard;
 
         public int CornerRadius
         {
@@ -395,7 +491,7 @@ namespace UNCAD.UI
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
             g.Clear(Parent?.BackColor ?? UiTheme.WindowBg);
-            using var path = CreateRoundedPath(rect, CornerRadius);
+            using var path = UiTheme.CreateRoundedPath(rect, CornerRadius);
             using var brush = new SolidBrush(BackColor);
             g.FillPath(brush, path);
         }
@@ -405,27 +501,9 @@ namespace UNCAD.UI
             base.OnPaint(e);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var path = CreateRoundedPath(rect, CornerRadius);
+            using var path = UiTheme.CreateRoundedPath(rect, CornerRadius);
             using var pen = new Pen(UiTheme.Border);
             e.Graphics.DrawPath(pen, path);
-        }
-
-        private static GraphicsPath CreateRoundedPath(Rectangle rect, int radius)
-        {
-            var path = new GraphicsPath();
-            radius = Math.Min(radius, Math.Min(rect.Width, rect.Height) / 2);
-            if (radius <= 0)
-            {
-                path.AddRectangle(rect);
-                return path;
-            }
-            var diameter = radius * 2;
-            path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
-            path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);
-            path.AddArc(rect.Right - diameter, rect.Bottom - diameter, diameter, diameter, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90);
-            path.CloseFigure();
-            return path;
         }
     }
 

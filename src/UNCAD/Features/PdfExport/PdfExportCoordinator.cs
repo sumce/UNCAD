@@ -11,6 +11,8 @@ namespace UNCAD.Features.PdfExport
         public string CircuitName { get; set; } = "";
         /// <summary>图框块参照句柄：用于把出图任务映射回具体图框，也便于日志定位。</summary>
         public string FrameHandle { get; set; } = "";
+        /// <summary>本份 PDF 的最终输出路径（命令层按输出布局 + 唯一文件名预先分配）。</summary>
+        public string FilePath { get; set; } = "";
 
         internal string Label
             => (CircuitName ?? "").Length > 0 ? CircuitName : "(未识别回路)";
@@ -65,7 +67,6 @@ namespace UNCAD.Features.PdfExport
 
         public int Total { get; set; }
         public int Rendered { get; set; }
-        public int Queued { get; set; }
         public int Failed { get; set; }
         public List<string> Failures { get; } = new List<string>();
 
@@ -100,8 +101,7 @@ namespace UNCAD.Features.PdfExport
         {
             var text = new StringBuilder();
             text.Append("出图完成：成功 ").Append(Rendered).Append(" 份 / 失败 ")
-                .Append(Failed).Append(" 份；已排队上传 ").Append(Queued)
-                .Append(" 份（后台执行，失败只记日志与命令行提示，不影响图纸）。");
+                .Append(Failed).Append(" 份（PDF 已保存到输出目录）。");
             if (Failures.Count > 0)
             {
                 text.Append(" 失败原因：")
@@ -115,24 +115,23 @@ namespace UNCAD.Features.PdfExport
 
     /// <summary>
     /// U1PDF 的出图编排（不依赖 AutoCAD，可单测）：
-    /// 逐份出图 → 每份**成功后立刻单独排队上传**（一个图框一个回路一份 PDF）。
+    /// 逐份出图到预先分配好的输出文件（一个图框一个回路一份 PDF），**不做任何上传**。
     ///
     /// 关键语义：
     /// - **某一份失败只跳过该份并继续处理其余份**，最后给出"成功 N / 失败 M + 原因"；
-    /// - 出图失败的份**绝不上传**（半成品没有 %PDF- 头/%%EOF 尾，会被服务端拒绝或预览空白）；
-    /// - 上传在后台执行，失败不影响图纸，也不会中断其余份。
+    /// - 出图失败的份**绝不交付**（半成品没有 %PDF- 头/%%EOF 尾，打开只能看到空白）；
+    /// - 每份的最终路径由命令层预先分配（<see cref="PdfExportTarget.FilePath"/>），
+    ///   失败不会留下覆盖别人文件名的半成品。
     /// </summary>
     internal sealed class PdfExportCoordinator
     {
         private readonly Func<PdfExportTarget, PdfRenderResult> _render;
-        private readonly Action<PdfExportTarget, string> _enqueueUpload;
         private readonly Action<string> _report;
 
         internal PdfExportCoordinator(Func<PdfExportTarget, PdfRenderResult> render,
-            Action<PdfExportTarget, string> enqueueUpload, Action<string> report)
+            Action<string> report)
         {
             _render = render ?? throw new ArgumentNullException(nameof(render));
-            _enqueueUpload = enqueueUpload ?? throw new ArgumentNullException(nameof(enqueueUpload));
             _report = report ?? (_ => { });
         }
 
@@ -172,15 +171,6 @@ namespace UNCAD.Features.PdfExport
                 {
                     reportedSettings = true;
                     _report("出图设置：" + rendered.Details[0]);
-                }
-                try
-                {
-                    _enqueueUpload(target, rendered.FilePath);
-                    run.Queued++;
-                }
-                catch (System.Exception ex)
-                {
-                    run.AddFailure(target.Label, "排队上传失败：" + ex.Message);
                 }
             }
             return run;

@@ -59,8 +59,6 @@ namespace UNCAD.Infra
         public const string FillCableOwnerReserve = "UNC_FILL_CABLE_OWNER_RESERVE_MM";
         public const string FillDeviceColorIndex = "UNC_FILL_DEVICE_COLOR_INDEX";
         public const string FillUpstreamColorIndex = "UNC_FILL_UPSTREAM_COLOR_INDEX";
-        public const string FillIncludeUnmatchedConduits =
-            "UNC_FILL_INCLUDE_UNMATCHED_CONDUITS"; // 仅兼容旧配置；运行时固定忽略
         public const string FillRecentCatalogItems =
             "UNC_FILL_RECENT_CATALOG_ITEMS"; // 清单选择对话框“最近使用”记忆（仅UI，逗号分隔编码）
 
@@ -90,6 +88,21 @@ namespace UNCAD.Infra
 
         // BOQ 与 DWG 自动输出目录；沿用旧键名以迁移已有用户设置。
         public const string SubmitFolder = "UNC_SUBMIT_FOLDER";  // 自动输出文件夹
+
+        // ---- 2.10.0 输出结构、整机回路校验、可配置预留、日志与操作记录 ----
+        // 输出目录结构（"1"=开启，默认开启）：按图纸名建子目录 / BOQ、DWG、PDF 分目录。
+        public const string OutputByDrawing = "UNC_OUTPUT_BY_DRAWING";
+        public const string OutputSeparateKinds = "UNC_OUTPUT_SEPARATE_KINDS";
+        // 整机回路校验：生成 BOQ/DWG 前要求该机台的所有回路都在本次选集中（"1"=开启，默认开启）。
+        public const string FillRequireAllCircuits = "UNC_FILL_REQUIRE_ALL_CIRCUITS";
+        // 电缆盘内/箱内预留（毫米）：I-Line 电盘 3400 / 插座盘 1000 / 母线插接箱 500。
+        public const string CableReserveILine = "UNC_CABLE_RESERVE_ILINE_MM";
+        public const string CableReserveSocket = "UNC_CABLE_RESERVE_SOCKET_MM";
+        public const string CableReserveBusbar = "UNC_CABLE_RESERVE_BUSBAR_MM";
+        // 日志与操作记录（U1SET 可改）：级别 INFO/WARN/ERROR；日志保留天数；操作记录保留月数。
+        public const string LogLevel = "UNC_LOG_LEVEL";
+        public const string LogRetentionDays = "UNC_LOG_RETENTION_DAYS";
+        public const string HistoryRetentionMonths = "UNC_HISTORY_RETENTION_MONTHS";
         // 试用授权防回拨:系统时间水位线(max-seen UTC,yyyyMMddHHmmss)。
         public const string ClockWatermarkUtc = "UNC_CLOCK_WATERMARK";
         // 在线授权账号名（v2）：旧版本此处存的是"授权码"，键名沿用以免升级后丢登录态；

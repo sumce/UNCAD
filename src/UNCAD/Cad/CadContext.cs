@@ -1,6 +1,7 @@
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using UNCAD.Infra;
 
 namespace UNCAD.Cad
 {
@@ -16,6 +17,13 @@ namespace UNCAD.Cad
         }
 
         public Document Doc { get; }
+
+        /// <summary>
+        /// 当前命令的操作记录作用域（2.10.0）；命令实现可登记机台/回路与输出文件。
+        /// 直接 Run/单元测试里可能为 null，调用方必须判空。
+        /// </summary>
+        public OperationLogScope Operation { get; internal set; }
+
         public Editor Ed => Doc.Editor;
         public Database Db => Doc.Database;
         public ObjectId CurrentSpaceId => Db.CurrentSpaceId;

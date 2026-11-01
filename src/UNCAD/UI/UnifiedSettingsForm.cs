@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -6,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 
@@ -32,8 +35,7 @@ namespace UNCAD.UI
         private readonly RadioButton _unlAbove = new RadioButton { Text = "靠边上" };
         private readonly NumericUpDown _unlOff = NumberBox(0m, 0m, 100000m);
 
-        // 桥架标注
-        private readonly TextBox _unqText = new TextBox { Width = 200 };
+        // 桥架标注（规格由 U1Q1/U1Q2/U1Q4 命令固定传入，不再作为可配置项）
         private readonly NumericUpDown _unqHgt = NumberBox(180m, 1m, 100000m);
         private readonly NumericUpDown _unqLoff = NumberBox(15m, 0m, 100000m);
         private readonly NumericUpDown _unqToff = NumberBox(0m, 0m, 100000m);
@@ -134,6 +136,38 @@ namespace UNCAD.UI
         };
         private bool _machineRefreshInProgress;
 
+        // 电缆盘内/箱内预留（2.10.0 可配置）：I-Line 电盘 3400 / 插座盘 1000 / 插接箱 500。
+        private readonly NumericUpDown _cableReserveILine = NumberBox(3400m, 0m, 100000m);
+        private readonly NumericUpDown _cableReserveSocket = NumberBox(1000m, 0m, 100000m);
+        private readonly NumericUpDown _cableReserveBusbar = NumberBox(500m, 0m, 100000m);
+        // 整机回路校验：缺少任一回路时禁止生成 BOQ/DWG（默认开启）。
+        private readonly UiToggle _requireAllCircuits = new UiToggle(
+            "整机回路校验：该机台所有回路都在本次选集中才生成 BOQ / DWG");
+
+        // 输出与分享
+        private readonly UiToggle _outputByDrawing = new UiToggle("按图纸名建立子目录");
+        private readonly UiToggle _outputSeparateKinds = new UiToggle("BOQ / DWG / PDF 分目录");
+        private readonly UiBanner _shareStatus = UiKit.Banner(UiTone.Neutral, "");
+
+        // 日志与记录
+        private readonly ComboBox _logLevel = new ComboBox
+        {
+            Width = 160,
+            DropDownStyle = ComboBoxStyle.DropDownList
+        };
+        private readonly NumericUpDown _logRetentionDays = IntegerBox(30m, 1m, 3650m);
+        private readonly NumericUpDown _historyRetentionMonths = IntegerBox(6m, 1m, 120m);
+        private readonly DataGridView _operationGrid = new DataGridView();
+        private readonly Label _operationStatus = new Label
+        {
+            AutoSize = true,
+            ForeColor = UiTheme.TextSecondary,
+            Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
+        };
+        private readonly UiEmptyState _operationEmpty =
+            UiKit.EmptyState("还没有操作记录",
+                "执行 U1F / U1U / U1S / U1DWG 等命令后，这里会按时间倒序列出最近操作。");
+
         public UnifiedSettingsForm(int tabIndex)
         {
             DialogLayout.Apply(this, ProductMetadata.ProductName + " · 配置中心",
@@ -141,6 +175,9 @@ namespace UNCAD.UI
 
             _conduitDia.Items.AddRange(new object[]
                 { "20", "25", "38", "51" });
+            _logLevel.Items.AddRange(new object[] { "INFO", "WARN", "ERROR" });
+            _shareStatus.Visible = false;
+            BuildOperationGrid();
             ConfigureStatisticsToolTips();
             LoadValues();
 
@@ -155,6 +192,7 @@ namespace UNCAD.UI
             _tabs.TabPages.Add(BuildDownstreamTab());
             _tabs.TabPages.Add(BuildColorTab());
             _tabs.TabPages.Add(BuildOutputTab());
+            _tabs.TabPages.Add(BuildLogsTab());
             _tabs.SelectedIndex = Math.Min(Math.Max(tabIndex, 0), _tabs.TabPages.Count - 1);
             StyleInteractiveControls(_tabs);
             _fillExcel.TextChanged += (sender, args) => UpdateMachineSnapshotStatus();
@@ -209,11 +247,9 @@ namespace UNCAD.UI
             _conduitDia.Text = diameter;
             // 用户只需要提供机台/设备表；固定清单随插件内嵌，不再有清单路径校验。
             string machinePath = _fillExcel.Text.Trim();
-            // A machine workbook may be a manually selected local file or a
-            // manually entered HTTP(S) source that is refreshed from this page.
-            // Do not treat a valid remote source as a missing local path.
+            // 2.10.0 起只支持本地/UNC 机台数据文件：网络下载已移除，
+            // 路径必须是现有文件，或已经解析过且保留 SQLite 快照的同一个路径。
             if (machinePath.Length > 0
-                && !MachineWorkbookSource.IsRemote(machinePath)
                 && !File.Exists(machinePath)
                 && !MachineWorkbookSource.HasSnapshot(machinePath))
             {
@@ -245,7 +281,6 @@ namespace UNCAD.UI
             _unlAbove.Checked = unlPos == "2";
             SetNumber(_unlOff, Settings.GetDouble(ConfigKeys.UnlOffset, 0.0));
 
-            _unqText.Text = Settings.Get(ConfigKeys.UnqText, "桥架200*100 10格");
             SetNumber(_unqHgt, Settings.GetDouble(ConfigKeys.UnqHeight, 180.0));
             SetNumber(_unqLoff, Settings.GetDouble(ConfigKeys.UnqLineOff, 15.0));
             SetNumber(_unqToff, Settings.GetDouble(ConfigKeys.UnqTextOff, 0.0));
@@ -320,6 +355,47 @@ namespace UNCAD.UI
                 ConfigKeys.FillAutofillOutletPanel, autoFill.OutletPanel);
             _autofillBusPlugBox.Checked = Settings.GetBool(
                 ConfigKeys.FillAutofillBusPlugBox, autoFill.BusPlugBox);
+            // 电缆盘内/箱内预留与整机回路校验（2.10.0）
+            SetNumber(_cableReserveILine, Settings.GetDouble(ConfigKeys.CableReserveILine,
+                CableReserveSettings.DefaultILinePanelMillimeters));
+            SetNumber(_cableReserveSocket, Settings.GetDouble(ConfigKeys.CableReserveSocket,
+                CableReserveSettings.DefaultSocketPanelMillimeters));
+            SetNumber(_cableReserveBusbar, Settings.GetDouble(ConfigKeys.CableReserveBusbar,
+                CableReserveSettings.DefaultBusbarConnectorMillimeters));
+            _requireAllCircuits.Checked = Settings.GetBool(
+                ConfigKeys.FillRequireAllCircuits, true);
+            // 输出结构开关（2.10.0）
+            _outputByDrawing.Checked = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
+            _outputSeparateKinds.Checked = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
+            // 日志与操作记录（2.10.0）
+            SelectText(_logLevel, Settings.Get(ConfigKeys.LogLevel,
+                FileLogger.DefaultLevel), "INFO");
+            SetNumber(_logRetentionDays, Settings.GetDouble(ConfigKeys.LogRetentionDays,
+                FileLogger.DefaultRetentionDays));
+            SetNumber(_historyRetentionMonths, Settings.GetDouble(
+                ConfigKeys.HistoryRetentionMonths, OperationLog.DefaultRetentionMonths));
+            RefreshOperationLog();
+        }
+
+        /// <summary>下拉框按文本选中；不受当前区域设置影响，找不到时回退。</summary>
+        private static void SelectText(ComboBox box, string value, string fallback)
+        {
+            string wanted = (value ?? "").Trim();
+            foreach (object item in box.Items)
+            {
+                if (!string.Equals(Convert.ToString(item), wanted,
+                    StringComparison.OrdinalIgnoreCase)) continue;
+                box.SelectedItem = item;
+                return;
+            }
+            foreach (object item in box.Items)
+            {
+                if (!string.Equals(Convert.ToString(item), fallback,
+                    StringComparison.OrdinalIgnoreCase)) continue;
+                box.SelectedItem = item;
+                return;
+            }
+            if (box.Items.Count > 0) box.SelectedIndex = 0;
         }
 
         // ---------- 保存（含数据校验） ----------
@@ -332,8 +408,7 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.UnlPos, _unlCenter.Checked ? "0" : _unlBelow.Checked ? "1" : "2");
             Settings.Set(ConfigKeys.UnlOffset, Value(_unlOff));
 
-            // 桥架（偏移允许 0=自动/贴线）
-            Settings.Set(ConfigKeys.UnqText, _unqText.Text.Trim());
+            // 桥架（偏移允许 0=自动/贴线）；规格由 U1Q1/U1Q2/U1Q4 固定传入，不写配置。
             Settings.Set(ConfigKeys.UnqHeight, Value(_unqHgt));
             Settings.Set(ConfigKeys.UnqLineOff, Value(_unqLoff));
             Settings.Set(ConfigKeys.UnqTextOff, Value(_unqToff));
@@ -403,6 +478,29 @@ namespace UNCAD.UI
                 _autofillOutletPanel.Checked);
             Settings.SetBool(ConfigKeys.FillAutofillBusPlugBox,
                 _autofillBusPlugBox.Checked);
+
+            // 电缆盘内/箱内预留与整机回路校验
+            Settings.Set(ConfigKeys.CableReserveILine, Value(_cableReserveILine));
+            Settings.Set(ConfigKeys.CableReserveSocket, Value(_cableReserveSocket));
+            Settings.Set(ConfigKeys.CableReserveBusbar, Value(_cableReserveBusbar));
+            Settings.SetBool(ConfigKeys.FillRequireAllCircuits, _requireAllCircuits.Checked);
+
+            // 输出结构与日志/操作记录
+            Settings.SetBool(ConfigKeys.OutputByDrawing, _outputByDrawing.Checked);
+            Settings.SetBool(ConfigKeys.OutputSeparateKinds, _outputSeparateKinds.Checked);
+            Settings.Set(ConfigKeys.LogLevel, SelectedLogLevel());
+            Settings.Set(ConfigKeys.LogRetentionDays,
+                ((int)_logRetentionDays.Value).ToString(CultureInfo.InvariantCulture));
+            Settings.Set(ConfigKeys.HistoryRetentionMonths,
+                ((int)_historyRetentionMonths.Value).ToString(CultureInfo.InvariantCulture));
+        }
+
+        private string SelectedLogLevel()
+        {
+            string value = Convert.ToString(_logLevel.SelectedItem);
+            return string.Equals(value, "WARN", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "ERROR", StringComparison.OrdinalIgnoreCase)
+                ? value.ToUpperInvariant() : "INFO";
         }
 
         private void ConfigureStatisticsToolTips()
@@ -579,15 +677,14 @@ namespace UNCAD.UI
             AddField(unl, 2, "文字位置", posPanel);
             AddField(unl, 3, "偏移距离（0 = 贴线）", _unlOff);
 
-            var unq = Grid(5);
-            AddField(unq, 0, "默认规格", _unqText);
-            AddField(unq, 1, "文字高度", _unqHgt);
-            AddField(unq, 2, "红线距基线（0 = 15）", _unqLoff);
-            AddField(unq, 3, "文字距红线（0 = 贴线）", _unqToff);
+            var unq = Grid(4);
+            AddField(unq, 0, "文字高度", _unqHgt);
+            AddField(unq, 1, "红线距基线（0 = 15）", _unqLoff);
+            AddField(unq, 2, "文字距红线（0 = 贴线）", _unqToff);
             var sidePanel = new FlowLayoutPanel { AutoSize = true };
             sidePanel.Controls.Add(_unqAbove);
             sidePanel.Controls.Add(_unqBelow);
-            AddField(unq, 4, "标注侧", sidePanel);
+            AddField(unq, 3, "标注侧", sidePanel);
 
             var unr = Grid(1);
             AddField(unr, 0, "拱桥直径", _unrDia);
@@ -597,7 +694,9 @@ namespace UNCAD.UI
 
             return Page("绘制标注", "U1L / U1Q / U1C / U1R 的默认标注参数",
                 Section("线段文字（U1L）", null, unl),
-                Section("桥架文字与位置（U1Q）", "成图文字使用固定 BOQ 清单中的桥架型号。", unq),
+                Section("桥架文字与位置（U1Q）",
+                    "规格由 U1Q1 / U1Q2 / U1Q4 分别固定为 100 / 200 / 400 桥架型号，"
+                    + "本页只调整文字高度、偏移和标注侧。", unq),
                 Section("线管规格（U1C）", "文字高度、偏移距离和标注侧与桥架标注共用。", conduit),
                 Section("拱桥开洞（U1R）", null, unr));
         }
@@ -671,28 +770,35 @@ namespace UNCAD.UI
                 Section("关于", null, about));
         }
 
-        /// <summary>机台数据：数据源与快照状态（原“Excel 数据”页的第一块）。</summary>
+        /// <summary>机台数据：本地/UNC 数据源与快照状态（2.10.0 起不再支持 HTTP 下载）。</summary>
         private TabPage BuildMachineTab()
         {
-            var source = Grid(2);
+            var source = Grid(3);
             // 机台数据 Excel 是用户唯一需要提供的文件；固定清单内嵌在插件里。
             AddField(source, 0, "机台数据 Excel", PathPicker(_fillExcel));
             AddField(source, 1, "快照状态", _snapshotStatus);
+            AddField(source, 2, "说明", ReadOnly(
+                "只支持本地或 UNC 共享路径；点“刷新”后写入 SQLite 快照，业务命令不再读 Excel。"));
 
             return Page("机台数据", "命令只读快照：运行时不读 Excel、不联网",
-                Section("数据源", "本地源手动刷新；远程链接在 CAD 启动时后台刷新。", source));
+                Section("数据源", "本地文件手动刷新；2.10.0 起已移除网络数据源。", source));
         }
 
-        /// <summary>清单与表格：写表参数 + BOQ 自动填充类别。</summary>
+        /// <summary>清单与表格：写表参数 + 电缆预留 + 整机回路校验 + BOQ 自动填充类别。</summary>
         private TabPage BuildBomTab()
         {
-            var table = Grid(6);
+            var table = Grid(10);
             AddField(table, 0, "起始数据行（1 = No.1）", _fillTblRow);
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
             AddField(table, 3, "软管手动数量（m）", _fillFlexibleMeters);
             AddField(table, 4, "桥架信息（块属性）", _fillBridge);
             AddField(table, 5, "电缆业主预留（mm）", _fillOwnerReserve);
+            // 电缆盘内/箱内预留：现场默认值来自 CableReserveSettings，随项目可调。
+            AddField(table, 6, "I-Line 盘内预留（mm）", _cableReserveILine);
+            AddField(table, 7, "插座盘内预留（mm）", _cableReserveSocket);
+            AddField(table, 8, "母线插接箱预留（mm）", _cableReserveBusbar);
+            AddField(table, 9, "整机回路校验", _requireAllCircuits);
 
             var autoFill = new TableLayoutPanel
             {
@@ -716,8 +822,11 @@ namespace UNCAD.UI
             autoFill.Controls.Add(_autofillOutletPanel, 2, 1);
             autoFill.Controls.Add(_autofillBusPlugBox, 3, 1);
 
-            return Page("清单与表格", "U1F / U1U 写表参数与自动填充类别",
-                Section("表格参数", "写入图框表格的起始行与清空行数。", table),
+            return Page("清单与表格", "U1F / U1U 写表参数、电缆预留与自动填充类别",
+                Section("表格参数与电缆预留",
+                    "电缆总长 = 实测 + 盘内/箱内预留（I-Line 电盘 / 插座盘 / 母线插接箱）"
+                    + " + 设备内预留 + 业主预留；整机回路校验要求该机台所有回路都在本次选集中。",
+                    table),
                 Section("BOQ 自动填充类别",
                     "这里控制的是上游/通用类别；Downstream 块的自动添加有自己的独立开关"
                     + "（见「Downstream 自动添加」页），两者互不影响。",
@@ -766,13 +875,330 @@ namespace UNCAD.UI
                 Section("块颜色", "设备端包含 Downstream 块；修改后对所有后续命令生效。", g));
         }
 
-        /// <summary>自动输出：BOQ 与提交文件的落盘位置。</summary>
+        /// <summary>输出与分享：落盘结构（按图纸/分类型）+ 配置分享码导入导出。</summary>
         private TabPage BuildOutputTab()
         {
-            var g = Grid(1);
-            AddField(g, 0, "自动输出文件夹", FolderPicker(_submitFolder));
-            return Page("自动输出", "U1S / U1F / U1U 生成文件的落盘位置",
-                Section("输出位置", "留空表示与图纸同目录。", g));
+            var output = Grid(4);
+            AddField(output, 0, "输出根目录", OutputPicker(_submitFolder));
+            AddField(output, 1, "目录结构", ReadOnly(
+                "默认：<根目录>\\<图纸>\\BOQ|DWG|PDF\\<机台>\\…；根目录留空使用 "
+                + DefaultOutputRoot()));
+            AddField(output, 2, "按图纸建子目录", _outputByDrawing);
+            AddField(output, 3, "BOQ / DWG / PDF 分目录", _outputSeparateKinds);
+
+            var shareActions = UiKit.Toolbar();
+            Button copy = UiTheme.Button("复制配置到剪贴板");
+            copy.Click += (sender, args) => CopyConfigToClipboard();
+            Button paste = UiTheme.Button("从剪贴板导入");
+            paste.Click += (sender, args) => ImportConfigFromClipboard();
+            shareActions.AddAction(copy).AddAction(paste);
+
+            return Page("输出与分享", "生成文件的落盘结构，以及跨设备迁移 U1SET 配置",
+                Section("输出目录",
+                    "BOQ / DWG / PDF 统一输出到根目录下；两个开关分别控制“按图纸建一级子目录”"
+                    + "和“按 BOQ / DWG / PDF 分目录”。", output),
+                Section("配置分享",
+                    "把本机 U1SET 配置导出为 Base64 分享码，或在另一台电脑粘贴导入。"
+                    + "分享码不包含授权账号、时钟水位线和界面记忆。",
+                    Stack(_shareStatus, shareActions)));
+        }
+
+        /// <summary>日志与记录：级别/保留策略，以及最近操作记录。</summary>
+        private TabPage BuildLogsTab()
+        {
+            var logs = Grid(3);
+            AddField(logs, 0, "日志级别", _logLevel);
+            AddField(logs, 1, "日志保留天数", _logRetentionDays);
+            AddField(logs, 2, "操作记录保留月数", _historyRetentionMonths);
+
+            var logActions = UiKit.Toolbar();
+            Button openLogs = UiTheme.Button("打开日志目录");
+            openLogs.Click += (sender, args) => OpenFolder(LogDirectory());
+            Button openHistory = UiTheme.Button("打开操作记录目录");
+            openHistory.Click += (sender, args) => OperationLog.OpenFolder();
+            Button refresh = UiTheme.Button("刷新记录");
+            refresh.Click += (sender, args) => RefreshOperationLog();
+            logActions.AddAction(openLogs).AddAction(openHistory).AddAction(refresh);
+
+            return Page("日志与记录", "本地排障：日志级别与保留策略，以及最近的操作记录",
+                Section("日志策略",
+                    "日志文件位于 %APPDATA%\\UNCAD\\logs；级别越高写入越少。"
+                    + "日志与操作记录只写本机，不会上传。", logs),
+                Section("最近操作记录",
+                    "每次 U1F / U1U / U1S / U1DWG 等操作都会记一条；最多显示最近 200 条。",
+                    Stack(logActions, _operationStatus, _operationEmpty, _operationGrid)));
+        }
+
+        /// <summary>默认输出根目录文案（Core 与 Features 使用同一定义）。</summary>
+        private static string DefaultOutputRoot()
+        {
+            try { return OutputLayout.DefaultRootDirectory(); }
+            catch (Exception) { return "我的文档\\UNCAD输出"; }
+        }
+
+        private Control OutputPicker(TextBox target)
+        {
+            var browse = UiTheme.Button("浏览...");
+            browse.Click += (sender, args) =>
+            {
+                using (var dialog = new FolderBrowserDialog
+                {
+                    Description = "选择输出根目录",
+                    ShowNewFolderButton = true,
+                    SelectedPath = Directory.Exists(target.Text.Trim()) ? target.Text.Trim() : ""
+                })
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
+                }
+            };
+            var open = UiTheme.Button("打开目录");
+            open.Click += (sender, args) => OpenFolder(CurrentOutputRoot());
+            var row = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                Margin = new Padding(0)
+            };
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96));
+            row.Controls.Add(target, 0, 0);
+            row.Controls.Add(browse, 1, 0);
+            row.Controls.Add(open, 2, 0);
+            return row;
+        }
+
+        private string CurrentOutputRoot()
+        {
+            string configured = _submitFolder.Text.Trim();
+            if (configured.Length > 0) return configured;
+            try { return OutputLayout.DefaultRootDirectory(); }
+            catch (Exception) { return ""; }
+        }
+
+        private void OpenFolder(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                Directory.CreateDirectory(path);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("打开目录失败: " + ex.Message);
+                ShowShareStatus(UiTone.Warning, "无法打开目录：" + ex.Message);
+            }
+        }
+
+        private void ShowShareStatus(UiTone tone, string message)
+        {
+            _shareStatus.Tone = tone;
+            _shareStatus.Text = message ?? "";
+            _shareStatus.Visible = !string.IsNullOrWhiteSpace(message);
+        }
+
+        /// <summary>导出本机配置为分享码并复制到剪贴板；返回的文案同时用于提示。</summary>
+        private void CopyConfigToClipboard()
+        {
+            try
+            {
+                string code = ConfigShareService.Export();
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    ShowShareStatus(UiTone.Warning, "本机没有可导出的配置项。");
+                    return;
+                }
+                Clipboard.SetText(code);
+                ShowShareStatus(UiTone.Success, "已复制配置分享码（" + code.Length
+                    + " 字符）。在另一台电脑的 U1SET 中粘贴即可导入。");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("导出配置分享码失败", ex);
+                ShowShareStatus(UiTone.Danger, "导出失败：" + ex.Message);
+            }
+        }
+
+        /// <summary>从剪贴板读取分享码 → 预览变更 → 用户确认后原子导入。</summary>
+        private void ImportConfigFromClipboard()
+        {
+            string code;
+            try
+            {
+                code = Clipboard.ContainsText() ? Clipboard.GetText().Trim() : "";
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("读取剪贴板失败: " + ex.Message);
+                ShowShareStatus(UiTone.Warning, "无法读取剪贴板：" + ex.Message);
+                return;
+            }
+            if (code.Length == 0)
+            {
+                ShowShareStatus(UiTone.Warning,
+                    "剪贴板里没有配置分享码。请先在源电脑导出并复制。");
+                return;
+            }
+            ConfigSharePreview preview;
+            try
+            {
+                preview = ConfigShareService.Preview(code);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("配置分享码解析失败: " + ex.Message);
+                ShowShareStatus(UiTone.Danger, "分享码无效：" + ex.Message);
+                return;
+            }
+            using (var dialog = new ConfigSharePreviewForm(preview))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+            }
+            try
+            {
+                ConfigShareImportResult result = ConfigShareService.Import(code);
+                ShowShareStatus(UiTone.Success, "已导入 " + result.AppliedCount
+                    + " 项配置"
+                    + (result.SkippedCount > 0
+                        ? "，跳过 " + result.SkippedCount + " 项（未知或禁止分享的键）。"
+                        : "。"));
+                // 导入已经写入注册表；重新载入界面值，避免用户随后按“保存”用旧值覆盖。
+                LoadValues();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("导入配置分享码失败", ex);
+                ShowShareStatus(UiTone.Danger, "导入失败：" + ex.Message);
+            }
+        }
+
+        private static string LogDirectory()
+        {
+            string directory = FileLogger.Instance.LogDirectory;
+            return string.IsNullOrWhiteSpace(directory)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "UNCAD", "logs")
+                : directory;
+        }
+
+        private void BuildOperationGrid()
+        {
+            _operationGrid.Name = "OperationLogGrid";
+            _operationGrid.Dock = DockStyle.Top;
+            _operationGrid.Height = 220;
+            _operationGrid.ReadOnly = true;
+            _operationGrid.AllowUserToAddRows = false;
+            _operationGrid.AllowUserToDeleteRows = false;
+            _operationGrid.AutoGenerateColumns = false;
+            _operationGrid.RowHeadersVisible = false;
+            _operationGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            _operationGrid.MultiSelect = false;
+            _operationGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Time",
+                HeaderText = "时间",
+                Width = UiTheme.NotAutoScaled(140),
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            _operationGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Command",
+                HeaderText = "命令",
+                Width = UiTheme.NotAutoScaled(90),
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            _operationGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Result",
+                HeaderText = "结果",
+                Width = UiTheme.NotAutoScaled(84),
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            _operationGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Summary",
+                HeaderText = "摘要",
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                MinimumWidth = UiTheme.NotAutoScaled(220),
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
+            _operationGrid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                Name = "Duration",
+                HeaderText = "耗时(ms)",
+                Width = UiTheme.NotAutoScaled(84),
+                SortMode = DataGridViewColumnSortMode.NotSortable,
+                DefaultCellStyle = new DataGridViewCellStyle
+                {
+                    Alignment = DataGridViewContentAlignment.MiddleRight
+                }
+            });
+            UiTheme.StyleGrid(_operationGrid);
+            UiTheme.FixGridRows(_operationGrid, 28);
+        }
+
+        /// <summary>读取最近操作记录（本地 JSONL，最多 200 条）。</summary>
+        private void RefreshOperationLog()
+        {
+            try
+            {
+                IReadOnlyList<OperationLogEntry> entries = OperationLog.ReadRecent(200);
+                _operationGrid.Rows.Clear();
+                foreach (OperationLogEntry entry in entries)
+                {
+                    int index = _operationGrid.Rows.Add(
+                        entry.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss",
+                            CultureInfo.InvariantCulture),
+                        entry.Command,
+                        entry.Result,
+                        entry.Summary,
+                        entry.DurationMs);
+                    _operationGrid.Rows[index].Tag = entry;
+                }
+                UiTheme.FixGridRows(_operationGrid, 28);
+                bool hasEntries = entries.Count > 0;
+                _operationGrid.Visible = hasEntries;
+                _operationEmpty.Visible = !hasEntries;
+                _operationStatus.Text = hasEntries
+                    ? "最近 " + entries.Count + " 条 · 目录 " + OperationLog.Directory
+                    : "暂无操作记录。";
+                _operationStatus.ForeColor = UiTheme.TextSecondary;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("读取操作记录失败: " + ex.Message);
+                _operationStatus.Text = "读取操作记录失败：" + ex.Message;
+                _operationStatus.ForeColor = UiTheme.DangerFg;
+            }
+        }
+
+        /// <summary>纵向堆叠多个控件（页内分组内容）。</summary>
+        private static Control Stack(params Control[] children)
+        {
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = children.Length,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (int index = 0; index < children.Length; index++)
+            {
+                children[index].Dock = DockStyle.Top;
+                children[index].Margin = new Padding(0, 0, 0, UiTheme.SpaceS);
+                layout.Controls.Add(children[index], 0, index);
+            }
+            return layout;
         }
 
         private Control FolderPicker(TextBox target)
@@ -830,9 +1256,9 @@ namespace UNCAD.UI
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            if (!MachineWorkbookSource.IsRemote(source) && !File.Exists(source))
+            if (!File.Exists(source))
             {
-                MessageBox.Show(this, "本地机台数据 Excel 不存在。", "U1SET",
+                MessageBox.Show(this, "机台数据文件不存在：" + source, "U1SET",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -845,30 +1271,20 @@ namespace UNCAD.UI
             button.Text = "刷新中...";
             try
             {
-                // U1SET 的刷新不走后台协调器，因此这里同样在成功后上报台账；
-                // 上报失败只影响提示文案，不影响本地快照与用户可用性。
+                    // 2.10.0 起这里只刷新本地/UNC 文件；网络下载与台账上报已移除，
+                // 失败时保留上一次成功快照，不阻塞用户继续使用。
                 MachineWorkbookSourceResult result = null;
-                MachineLedgerReportOutcome ledger = null;
-                await Task.Run(() =>
-                {
-                    result = MachineWorkbookSource.Refresh(source);
-                    if (!result.UsedCachedFallback && result.Snapshot != null)
-                        ledger = MachineLedgerReporter.Default.Report(source);
-                });
+                await Task.Run(() => { result = MachineWorkbookSource.Refresh(source); });
                 string message = result.UsedCachedFallback
-                    ? "网络暂时不可用，继续使用上次 SQLite 快照。"
-                    : "机台 Excel 已解析并写入 SQLite 快照。";
+                    ? "继续使用上次 SQLite 快照。" : "机台 Excel 已解析并写入 SQLite 快照。";
                 if (!result.UsedCachedFallback && result.Snapshot != null)
                     message += "\n有效回路: " + result.Snapshot.RowCount + " 行。";
-                if (ledger != null && !string.IsNullOrWhiteSpace(ledger.Message))
-                    message += "\n" + ledger.Message;
                 if (!string.IsNullOrWhiteSpace(result.Warning))
                     message += "\n" + result.Warning;
                 if (IsDisposed || Disposing) return;
                 UpdateMachineSnapshotStatus();
                 MessageBox.Show(this, message, "U1SET", MessageBoxButtons.OK,
-                    result.UsedCachedFallback || ledger?.RequiresRelogin == true
-                        || !string.IsNullOrWhiteSpace(result.Warning)
+                    result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
                         ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -1011,46 +1427,7 @@ namespace UNCAD.UI
         };
 
         private static UiCard Section(string title, string subtitle, Control content)
-        {
-            var card = UiTheme.Card();
-            card.Dock = DockStyle.Top;
-            card.AutoSize = true;
-            card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-
-            int rows = string.IsNullOrWhiteSpace(subtitle) ? 2 : 3;
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 1,
-                RowCount = rows,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0)
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            var header = UiTheme.SectionHeader(title);
-            header.Dock = DockStyle.Fill;
-            layout.Controls.Add(header, 0, 0);
-            int contentRow = 1;
-            if (!string.IsNullOrWhiteSpace(subtitle))
-            {
-                layout.Controls.Add(new Label
-                {
-                    Text = subtitle,
-                    Dock = DockStyle.Fill,
-                    AutoSize = true,
-                    ForeColor = UiTheme.TextSecondary,
-                    Margin = new Padding(0, 0, 0, UiTheme.SpaceS)
-                }, 0, 1);
-                contentRow = 2;
-            }
-            content.Dock = DockStyle.Top;
-            content.Margin = new Padding(0, UiTheme.SpaceXS, 0, 0);
-            layout.Controls.Add(content, 0, contentRow);
-            card.Controls.Add(layout);
-            return card;
-        }
+            => UiKit.Section(title, subtitle).AddBodyTop(content);
 
         private static TabPage Page(string title, string subtitle,
             params UiCard[] sections)
@@ -1080,33 +1457,7 @@ namespace UNCAD.UI
                 Margin = new Padding(0)
             };
             stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            var pageHeader = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, UiTheme.SpaceL)
-            };
-            pageHeader.Controls.Add(new Label
-            {
-                Text = title,
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                Font = UiTheme.FontTitle,
-                ForeColor = UiTheme.TextPrimary,
-                Margin = new Padding(0)
-            }, 0, 0);
-            pageHeader.Controls.Add(new Label
-            {
-                Text = subtitle,
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ForeColor = UiTheme.TextSecondary,
-                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
-            }, 0, 1);
-            stack.Controls.Add(pageHeader, 0, 0);
+            stack.Controls.Add(UiKit.PageHeader(title, subtitle), 0, 0);
             for (int index = 0; index < sections.Length; index++)
             {
                 sections[index].Dock = DockStyle.Top;

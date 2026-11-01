@@ -4,7 +4,6 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
-using UNCAD.Features.ConfigCenter;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.Unq
@@ -15,10 +14,6 @@ namespace UNCAD.Features.Unq
         Description = "选中线段生成桥架标注（红色桥架线+规格文字）")]
     public class UnqFeature : CommandBase
     {
-        public void UncadTray() => Run(null);
-
-        public void UncadTraySet() => SettingsFeature.Show(1);
-
         [CommandMethod(CommandIds.Tray100, CommandFlags.UsePickSet)]
         public void UncadTray100() => Run("桥架100*100 2500mm");
 
@@ -31,7 +26,6 @@ namespace UNCAD.Features.Unq
         [CommandMethod(CommandIds.LegacyTray100, CommandFlags.UsePickSet)] public void Unq1() => UncadTray100();
         [CommandMethod(CommandIds.LegacyTray200, CommandFlags.UsePickSet)] public void Unq2() => UncadTray200();
         [CommandMethod(CommandIds.LegacyTray400, CommandFlags.UsePickSet)] public void Unq4() => UncadTray400();
-        public void OpUnq() => UncadTraySet();
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);
 

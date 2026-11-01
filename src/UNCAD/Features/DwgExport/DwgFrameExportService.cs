@@ -19,7 +19,7 @@ namespace UNCAD.Features.DwgExport
         public string FilePath { get; set; }
         public int MachineCount { get; set; }
         public int FrameCount { get; set; }
-        /// <summary>按机台拆分的导出明细：上传接口需要"每个机台的文件 + 覆盖的回路"。</summary>
+        /// <summary>按机台拆分的导出明细：操作记录需要"每个机台的文件 + 覆盖的回路"。</summary>
         public List<DwgExportMachine> Machines { get; set; } = new List<DwgExportMachine>();
     }
 
@@ -82,16 +82,20 @@ namespace UNCAD.Features.DwgExport
         /// 句柄一直持有到导出结束。身份读取拆到 <see cref="ReadFrames"/> 的短事务里。
         /// </summary>
         internal static DwgExportResult Export(CadContext ctx,
-            IReadOnlyList<DwgExportFrame> frames)
+            IReadOnlyList<DwgExportFrame> frames, string drawingName = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (frames == null) throw new ArgumentNullException(nameof(frames));
 
-            string outputRoot = ResolveOutputRoot();
+            string outputRoot = ResolveOutputRoot(out bool outputByDrawing,
+                out bool separateKinds);
+            // 统一走 OutputLayout：与 BOQ/PDF 相同的 <root>\<图纸>\<类别> 布局。
             var machineGroups = frames.GroupBy(frame => frame.MachineId,
                 IdentityTextNormalizer.Comparer).ToList();
-            var paths = machineGroups.Select(machine => Path.Combine(outputRoot, machine.Key,
-                machine.Key + ".dwg")).ToList();
+            var paths = machineGroups.Select(machine => OutputLayout.ComposeDwgPath(
+                outputRoot, drawingName, machine.Key, outputByDrawing, separateKinds)).ToList();
+            // 写占用预检：目标 DWG 可能正被另一台 AutoCAD/看图程序打开。
+            OutputLayout.ValidateNotLocked(paths);
             // FileBatchRollback also protects first-time outputs that do not exist yet. Ensure
             // their parent folders exist before it creates the per-file lock sidecars.
             foreach (string path in paths)
@@ -143,17 +147,28 @@ namespace UNCAD.Features.DwgExport
             };
         }
 
-        private static string ResolveOutputRoot()
+        /// <summary>
+        /// 解析输出根目录与布局开关。根为空时默认 &lt;我的文档&gt;\UNCAD输出 并写回
+        /// UNC_SUBMIT_FOLDER，与 BOQ/PDF 输出保持一致。
+        /// </summary>
+        private static string ResolveOutputRoot(out bool outputByDrawing,
+            out bool separateKinds)
         {
             string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            string folder = configured.Length > 0
-                ? configured
-                : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 DWG 输出文件夹，请先在 U1SET 中设置。");
-            Directory.CreateDirectory(folder);
+            outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
+            separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
+            string folder = OutputLayout.NormalizeRoot(configured);
+            try
+            {
+                Directory.CreateDirectory(folder);
+            }
+            catch (System.Exception ex)
+            {
+                throw new DirectoryNotFoundException(
+                    "无法创建输出文件夹：" + folder + "（" + ex.Message + "）", ex);
+            }
             if (!Directory.Exists(folder))
-                throw new DirectoryNotFoundException("DWG 输出文件夹不存在：" + folder);
+                throw new DirectoryNotFoundException("输出文件夹不存在：" + folder);
             if (!string.Equals(configured, folder, StringComparison.OrdinalIgnoreCase))
                 Settings.Set(ConfigKeys.SubmitFolder, folder);
             return folder;

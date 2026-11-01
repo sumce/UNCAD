@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -25,8 +26,57 @@ namespace UNCAD.Features.Stat
         Description = "框选多张图纸，统计机台回路数量并导出 Excel")]
     public sealed class XstsFeature : CommandBase
     {
+        // 只在明显变慢时输出一行 [PERF]，避免正常命令刷屏日志。
+        private const long PerfThresholdMilliseconds = 500;
+
         [CommandMethod(CommandIds.Statistics, CommandFlags.UsePickSet)]
         public void Statistics() => Run();
+
+        /// <summary>
+        /// XSTS 报告文件路径（纯路径计算，不创建目录）：<c>&lt;root&gt;\&lt;图纸&gt;\XSTS\UNCAD_XSTS_时间戳.xlsx</c>。
+        /// 根目录由 <see cref="OutputLayout.NormalizeRoot"/> 归一化；文件名规则保持不变。
+        /// </summary>
+        internal static string ResolveOutputFile(string root, string drawingName, DateTime now,
+            bool outputByDrawing, bool separateKinds)
+        {
+            string directory = OutputLayout.ResolveKindDirectory(root, drawingName, "XSTS",
+                outputByDrawing, separateKinds);
+            return Path.Combine(directory, "UNCAD_XSTS_"
+                + now.ToString("yyyyMMdd_HHmmss_fff") + ".xlsx");
+        }
+
+        /// <summary>
+        /// 准备 XSTS 输出目录并返回报告路径（创建目录 + 写占用预检 + 默认根写回配置），
+        /// 失败抛出带中文原因的异常，由调用方统一提示且不写盘。
+        /// </summary>
+        private static string PrepareOutputFile(CadContext ctx)
+        {
+            string configuredRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
+            bool outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
+            bool separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
+            string root = OutputLayout.NormalizeRoot(configuredRoot);
+            string drawingName = Path.GetFileNameWithoutExtension(ctx.Doc?.Name ?? "");
+            string directory = OutputLayout.ResolveKindDirectory(root, drawingName, "XSTS",
+                outputByDrawing, separateKinds);
+            try
+            {
+                Directory.CreateDirectory(directory);
+            }
+            catch (System.Exception ex)
+            {
+                throw new DirectoryNotFoundException(
+                    "无法创建 XSTS 输出文件夹：" + directory + "（" + ex.Message + "）", ex);
+            }
+            if (!Directory.Exists(directory))
+                throw new DirectoryNotFoundException("XSTS 输出文件夹不存在：" + directory);
+            if (!string.Equals(configuredRoot, root, StringComparison.OrdinalIgnoreCase))
+                Settings.Set(ConfigKeys.SubmitFolder, root);
+            string path = ResolveOutputFile(root, drawingName, DateTime.Now,
+                outputByDrawing, separateKinds);
+            // 报告文件若同名已存在且被占用，必须在写盘前中止并给出中文提示。
+            OutputLayout.ValidateNotLocked(new[] { path });
+            return path;
+        }
 
         protected override void Execute(CadContext ctx)
         {
@@ -39,7 +89,10 @@ namespace UNCAD.Features.Stat
                 ctx.Write("\n[XSTS] 未选择图纸，未执行统计。");
                 return;
             }
+            var perfWatch = Stopwatch.StartNew();
+            var phaseWatch = Stopwatch.StartNew();
             FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selected);
+            long collectMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (regions.Errors.Count > 0)
             {
                 foreach (string error in regions.Errors) ctx.Write("\n[XSTS] " + error);
@@ -50,6 +103,7 @@ namespace UNCAD.Features.Stat
                 return;
             }
 
+            phaseWatch.Restart();
             var selectedRows = new List<XstsCircuitRecord>();
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -73,7 +127,9 @@ namespace UNCAD.Features.Stat
                 }
                 transaction.Commit();
             }
+            long identityMilliseconds = phaseWatch.ElapsedMilliseconds;
 
+            phaseWatch.Restart();
             // When an Excel machine workbook is configured, use it as the expected set,
             // but scope it strictly to machine IDs present in the current selection.
             // Never compare one drawing against the whole project workbook: that makes
@@ -121,21 +177,55 @@ namespace UNCAD.Features.Stat
                     expectedDetail = "SQLite 机台快照读取失败: " + ex.Message;
                 }
             }
+            long expectedMilliseconds = phaseWatch.ElapsedMilliseconds;
+            phaseWatch.Restart();
             XstsReport report = XstsReportBuilder.Build(selectedRows, expectedRows,
                 expectedStatus, expectedDetail);
+            long reportMilliseconds = phaseWatch.ElapsedMilliseconds;
             // Include frames whose boundary could not be collected. They are still part of
             // the user's selection and are listed in the issue sheet; omitting them from the
             // headline would make the physical frame count disagree with the diagnostics.
             report.FrameCount = regions.SelectedFrameCount;
             foreach (string error in regions.Errors)
                 report.Issues.Add(new XstsFrameIssue { Description = error });
-            string outputRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            if (outputRoot.Length == 0) outputRoot = Environment.GetFolderPath(
-                Environment.SpecialFolder.MyDocuments);
-            Directory.CreateDirectory(outputRoot);
-            string path = Path.Combine(outputRoot, "UNCAD_XSTS_"
-                + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ".xlsx");
-            XstsExcelReporter.WriteToFile(report, path);
+            // 输出与 U1S/U1DWG/U1PDF 统一走 OutputLayout：<输出根>\<图纸>\XSTS\UNCAD_XSTS_<时间>.xlsx。
+            // 目录/占用预检在写盘之前完成；输出根为空时默认<我的文档>\UNCAD输出并写回 UNC_SUBMIT_FOLDER。
+            string path;
+            try
+            {
+                path = PrepareOutputFile(ctx);
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error("XSTS 准备输出目录失败", ex);
+                ctx.Write("\n[XSTS] 无法准备输出目录，未生成报告：\n[XSTS]   " + ex.Message);
+                return;
+            }
+            phaseWatch.Restart();
+            try
+            {
+                XstsExcelReporter.WriteToFile(report, path);
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error("XSTS 报告写入失败", ex);
+                ctx.Write("\n[XSTS] 报告写入失败，未生成 Excel：\n[XSTS]   " + ex.Message);
+                return;
+            }
+            long excelMilliseconds = phaseWatch.ElapsedMilliseconds;
+            perfWatch.Stop();
+            if (perfWatch.ElapsedMilliseconds >= PerfThresholdMilliseconds)
+            {
+                Log.Info("[PERF] XSTS total=" + perfWatch.ElapsedMilliseconds + "ms"
+                    + " collect=" + collectMilliseconds + "ms"
+                    + " identity=" + identityMilliseconds + "ms"
+                    + " expected=" + expectedMilliseconds + "ms"
+                    + " report=" + reportMilliseconds + "ms"
+                    + " xlsx=" + excelMilliseconds + "ms"
+                    + " frames=" + regions.SelectedFrameCount
+                    + " machines=" + report.Machines.Count
+                    + " rows=" + (selectedRows.Count + expectedRows.Count));
+            }
             string coverage = report.ExpectedDataAvailable
                 && !report.HasUnknownMachineBaseline
                 ? "缺少 " + report.MissingCircuitCount + " 个回路，多出 "

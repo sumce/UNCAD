@@ -36,9 +36,9 @@ namespace UNCAD.UI
             DialogLayout.Apply(this, "U1U 批量确认", new Size(980, 640),
                 new Size(820, 500));
 
-            var header = UiTheme.Header(
+            var frame = new UiDialogFrame(this,
                 "将按图框边界批量更新 " + rows.Count + " 个已填图框",
-                "所有图框将在一个事务中写入，任一失败则整批回滚。");
+                "所有图框将在一个事务中写入，任一失败则整批回滚；请逐行核对机台和回路。");
 
             var grid = new DataGridView
             {
@@ -50,37 +50,16 @@ namespace UNCAD.UI
                 AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = UiTheme.Surface,
-                BorderStyle = BorderStyle.FixedSingle,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                RowTemplate = { Height = UiTheme.NotAutoScaled(28) }
+                BorderStyle = BorderStyle.None
             };
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                HeaderText = "图框",
-                DataPropertyName = nameof(BatchFillConfirmationRow.FrameHandle),
-                FillWeight = 16
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                HeaderText = "机台 ID",
-                DataPropertyName = nameof(BatchFillConfirmationRow.MachineId),
-                FillWeight = 22
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                HeaderText = "设备 / 回路",
-                DataPropertyName = nameof(BatchFillConfirmationRow.DeviceName),
-                FillWeight = 28
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                HeaderText = "Device",
-                DataPropertyName = nameof(BatchFillConfirmationRow.DeviceState),
-                FillWeight = 18
-            });
+            UiKit.StyleTable(grid, readOnly: true);
+            AddColumn(grid, "图框", nameof(BatchFillConfirmationRow.FrameHandle), 16);
+            AddColumn(grid, "机台 ID", nameof(BatchFillConfirmationRow.MachineId), 22);
+            AddColumn(grid, "设备 / 回路", nameof(BatchFillConfirmationRow.DeviceName), 28);
+            AddColumn(grid, "Device", nameof(BatchFillConfirmationRow.DeviceState), 18);
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 HeaderText = "清单项",
@@ -92,20 +71,27 @@ namespace UNCAD.UI
                 }
             });
             grid.DataSource = rows.ToList();
-            UiTheme.StyleGrid(grid);
+            UiTheme.FixGridRows(grid, 30);
 
-            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
-            Button confirm = UiTheme.PrimaryButton("确认更新", DialogResult.OK);
-            FlowLayoutPanel commands = UiTheme.CommandBar();
-            commands.Controls.Add(cancel);
-            commands.Controls.Add(confirm);
-
-            Controls.Add(grid);
-            Controls.Add(commands);
-            Controls.Add(header);
+            Button confirm = frame.AddPrimary("确认更新", DialogResult.OK);
+            Button cancel = frame.AddSecondary("取消", DialogResult.Cancel);
+            frame.Body.Controls.Add(grid);
+            frame.Wire(confirm, cancel);
             AcceptButton = confirm;
             CancelButton = cancel;
             Shown += (sender, args) => confirm.Select();
+        }
+
+        private static void AddColumn(DataGridView grid, string header,
+            string property, float weight)
+        {
+            grid.Columns.Add(new DataGridViewTextBoxColumn
+            {
+                HeaderText = header,
+                DataPropertyName = property,
+                FillWeight = weight,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            });
         }
     }
 }

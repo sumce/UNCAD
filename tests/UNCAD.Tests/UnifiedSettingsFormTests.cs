@@ -22,10 +22,12 @@ namespace UNCAD.Tests
         {
             RunSta(() =>
             {
+                // 2.10.0：原“自动输出”页升级为“输出与分享”，并新增“日志与记录”页。
                 string[] titles =
                 {
                     "概览", "绘制标注", "统计汇总", "文字样式", "界面与启动",
-                    "机台数据", "清单与表格", "Downstream 自动添加", "颜色", "自动输出"
+                    "机台数据", "清单与表格", "Downstream 自动添加", "颜色",
+                    "输出与分享", "日志与记录"
                 };
                 for (int index = 0; index < titles.Length; index++)
                 {
@@ -170,21 +172,33 @@ namespace UNCAD.Tests
                     Assert.Equal("清单与表格", tabs.SelectedTab.Text);
                     Assert.Equal(2, FindAll<UiCard>(tabs.SelectedTab).Count);
 
+                    // 表格参数 5 项 + 电缆盘内/箱内预留 3 项（2.10.0 可配置）。
                     List<NumericUpDown> numbers = FindAll<NumericUpDown>(tabs.SelectedTab);
-                    Assert.Equal(5, numbers.Count);
+                    Assert.Equal(8, numbers.Count);
                     Assert.Single(numbers, number => number.DecimalPlaces == 0
                         && number.Minimum == 1m && number.Maximum == 100m);
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "每次清空数据行数");
                     Assert.Contains(FindAll<Label>(tabs.SelectedTab),
                         label => label.Text == "软管手动数量（m）");
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "I-Line 盘内预留（mm）");
+                    Assert.Contains(numbers, number => number.Value == 3400m);
+                    Assert.Contains(numbers, number => number.Value == 1000m);
+                    Assert.Contains(numbers, number => number.Value == 500m);
 
+                    // 8 个自动填充类别 + 1 个整机回路校验开关。
                     List<CheckBox> autoFill = FindAll<CheckBox>(tabs.SelectedTab);
+                    Assert.Equal(9, autoFill.Count);
+                    List<CheckBox> categoryBoxes = autoFill
+                        .Where(check => !check.Text.StartsWith("整机回路校验")).ToList();
                     Assert.Equal(new[]
                     {
                         "电缆", "断路器", "电盘", "软管",
                         "线管", "桥架", "插座盘", "插接箱"
-                    }, autoFill.Select(check => check.Text).ToArray());
+                    }, categoryBoxes.Select(check => check.Text).ToArray());
+                    Assert.Contains(autoFill,
+                        check => check.Text.StartsWith("整机回路校验"));
                     Assert.DoesNotContain(autoFill,
                         check => check.Text.Contains("未匹配"));
                 }
@@ -322,6 +336,161 @@ namespace UNCAD.Tests
                     Assert.Equal(FormBorderStyle.FixedDialog, form.FormBorderStyle);
                 }
             });
+        }
+
+        [Fact]
+        public void OutputShareTab_ExposesDirectoryStructureAndConfigShareActions()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(9))
+                {
+                    form.Show();
+                    form.Size = form.MinimumSize;
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("输出与分享", tabs.SelectedTab.Text);
+                    List<CheckBox> switches = FindAll<CheckBox>(tabs.SelectedTab);
+                    Assert.Equal(2, switches.Count);
+                    Assert.Contains(switches, check => check.Text.Contains("图纸"));
+                    Assert.Contains(switches, check => check.Text.Contains("分目录"));
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "复制配置到剪贴板");
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "从剪贴板导入");
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "打开目录");
+                }
+            });
+        }
+
+        [Fact]
+        public void LogsTab_ExposesLevelRetentionAndRecentOperationTable()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(10))
+                {
+                    form.Show();
+                    form.Size = form.MinimumSize;
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("日志与记录", tabs.SelectedTab.Text);
+                    List<ComboBox> levelBoxes = FindAll<ComboBox>(tabs.SelectedTab)
+                        .Where(box => box.DropDownStyle == ComboBoxStyle.DropDownList).ToList();
+                    Assert.Contains(levelBoxes, box => box.Items.Cast<object>()
+                        .Select(item => Convert.ToString(item))
+                        .SequenceEqual(new[] { "INFO", "WARN", "ERROR" }));
+                    Assert.Equal(2, FindAll<NumericUpDown>(tabs.SelectedTab).Count);
+                    DataGridView grid = FindAll<DataGridView>(tabs.SelectedTab)
+                        .Single(view => view.Name == "OperationLogGrid");
+                    Assert.True(grid.Columns.Count >= 4);
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "打开日志目录");
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab),
+                        button => button.Text == "打开操作记录目录");
+                }
+            });
+        }
+
+        [Theory]
+        [InlineData(150)]
+        [InlineData(200)]
+        public void NewPages_KeepKeyControlsVisibleAtHighDpi(int percent)
+        {
+            RunSta(() =>
+            {
+                float designDpi = 96f * 100f / percent;
+                using (var form = new UnifiedSettingsForm(9))
+                {
+                    form.AutoScaleDimensions = new SizeF(designDpi, designDpi);
+                    form.Show();
+                    form.Size = form.MinimumSize;
+                    Application.DoEvents();
+
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("输出与分享", tabs.SelectedTab.Text);
+                    Assert.True(tabs.Width > 0 && tabs.Height > 0);
+                    foreach (string text in new[]
+                        { "复制配置到剪贴板", "从剪贴板导入", "打开目录" })
+                    {
+                        Button button = FindAll<Button>(tabs.SelectedTab)
+                            .FirstOrDefault(candidate => candidate.Text == text);
+                        Assert.NotNull(button);
+                        Assert.True(button.Visible && button.Width > 0 && button.Height > 0,
+                            text + " 在高 DPI 下不可见: " + button.Bounds);
+                    }
+                    Assert.All(FindAll<UiCard>(tabs.SelectedTab), card =>
+                    {
+                        Assert.True(card.Width > 0 && card.Height > 0);
+                        Assert.True(card.Left >= 0 && card.Top >= 0);
+                    });
+
+                    tabs.SelectedIndex = 10;
+                    Application.DoEvents();
+                    Assert.Equal("日志与记录", tabs.SelectedTab.Text);
+                    Assert.Contains(FindAll<ComboBox>(tabs.SelectedTab), box =>
+                        box.Items.Cast<object>().Select(Convert.ToString)
+                            .Contains("INFO"));
+                    Assert.Equal(2, FindAll<NumericUpDown>(tabs.SelectedTab).Count);
+                    Assert.All(FindAll<NumericUpDown>(tabs.SelectedTab), number =>
+                    {
+                        Assert.True(number.Width > 0 && number.Height > 0);
+                        Assert.True(number.Left >= 0 && number.Top >= 0);
+                    });
+                    Assert.Contains(FindAll<Button>(tabs.SelectedTab), button =>
+                        button.Text == "打开日志目录" && button.Width > 0);
+                }
+            });
+        }
+
+        [Fact]
+        public void DrawTab_DoesNotExposeIneffectiveBridgeSpecSetting()
+        {
+            RunSta(() =>
+            {
+                using (var form = new UnifiedSettingsForm(1))
+                {
+                    form.Show();
+                    Application.DoEvents();
+                    TabControl tabs = Find<TabControl>(form, "SettingsNavigation");
+                    Assert.Equal("绘制标注", tabs.SelectedTab.Text);
+                    // U1Q1/U1Q2/U1Q4 各自传固定规格，页面上的“默认规格”改了也不生效，
+                    // 2.10.0 已移除；只保留文字高度/偏移/标注侧。
+                    Assert.DoesNotContain(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "默认规格");
+                    Assert.DoesNotContain(FindAll<TextBox>(tabs.SelectedTab),
+                        box => (box.Text ?? "").Contains("桥架"));
+                    Assert.Single(FindAll<TextBox>(tabs.SelectedTab),
+                        box => box.Text == "2000mm");
+                    Assert.Contains(FindAll<Label>(tabs.SelectedTab),
+                        label => label.Text == "文字高度");
+                }
+            });
+        }
+
+        [Fact]
+        public void SettingsSource_HasNoRemoteSourceOrLedgerWiring()
+        {
+            string source = File.ReadAllText(Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+                "src", "UNCAD", "UI", "UnifiedSettingsForm.cs")));
+
+            // 2.10.0：远程数据源与台账上传已移除，UI 不得再引用这些类型。
+            // 只断言代码接线，不断言文案字面量（否则改文案就会误报）。
+            Assert.DoesNotContain("MachineWorkbookSource.IsRemote", source);
+            Assert.DoesNotContain("MachineLedgerReporter", source);
+            Assert.DoesNotContain("ClientSubmissionUploader", source);
+            Assert.DoesNotContain("BackgroundUploadQueue", source);
+            // 新页签的接线必须存在（否则按钮只是摆设）。
+            Assert.Contains("ConfigShareService.Export()", source);
+            Assert.Contains("ConfigShareService.Preview(", source);
+            Assert.Contains("ConfigShareService.Import(", source);
+            Assert.Contains("OperationLog.ReadRecent(", source);
+            Assert.Contains("OperationLog.OpenFolder()", source);
+            // 无效设置：桥架默认规格由命令固定传入，UI 不得再写 UNQ_TEXT。
+            // 注意 UNQ_TEXT_OFF 是有效的偏移设置，必须用带逗号的精确前缀区分。
+            Assert.DoesNotContain("Settings.Set(ConfigKeys.UnqText,", source);
         }
 
         [Fact]

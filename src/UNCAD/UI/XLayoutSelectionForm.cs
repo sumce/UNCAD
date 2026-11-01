@@ -38,7 +38,7 @@ namespace UNCAD.UI
             DialogLayout.Apply(this, "XLAYOUT · 选择要排版的机台/回路",
                 new Size(720, 620), new Size(560, 460));
 
-            var header = UiTheme.Header("选择要排版的机台/回路",
+            var header = UiKit.PageHeader("选择要排版的机台/回路",
                 "勾选后只重排这些回路；筛选框支持空格/逗号分隔多个关键词（任一命中即可，可整段粘贴机台ID）");
 
             var filterRow = new TableLayoutPanel

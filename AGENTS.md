@@ -32,7 +32,7 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`, version `2.9.3`.
+- Product: `UNCAD Pro`, version `2.10.0`.
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -40,8 +40,16 @@ when their version numbers or counts are stale.
 
 ## Hard Constraints
 
-- Machine workbooks are selected by the user. Local sources refresh manually;
-  configured HTTP/HTTPS sources refresh once in the background at CAD startup.
+- Machine workbooks are selected by the user and must be local or UNC paths.
+  HTTP/HTTPS sources are rejected (2.10.0 removed cloud sync); refresh is explicit
+  in U1SET/U1DATA and commands never touch the network.
+- Nothing is uploaded. Account/licence validation is the only network feature;
+  do not reintroduce upload code without a new decision in `docs/DECISIONS.md`.
+- U1F/U1U/U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
+  machine is in the selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on;
+  missing circuits are listed before any write). Output layout is
+  `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...`; write-occupancy is checked
+  before the CAD transaction.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

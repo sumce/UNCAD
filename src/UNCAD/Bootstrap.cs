@@ -26,8 +26,7 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
-            AttachMachineDataRefreshIdle();
-            StartRemoteMachineDataRefresh();
+            // 2.10.0：云端上传与远程机台数据刷新已移除；U1DATA 只刷新本地/UNC 数据源。
             if (SupportsStartupUi())
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnStartupSplashIdle;
@@ -44,43 +43,6 @@ namespace UNCAD
 
         private static bool _startupSplashIdleAttached;
         private static bool _startupSplashShown;
-        private static bool _machineDataRefreshIdleAttached;
-
-        private static void StartRemoteMachineDataRefresh()
-        {
-            try
-            {
-                string source = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
-                MachineDataRefreshStartStatus status = MachineDataRefreshCoordinator.Default
-                    .TryStartStartupRefresh(source);
-                if (status == MachineDataRefreshStartStatus.Started)
-                    Log.Info("已排队启动远程机台数据后台刷新");
-            }
-            catch (System.Exception ex)
-            {
-                // Startup refresh is optional; loading the CAD commands must never depend on it.
-                Log.Warn("启动远程机台数据刷新失败: " + ex.Message);
-            }
-        }
-
-        private static void AttachMachineDataRefreshIdle()
-        {
-            if (_machineDataRefreshIdleAttached) return;
-            Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnMachineDataRefreshIdle;
-            _machineDataRefreshIdleAttached = true;
-        }
-
-        private static void OnMachineDataRefreshIdle(object sender, EventArgs args)
-        {
-            // 命令/选择进行中绝对不能写命令行：Application.Idle 在等输入时也会触发，
-            // 此时 WriteMessage 会打断用户正在进行的框选或命令输入（现场"提示正好堵住命令"）。
-            if (IsCommandActive()) return;
-            var document = Autodesk.AutoCAD.ApplicationServices.Application.DocumentManager
-                ?.MdiActiveDocument;
-            if (document == null) return;
-            while (MachineDataRefreshCoordinator.Default.TryTakeNotice(out string message))
-                document.Editor.WriteMessage("\n[U1DATA] " + message);
-        }
 
         /// <summary>
         /// AutoCAD 的 CMDACTIVE 非 0 表示有命令正在执行（1=命令、2=选择对象、4=脚本…）。
@@ -98,13 +60,6 @@ namespace UNCAD
             {
                 return true;
             }
-        }
-
-        private static void DetachMachineDataRefreshIdle()
-        {
-            if (!_machineDataRefreshIdleAttached) return;
-            Autodesk.AutoCAD.ApplicationServices.Application.Idle -= OnMachineDataRefreshIdle;
-            _machineDataRefreshIdleAttached = false;
         }
 
         /// <summary>
@@ -324,7 +279,6 @@ namespace UNCAD
             }
             DetachStartupSplashIdle();
             DetachUpdateNotesIdle();
-            DetachMachineDataRefreshIdle();
             OnlineLicenseMonitor.Stop();
         }
     }

@@ -46,15 +46,21 @@ namespace UNCAD.Features.PdfExport
             }
         }
 
-        /// <summary>把图框窗口打印成一份彩色 PDF；失败返回中文原因 + 逐步诊断，不抛异常。</summary>
+        /// <summary>
+        /// 把图框窗口打印成一份彩色 PDF；<paramref name="outputFile"/> 是**最终输出文件全路径**
+        /// （由命令层用 <see cref="UNCAD.Core.Submission.OutputLayout"/> + <see cref="PdfExportNaming"/>
+        /// 预先分配，同一批不会互相覆盖）。失败返回中文原因 + 逐步诊断，不抛异常。
+        /// </summary>
         internal static PdfRenderResult Render(CadContext ctx, FrameRegionGroup region,
-            string circuitName, string outputDirectory)
+            string circuitName, string outputFile)
         {
             if (ctx == null) return PdfRenderResult.Fail("缺少图形上下文。");
             if (region == null || region.Boundary == null)
                 return PdfRenderResult.Fail("找不到图框边界。");
-            if (string.IsNullOrWhiteSpace(outputDirectory))
-                return PdfRenderResult.Fail("缺少 PDF 临时输出目录。");
+            if (string.IsNullOrWhiteSpace(outputFile))
+                return PdfRenderResult.Fail("缺少 PDF 输出路径。");
+            if (!PdfExportNaming.HasPdfExtension(outputFile))
+                return PdfRenderResult.Fail("PDF 输出路径必须以 .pdf 结尾：" + outputFile);
             if (!TryGetDeviceError(out string deviceError))
                 return PdfRenderResult.Fail(deviceError);
 
@@ -62,8 +68,7 @@ namespace UNCAD.Features.PdfExport
             if (!PdfPlotPolicy.TryValidateWindow(window, out string windowError))
                 return PdfRenderResult.Fail(windowError);
 
-            string file = Path.Combine(outputDirectory,
-                PdfExportNaming.BuildFileName(circuitName));
+            string file = outputFile;
             var diagnostics = new PdfPlotDiagnostics();
             string note = "";
             try

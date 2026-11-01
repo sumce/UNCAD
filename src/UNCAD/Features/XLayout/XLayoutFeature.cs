@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -36,6 +37,8 @@ namespace UNCAD.Features.XLayout
         private const short MachineIncompleteColorIndex = 1;
         private const short MachineUnknownColorIndex = 8;
         private const short DuplicateMarkerColorIndex = 2;
+        // 只在明显变慢时输出一行 [PERF]；用户交互/对话框时间不计入。
+        private const long PerfThresholdMilliseconds = 500;
 
         protected override void Execute(CadContext ctx)
         {
@@ -49,7 +52,9 @@ namespace UNCAD.Features.XLayout
                 return;
             }
 
+            var phaseWatch = Stopwatch.StartNew();
             FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx, selected);
+            long collectMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (regions.Errors.Count > 0)
             {
                 foreach (string error in regions.Errors)
@@ -62,6 +67,7 @@ namespace UNCAD.Features.XLayout
                 return;
             }
 
+            phaseWatch.Restart();
             var items = new List<XLayoutFrameItem>();
             var groupsByItem = new Dictionary<XLayoutFrameItem, FrameRegionGroup>();
             var summaries = new Dictionary<string, XLayoutMachineSummary>(
@@ -112,6 +118,7 @@ namespace UNCAD.Features.XLayout
                 readTransaction.Commit();
             }
 
+            long identityMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (identityErrors.Count > 0)
             {
                 const int maxReportedErrors = 20;
@@ -134,10 +141,12 @@ namespace UNCAD.Features.XLayout
                 return;
             }
 
+            phaseWatch.Restart();
             Dictionary<string, HashSet<string>> expectedCircuits =
                 ReadExpectedCircuits(ctx, items.Select(item => item.MachineId));
             HashSet<string> duplicateHandles = FindDuplicateCircuits(items, summaries,
                 expectedCircuits);
+            long prepareMilliseconds = phaseWatch.ElapsedMilliseconds;
 
             // 排版前让用户挑选机台/回路：树形勾选 + 关键词筛选（空格/逗号分隔，AND）。
             // 只有"勾选且命中当前筛选"的回路参与重排，其余图框保持原位。
@@ -164,7 +173,9 @@ namespace UNCAD.Features.XLayout
             }
             Dictionary<string, XLayoutMachineSummary> arrangedSummaries =
                 BuildArrangedSummaries(arrangedItems, summaries);
+            phaseWatch.Restart();
             IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(arrangedItems);
+            long arrangeMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
             {
                 SelectionService.ClearPickFirst(ctx);
@@ -172,6 +183,7 @@ namespace UNCAD.Features.XLayout
                 return;
             }
 
+            phaseWatch.Restart();
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 HashSet<string> targetHandles = new HashSet<string>(
@@ -228,6 +240,21 @@ namespace UNCAD.Features.XLayout
                     DrawDuplicateMarker(ctx, transaction, placement, layoutOrigin);
                 }
                 transaction.Commit();
+            }
+            long writeMilliseconds = phaseWatch.ElapsedMilliseconds;
+            long perfTotal = collectMilliseconds + identityMilliseconds
+                + prepareMilliseconds + arrangeMilliseconds + writeMilliseconds;
+            if (perfTotal >= PerfThresholdMilliseconds)
+            {
+                Log.Info("[PERF] XLAYOUT total=" + perfTotal + "ms"
+                    + " collect=" + collectMilliseconds + "ms"
+                    + " identity=" + identityMilliseconds + "ms"
+                    + " prepare=" + prepareMilliseconds + "ms"
+                    + " arrange=" + arrangeMilliseconds + "ms"
+                    + " write=" + writeMilliseconds + "ms"
+                    + " frames=" + regions.SelectedFrameCount
+                    + " machines=" + summaries.Count
+                    + " arranged=" + arrangedItems.Count);
             }
 
             SelectionService.ClearPickFirst(ctx);

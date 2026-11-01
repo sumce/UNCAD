@@ -1,10 +1,5 @@
 using System;
-using System.Globalization;
 using System.IO;
-using System.Net;
-using System.Net.Cache;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace UNCAD.Core.Excel
 {
@@ -12,19 +7,27 @@ namespace UNCAD.Core.Excel
     {
         public string LocalPath { get; set; }
         public bool Updated { get; set; }
+        /// <summary>
+        /// 保留字段（历史版本用于"远程下载失败回退到已下载缓存"）。
+        /// 2.10.0 起远程机台数据源已移除，本地刷新不会产生回退，恒为 false。
+        /// </summary>
         public bool UsedCachedFallback { get; set; }
         public string Warning { get; set; }
         public MachineWorkbookSnapshotInfo Snapshot { get; set; }
     }
 
     /// <summary>
-    /// Refreshes the configured workbook for U1SET, U1DATA, or remote startup.
+    /// Refreshes a **local/UNC** workbook for U1SET, U1DATA, or explicit user refresh.
+    ///
+    /// 2.10.0 起不再下载远程工作簿：机台数据源只能是本地或共享文件夹中的 Excel。
     /// Drawing commands do not call this class; they read the SQLite snapshot.
     /// </summary>
     internal static class MachineWorkbookSource
     {
-        private const long MaximumBytes = 100L * 1024L * 1024L;
-
+        /// <summary>
+        /// 是否为 HTTP/HTTPS 地址。保留该判断只为在 U1SET/刷新入口给出"网络数据源已移除"
+        /// 的明确中文提示——任何刷新路径都不再发起网络请求。
+        /// </summary>
         internal static bool IsRemote(string source)
         {
             return Uri.TryCreate((source ?? "").Trim(), UriKind.Absolute, out Uri uri)
@@ -39,146 +42,34 @@ namespace UNCAD.Core.Excel
             => MachineWorkbookSnapshotStore.Default.TryGetSnapshot(source, out snapshot);
 
         /// <summary>
-        /// Retained for older diagnostics that need the downloaded XLSX path.
-        /// Production command paths must use TryGetSnapshot instead.
-        /// </summary>
-        internal static bool TryGetCachedPath(string source, out string path)
-            => TryGetCachedPath(source, null, out path);
-
-        internal static bool TryGetCachedPath(string source, string cacheDirectory,
-            out string path)
-        {
-            path = null;
-            if (!Uri.TryCreate((source ?? "").Trim(), UriKind.Absolute, out Uri uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                return false;
-
-            path = CachePath(uri, cacheDirectory);
-            if (!File.Exists(path))
-            {
-                path = null;
-                return false;
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Imports a local or remote workbook for an explicit or startup refresh.
+        /// Imports a local (or UNC) workbook for an explicit refresh.
         /// A successful refresh always replaces the SQLite snapshot, even when
         /// the XLSX bytes are unchanged.
         /// </summary>
         internal static MachineWorkbookSourceResult Refresh(string source)
-            => Refresh(source, MachineWorkbookSnapshotStore.Default, null);
+            => Refresh(source, MachineWorkbookSnapshotStore.Default);
 
         internal static MachineWorkbookSourceResult Refresh(string source,
-            MachineWorkbookSnapshotStore store, string cacheDirectory = null)
+            MachineWorkbookSnapshotStore store)
         {
             if (store == null) throw new ArgumentNullException(nameof(store));
             string value = (source ?? "").Trim();
             if (value.Length == 0)
                 throw new ArgumentException("机台数据源不能为空。", nameof(source));
+            if (IsRemote(value))
+                throw new InvalidDataException(
+                    "不再支持网络机台数据源（HTTP/HTTPS 下载已移除）：" + value
+                    + "。请把机台 Excel 保存到本地或共享文件夹，并在 U1SET 中重新选择后再刷新。");
+            if (!File.Exists(value))
+                throw new FileNotFoundException("机台数据 Excel 不存在：" + value, value);
 
-            if (!IsRemote(value))
+            MachineWorkbookSnapshotInfo snapshot = store.RefreshFromFile(value, value);
+            return new MachineWorkbookSourceResult
             {
-                if (!File.Exists(value))
-                    throw new FileNotFoundException("机台数据 Excel 不存在。", value);
-                MachineWorkbookSnapshotInfo snapshot =
-                    store.RefreshFromFile(value, value);
-                return new MachineWorkbookSourceResult
-                {
-                    LocalPath = Path.GetFullPath(value),
-                    Updated = true,
-                    Snapshot = snapshot
-                };
-            }
-
-            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri uri))
-                throw new ArgumentException("机台数据源不是有效的 HTTP/HTTPS 地址。",
-                    nameof(source));
-
-            string cachePath = CachePath(uri, cacheDirectory);
-            string downloadPath = cachePath + ".download-" + Guid.NewGuid().ToString("N");
-            try
-            {
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
-                    Download(uri, downloadPath);
-                }
-                catch (InvalidDataException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    // A network outage after a successful prior refresh is non-fatal;
-                    // the command can continue using the last explicit SQLite snapshot.
-                    if (store.TryGetSnapshot(value,
-                        out MachineWorkbookSnapshotInfo previous))
-                        return new MachineWorkbookSourceResult
-                        {
-                            LocalPath = File.Exists(cachePath) ? cachePath : null,
-                            UsedCachedFallback = true,
-                            Warning = ex.Message,
-                            Snapshot = previous
-                        };
-                    throw new IOException("无法下载网络机台 Excel，且没有可用 SQLite 快照。", ex);
-                }
-
-                // Parsing and SQLite replacement happen before the optional XLSX
-                // compatibility cache is swapped, so a parse failure leaves the
-                // old database snapshot and old downloaded file intact.
-                MachineWorkbookSnapshotInfo snapshot =
-                    store.RefreshFromFile(value, downloadPath);
-                string cacheWarning = null;
-                try
-                {
-                    if (File.Exists(cachePath)) File.Replace(downloadPath, cachePath, null);
-                    else File.Move(downloadPath, cachePath);
-                    CleanupStaleDownloads(Path.GetDirectoryName(cachePath));
-                }
-                catch (Exception ex)
-                {
-                    // The XLSX file is only a compatibility diagnostic cache;
-                    // a successful SQLite refresh must not be reported as failed
-                    // merely because that optional copy cannot be replaced.
-                    cacheWarning = "下载文件缓存未更新: " + ex.Message;
-                }
-                return new MachineWorkbookSourceResult
-                {
-                    LocalPath = File.Exists(cachePath) ? cachePath : null,
-                    Updated = true,
-                    Snapshot = snapshot,
-                    Warning = cacheWarning
-                };
-            }
-            finally
-            {
-                try { if (File.Exists(downloadPath)) File.Delete(downloadPath); }
-                catch { }
-            }
-        }
-
-        /// <summary>
-        /// 清理历史失败下载残留（<c>*.download-*</c>）。下载中途崩溃时 finally 跑不到，
-        /// 残留会长期累积（现场曾堆到 30+ 个、约 100MB）。只删 1 天前的文件，成功路径才调用。
-        /// </summary>
-        internal static void CleanupStaleDownloads(string directory, DateTime? nowUtc = null)
-        {
-            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
-            DateTime cutoff = (nowUtc ?? DateTime.UtcNow).AddDays(-1);
-            try
-            {
-                foreach (string file in Directory.EnumerateFiles(directory, "*.download-*"))
-                {
-                    try
-                    {
-                        if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
-                    }
-                    catch { }
-                }
-            }
-            catch { }
+                LocalPath = Path.GetFullPath(value),
+                Updated = true,
+                Snapshot = snapshot
+            };
         }
 
         internal static void ValidateWorkbook(string path)
@@ -193,70 +84,8 @@ namespace UNCAD.Core.Excel
             }
             catch (Exception ex)
             {
-                throw new InvalidDataException("下载的机台 Excel 无法解析。", ex);
+                throw new InvalidDataException("机台 Excel 无法解析。", ex);
             }
-        }
-
-        internal static string CacheKey(Uri uri)
-        {
-            if (uri == null) throw new ArgumentNullException(nameof(uri));
-            string normalized = new UriBuilder(uri) { Fragment = "" }.Uri.AbsoluteUri;
-            using (SHA256 sha = SHA256.Create())
-            {
-                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-                return BitConverter.ToString(hash, 0, 12).Replace("-", "").ToLowerInvariant();
-            }
-        }
-
-        private static void Download(Uri uri, string destination)
-        {
-            HttpWebRequest request = WebRequest.CreateHttp(uri);
-            if (uri.IsLoopback) request.Proxy = null;
-            request.Method = "GET";
-            request.UserAgent = "UNCAD";
-            request.Accept = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*";
-            request.AutomaticDecompression = DecompressionMethods.GZip
-                | DecompressionMethods.Deflate;
-            request.CachePolicy = new RequestCachePolicy(RequestCacheLevel.NoCacheNoStore);
-            request.Timeout = 20000;
-            request.ReadWriteTimeout = 20000;
-
-            using (var response = (HttpWebResponse)request.GetResponse())
-            {
-                if (response.StatusCode != HttpStatusCode.OK)
-                    throw new IOException("网络机台 Excel 返回 HTTP "
-                        + ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + "。");
-                if (response.ContentLength > MaximumBytes)
-                    throw new InvalidDataException("网络机台 Excel 超过 100 MB 限制。");
-                using (Stream input = response.GetResponseStream())
-                using (var output = new FileStream(destination, FileMode.CreateNew,
-                    FileAccess.Write, FileShare.None))
-                {
-                    var buffer = new byte[81920];
-                    long total = 0;
-                    int read;
-                    while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        total += read;
-                        if (total > MaximumBytes)
-                            throw new InvalidDataException("网络机台 Excel 超过 100 MB 限制。");
-                        output.Write(buffer, 0, read);
-                    }
-                }
-            }
-        }
-
-        private static string CachePath(Uri uri, string cacheDirectory)
-        {
-            string directory = cacheDirectory;
-            if (string.IsNullOrWhiteSpace(directory))
-            {
-                string root = Environment.GetFolderPath(
-                    Environment.SpecialFolder.LocalApplicationData);
-                if (string.IsNullOrWhiteSpace(root)) root = Path.GetTempPath();
-                directory = Path.Combine(root, "UNCAD", "cache");
-            }
-            return Path.Combine(directory, "machine-" + CacheKey(uri) + ".xlsx");
         }
     }
 }

@@ -221,6 +221,21 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
+            foreach (Plan plan in plans)
+                ctx.Operation?.Machine(plan.Machine.MachineId, plan.Machine.CircuitName);
+
+            // 2.10.0：整机回路校验——每个机台的所有回路都必须被框选，否则不生成 BOQ/DWG。
+            if (!FillFeature.EnsureCircuitCoverage(ctx, workbook, CommandIds.FillUpdate,
+                    plans.Select(plan => new KeyValuePair<string, string>(
+                        plan.Machine.MachineId, plan.Machine.CircuitName))))
+            {
+                MessageBox.Show(Owner(), "整机回路校验未通过，本次批量更新已取消（图纸与 BOQ 均未修改）。"
+                    + "\r\n\r\n缺少的回路见 CAD 命令行；补选后再执行。"
+                    + "\r\n如该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。",
+                    "U1U 整机回路校验", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             string automaticExcelPath;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions;
             try
@@ -229,7 +244,8 @@ namespace UNCAD.Features.Fill
                     new KeyValuePair<string, string>(plan.Machine.MachineId,
                         plan.Machine.CircuitName)));
                 automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                    plans.Select(plan => plan.Machine.MachineId));
+                    plans.Select(plan => plan.Machine.MachineId),
+                    AutomaticSubmissionService.CurrentDrawingName(ctx));
                 automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
                     automaticExcelPath, plans.Select(plan => plan.Machine.MachineId));
             }
@@ -442,6 +458,7 @@ namespace UNCAD.Features.Fill
                     fixTransaction.Commit();
                 }
                 outputBatch.Complete();
+                FillFeature.RecordOutputs(ctx, "BOQ", automaticExcel.FilePath);
             }
             catch (System.Exception ex)
             {
@@ -481,39 +498,6 @@ namespace UNCAD.Features.Fill
                     + " mm/格）。" : "")
                 + " BOQ 文件处理 " + automaticExcel.AddedCount + " 条，覆盖 "
                 + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath);
-            // 批量 U1U 同样是"以回路为最小单位"：每个图框各自上传自己的清单内容与等轴测场景。
-            // 上传在后台执行，失败只记日志+命令行提示，绝不影响已提交的批量写入。
-            int queued = 0;
-            // 场景要在 CAD 线程同步构建（单个上限 1MB），一次批量上千个会堆出上百 MB。
-            // 用总预算兜底：超出的回路只上传清单，跳过场景并汇总提示。
-            var sceneBudget = new FillFeature.SceneUploadBudget(64L * 1024 * 1024);
-            // 整批只扫一次 U1L 线段：以前每个图框的 BuildRegionEnvelope 都扫全图 → O(N²)。
-            var sceneScan = new FillFeature.SceneScanCache();
-            int droppedBefore = BackgroundUploadQueue.Shared.Dropped;
-            int uploadDone = 0;
-            foreach (Plan plan in plans)
-            {
-                uploadDone++;
-                if (FillFeature.UploadCircuitSubmission(ctx, plan.Machine, plan.Rows, true,
-                        plan.Selection, sceneBudget, sceneScan)) queued++;
-                if (uploadDone % 50 == 0 || uploadDone == plans.Count)
-                    ReportProgress(ctx, "\n[U1U] 上传回路数据 " + uploadDone + "/"
-                        + plans.Count + " 个…");
-            }
-            if (sceneBudget.Skipped > 0)
-                ctx.Write("\n[U1U] 图框较多：" + sceneBudget.Skipped
-                    + " 个回路的等轴测场景未上传（清单照常上传；分批执行可补传场景）。");
-            int droppedUploads = BackgroundUploadQueue.Shared.Dropped - droppedBefore;
-            if (BackgroundUploadQueue.Shared.Suspended)
-                ctx.Write("\n[U1U] 上传服务连续失败：本批剩余回路上传已暂停（丢弃 "
-                    + droppedUploads + " 个排队项）。图纸与 BOQ 不受影响；"
-                    + "网络恢复后可重跑 " + CommandIds.Submit + " 重新上报。");
-            else if (droppedUploads > 0)
-                ctx.Write("\n[U1U] 上传队列繁忙：超过上限的 " + droppedUploads
-                    + " 个回路上传被丢弃（图纸与 BOQ 不受影响）。");
-            if (queued > 0)
-                ctx.Write("\n[U1U] 已排队上传 " + queued
-                    + " 个回路的清单与等轴测数据（后台执行，失败不影响图纸）。");
         }
 
         private static void Preflight(CadContext ctx, Transaction readTransaction,
@@ -526,7 +510,7 @@ namespace UNCAD.Features.Fill
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
                 region.EntityIds.ToArray(), true, definitions);
-            // 复用分区结果：上传等轴测场景时不再做一次全空间扫描（批量 O(N²) 的主因）。
+            // 复用分区结果：拿到已算好的图框区域，避免每个图框再做一次全空间扫描。
             selection.Region = region;
             if (selection.FrameBlockIds.Length != 1)
             {
@@ -581,7 +565,8 @@ namespace UNCAD.Features.Fill
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
                 FrameInfoJsonBlockWriter.ReadSources(selection));
             CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
-                machine, statistics, options.CableOwnerReserveMillimeters);
+                machine, statistics, options.CableOwnerReserveMillimeters,
+                options.CableReserve);
 
             try
             {

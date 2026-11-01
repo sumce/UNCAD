@@ -6,7 +6,6 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
-using UNCAD.Features.ConfigCenter;
 using UNCAD.Features.Fill;
 using UNCAD.Infra;
 
@@ -32,8 +31,6 @@ namespace UNCAD.Features.Conduit
 
         [CommandMethod(CommandIds.Conduit51, CommandFlags.UsePickSet)]
         public void UncadConduit51() => Run("51");
-
-        public void UncadConduitSet() => SettingsFeature.Show(2);
 
         protected override void Execute(CadContext ctx) => Execute(ctx, null);
 

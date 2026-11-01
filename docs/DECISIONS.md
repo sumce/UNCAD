@@ -4,6 +4,29 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-033: 2.10.0 — No Cloud Sync, Whole-Machine Circuit Gate, Layered Output, Local History (2026-11-01)
+
+- Status: accepted
+- Decision: the Pro package uploads nothing and downloads no machine data over
+  HTTP/HTTPS. Account/licence validation (login, online state, single-device
+  binding) is the only network feature. `U1F/U1U/U1S/U1DWG` refuse to generate
+  BOQ/DWG unless every circuit of each selected machine is in the current
+  selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on); the missing circuits
+  are listed and neither the drawing nor the BOQ is written. Output layout is
+  `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...` (default root
+  `Documents\UNCAD输出`) with a write-occupancy precheck before the CAD
+  transaction. File logs rotate per day + configurable level/retention; every
+  command writes one local operation record (JSONL, 6 months default). Settings
+  can be shared as Base64 that excludes licence/clock/update-memory keys.
+- Rationale: field use never needed the server mirror; it produced multi-hour
+  batch stalls, ~5GB memory peaks, network-error spam and a recovery path that
+  could not actually retry. A partial-machine BOQ is a data-integrity defect,
+  not a convenience trade-off.
+- Consequence: `ClientSubmissionUploader`, `BackgroundUploadQueue` and
+  `MachineLedgerReporter` are deleted; `U1PDF` keeps exporting locally. The
+  command contract stays at 35 commands. Do not reintroduce an upload path or a
+  remote data source without a new decision.
+
 ## D-032: Version Numbering — Features Move X.Y.Z, Fixes Move The Fourth Part (2026-10-11)
 
 - Status: accepted
@@ -299,6 +322,10 @@ rewrite an existing entry.
   only conflicting definitions receive AutoCAD-generated `$N$` names.
 
 ## D-023: Remote Workbook Startup Refresh (2026-09-22)
+
+- Status: superseded by D-033 (2026-11-01) — remote refresh and HTTP/HTTPS
+  workbook sources were removed; U1DATA/U1SET only refresh local/UNC files.
+- Historical decision:
 
 - Status: accepted
 - Decision: this supersedes D-003 and D-012 only for a configured HTTP/HTTPS

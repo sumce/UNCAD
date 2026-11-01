@@ -93,6 +93,13 @@ namespace UNCAD.Core.Stat
 
     public static class XstsReportBuilder
     {
+        // 性能回归探针：本次 Build 归组的机台行数。线性实现等于
+        // selected+expected 行数；旧的“每机台对全表 Where 过滤”实现等于
+        // 机台数×行数。测试用它断言复杂度，不断言脆弱的时间。
+        [ThreadStatic] private static long _lastBuildRowVisits;
+
+        internal static long LastBuildRowVisits => _lastBuildRowVisits;
+
         /// <summary>
         /// Builds a deterministic coverage report.  Circuit names are compared
         /// case-insensitively after trimming; duplicate frame names count once in
@@ -103,6 +110,7 @@ namespace UNCAD.Core.Stat
             XstsExpectedDataStatus expectedDataStatus = XstsExpectedDataStatus.Available,
             string expectedDataDetail = null)
         {
+            _lastBuildRowVisits = 0;
             var selectedRows = (selected ?? Enumerable.Empty<XstsCircuitRecord>()).ToList();
             var expectedRows = (expected ?? Enumerable.Empty<XstsCircuitRecord>()).ToList();
             var report = new XstsReport
@@ -114,6 +122,13 @@ namespace UNCAD.Core.Stat
             AddFrameIssues(selectedRows, report);
             var selectedGroups = Group(selectedRows);
             var expectedGroups = Group(expectedRows);
+            // 机台元数据按机台分组一次。旧实现每台机台都对整张 selected/expected
+            // 行表做一次 Where 过滤，机台数与行数同时增长时是 O(机台×行)：
+            // 1000 机台 × 20 回路实测 3.7s。分组后每行只归属一次。
+            Dictionary<string, List<XstsCircuitRecord>> expectedByMachine =
+                GroupRowsByMachine(expectedRows);
+            Dictionary<string, List<XstsCircuitRecord>> selectedByMachine =
+                GroupRowsByMachine(selectedRows);
             // The report is selection-scoped: expected-only machines are deliberately
             // omitted. XSTS answers which circuits are missing from the machines the
             // user framed, not which circuits are missing from the whole workbook.
@@ -121,15 +136,13 @@ namespace UNCAD.Core.Stat
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
             {
                 var row = new XstsMachineSummary(machineId);
-                List<XstsCircuitRecord> metadataRows = expectedRows
-                    .Where(item => IdentityTextNormalizer.Equals(item?.MachineId,
-                        machineId))
-                    .ToList();
-                if (metadataRows.Count == 0)
-                    metadataRows = selectedRows
-                        .Where(item => IdentityTextNormalizer.Equals(item?.MachineId,
-                            machineId))
-                        .ToList();
+                if (!expectedByMachine.TryGetValue(machineId,
+                        out List<XstsCircuitRecord> metadataRows))
+                {
+                    selectedByMachine.TryGetValue(machineId,
+                        out metadataRows);
+                }
+                metadataRows = metadataRows ?? new List<XstsCircuitRecord>();
                 row.Batch = CollapseField(metadataRows.Select(item => item.Batch));
                 row.Seq = CollapseField(metadataRows.Select(item => item.Seq));
                 // A globally readable workbook still cannot provide a baseline for a
@@ -213,6 +226,30 @@ namespace UNCAD.Core.Stat
                     result[machine] = names;
                 }
                 names.Add(circuit);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 按机台把报表行分组一次；机台 ID 比较沿用 IdentityTextNormalizer
+        /// 的“忽略大小写与空白”语义，保证与旧的 Equals 过滤一致。
+        /// </summary>
+        private static Dictionary<string, List<XstsCircuitRecord>> GroupRowsByMachine(
+            IEnumerable<XstsCircuitRecord> source)
+        {
+            var result = new Dictionary<string, List<XstsCircuitRecord>>(
+                IdentityTextNormalizer.Comparer);
+            foreach (XstsCircuitRecord item in source ?? Enumerable.Empty<XstsCircuitRecord>())
+            {
+                string machine = (item?.MachineId ?? "").Trim();
+                if (machine.Length == 0) continue;
+                if (!result.TryGetValue(machine, out List<XstsCircuitRecord> rows))
+                {
+                    rows = new List<XstsCircuitRecord>();
+                    result[machine] = rows;
+                }
+                rows.Add(item);
+                _lastBuildRowVisits++;
             }
             return result;
         }

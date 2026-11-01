@@ -11,50 +11,29 @@ namespace UNCAD.UI
     public sealed class DeviceReserveForm : DpiAwareForm
     {
         private readonly TextBox _reserve;
+        private readonly UiFieldRow _row;
 
         public DeviceReserveForm(int frameCount)
         {
-            DialogLayout.Apply(this, "U1U 设备内预留", new Size(560, 230),
-                new Size(500, 200));
+            DialogLayout.Apply(this, "U1U 设备内预留", new Size(600, 260),
+                new Size(520, 230), false);
 
-            var header = UiTheme.Header(
-                "本次有 " + Math.Max(0, frameCount) + " 个图框还没有设备内预留记录",
-                "请输入设备内预留（毫米）；直接确定 = 0。填写后写入 frameinfo_json，后续 U1U 不再询问。");
-
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
-                Padding = new Padding(24, 12, 24, 8)
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.Controls.Add(new Label
-            {
-                Text = "设备内预留 (mm):",
-                Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.MiddleRight,
-                ForeColor = UiTheme.TextSecondary
-            }, 0, 0);
+            var frame = new UiDialogFrame(this, "设备内预留",
+                "本次有 " + Math.Max(0, frameCount)
+                + " 个图框还没有设备内预留记录。填写后写入 frameinfo_json，后续 U1U 不再询问。");
             _reserve = new TextBox
             {
                 Dock = DockStyle.Fill,
-                Text = "0",
-                Margin = new Padding(8, 4, 0, 4)
+                Text = "0"
             };
-            layout.Controls.Add(_reserve, 1, 0);
+            UiTheme.StyleInput(_reserve);
+            _row = UiKit.Field("设备内预留（mm）", _reserve, "直接确定 = 0；范围 0~100000 毫米。");
+            frame.Body.Controls.Add(_row);
 
-            Button cancel = UiTheme.Button("取消", DialogResult.Cancel);
-            Button confirm = UiTheme.PrimaryButton("确定");
+            Button confirm = frame.AddPrimary("确定");
+            Button cancel = frame.AddSecondary("取消", DialogResult.Cancel);
             confirm.Click += Confirm;
-            FlowLayoutPanel commands = UiTheme.CommandBar();
-            commands.Controls.Add(cancel);
-            commands.Controls.Add(confirm);
-
-            Controls.Add(layout);
-            Controls.Add(commands);
-            Controls.Add(header);
+            frame.Wire(confirm, cancel);
             AcceptButton = confirm;
             CancelButton = cancel;
             Shown += (sender, args) => _reserve.Select();
@@ -72,8 +51,8 @@ namespace UNCAD.UI
                         System.Globalization.CultureInfo.InvariantCulture, out value)
                     || value < 0d || value > 100000d))
             {
-                MessageBox.Show(this, "设备内预留必须是 0~100000 的毫米数。",
-                    "U1U 设备内预留", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // 行内错误 + 保留输入，不弹 Message 中断填写。
+                _row.SetError("设备内预留必须是 0~100000 的毫米数。");
                 _reserve.Focus();
                 _reserve.SelectAll();
                 return;

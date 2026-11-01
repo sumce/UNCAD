@@ -44,7 +44,14 @@ namespace UNCAD.Infra
                 Settings.GetBool(ConfigKeys.FillDownstreamPanelEnabled,
                     FillRuntimeOptions.DefaultDownstreamEnabled),
                 Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
-                    FillRuntimeOptions.DefaultCableOwnerReserveMillimeters));
+                    FillRuntimeOptions.DefaultCableOwnerReserveMillimeters),
+                new CableReserveSettings(
+                    Settings.GetDouble(ConfigKeys.CableReserveILine,
+                        CableReserveSettings.DefaultILinePanelMillimeters),
+                    Settings.GetDouble(ConfigKeys.CableReserveSocket,
+                        CableReserveSettings.DefaultSocketPanelMillimeters),
+                    Settings.GetDouble(ConfigKeys.CableReserveBusbar,
+                        CableReserveSettings.DefaultBusbarConnectorMillimeters)));
         }
 
         private static int SafeInt(double value, int fallback)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -30,6 +31,9 @@ namespace UNCAD.Features.Unl
         Description = "框选完整图框并预览其中的 U1L 等测路线、机台上下游轴位。")]
     public sealed class QuickLine3dPreviewFeature : CommandBase
     {
+        // 只在明显变慢时输出一行 [PERF]；正常单图框预览不写日志。
+        private const long PerfThresholdMilliseconds = 500;
+
         private static readonly Lazy<AnnotationModelIndex> AnnotationModels =
             new Lazy<AnnotationModelIndex>(
                 () => AnnotationModelIndex.Build(ListItemReader.ReadEmbedded()), true);
@@ -51,8 +55,10 @@ namespace UNCAD.Features.Unl
                 return;
             }
 
+            var perfWatch = Stopwatch.StartNew();
             FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
                 selected);
+            long collectMilliseconds = perfWatch.ElapsedMilliseconds;
             if (regions.Errors.Count > 0)
                 throw new InvalidOperationException(string.Join("\n", regions.Errors));
             if (regions.SelectedFrameCount != 1 || regions.Groups.Count != 1)
@@ -63,12 +69,22 @@ namespace UNCAD.Features.Unl
             }
 
             FrameRegionGroup region = regions.Groups[0];
+            perfWatch.Restart();
             Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region,
                 out string sceneIssue);
+            long sceneMilliseconds = perfWatch.ElapsedMilliseconds;
             if (envelope == null)
             {
                 ctx.Write("\n[U1L3D] " + sceneIssue);
                 return;
+            }
+            long perfTotal = collectMilliseconds + sceneMilliseconds;
+            if (perfTotal >= PerfThresholdMilliseconds)
+            {
+                Log.Info("[PERF] U1L3D total=" + perfTotal + "ms"
+                    + " collect=" + collectMilliseconds + "ms"
+                    + " scan+scene=" + sceneMilliseconds + "ms"
+                    + " frameEntities=" + (region.EntityIds?.Count ?? 0));
             }
 
             using (var form = new U1L3DPreviewForm(envelope))
@@ -146,10 +162,11 @@ namespace UNCAD.Features.Unl
                 return null;
             }
 
-            QuickLineIsometricScene scene = BuildScene(labelled);
+            QuickLineGraph routeGraph = BuildRouteGraph(labelled);
+            QuickLineIsometricScene scene = BuildScene(labelled, routeGraph);
             var anchorDiagnostics = new List<string>();
             IReadOnlyDictionary<string, QuickLineSpatialPoint> routeAnchors =
-                ResolveRouteAnchorPositions(labelled, scene, downstreamAnchor,
+                ResolveRouteAnchorPositions(labelled, scene, routeGraph, downstreamAnchor,
                     upstreamAnchor, anchorDiagnostics);
             List<string> diagnostics = new List<string>();
             MachineRow machine = knownMachine ?? ReadMachine(identity, out diagnostics);
@@ -157,102 +174,6 @@ namespace UNCAD.Features.Unl
             QuickLineAxisGrid axes = QuickLineAxisGridPlanner.Plan(
                 machine?.UpstreamAxis, machine?.DownstreamAxis);
             return BuildEnvelope(scene, axes, identity, machine, diagnostics, routeAnchors);
-        }
-
-        /// <summary>
-        /// U1F/U1U 自动上传用：把**单个图框（= 一个回路）**的等轴测场景序列化成 JSON，
-        /// 与 U1L3D 本地预览用的是同一个 envelope（同一套 BuildScene / BuildEnvelope）。
-        ///
-        /// 返回 false 时 <paramref name="issue"/> 说明原因；"图框内没有 U1L 标注"属正常情况，
-        /// 调用方只需记日志、不要当失败处理。
-        /// </summary>
-        internal static bool TryBuildSceneJson(CadContext ctx, ObjectId[] frameBlockIds,
-            out string sceneJson, out string issue)
-        {
-            sceneJson = "";
-            issue = "";
-            if (ctx == null)
-            {
-                issue = "缺少图形上下文。";
-                return false;
-            }
-            if (frameBlockIds == null || frameBlockIds.Length == 0)
-            {
-                issue = "缺少图框。";
-                return false;
-            }
-
-            FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
-                frameBlockIds);
-            if (regions.Errors.Count > 0)
-            {
-                issue = string.Join("；", regions.Errors);
-                return false;
-            }
-            if (regions.Groups.Count != 1)
-            {
-                issue = "需要恰好一个完整图框（当前 " + regions.Groups.Count + " 个）。";
-                return false;
-            }
-
-            return TryBuildSceneJson(ctx, regions.Groups[0], out sceneJson, out issue);
-        }
-
-        /// <summary>
-        /// 用**已经算好的图框区域**构建场景，跳过 CollectForLayout（那是全空间扫描，
-        /// 批量 U1U 每个图框调一次就是 O(N²)，正是大批量卡死的主因）。
-        /// </summary>
-        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
-            out string sceneJson, out string issue)
-        {
-            if (region == null)
-            {
-                sceneJson = "";
-                issue = "缺少图框区域。";
-                return false;
-            }
-            return TryBuildSceneJson(ctx, region,
-                QuickLineCadService.Scan(ctx, new QuickLineScanOptions
-                {
-                    IncludeUnlabelled = true
-                }), out sceneJson, out issue);
-        }
-
-        /// <summary>
-        /// 用**整批只扫一次**的 U1L 线段构建场景（批量 U1F/U1U 专用，避免 O(N²)）。
-        /// </summary>
-        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
-            IReadOnlyList<QuickLineCadSegment> scanned,
-            out string sceneJson, out string issue)
-            => TryBuildSceneJson(ctx, region, scanned, null, out sceneJson, out issue);
-
-        /// <summary>
-        /// 用整批只扫一次的 U1L 线段 + 调用方已解析的机台行构建场景。
-        /// </summary>
-        internal static bool TryBuildSceneJson(CadContext ctx, FrameRegionGroup region,
-            IReadOnlyList<QuickLineCadSegment> scanned, MachineRow knownMachine,
-            out string sceneJson, out string issue)
-        {
-            sceneJson = "";
-            issue = "";
-            if (ctx == null)
-            {
-                issue = "缺少图形上下文。";
-                return false;
-            }
-            if (region == null)
-            {
-                issue = "缺少图框区域。";
-                return false;
-            }
-            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region, scanned,
-                knownMachine, out issue);
-            if (envelope == null) return false;
-            sceneJson = new System.Web.Script.Serialization.JavaScriptSerializer
-            {
-                MaxJsonLength = 16 * 1024 * 1024
-            }.Serialize(envelope);
-            return sceneJson.Length > 0;
         }
 
         protected override void Execute(CadContext ctx, object state)
@@ -276,8 +197,10 @@ namespace UNCAD.Features.Unl
                 return;
             }
 
+            var perfWatch = Stopwatch.StartNew();
             FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
                 selected);
+            long collectMilliseconds = perfWatch.ElapsedMilliseconds;
             if (regions.Errors.Count > 0)
                 throw new InvalidOperationException(string.Join("\n", regions.Errors));
             if (regions.Groups.Count == 0)
@@ -286,20 +209,29 @@ namespace UNCAD.Features.Unl
                 return;
             }
 
+            perfWatch.Restart();
             IReadOnlyList<QuickLineCadSegment> scanned = QuickLineCadService.Scan(ctx,
                 new QuickLineScanOptions { IncludeUnlabelled = true });
+            long scanMilliseconds = perfWatch.ElapsedMilliseconds;
             var frames = new List<BatchFrameData>();
             var ordered = regions.Groups
                 .OrderBy(item => item.Boundary,
                     Comparer<FrameRectangle>.Create(FrameRectangle.CompareReadingOrder))
                 .ThenBy(item => item.Handle, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            // 逐帧对整份扫描结果做 Where 过滤是 O(图框×线段)：1000 图框 × 数千线段
+            // 时白白重复扫描百万元素。先把实体归属到图框，再按扫描顺序一次分桶，
+            // 每个图框拿到的线段顺序与原来的 Where 完全相同。
+            List<List<QuickLineCadSegment>> labelledByFrame =
+                BucketLabelledLinesByFrame(ordered, scanned);
 
+            perfWatch.Restart();
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var definitions = new CadBlockDefinitionReader(transaction);
-                foreach (FrameRegionGroup region in ordered)
+                for (int frameIndex = 0; frameIndex < ordered.Count; frameIndex++)
                 {
+                    FrameRegionGroup region = ordered[frameIndex];
                     var frame = new BatchFrameData
                     {
                         Id = string.IsNullOrWhiteSpace(region.Handle)
@@ -318,9 +250,7 @@ namespace UNCAD.Features.Unl
                         frame.Diagnostics.Add("图框身份读取失败：" + ex.Message);
                     }
 
-                    var frameIds = new HashSet<ObjectId>(region.EntityIds);
-                    frame.Labelled = scanned.Where(item => frameIds.Contains(item.LineId)
-                        && item.HasMillimetreLabel).ToList();
+                    frame.Labelled = labelledByFrame[frameIndex];
                     FillSelection selection = FillSelectionCollector.Split(transaction,
                         region.EntityIds.ToArray(), true, definitions);
                     frame.DownstreamAnchor = ReadAnchorPoint(transaction,
@@ -332,7 +262,9 @@ namespace UNCAD.Features.Unl
                 }
                 transaction.Commit();
             }
+            long inspectMilliseconds = perfWatch.ElapsedMilliseconds;
 
+            perfWatch.Restart();
             foreach (BatchFrameData frame in frames)
             {
                 if (frame.Labelled.Count == 0)
@@ -342,7 +274,10 @@ namespace UNCAD.Features.Unl
                 }
                 try
                 {
-                    frame.Scene = BuildScene(frame.Labelled);
+                    // 一个图框只建一次端点图：场景、路线端点锚定和路线分组
+                    // 以前各自重建同一张图（每帧 3 次多余的全量图构建）。
+                    frame.Graph = BuildRouteGraph(frame.Labelled);
+                    frame.Scene = BuildScene(frame.Labelled, frame.Graph);
                 }
                 catch (System.Exception ex)
                 {
@@ -350,8 +285,9 @@ namespace UNCAD.Features.Unl
                 }
                 if (frame.Scene != null)
                     frame.RouteAnchors = ResolveRouteAnchorPositions(
-                        frame.Labelled, frame.Scene, frame.DownstreamAnchor,
-                        frame.UpstreamAnchor, frame.Diagnostics);
+                        frame.Labelled, frame.Scene, frame.Graph,
+                        frame.DownstreamAnchor, frame.UpstreamAnchor,
+                        frame.Diagnostics);
                 var machineDiagnostics = new List<string>();
                 if (frame.Identity != null)
                     frame.Machine = ReadMachine(frame.Identity, out machineDiagnostics);
@@ -366,19 +302,31 @@ namespace UNCAD.Features.Unl
                 return;
             }
 
+            long sceneMilliseconds = perfWatch.ElapsedMilliseconds;
+            perfWatch.Restart();
             Dictionary<string, object> envelope = BuildBatchEnvelope(frames);
+            long envelopeMilliseconds = perfWatch.ElapsedMilliseconds;
+            long perfTotal = collectMilliseconds + scanMilliseconds
+                + inspectMilliseconds + sceneMilliseconds + envelopeMilliseconds;
+            if (perfTotal >= PerfThresholdMilliseconds)
+            {
+                Log.Info("[PERF] U13D total=" + perfTotal + "ms"
+                    + " collect=" + collectMilliseconds + "ms"
+                    + " scan=" + scanMilliseconds + "ms"
+                    + " inspect=" + inspectMilliseconds + "ms"
+                    + " scene=" + sceneMilliseconds + "ms"
+                    + " envelope=" + envelopeMilliseconds + "ms"
+                    + " frames=" + frames.Count
+                    + " scanned=" + scanned.Count);
+            }
             using (var form = new U1L3DPreviewForm(envelope))
                 AcApplication.ShowModalDialog(form);
         }
 
         private static QuickLineIsometricScene BuildScene(
-            IReadOnlyList<QuickLineCadSegment> labelled)
+            IReadOnlyList<QuickLineCadSegment> labelled, QuickLineGraph graph = null)
         {
-            var coreSegments = labelled.Select(item => new QuickLineSegment(
-                item.LineId.Handle.ToString(),
-                new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
-                new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))).ToList();
-            QuickLineGraph graph = QuickLineGraph.Build(coreSegments, 1.0);
+            graph = graph ?? BuildRouteGraph(labelled);
             var distances = labelled.ToDictionary(
                 item => item.LineId.Handle.ToString(),
                 item => item.LabelMillimetres.Value,
@@ -397,19 +345,62 @@ namespace UNCAD.Features.Unl
                 displayDistances, completed);
         }
 
-        private static Dictionary<string, string> BuildRouteGroupIds(
-            IReadOnlyList<QuickLineCadSegment> labelled)
+        /// <summary>
+        /// 一次扫描得到整批线段后，按图框把带毫米标注的线段分桶。
+        /// 逐帧 Where 过滤是 O(图框×线段)，分桶后是 O(线段+图框实体)，
+        /// 而且每个图框内的线段顺序保持扫描顺序（与旧实现一致）。
+        /// </summary>
+        private static List<List<QuickLineCadSegment>> BucketLabelledLinesByFrame(
+            IReadOnlyList<FrameRegionGroup> orderedGroups,
+            IReadOnlyList<QuickLineCadSegment> scanned)
         {
-            var result = new Dictionary<string, string>(
-                StringComparer.OrdinalIgnoreCase);
-            var coreSegments = (labelled ?? Array.Empty<QuickLineCadSegment>())
-                .Where(item => item != null)
+            var frameIndexById = new Dictionary<ObjectId, List<int>>();
+            for (int frameIndex = 0; frameIndex < orderedGroups.Count; frameIndex++)
+            {
+                FrameRegionGroup group = orderedGroups[frameIndex];
+                if (group?.EntityIds == null) continue;
+                foreach (ObjectId id in group.EntityIds)
+                {
+                    if (!frameIndexById.TryGetValue(id, out List<int> owners))
+                    {
+                        owners = new List<int>(1);
+                        frameIndexById[id] = owners;
+                    }
+                    if (!owners.Contains(frameIndex)) owners.Add(frameIndex);
+                }
+            }
+
+            var result = new List<List<QuickLineCadSegment>>(orderedGroups.Count);
+            for (int frameIndex = 0; frameIndex < orderedGroups.Count; frameIndex++)
+                result.Add(new List<QuickLineCadSegment>());
+            foreach (QuickLineCadSegment segment in scanned ??
+                Array.Empty<QuickLineCadSegment>())
+            {
+                if (segment == null || !segment.HasMillimetreLabel) continue;
+                if (!frameIndexById.TryGetValue(segment.LineId, out List<int> owners))
+                    continue;
+                foreach (int frameIndex in owners) result[frameIndex].Add(segment);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 由同一份 U1L 线段快照构建端点图。批量场景构建里场景重建、端点锚定
+        /// 和路线分组必须共用这一张图，否则每帧要重复三次全量建图。
+        /// </summary>
+        private static QuickLineGraph BuildRouteGraph(
+            IReadOnlyList<QuickLineCadSegment> labelled)
+            => QuickLineGraph.Build((labelled ?? Array.Empty<QuickLineCadSegment>())
                 .Select(item => new QuickLineSegment(
                     item.LineId.Handle.ToString(),
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
-                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y)))
-                .ToList();
-            QuickLineGraph graph = QuickLineGraph.Build(coreSegments, 1.0);
+                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))), 1.0);
+
+        private static Dictionary<string, string> BuildRouteGroupIds(
+            IReadOnlyList<QuickLineCadSegment> labelled, QuickLineGraph graph)
+        {
+            var result = new Dictionary<string, string>(
+                StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int routeNumber = 0;
             foreach (QuickLineSegment segment in graph.Segments)
@@ -444,6 +435,12 @@ namespace UNCAD.Features.Unl
                 AddSceneSegment(byNode, segment.EndNodeId, segment.Id);
             }
 
+            // 场景线段按 id 建一次索引：原实现对每个出队线段都做一次
+            // scene.Segments.First(...)，一条长路线是 O(线段²)。
+            var segmentById = new Dictionary<string, QuickLineIsometricSegment>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (QuickLineIsometricSegment segment in scene.Segments)
+                if (!segmentById.ContainsKey(segment.Id)) segmentById[segment.Id] = segment;
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int routeNumber = 0;
             foreach (QuickLineIsometricSegment segment in scene.Segments)
@@ -456,9 +453,8 @@ namespace UNCAD.Features.Unl
                 {
                     string current = queue.Dequeue();
                     result[current] = group;
-                    QuickLineIsometricSegment currentSegment = scene.Segments
-                        .First(item => string.Equals(item.Id, current,
-                            StringComparison.OrdinalIgnoreCase));
+                    if (!segmentById.TryGetValue(current,
+                            out QuickLineIsometricSegment currentSegment)) continue;
                     foreach (string nodeId in new[]
                     {
                         currentSegment.StartNodeId, currentSegment.EndNodeId
@@ -678,8 +674,9 @@ namespace UNCAD.Features.Unl
                     "图框 " + frame.Id + "：" + item));
 
                 string framePrefix = "F" + (++frameIndex) + "_";
-                Dictionary<string, string> routeGroups =
-                    BuildRouteGroupIds(frame.Labelled);
+                Dictionary<string, string> routeGroups = frame.Graph == null
+                    ? BuildRouteGroupIds(frame.Labelled, BuildRouteGraph(frame.Labelled))
+                    : BuildRouteGroupIds(frame.Labelled, frame.Graph);
                 double sceneOffsetX = placement.OffsetXMillimetres;
                 double sceneOffsetY = placement.OffsetYMillimetres;
                 if (frame.RouteAnchors != null
@@ -756,13 +753,17 @@ namespace UNCAD.Features.Unl
                     sceneOffsetY,
                     frame.RouteAnchors));
 
+                // 桥架关联只查一次场景线段集合，不再对每个桥架线性扫描整条路线。
+                HashSet<string> sceneSegmentIds = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+                if (frame.Scene != null)
+                    foreach (QuickLineIsometricSegment segment in frame.Scene.Segments)
+                        sceneSegmentIds.Add(segment.Id);
                 foreach (BridgePreviewInfo bridge in frame.Bridges)
                 {
                     string routeId = string.Empty;
-                    bool associated = frame.Scene != null
-                        && frame.Scene.Segments.Any(item =>
-                            string.Equals(item.Id, bridge.SourceHandle,
-                                StringComparison.OrdinalIgnoreCase));
+                    bool associated = bridge.SourceHandle != null
+                        && sceneSegmentIds.Contains(bridge.SourceHandle);
                     if (associated)
                         routeId = framePrefix + bridge.SourceHandle;
                     bridgeValues.Add(new Dictionary<string, object>
@@ -834,6 +835,8 @@ namespace UNCAD.Features.Unl
             public MachineRow Machine { get; set; }
             public List<QuickLineCadSegment> Labelled { get; set; }
                 = new List<QuickLineCadSegment>();
+            /// <summary>本帧唯一的端点图，场景/锚定/路线分组共用。</summary>
+            public QuickLineGraph Graph { get; set; }
             public QuickLineIsometricScene Scene { get; set; }
             public Point2d? DownstreamAnchor { get; set; }
             public Point2d? UpstreamAnchor { get; set; }
@@ -1057,6 +1060,7 @@ namespace UNCAD.Features.Unl
             ResolveRouteAnchorPositions(
                 IReadOnlyList<QuickLineCadSegment> labelled,
                 QuickLineIsometricScene scene,
+                QuickLineGraph graph,
                 Point2d? downstreamAnchor,
                 Point2d? upstreamAnchor,
                 ICollection<string> diagnostics)
@@ -1065,13 +1069,24 @@ namespace UNCAD.Features.Unl
                 StringComparer.OrdinalIgnoreCase);
             if (scene == null || labelled == null || labelled.Count == 0)
                 return result;
+            // 上下游两个锚点共用同一张端点图和同一份场景索引；旧实现每个锚点
+            // 都重建一张图并线性查找场景线段（每帧 2 次多余建图 + O(线段²)）。
+            graph = graph ?? BuildRouteGraph(labelled);
+            var segmentById = new Dictionary<string, QuickLineIsometricSegment>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (QuickLineIsometricSegment segment in scene.Segments)
+                if (!segmentById.ContainsKey(segment.Id)) segmentById[segment.Id] = segment;
+            var nodeById = new Dictionary<string, QuickLineSpatialPoint>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (QuickLineIsometricNode node in scene.Nodes)
+                if (!nodeById.ContainsKey(node.Id)) nodeById[node.Id] = node.Position;
 
             if (downstreamAnchor.HasValue)
             {
-                string nodeId = FindNearestRouteNode(labelled, scene,
+                string nodeId = FindNearestRouteNode(labelled, graph, segmentById,
                     downstreamAnchor.Value, diagnostics);
                 if (!string.IsNullOrWhiteSpace(nodeId)
-                    && TryFindNode(scene, nodeId, out QuickLineSpatialPoint point))
+                    && nodeById.TryGetValue(nodeId, out QuickLineSpatialPoint point))
                     result["downstream"] = point;
                 else
                     diagnostics?.Add("未找到靠近设备块的 U1L 端点，下游标记按轴位显示。");
@@ -1081,10 +1096,10 @@ namespace UNCAD.Features.Unl
 
             if (upstreamAnchor.HasValue)
             {
-                string nodeId = FindNearestRouteNode(labelled, scene,
+                string nodeId = FindNearestRouteNode(labelled, graph, segmentById,
                     upstreamAnchor.Value, diagnostics);
                 if (!string.IsNullOrWhiteSpace(nodeId)
-                    && TryFindNode(scene, nodeId, out QuickLineSpatialPoint point))
+                    && nodeById.TryGetValue(nodeId, out QuickLineSpatialPoint point))
                     result["upstream"] = point;
                 else
                     diagnostics?.Add("未找到靠近上游块的 U1L 端点，上游标记按轴位显示。");
@@ -1103,26 +1118,17 @@ namespace UNCAD.Features.Unl
 
         private static string FindNearestRouteNode(
             IReadOnlyList<QuickLineCadSegment> labelled,
-            QuickLineIsometricScene scene, Point2d anchor,
-            ICollection<string> diagnostics)
+            QuickLineGraph graph,
+            IReadOnlyDictionary<string, QuickLineIsometricSegment> segmentById,
+            Point2d anchor, ICollection<string> diagnostics)
         {
-            var coreSegments = labelled.Where(item => item != null)
-                .Select(item => new QuickLineSegment(
-                    item.LineId.Handle.ToString(),
-                    new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
-                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y)))
-                .ToList();
-            QuickLineGraph graph = QuickLineGraph.Build(coreSegments, 1.0);
             var terminalCandidates = new List<QuickLineRouteEndpointCandidate>();
             var allCandidates = new List<QuickLineRouteEndpointCandidate>();
             foreach (QuickLineCadSegment line in labelled)
             {
                 if (line == null) continue;
-                QuickLineIsometricSegment segment = scene.Segments
-                    .FirstOrDefault(item => string.Equals(item.Id,
-                        line.LineId.Handle.ToString(),
-                        StringComparison.OrdinalIgnoreCase));
-                if (segment == null) continue;
+                if (!segmentById.TryGetValue(line.LineId.Handle.ToString(),
+                        out QuickLineIsometricSegment segment)) continue;
                 var start = new QuickLineRouteEndpointCandidate(
                     segment.Id, segment.StartNodeId,
                     new QuickLinePoint(line.StartPoint.X, line.StartPoint.Y));
@@ -1144,20 +1150,6 @@ namespace UNCAD.Features.Unl
             }
             return QuickLineRouteAnchorPlanner.FindNearestNode(terminalCandidates,
                 new QuickLinePoint(anchor.X, anchor.Y));
-        }
-
-        private static bool TryFindNode(QuickLineIsometricScene scene,
-            string nodeId, out QuickLineSpatialPoint point)
-        {
-            QuickLineIsometricNode node = scene.Nodes.FirstOrDefault(item =>
-                string.Equals(item.Id, nodeId, StringComparison.OrdinalIgnoreCase));
-            if (node == null)
-            {
-                point = default(QuickLineSpatialPoint);
-                return false;
-            }
-            point = node.Position;
-            return true;
         }
 
     }

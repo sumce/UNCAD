@@ -13,19 +13,6 @@ namespace UNCAD.Features.About
         [CommandMethod(CommandIds.About)]
         public void UncadAbout() => Run();
 
-        public void UncadRibbon()
-        {
-            Guard(() =>
-            {
-                RibbonBuilder.Build();
-                var document = Autodesk.AutoCAD.ApplicationServices.Application
-                    .DocumentManager.MdiActiveDocument;
-                document?.SendStringToExecute("_.RIBBON ", true, false, false);
-                document?.Editor.WriteMessage(
-                    "\n[UNCAD] 已请求显示并重新注册 UNCAD Ribbon。");
-            });
-        }
-
         protected override void Execute(CadContext ctx)
         {
             using (var form = new AboutForm())

@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.9.3`.
+- Current release: `2.10.0`.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -21,8 +21,8 @@ shorter than the historical release notes.
 | Marking | `Features/Unq/`, `Features/Conduit/`, `Features/Unr/` | U1Q1/U1Q2/U1Q4, U1C, and U1R annotations |
 | Layout | `Features/XLayout/`, `Core/Dwg/` | XLAYOUT arrangement, duplicate markers, and Xmerge |
 | Statistics | `Features/Stat/`, `Features/Unadd/`, `Core/Stat/` | XSTS and legacy UNADD reports |
-| Export/Submit | `Features/DwgExport/`, `Features/Submit/` | U1DWG and U1S outputs |
-| PDF export | `Features/PdfExport/` | U1PDF: one coloured PDF per frame/circuit via the built-in plot engine |
+| Export/Submit | `Features/DwgExport/`, `Features/Submit/` | U1DWG and U1S outputs; `Core/Submission/OutputLayout` owns folder layout and write-occupancy precheck |
+| PDF export | `Features/PdfExport/` | U1PDF: one coloured PDF per frame/circuit via the built-in plot engine, written to the output folder (no upload) |
 | Host/Settings | `Infra/`, `Cad/`, `UI/` | registration, settings, licensing, dialogs, and AutoCAD adapters |
 
 ## Command Map
@@ -46,12 +46,13 @@ U1F/U1U
   -> plan BOQ rows -> user review/compare -> one transaction -> verify output
 
 U1SET / U1DATA refresh
-  selected local/remote workbook -> parse unified U_ rows -> SQLite snapshot
+  selected local/UNC workbook -> parse unified U_ rows -> SQLite snapshot
   (commands query this snapshot; they do not re-read the source workbook)
 
-AutoCAD startup (remote source only)
-  queue one background refresh -> keep prior snapshot live -> atomically replace
-  after download and parsing succeed
+U1F/U1U/U1S/U1DWG output gate
+  before any CAD/BOQ write, require every circuit of each selected machine to be
+  in the selection (UNC_FILL_REQUIRE_ALL_CIRCUITS) -> otherwise abort with the
+  missing circuit list and leave drawing + BOQ untouched
 
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels
@@ -69,7 +70,7 @@ U13D
 U1PDF
   select frames -> resolve machine/circuit identity (same resolver as U1F/U1U)
   -> per frame: plot the frame window with the built-in engine (DWG To PDF.pc3,
-  A3, colours preserved) -> verify %PDF- + %%EOF -> upload one PDF per circuit
+  A3, colours preserved) -> verify %PDF- + %%EOF -> write one PDF per circuit under <root>\<drawing>\PDF
   (the plot engine writes to the layout's own plot settings, then the user's
   settings are restored field by field; no third-party batch-plot plugin)
 
@@ -83,9 +84,17 @@ XLAYOUT/XSTS
   circuit row with strikethrough on `回路名称` is excluded.
 - Optional `U_批次` and `U_序号` values are retained in the workbook snapshot;
   XSTS presents one batch and one sequence field per machine.
-- Local workbook refresh is explicit in `U1SET` or `U1DATA`. A configured
-  HTTP/HTTPS workbook refreshes once in the background at CAD startup; drawing
-  commands never download it themselves.
+- Local/UNC workbook refresh is explicit in `U1SET` or `U1DATA`. HTTP/HTTPS
+  sources are rejected (2.10.0 removed cloud sync); drawing commands never touch
+  the network and nothing is uploaded — account/licence validation is the only
+  network feature.
+- Outputs: BOQ/DWG/PDF go to `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...`
+  (default root `Documents\UNCAD输出`; U1SET toggles the drawing/kind levels).
+  Occupied files are detected before the CAD transaction, never after.
+- Every command writes one local operation record (JSONL, `%APPDATA%\UNCAD\history`),
+  and file logs rotate per day; U1SET → 日志与记录 shows them.
+- Config sharing is Base64 JSON limited to shareable `ConfigKeys`; licence,
+  clock watermark, update-memory and recent-catalog keys are excluded.
 - Parsed machine rows and refresh metadata live in the per-user SQLite snapshot;
   the last successful snapshot remains live until a later refresh succeeds.
 - `frameinfo_json` stores machine ID, device/upstream identity, last update,

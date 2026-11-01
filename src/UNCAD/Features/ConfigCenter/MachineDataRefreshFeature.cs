@@ -1,6 +1,7 @@
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.Excel;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.ConfigCenter
@@ -17,6 +18,15 @@ namespace UNCAD.Features.ConfigCenter
         protected override void Execute(CadContext ctx)
         {
             string source = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+            // 2.10.0：远程机台数据源已移除，U1DATA 只刷新本地/共享文件夹工作簿。
+            if (MachineWorkbookSource.IsRemote(source))
+            {
+                ctx.Write("\n[U1DATA] 不再支持网络机台数据源（HTTP/HTTPS 下载已移除）："
+                    + source);
+                ctx.Write("\n[U1DATA] 请把机台 Excel 保存到本地或共享文件夹，"
+                    + "并在 U1SET 中重新选择后再刷新。");
+                return;
+            }
             MachineDataRefreshStartStatus status = MachineDataRefreshCoordinator.Default
                 .TryStartManualRefresh(source);
             if (status == MachineDataRefreshStartStatus.NoSource)

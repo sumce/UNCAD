@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -57,6 +58,8 @@ namespace UNCAD.Cad.QuickLine
     public static class QuickLineCadService
     {
         private const double Epsilon = 1e-9;
+        // 整图扫描是 U1L3D/U13D/U1LX 的固定成本；只在明显变慢时输出一行 [PERF]。
+        private const long PerfLogThresholdMilliseconds = 300;
         // ObjectClass lookups avoid opening entities that can never be scan
         // candidates.  IsDerivedFrom covers proxy-safe subclasses the same way
         // the "as" casts below would.
@@ -97,7 +100,9 @@ namespace UNCAD.Cad.QuickLine
 
             var lines = new List<LineSnapshot>();
             var labels = new List<LabelSnapshot>();
+            long scanStarted = Stopwatch.GetTimestamp();
             int order = 0;
+            int candidateCount = 0;
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 var space = tr.GetObject(ctx.CurrentSpaceId, OpenMode.ForRead, false)
@@ -116,6 +121,7 @@ namespace UNCAD.Cad.QuickLine
                     // ForRead dominates scan time on dense drawings, and only
                     // lines, labels and blocks can ever become scan candidates.
                     if (!IsCandidateClass(id)) continue;
+                    candidateCount++;
                     Entity entity;
                     try
                     {
@@ -330,6 +336,17 @@ namespace UNCAD.Cad.QuickLine
                     label?.Millimetres,
                     label?.HasCompletionMarker ?? false,
                     label?.SourceKind ?? string.Empty));
+            }
+            long scanMilliseconds = (long)((Stopwatch.GetTimestamp() - scanStarted)
+                * 1000.0 / Stopwatch.Frequency);
+            if (scanMilliseconds >= PerfLogThresholdMilliseconds)
+            {
+                Log.Info("[PERF] U1L Scan " + scanMilliseconds + "ms"
+                    + " entities=" + order
+                    + " candidates=" + candidateCount
+                    + " lines=" + lines.Count
+                    + " labels=" + labels.Count
+                    + " segments=" + result.Count);
             }
             return result;
         }

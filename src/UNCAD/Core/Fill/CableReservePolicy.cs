@@ -17,14 +17,16 @@ namespace UNCAD.Core.Fill
         public const double DefaultOwnerReserveMillimeters = 3000d;
 
         /// <summary>按 U_上游类型返回盘内/箱内预留（毫米）；未知类型返回 0。</summary>
-        public static double PanelReserveMillimeters(string next)
+        public static double PanelReserveMillimeters(string next,
+            CableReserveSettings settings = null)
         {
             string value = Normalize(next);
             if (value.Length == 0) return 0d;
-            if (IsILine(value)) return ILinePanelReserveMillimeters;
+            CableReserveSettings reserves = settings ?? CableReserveSettings.Default;
+            if (IsILine(value)) return reserves.ILinePanelMillimeters;
             if (value.IndexOf("插座盘", StringComparison.Ordinal) >= 0)
-                return SocketPanelReserveMillimeters;
-            if (IsBusbar(value)) return BusbarConnectorReserveMillimeters;
+                return reserves.SocketPanelMillimeters;
+            if (IsBusbar(value)) return reserves.BusbarConnectorMillimeters;
             return 0d;
         }
 
@@ -54,10 +56,11 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public static CableReserveInfo Apply(CableStatResult statistics, string next,
             double deviceReserveMillimeters,
-            double ownerReserveMillimeters = DefaultOwnerReserveMillimeters)
+            double ownerReserveMillimeters = DefaultOwnerReserveMillimeters,
+            CableReserveSettings settings = null)
         {
             double measured = statistics == null ? 0d : statistics.CableSum;
-            double panel = PanelReserveMillimeters(next);
+            double panel = PanelReserveMillimeters(next, settings);
             double device = ClampReserve(deviceReserveMillimeters);
             double owner = ClampReserve(ownerReserveMillimeters);
             var reserve = new CableReserveInfo

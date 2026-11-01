@@ -8,8 +8,8 @@ using UNCAD.Infra;
 namespace UNCAD.Features.ConfigCenter
 {
     /// <summary>
-    /// 配置中心 U1SET：所有功能的配置集中在一个页面（页签：线段/桥架/拱桥/统计）。
-    /// 各功能 SET 命令通过 Show(tabIndex) 打开对应页签。
+    /// 配置中心 U1SET：所有功能的配置集中在一个页面（页签：线段/桥架/拱桥/统计/输出与分享/日志与记录）。
+    /// 旧的“功能命令打开指定页签”入口（Show(0/1/2)）已废弃，统一只通过 U1SET 打开。
     /// </summary>
     [Feature("settings", "配置中心",
         Commands = CommandIds.Settings,
@@ -19,14 +19,14 @@ namespace UNCAD.Features.ConfigCenter
         [CommandMethod(CommandIds.Settings)]
         public void UncadSet() => Run();
 
-        protected override void Execute(CadContext ctx) => Show(0);
+        protected override void Execute(CadContext ctx) => Show();
 
         /// <summary>打开配置中心；返回是否点了确定（已保存）。</summary>
-        internal static bool Show(int tabIndex)
+        internal static bool Show()
         {
             try
             {
-                using (var dlg = new UnifiedSettingsForm(tabIndex))
+                using (var dlg = new UnifiedSettingsForm(0))
                 {
                     if (Application.ShowModalDialog(dlg) !=
                         System.Windows.Forms.DialogResult.OK)

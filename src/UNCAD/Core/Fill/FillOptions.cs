@@ -104,7 +104,7 @@ namespace UNCAD.Core.Fill
             FillPlanningOptions planning, FillAutoFillOptions autoFill,
             double downstreamSocketAmps, double downstreamPanelAmps,
             bool downstreamSocketEnabled, bool downstreamPanelEnabled,
-            double cableOwnerReserveMillimeters)
+            double cableOwnerReserveMillimeters, CableReserveSettings cableReserve)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -119,6 +119,7 @@ namespace UNCAD.Core.Fill
             DownstreamSocketEnabled = downstreamSocketEnabled;
             DownstreamPanelEnabled = downstreamPanelEnabled;
             CableOwnerReserveMillimeters = cableOwnerReserveMillimeters;
+            CableReserve = cableReserve ?? CableReserveSettings.Default;
         }
 
         public string MachineWorkbookPath { get; }
@@ -158,6 +159,9 @@ namespace UNCAD.Core.Fill
         /// <summary>业主统一预留（毫米）：所有回路电缆总长默认加 3000，U1SET 可改。</summary>
         public double CableOwnerReserveMillimeters { get; }
 
+        /// <summary>盘内/箱内预留（I-Line 电盘 / 插座盘 / 母线插接箱），U1SET 可改。</summary>
+        public CableReserveSettings CableReserve { get; }
+
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             string bridgeInfo, FillPlanningOptions planning,
@@ -166,7 +170,8 @@ namespace UNCAD.Core.Fill
             double downstreamPanelAmps = DefaultDownstreamPanelAmps,
             bool downstreamSocketEnabled = DefaultDownstreamEnabled,
             bool downstreamPanelEnabled = DefaultDownstreamEnabled,
-            double cableOwnerReserveMillimeters = DefaultCableOwnerReserveMillimeters)
+            double cableOwnerReserveMillimeters = DefaultCableOwnerReserveMillimeters,
+            CableReserveSettings cableReserve = null)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -183,7 +188,8 @@ namespace UNCAD.Core.Fill
                 PositiveWithin(downstreamPanelAmps, MaximumDownstreamPanelAmps,
                     DefaultDownstreamPanelAmps),
                 downstreamSocketEnabled, downstreamPanelEnabled,
-                ReserveWithin(cableOwnerReserveMillimeters));
+                ReserveWithin(cableOwnerReserveMillimeters),
+                cableReserve ?? CableReserveSettings.Default);
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)

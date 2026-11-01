@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The current 2.9.3 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook in the background. Older command references below are historical release notes.
+The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured local/UNC machine workbook; 2.10.0 removed all cloud uploads and remote workbook sources (account validation stays). Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +10,13 @@ The current 2.9.3 build has 35 commands (including `U1PDF` and the online-login 
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v2.10.0
+
+- 移除：**全部云端上传**（回路/等轴测/DWG/PDF/台账）与**远程机台数据源**（只支持本地/UNC 文件），仅保留账户与授权验证；U1DATA 不再联网。
+- 新增：**整机回路校验**——U1F/U1U/U1S/U1DWG 生成 BOQ/DWG 前要求该机台所有回路都已框选，缺回路即中止且不修改图纸/BOQ（U1SET 可关闭）；**配置分享码**（Base64，可导出/预览/导入，不含授权键）；**操作记录**与按天滚动日志（U1SET 可查看/配置）。
+- 变更：输出目录改为 `<输出根>\<图纸>\BOQ|DWG|PDF\<机台>`（默认 `我的文档\UNCAD输出`），写盘前检查文件占用，PDF 按机台+回路命名去重；盘内预留三项（I-Line/插座盘/插接箱）与输出结构可在 U1SET 配置。
+- UI：统一自建组件库与商务风格，U1SET 重构为 11 页；批量 U1F/U1U 不再构建等轴测上传数据，速度与内存显著改善。
 
 ## v2.9.3
 

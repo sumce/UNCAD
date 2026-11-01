@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Features.Submit;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.DwgExport
@@ -54,43 +55,35 @@ namespace UNCAD.Features.DwgExport
                 frames = DwgFrameExportService.ReadFrames(ctx, transaction, regions.Groups);
                 transaction.Commit();
             }
-            DwgExportResult result = DwgFrameExportService.Export(ctx, frames);
+            // 2.10.0 整机回路校验：一个机台的所有回路都必须选中，否则不生成 DWG（写盘之前）。
+            if (!CircuitCoverageGuard.Ensure(ctx, CommandIds.DwgExport,
+                frames.Select(frame => new KeyValuePair<string, string>(
+                    frame.MachineId, frame.DeviceName))))
+                return;
+
+            DwgExportResult result;
+            try
+            {
+                // 图纸名 → <root>\<图纸>\DWG\<机台>\<机台>.dwg；占用预检在写盘之前。
+                result = DwgFrameExportService.Export(ctx, frames,
+                    AutomaticSubmissionService.CurrentDrawingName(ctx));
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error("U1DWG 导出失败", ex);
+                ctx.Write("\n[U1DWG] 导出已中止，未生成文件：\n[U1DWG]   " + ex.Message);
+                return;
+            }
+            // 操作记录：登记机台与 DWG 输出文件（失败只写日志，不影响导出结果）。
+            foreach (DwgExportMachine machine in result.Machines)
+            {
+                ctx.Operation?.Machine(machine.MachineId);
+                foreach (string circuit in machine.Circuits)
+                    ctx.Operation?.Machine(machine.MachineId, circuit);
+                ctx.Operation?.Output("DWG", machine.FilePath);
+            }
             ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框，"
                 + result.MachineCount + " 个机台文件：" + result.FilePath);
-            UploadExport(result);
-            if (result.MachineCount > 0)
-                ctx.Write("\n[U1DWG] 已排队上传 " + result.MachineCount
-                    + " 个机台的 DWG 与回路登记（后台执行，失败不影响图纸）。");
-        }
-
-        /// <summary>
-        /// 导出成功后把数据交给后台线程上传：先登记"该机台覆盖了哪些回路"，
-        /// 再上传该机台的 DWG 本体。**绝不能阻塞 CAD 主线程，也绝不能因上传失败回滚图纸**：
-        /// 失败只在日志与命令行提示（由 Bootstrap 的 Idle 循环输出），可重新执行命令重试。
-        /// </summary>
-        private static void UploadExport(DwgExportResult result)
-        {
-            List<DwgExportMachine> machines = result?.Machines;
-            if (machines == null || machines.Count == 0) return;
-            var captured = new List<DwgExportMachine>(machines);
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                foreach (DwgExportMachine machine in captured)
-                {
-                    try
-                    {
-                        ClientSubmissionUploader.Default.ReportDwgExport(machine.MachineId,
-                            machine.Circuits);
-                        ClientSubmissionUploader.Default.UploadDwgFile(machine.MachineId,
-                            machine.FilePath, machine.Circuits);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        // 上传链路的任何异常都不得影响已完成的导出结果。
-                        Log.Warn("U1DWG 上传异常（已忽略）: " + ex.Message);
-                    }
-                }
-            });
         }
     }
 }

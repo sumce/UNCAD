@@ -7,7 +7,7 @@ namespace UNCAD.Features.Fill
     {
         /// <summary>
         /// 该选集所属的图框区域。批量 U1U / 单框 U1U 在分区阶段已经算过，
-        /// 上传等轴测场景时直接复用，避免再调用一次全空间扫描的 CollectForLayout。
+        /// 这里直接复用，避免再调用一次全空间扫描的 CollectForLayout。
         /// </summary>
         public FrameRegionGroup Region { get; set; }
 

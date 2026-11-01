@@ -27,29 +27,79 @@ namespace UNCAD.Features.Submit
     /// </summary>
     internal static class AutomaticSubmissionService
     {
-        public static string PrepareTargetPath(IEnumerable<string> machineIds = null)
+        /// <summary>
+        /// 预热并校验 BOQ 输出目录（在 CAD 事务/写盘之前调用）。
+        ///
+        /// 返回的是 BOQ 写盘根目录：默认 <c>&lt;输出根&gt;\&lt;图纸&gt;\BOQ</c>
+        /// （见 <see cref="OutputLayout"/>）；调用方把它继续传给
+        /// <see cref="TargetPaths"/> / <see cref="Write(CadContext, string, IEnumerable{ObjectId[]})"/>，
+        /// 得到 <c>&lt;输出根&gt;\&lt;图纸&gt;\BOQ\&lt;机台&gt;\[BOQ]&lt;机台&gt;.xlsx</c>。
+        ///
+        /// 输出根为空时使用默认 <c>&lt;我的文档&gt;\UNCAD输出</c> 并写回
+        /// <see cref="ConfigKeys.SubmitFolder"/>，保证下次 U1S/U1F/U1U 与 U1DWG/U1PDF 落到同一处。
+        /// </summary>
+        public static string PrepareTargetPath(IEnumerable<string> machineIds = null,
+            string drawingName = null)
         {
             string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            string folder = configured;
-            if (folder.Length == 0)
-                folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (folder.Length == 0)
-                throw new DirectoryNotFoundException("无法确定 BOQ 输出文件夹，请先在 U1SET 中设置。");
+            bool outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
+            bool separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
+            string root = OutputLayout.NormalizeRoot(configured);
+            try
+            {
+                Directory.CreateDirectory(root);
+            }
+            catch (System.Exception ex)
+            {
+                throw new DirectoryNotFoundException(
+                    "无法创建输出文件夹：" + root + "（" + ex.Message + "）", ex);
+            }
+            if (!Directory.Exists(root))
+                throw new DirectoryNotFoundException("输出文件夹不存在：" + root);
+            if (!string.Equals(configured, root, StringComparison.OrdinalIgnoreCase))
+                Settings.Set(ConfigKeys.SubmitFolder, root);
 
-            Directory.CreateDirectory(folder);
-            if (!Directory.Exists(folder))
-                throw new DirectoryNotFoundException("BOQ 输出文件夹不存在: " + folder);
-            if (!string.Equals(configured, folder, StringComparison.OrdinalIgnoreCase))
-                Settings.Set(ConfigKeys.SubmitFolder, folder);
+            string boqRoot = OutputLayout.ResolveBoqDirectory(root, drawingName,
+                outputByDrawing, separateKinds);
+            try
+            {
+                Directory.CreateDirectory(boqRoot);
+            }
+            catch (System.Exception ex)
+            {
+                throw new DirectoryNotFoundException(
+                    "无法创建 BOQ 输出文件夹：" + boqRoot + "（" + ex.Message + "）", ex);
+            }
+            if (!Directory.Exists(boqRoot))
+                throw new DirectoryNotFoundException("BOQ 输出文件夹不存在：" + boqRoot);
+
             string template = null;
+            var targets = new List<string>();
             foreach (string machineId in machineIds ?? Enumerable.Empty<string>())
             {
-                string target = BoqWorkbookWriter.BuildTargetPath(folder, machineId);
+                string target = BoqWorkbookWriter.ComposeTargetPath(boqRoot, machineId);
+                targets.Add(target);
                 if (!File.Exists(target) && template == null)
                     template = BoqWorkbookWriter.ResolveTemplatePath();
                 BoqWorkbookWriter.ValidateTargetForUpdate(target, template);
             }
-            return folder;
+            // 写占用预检：BOQ 文件可能正被 Excel 打开。必须在 CAD 事务之前中止并给中文提示。
+            OutputLayout.ValidateNotLocked(targets);
+            return boqRoot;
+        }
+
+        /// <summary>当前图纸名（不含扩展名）；未保存图纸退回 AutoCAD 的默认名，空名会被布局层清洗为"未命名图纸"。</summary>
+        public static string CurrentDrawingName(CadContext ctx)
+        {
+            if (ctx == null) return "";
+            try
+            {
+                return Path.GetFileNameWithoutExtension(ctx.Doc?.Name ?? "");
+            }
+            catch (System.Exception)
+            {
+                return "";
+            }
         }
 
         public static void ValidateIdentityKeys(
@@ -180,6 +230,8 @@ namespace UNCAD.Features.Submit
                         && (machineDone % 50 == 0 || machineDone == machineGroups.Count))
                         ReportBoqProgress(ctx, machineDone, machineGroups.Count);
                     string target = BoqWorkbookWriter.BuildTargetPath(outputRoot, machineGroup.Key);
+                    // 长事务之后重新预检一次：用户可能在 CAD 编辑期间用 Excel 打开了目标文件。
+                    OutputLayout.ValidateNotLocked(new[] { target });
                     bool existed = File.Exists(target);
                     var progress = new BoqWorkbookWriteProgress();
                     batch?.BeginWrite(target);

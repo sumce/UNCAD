@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -9,27 +9,30 @@ using UNCAD.Cad;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Submission;
 using UNCAD.Features.Fill;
+using UNCAD.Features.Submit;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.PdfExport
 {
     /// <summary>
-    /// U1PDF：框选图框 → **每个图框（= 一个回路）出一份彩色 PDF** → 上传到服务端，
-    /// 供回路详情页在线预览。
+    /// U1PDF：框选图框 → **每个图框（= 一个回路）出一份彩色 PDF**，
+    /// 按输出布局落到 `<输出根>\<图纸>\PDF\<机台>_<回路>.pdf`（同批同名冲突加 -2/-3），
+    /// 写盘前做占用预检。
     ///
     /// 与 U1DWG 的粒度差异：**DWG 按机台**（一份 DWG 覆盖多个回路），
-    /// **PDF 按回路**（一个图框一份，上传时 circuits 必须且只能一个）。
+    /// **PDF 按回路**（一个图框一份）。
     ///
     /// 回路名的推导与 U1F/U1U 上报清单时**完全同一套**
     /// （`FrameIdentityReader` 读图框持久身份 + `ExistingFillIdentityResolver.MatchMachine`），
     /// 避免"PDF 挂到错误的回路"。
     ///
     /// 出图在主线程逐份执行并打印进度（批量较慢，必须让用户看到进度）；
-    /// **上传在后台排队**，失败只记日志与命令行提示，绝不影响图纸与出图结果。
+    /// 失败的份只跳过该份并在命令行给出中文原因，绝不影响图纸与其余份。
     /// </summary>
     [Feature("pdf-export", "PDF 出图", Commands = CommandIds.PdfExportFeatureCommands,
-        Description = "框选图框，按回路导出彩色 PDF 并上传到服务端供在线预览")]
+        Description = "框选图框，按回路导出彩色 PDF 到输出目录")]
     public sealed class PdfExportFeature : CommandBase
     {
         [CommandMethod(CommandIds.PdfExport, CommandFlags.UsePickSet)]
@@ -79,35 +82,104 @@ namespace UNCAD.Features.PdfExport
             foreach (string problem in resolveProblems)
                 ctx.Write("\n[U1PDF] 已跳过：" + problem);
 
-            string directory = Path.Combine(Path.GetTempPath(), "UNCAD",
-                "pdf-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(directory);
+            // 输出目录：统一走 OutputLayout（<root>\<图纸>\PDF），不再使用 %TEMP%。
+            if (!TryPrepareOutputDirectory(ctx, out string root, out string drawingName,
+                out bool outputByDrawing, out bool separateKinds, out string outputDirectory,
+                out string directoryError))
+            {
+                ctx.Write("\n[U1PDF] " + directoryError);
+                return;
+            }
 
-            // 渲染是主线程同步执行（要逐份进度）；上传排队到后台。
-            var queued = new List<KeyValuePair<PdfExportTarget, string>>();
+            // 预先分配每份 PDF 的文件名与最终路径：同批同名冲突加 -2/-3，
+            // 这样出图前就能做"文件被占用"预检，也不会让后出的图覆盖前一份。
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (PdfExportTarget target in targets)
+            {
+                string fileName = PdfExportNaming.AllocateFileName(target.MachineId,
+                    target.CircuitName, usedNames);
+                target.FilePath = OutputLayout.ComposePdfPath(root, drawingName, fileName,
+                    outputByDrawing, separateKinds);
+            }
+            try
+            {
+                OutputLayout.ValidateNotLocked(targets.Select(target => target.FilePath));
+            }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[U1PDF] PDF 输出文件被占用或被锁定，已中止（未出图）：");
+                ctx.Write("\n[U1PDF]   " + ex.Message);
+                return;
+            }
+
+            // 渲染在主线程同步逐份执行并打印进度；PDF 直接写最终输出目录，不做任何上传。
+            var rendered = new List<PdfExportTarget>();
             var coordinator = new PdfExportCoordinator(
-                target => regionsByHandle.TryGetValue(target.FrameHandle, out FrameRegionGroup region)
-                    ? PdfExportService.Render(ctx, region, target.CircuitName, directory)
-                    : PdfRenderResult.Fail("找不到图框 " + target.FrameHandle + "。"),
-                (target, file) => queued.Add(
-                    new KeyValuePair<PdfExportTarget, string>(target, file)),
+                target =>
+                {
+                    PdfRenderResult result = regionsByHandle.TryGetValue(target.FrameHandle,
+                        out FrameRegionGroup region)
+                        ? PdfExportService.Render(ctx, region, target.CircuitName, target.FilePath)
+                        : PdfRenderResult.Fail("找不到图框 " + target.FrameHandle + "。");
+                    if (result.Ok) rendered.Add(target);
+                    return result;
+                },
                 message => ctx.Write("\n[U1PDF] " + message));
 
             PdfExportRun run = coordinator.Run(targets);
-            if (queued.Count > 0) QueueUploads(queued, directory);
-            // 一份都没排上队（全部出图失败或被跳过）时也要清理临时目录，
-            // 否则每失败一次就在 %TEMP% 里留下一个 pdf-<guid> 目录。
-            else TryDeleteDirectory(directory);
+            // 操作记录：只登记真正出图成功的回路与 PDF 文件。
+            foreach (PdfExportTarget target in rendered)
+            {
+                ctx.Operation?.Machine(target.MachineId, target.CircuitName);
+                ctx.Operation?.Output("PDF", target.FilePath);
+            }
             ctx.Write("\n[U1PDF] " + run.BuildSummary());
+            ctx.Write("\n[U1PDF] 输出目录：" + outputDirectory);
             if (run.Failed > 0 && run.FirstFailureDetails.Count > 0)
             {
                 ctx.Write("\n[U1PDF] 首个失败诊断（" + run.FirstFailureLabel + "，详见日志）：");
                 foreach (string line in run.FirstFailureDetails)
                     ctx.Write("\n[U1PDF]   " + line);
             }
-            if (queued.Count > 0)
-                ctx.Write("\n[U1PDF] 已排队上传 " + queued.Count
-                    + " 份 PDF（后台执行，失败不影响图纸）。");
+        }
+
+        /// <summary>
+        /// 解析 PDF 输出目录（&lt;配置根&gt;\&lt;图纸&gt;\PDF），空根时默认
+        /// &lt;我的文档&gt;\UNCAD输出 并写回 UNC_SUBMIT_FOLDER。失败返回中文原因。
+        /// </summary>
+        private static bool TryPrepareOutputDirectory(CadContext ctx, out string root,
+            out string drawingName, out bool outputByDrawing, out bool separateKinds,
+            out string outputDirectory, out string error)
+        {
+            root = "";
+            drawingName = AutomaticSubmissionService.CurrentDrawingName(ctx);
+            outputDirectory = "";
+            error = "";
+            outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
+            separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
+            try
+            {
+                string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
+                root = OutputLayout.NormalizeRoot(configured);
+                Directory.CreateDirectory(root);
+                if (!Directory.Exists(root))
+                    throw new DirectoryNotFoundException("输出文件夹不存在：" + root);
+                if (!string.Equals(configured, root, StringComparison.OrdinalIgnoreCase))
+                    Settings.Set(ConfigKeys.SubmitFolder, root);
+                outputDirectory = OutputLayout.ResolvePdfDirectory(root, drawingName,
+                    outputByDrawing, separateKinds);
+                Directory.CreateDirectory(outputDirectory);
+                if (!Directory.Exists(outputDirectory))
+                    throw new DirectoryNotFoundException(
+                        "PDF 输出文件夹不存在：" + outputDirectory);
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error("U1PDF 准备输出目录失败", ex);
+                error = "无法准备 PDF 输出目录：" + ex.Message;
+                return false;
+            }
         }
 
         /// <summary>
@@ -175,44 +247,6 @@ namespace UNCAD.Features.PdfExport
                 return false;
             }
             return true;
-        }
-
-        /// <summary>
-        /// 后台逐份上传 PDF（kind=pdf，circuits 恰好一个）：失败只记日志+命令行提示
-        /// （由 Bootstrap 的 Idle 循环输出），随后删除临时文件与目录。
-        /// </summary>
-        /// <summary>删除本次出图的临时目录；失败只记日志（残留目录不影响出图结果）。</summary>
-        private static void TryDeleteDirectory(string directory)
-        {
-            try { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
-            catch (System.Exception ex) { Log.Warn("删除 PDF 临时目录失败: " + ex.Message); }
-        }
-
-        private static void QueueUploads(List<KeyValuePair<PdfExportTarget, string>> queued,
-            string directory)
-        {
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                foreach (KeyValuePair<PdfExportTarget, string> item in queued)
-                {
-                    try
-                    {
-                        ClientSubmissionUploader.Default.UploadPdf(item.Key.MachineId,
-                            item.Value, item.Key.CircuitName);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        // 上传链路的任何异常都不得影响出图结果。
-                        Log.Warn("U1PDF 上传异常（已忽略）: " + ex.Message);
-                    }
-                    finally
-                    {
-                        try { if (File.Exists(item.Value)) File.Delete(item.Value); }
-                        catch (System.Exception ex) { Log.Warn("删除临时 PDF 失败: " + ex.Message); }
-                    }
-                }
-                TryDeleteDirectory(directory);
-            });
         }
     }
 }

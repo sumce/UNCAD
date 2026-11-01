@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path d="M3 4h18v16H3z"/>
+  <path d="M3 9h18"/>
+  <path d="M9 9v11"/>
+  <path d="M15 9v11"/>
+</svg>

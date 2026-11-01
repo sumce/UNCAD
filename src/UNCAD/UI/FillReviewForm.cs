@@ -21,20 +21,11 @@ namespace UNCAD.UI
         private readonly Button _resolveMissing;
         private readonly Button _removeItem;
         private readonly ToolTip _toolTips = new ToolTip();
-        private readonly Label _catalogWarning = new Label
-        {
-            Dock = DockStyle.Top,
-            AutoSize = false,
-            Height = 54,
-            AutoEllipsis = true,
-            UseMnemonic = false,
-            Padding = new Padding(
-                8, 7,
-                8, 5),
-            ForeColor = UiTheme.WarningFg,
-            BackColor = UiTheme.WarningBg,
-            Visible = false
-        };
+        // 未匹配型号提示：统一用警告横幅（底色 + 左侧色条 + 自动换行），
+        // 不再用固定高度 Label，避免高 DPI 下文字被裁掉。
+        private readonly UiBanner _catalogWarning =
+            UiKit.Banner(UiTone.Warning, "");
+        private readonly UiProgress _progress = UiKit.Progress();
         private readonly BoqCatalogIndex _catalog;
         private readonly FillPlanningOptions _planningOptions;
         private readonly bool _lockIdentity;
@@ -92,15 +83,9 @@ namespace UNCAD.UI
             _panel.Items.AddRange(new object[] { "", "I-Line盘", "母线插接口", "插座盘" });
             TabPage basicTab = BuildBasicTab();
 
+            _catalogWarning.Visible = false;
             _grid = BuildGrid();
-            var toolbar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                Height = 38,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                Padding = new Padding(4, 4, 4, 2)
-            };
+            var toolbar = UiKit.Toolbar();
             Button addManual = UiTheme.Button("从固定清单添加");
             _replaceItem = UiTheme.Button("替换为固定清单");
             _resolveMissing = UiTheme.Button("选择未匹配项");
@@ -116,14 +101,21 @@ namespace UNCAD.UI
             selectAll.Click += (sender, args) => SetAll(true);
             clearAll.Click += (sender, args) => SetAll(false);
             restore.Click += (sender, args) => RestoreDefaults();
-            toolbar.Controls.Add(addManual);
-            toolbar.Controls.Add(_replaceItem);
-            toolbar.Controls.Add(_resolveMissing);
-            toolbar.Controls.Add(_removeItem);
-            toolbar.Controls.Add(selectAll);
-            toolbar.Controls.Add(clearAll);
-            toolbar.Controls.Add(restore);
-            toolbar.Controls.Add(_count);
+            toolbar.AddAction(addManual);
+            toolbar.AddAction(_replaceItem);
+            toolbar.AddAction(_resolveMissing);
+            toolbar.AddAction(_removeItem);
+            toolbar.AddSeparator();
+            toolbar.AddAction(selectAll);
+            toolbar.AddAction(clearAll);
+            toolbar.AddAction(restore);
+            toolbar.AddAction(_count);
+            // 进度条：已勾选行数 / 总行数，让“将生成多少”不止是文字。
+            _progress.Width = UiTheme.NotAutoScaled(160);
+            _progress.Minimum = 0;
+            _progress.Maximum = 1;
+            _progress.Margin = new Padding(UiTheme.SpaceM, 14, 0, 0);
+            toolbar.AddAction(_progress);
 
             var listTab = new TabPage("清单选择") { Padding = new Padding(4) };
             listTab.Controls.Add(_grid);
@@ -143,6 +135,8 @@ namespace UNCAD.UI
 
             Controls.Add(_tabs);
             Controls.Add(buttons);
+            Controls.Add(UiKit.PageHeader("清单确认",
+                "核对机台/回路身份与清单行；未匹配型号必须显式替换或删除后再确认。"));
             AcceptButton = ok;
             CancelButton = cancel;
 
@@ -171,48 +165,125 @@ namespace UNCAD.UI
 
         public FillReviewData Data { get; private set; }
 
+        /// <summary>基础信息：按“身份 / 电缆与预留 / 软管与轴位”三张卡片组织。</summary>
         private TabPage BuildBasicTab()
         {
-            var layout = new TableLayoutPanel
+            var page = new TabPage("基础信息")
+            {
+                Padding = new Padding(0),
+                BackColor = UiTheme.WindowBg,
+                UseVisualStyleBackColor = false
+            };
+            var scroll = new Panel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 9,
-                Padding = new Padding(16, 16, 16, 8),
-                AutoScroll = true
+                AutoScroll = true,
+                BackColor = UiTheme.WindowBg
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            AddPair(layout, 0, "机台ID:", _machine, "区域:", _region);
-            AddPair(layout, 1, "设备 / 回路:", _circuit, "盘柜类型:", _panel);
-            AddPair(layout, 2, "FR:", _fr, "项目序号:", _seq);
-            AddPair(layout, 3, "设备原电缆:", _originalCable, "清单电缆:", _cable);
-            AddPair(layout, 4, "实测电缆 (m):", _measuredCable, "电缆长度 (m):", _cableMeters);
-            AddPair(layout, 5, "设备内预留 (mm):", _deviceReserve, "盘内/箱内 (mm):", _panelReserve);
-            AddPair(layout, 6, "软管直径:", _diameter, "", new Label());
-            AddPair(layout, 7, "下游轴位:", _downstream, "上游轴位:", _upstream);
-            Label detailLabel = LabelFor("配电详情:");
-            detailLabel.TextAlign = ContentAlignment.TopRight;
-            detailLabel.Padding = new Padding(0, 6, 0, 0);
-            layout.Controls.Add(detailLabel, 0, 8);
-            layout.Controls.Add(_detail, 1, 8);
-            layout.SetColumnSpan(_detail, 3);
-            for (int row = 0; row < 8; row++)
-                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            var page = new TabPage("基础信息") { Padding = new Padding(4) };
-            page.Controls.Add(layout);
-            page.Controls.Add(new Label
+            var stack = new TableLayoutPanel
             {
-                Text = "来源：电缆型号决定软管直径；Ruanguan 决定软管长度；Device_Build20260716 动态状态决定是否输出插座。",
                 Dock = DockStyle.Top,
-                Height = 30,
-                ForeColor = UiTheme.Accent,
-                Padding = new Padding(14, 5, 14, 3)
-            });
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = UiTheme.WindowBg,
+                Padding = new Padding(UiTheme.SpaceXL, UiTheme.SpaceL,
+                    UiTheme.SpaceXL, UiTheme.SpaceXL),
+                Margin = new Padding(0)
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            stack.Controls.Add(UiKit.Banner(UiTone.Info,
+                "来源：电缆型号决定软管直径；Ruanguan 决定软管长度；"
+                + "Device_Build20260716 动态状态决定是否输出插座。"), 0, 0);
+            stack.Controls.Add(UiKit.Section("机台与回路")
+                .AddBodyTop(PairGrid(
+                    "机台ID", _machine, "区域", _region,
+                    "设备 / 回路", _circuit, "盘柜类型", _panel,
+                    "FR", _fr, "项目序号", _seq)), 0, 1);
+            stack.Controls.Add(UiKit.Section("电缆与预留",
+                "电缆总长 = 实测 + 盘内/箱内预留 + 设备内预留（毫米）；只读值是图框/统计结果。")
+                .AddBodyTop(PairGrid(
+                    "设备原电缆", _originalCable, "清单电缆", _cable,
+                    "实测电缆 (m)", _measuredCable, "电缆长度 (m)", _cableMeters,
+                    "设备内预留 (mm)", _deviceReserve, "盘内/箱内 (mm)", _panelReserve)), 0, 2);
+            stack.Controls.Add(UiKit.Section("软管与轴位")
+                .AddBodyTop(PairGrid(
+                    "软管直径", _diameter, "下游轴位", _downstream,
+                    "", new Label(), "上游轴位", _upstream))
+                .AddBodyTop(BuildDetailRow()), 0, 3);
+            scroll.Controls.Add(stack);
+            page.Controls.Add(scroll);
             return page;
+        }
+
+        private Control BuildDetailRow()
+        {
+            _detail.Dock = DockStyle.Fill;
+            _detail.Height = 84;
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+            Label label = LabelFor("配电详情");
+            label.TextAlign = ContentAlignment.TopRight;
+            label.Padding = new Padding(0, 6, 0, 0);
+            layout.Controls.Add(label, 0, 0);
+            layout.Controls.Add(_detail, 1, 0);
+            return layout;
+        }
+
+        /// <summary>两列“标签 + 输入”网格：标签自适应，输入按百分比拉伸。</summary>
+        private static TableLayoutPanel PairGrid(params object[] pairs)
+        {
+            var grid = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 4,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0)
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            for (int index = 0; index + 3 < pairs.Length; index += 4)
+            {
+                int row = index / 4;
+                grid.RowCount = row + 1;
+                grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                string rightLabel = Convert.ToString(pairs[index + 2]);
+                grid.Controls.Add(LabelFor(Convert.ToString(pairs[index])), 0, row);
+                grid.Controls.Add(PrepareEditor((Control)pairs[index + 1],
+                    new Padding(0, 4, UiTheme.SpaceXL, 4)), 1, row);
+                if (rightLabel.Length > 0)
+                    grid.Controls.Add(LabelFor(rightLabel), 2, row);
+                grid.Controls.Add(PrepareEditor((Control)pairs[index + 3],
+                    new Padding(0, 4, 0, 4)), 3, row);
+            }
+            return grid;
+        }
+
+        private static Control PrepareEditor(Control control, Padding margin)
+        {
+            if (control == null) return new Label();
+            control.Margin = margin;
+            if (control is TextBox || control is TableLayoutPanel || control is Panel)
+                control.Dock = DockStyle.Fill;
+            else
+                control.Anchor = AnchorStyles.Left;
+            return control;
         }
 
         private static DataGridView BuildGrid()
@@ -662,6 +733,11 @@ namespace UNCAD.UI
         {
             int selected = Data.Items.Count(item => item.Included);
             _count.Text = "将生成 " + selected + " / " + Data.Items.Count + " 行";
+            _count.ForeColor = selected == Data.Items.Count
+                ? UiTheme.SuccessFg : UiTheme.TextSecondary;
+            _progress.Maximum = Math.Max(1, Data.Items.Count);
+            _progress.Value = Math.Min(selected, _progress.Maximum);
+            _progress.Tone = selected == Data.Items.Count ? UiTone.Success : UiTone.Info;
         }
 
         private static bool ValidQuantity(string value)
@@ -695,13 +771,5 @@ namespace UNCAD.UI
             TextAlign = ContentAlignment.MiddleRight
         };
 
-        private static void AddPair(TableLayoutPanel layout, int row, string leftLabel,
-            Control left, string rightLabel, Control right)
-        {
-            layout.Controls.Add(LabelFor(leftLabel), 0, row);
-            layout.Controls.Add(left, 1, row);
-            layout.Controls.Add(LabelFor(rightLabel), 2, row);
-            layout.Controls.Add(right, 3, row);
-        }
     }
 }

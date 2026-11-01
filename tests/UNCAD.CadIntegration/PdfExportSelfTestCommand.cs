@@ -74,8 +74,11 @@ namespace UNCAD.CadIntegration
 
                 PlotOne(ctx, tempRoot, 50000d, 30000d, 420d, 297d, "SELFTEST-LANDSCAPE");
                 PlotOne(ctx, tempRoot, 56000d, 30000d, 297d, 420d, "SELFTEST-PORTRAIT");
-                // 同一个图框再出一遍：确认可重复出图（不会第二次就卡住/报错）。
+                // 另一个图框再出一遍：确认可重复出图（不会第二次就卡住/报错）。
                 PlotOne(ctx, tempRoot, 62000d, 30000d, 420d, 297d, "SELFTEST-REPEAT");
+                // 2.10.0：PDF 直接写输出目录（不再每次用新的 %TEMP% 子目录），
+                // 所以必须验证"同一目标路径已存在文件时再出图"真的能覆盖。
+                PlotSamePathTwice(ctx, tempRoot, 68000d, 30000d);
 
 
                 using (Transaction transaction = document.Database.TransactionManager
@@ -114,6 +117,18 @@ namespace UNCAD.CadIntegration
         private void PlotOne(CadContext ctx, string directory, double x, double y,
             double width, double height, string circuit)
         {
+            FrameRegionGroup region = CreateRegion(ctx, x, y, width, height, circuit);
+            RenderRegion(ctx, region, circuit, OutputFile(directory, circuit), circuit);
+        }
+
+        /// <summary>自检产物文件名：与命令层同一套"机台+回路"命名，扩展名固定 .pdf。</summary>
+        private static string OutputFile(string directory, string circuit)
+            => Path.Combine(directory, PdfExportNaming.BuildFileName("SELFTEST", circuit));
+
+        /// <summary>插入自检图框并读出边界（一个图框 = 一个回路）。</summary>
+        private FrameRegionGroup CreateRegion(CadContext ctx, double x, double y,
+            double width, double height, string circuit)
+        {
             ObjectId frameId;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -138,16 +153,57 @@ namespace UNCAD.CadIntegration
                 Boundary = boundary
             };
             region.EntityIds.Add(frameId);
+            return region;
+        }
 
-            PdfRenderResult result = PdfExportService.Render(ctx, region, circuit, directory);
+        /// <summary>对指定最终路径出图，并校验产物（%PDF- / %%EOF / A3 / 彩色）。</summary>
+        private void RenderRegion(CadContext ctx, FrameRegionGroup region, string circuit,
+            string filePath, string label)
+        {
+            PdfRenderResult result = PdfExportService.Render(ctx, region, circuit, filePath);
             foreach (string line in result.Details) Info("    诊断 | " + line);
-            Require(result.Ok, "出图失败：" + result.Error);
-            Require(PdfExportNaming.IsUsablePdf(result.FilePath, out string pdfError), pdfError);
+            Require(result.Ok, label + "出图失败：" + result.Error);
+            Require(string.Equals(Path.GetFullPath(result.FilePath),
+                    Path.GetFullPath(filePath), StringComparison.OrdinalIgnoreCase),
+                label + "出图写到了意外路径：" + result.FilePath + "（期望 " + filePath + "）");
+            Require(PdfExportNaming.IsUsablePdf(result.FilePath, out string pdfError),
+                label + "：" + pdfError);
 
             byte[] bytes = File.ReadAllBytes(result.FilePath);
-            Info("  " + circuit + " → " + bytes.Length + " 字节");
-            Inspect(circuit, bytes);
-            Keep(circuit, bytes);
+            Info("  " + label + " " + circuit + " → " + bytes.Length + " 字节");
+            Inspect(label + " " + circuit, bytes);
+            Keep(label + "-" + circuit, bytes);
+        }
+
+        /// <summary>
+        /// 2.10.0 覆盖行为自检：PDF 直接写最终输出目录后，同一目标路径可能已有上一次的
+        /// 出图产物。这里先放一段哨兵文本，再用真实 PlotEngine 对同一路径出图，断言
+        /// AutoCAD 确实覆盖了它（文件头变成 %PDF-、内容可解析）。
+        /// 如果真机拒绝覆盖，PdfExportService.Render 会失败，本自检直接报出原因。
+        /// </summary>
+        private void PlotSamePathTwice(CadContext ctx, string directory, double x, double y)
+        {
+            const string circuit = "SELFTEST-OVERWRITE";
+            FrameRegionGroup region = CreateRegion(ctx, x, y, 420d, 297d, circuit);
+            string file = OutputFile(directory, circuit);
+            RenderRegion(ctx, region, circuit, file, "首次");
+            long firstLength = new FileInfo(file).Length;
+
+            const string sentinel = "UNCAD-OVERWRITE-SENTINEL";
+            File.WriteAllText(file, sentinel, Encoding.ASCII);
+            Info("覆盖测试：把 " + file + " 改成哨兵内容后，再对同一路径出第二份图");
+
+            RenderRegion(ctx, region, circuit, file, "第二次");
+            long secondLength = new FileInfo(file).Length;
+            byte[] bytes = File.ReadAllBytes(file);
+            int headLength = Math.Min(5, bytes.Length);
+            string head = Encoding.ASCII.GetString(bytes, 0, headLength);
+            Require(head.StartsWith("%PDF-", StringComparison.Ordinal),
+                "同一路径第二次出图后文件头不是 %PDF-（旧文件未被覆盖）：" + head);
+            Require(secondLength > sentinel.Length,
+                "同一路径第二次出图后文件仍是哨兵大小（未写入 PDF）：" + secondLength + " 字节");
+            Info("覆盖测试 PASS：同一路径重复出图成功，长度 " + firstLength + " → "
+                + secondLength + " 字节，旧内容已被真正的 PDF 替换");
         }
 
         /// <summary>解析 PDF 内容：页数、纸张尺寸（MediaBox）、颜色算子。</summary>

@@ -41,7 +41,7 @@ namespace UNCAD.Features.PdfExport
                 ? string.Join("；", problems)
                 : "还原过程没有报告具体原因";
             return new PdfPlotCommitDecision(false,
-                "还原用户打印设置未全部成功，已回滚本次出图对布局的改动（PDF 已生成，不影响上传）："
+                "还原用户打印设置未全部成功，已回滚本次出图对布局的改动（PDF 已生成）："
                 + detail);
         }
     }

@@ -330,35 +330,7 @@ namespace UNCAD.UI
         }
 
         private static Control PageHeader(string title, string subtitle)
-        {
-            var header = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0, 0, 0, UiTheme.SpaceL)
-            };
-            header.Controls.Add(new Label
-            {
-                Text = title,
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                Font = UiTheme.FontTitle,
-                ForeColor = UiTheme.TextPrimary,
-                Margin = new Padding(0)
-            }, 0, 0);
-            header.Controls.Add(new Label
-            {
-                Text = subtitle,
-                Dock = DockStyle.Fill,
-                AutoSize = true,
-                ForeColor = UiTheme.TextSecondary,
-                Margin = new Padding(0, UiTheme.SpaceXS, 0, 0)
-            }, 0, 1);
-            return header;
-        }
+            => UiKit.PageHeader(title, subtitle);
 
         private static UiCard SectionCard(string title, Control content)
         {

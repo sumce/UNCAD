@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
-    /// <summary>Public AutoCAD command contract for v2.9.3.</summary>
+    /// <summary>Public AutoCAD command contract for v2.10.0.</summary>
     public static class CommandIds
     {
         public const string Fill = "U1F";
@@ -12,7 +12,7 @@ namespace UNCAD.Infra
         public const string DataRefresh = "U1DATA";
         public const string DwgExport = "U1DWG";
         public const string DwgExportShort = "U1D";
-        /// <summary>按**回路**（一个图框一份）导出彩色 PDF 并上传，供服务端在线预览。</summary>
+        /// <summary>按**回路**（一个图框一份）导出彩色 PDF 到本地输出目录（2.10.0 起不再上传）。</summary>
         public const string PdfExport = "U1PDF";
         public const string XLayout = "XLAYOUT";
         public const string Statistics = "XSTS";

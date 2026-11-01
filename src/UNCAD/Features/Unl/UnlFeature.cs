@@ -8,7 +8,6 @@ using UNCAD.Core.Contracts;
 using UNCAD.Core.QuickLine;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
-using UNCAD.Features.ConfigCenter;
 
 namespace UNCAD.Features.Unl
 {
@@ -26,14 +25,10 @@ namespace UNCAD.Features.Unl
         [CommandMethod(CommandIds.Line)]
         public void UncadLine() => Run();
 
-        public void UncadLineSet() => SettingsFeature.Show(0);
-
-        // ===== 旧名兼容（后续版本可删除） =====
+        // ===== 旧名兼容（仅注册在 CommandIds.Legacy 中的键盘别名） =====
 
         [CommandMethod(CommandIds.LegacyLine)]
         public void Unl() => UncadLine();
-
-        public void OpUnl() => UncadLineSet();
 
         // ===== 主逻辑 =====
 

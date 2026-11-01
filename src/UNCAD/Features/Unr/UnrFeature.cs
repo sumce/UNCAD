@@ -1,5 +1,4 @@
 using System;
-using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
@@ -18,37 +17,6 @@ namespace UNCAD.Features.Unr
         Description = "在直线上连续开半圆拱桥洞")]
     public class UnrFeature : CommandBase
     {
-        public void UncadArchSet()
-        {
-            Guard(() =>
-            {
-                var doc = Application.DocumentManager.MdiActiveDocument;
-                if (doc == null) return;
-                var ed = doc.Editor;
-
-                double oldDia = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
-                var opts = new PromptDistanceOptions(
-                    "\n请输入新的拱桥直径 <" + TextFormatter.FormatNum(oldDia) + ">: ")
-                {
-                    AllowNegative = false,
-                    AllowZero = false,
-                    DefaultValue = oldDia,
-                    UseDefaultValue = true
-                };
-                var res = ed.GetDistance(opts);
-                if (res.Status == PromptStatus.OK && res.Value > 0)
-                {
-                    Settings.Set(ConfigKeys.UnrDiameter,
-                        res.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
-                    ed.WriteMessage("\n拱桥直径已设置为: " + TextFormatter.FormatNum(res.Value));
-                }
-                else
-                {
-                    ed.WriteMessage("\n保持当前直径。");
-                }
-            });
-        }
-
         // 规范命令：U1R；统一设置使用 U1SET
         [CommandMethod(CommandIds.Arch)]
         public void UncadArch() => Run();
@@ -56,8 +24,6 @@ namespace UNCAD.Features.Unr
         // 旧名兼容（后续版本可删除）
         [CommandMethod(CommandIds.LegacyArch)]
         public void Unr() => UncadArch();
-
-        public void OpUnr() => UncadArchSet();
 
         protected override void Execute(CadContext ctx)
         {

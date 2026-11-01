@@ -28,12 +28,13 @@ namespace UNCAD.UI
         public XLayoutSummaryForm(IReadOnlyList<XLayoutMachineSummary> summaries,
             int frameCount)
         {
-            DialogLayout.Apply(this, "XLAYOUT · 排版统计", new Size(560, 420),
-                new Size(460, 320), false);
+            DialogLayout.Apply(this, "XLAYOUT · 排版统计", new Size(600, 440),
+                new Size(500, 340), false);
 
-            var header = UiTheme.Header(
+            var frame = new UiDialogFrame(this,
                 "排版完成  ·  " + frameCount + " 个图框  /  "
-                + (summaries?.Count ?? 0) + " 个机台");
+                    + (summaries?.Count ?? 0) + " 个机台",
+                "按机台查看回路数量与完整性；缺少回路的机台不会自动补齐。");
 
             var grid = new DataGridView
             {
@@ -44,12 +45,12 @@ namespace UNCAD.UI
                 AllowUserToResizeRows = false,
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                BackgroundColor = UiTheme.Surface,
-                BorderStyle = BorderStyle.FixedSingle,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false
+                MultiSelect = false,
+                BorderStyle = BorderStyle.None
             };
+            UiKit.StyleTable(grid, readOnly: true);
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 HeaderText = "机台ID",
@@ -73,14 +74,11 @@ namespace UNCAD.UI
                 FillWeight = 28
             });
             grid.DataSource = (summaries ?? Array.Empty<XLayoutMachineSummary>()).ToList();
-            UiTheme.StyleGrid(grid);
+            UiTheme.FixGridRows(grid, 30);
+            frame.Body.Controls.Add(grid);
 
-            Button close = UiTheme.Button("关闭", DialogResult.Cancel);
-            FlowLayoutPanel commands = UiTheme.CommandBar();
-            commands.Controls.Add(close);
-            Controls.Add(grid);
-            Controls.Add(commands);
-            Controls.Add(header);
+            Button close = frame.AddSecondary("关闭", DialogResult.Cancel);
+            frame.Wire(close, close);
             AcceptButton = close;
             CancelButton = close;
             Shown += (sender, args) => close.Select();

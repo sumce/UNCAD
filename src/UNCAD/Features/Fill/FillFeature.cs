@@ -33,12 +33,6 @@ namespace UNCAD.Features.Fill
         Description = "动态填充清单，并可读取已填充身份按当前统计重新生成")]
     public class FillFeature : CommandBase
     {
-        /// <summary>
-        /// 等轴测场景上限（字符）。与服务端 <c>MaximumSceneChars</c> 对齐：
-        /// 正常单图框场景只有几十 KB 量级，超过说明图框内 U1L 线段异常多，
-        /// 宁可这次不上传 3D（清单照常上传），也不要把服务端当网盘。
-        /// </summary>
-        internal const int MaximumSceneChars = 1_000_000;
         [CommandMethod(CommandIds.Fill, CommandFlags.UsePickSet)]
         public void UncadFill() => Run();
 
@@ -189,6 +183,13 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
+            // 2.10.0：生成 BOQ/DWG 前要求该机台所有回路都在本次选集中（U1SET 可关闭）。
+            if (!EnsureCircuitCoverage(ctx, workbook,
+                    updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
+                    picked.MachineId, picked.CircuitName))
+                return;
+            ctx.Operation?.Machine(picked.MachineId, picked.CircuitName);
+
             string automaticExcelPath = null;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
             // 迁移会从旧图框块参照上移除内嵌 FRAMEINFO_JSON，因此必须在迁移前读出
@@ -199,13 +200,15 @@ namespace UNCAD.Features.Fill
             // 设备内预留从 frameinfo_json 复用；没有记录时在清单确认窗里填写。
             CableReserveInfo cableReserve = ResolveCableReserve(frameInfoPrevious,
                 picked, statistics, Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
-                    CableReservePolicy.DefaultOwnerReserveMillimeters));
+                    CableReservePolicy.DefaultOwnerReserveMillimeters),
+                options.CableReserve);
             if (updateMode)
             {
                 try
                 {
                     automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                        new[] { picked.MachineId });
+                        new[] { picked.MachineId },
+                        AutomaticSubmissionService.CurrentDrawingName(ctx));
                     automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
                         automaticExcelPath, new[] { picked.MachineId });
                 }
@@ -409,7 +412,8 @@ namespace UNCAD.Features.Fill
                 if (!updateMode)
                 {
                     automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                        new[] { picked.MachineId });
+                        new[] { picked.MachineId },
+                        AutomaticSubmissionService.CurrentDrawingName(ctx));
                     automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
                         automaticExcelPath, new[] { picked.MachineId });
                 }
@@ -546,6 +550,7 @@ namespace UNCAD.Features.Fill
                     fixTransaction.Commit();
                 }
                 outputBatch.Complete();
+                RecordOutputs(ctx, "BOQ", automaticExcel.FilePath);
             }
             catch (System.Exception boqError)
             {
@@ -606,206 +611,8 @@ namespace UNCAD.Features.Fill
                     + " m + 盘内 " + TextFormatter.FormatNum(cableReserve.PanelReserveMillimeters)
                     + " mm + 设备 " + TextFormatter.FormatNum(cableReserve.DeviceReserveMillimeters)
                     + " mm = 总长 " + TextFormatter.FormatNum(cableReserve.TotalMeters) + " m。");
-            // 阶段6 之后：把**该回路（=该图框）**的清单内容 + 等轴测（3D）场景交给后台线程上传。
-            // 上传失败只记日志+命令行提示，绝不回滚已经提交的 CAD 事务与 BOQ 输出。
-            if (UploadCircuitSubmission(ctx, picked, tableRows, updateMode, selection))
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 已排队上传该回路清单与等轴测数据（后台执行，失败不影响图纸）。");
         }
 
-        /// <summary>
-        /// 批量 U1F/U1U 的等轴测场景总预算（字符数）。
-        ///
-        /// 场景必须在 CAD 线程上同步构建，单个上限 1,000,000 字符；一次批量上千个图框时
-        /// 全部构建完再上传会堆出上百 MB 的内存（表现为卡顿/卡死）。用预算限制总量，
-        /// 超出的回路只上传清单、跳过场景，并在命令行汇总提示。
-        /// </summary>
-        /// <summary>
-        /// 批量 U1F/U1U 的 U1L 线段扫描缓存：整批只扫一次，避免每个图框都扫全图（O(N²)）。
-        /// </summary>
-        internal sealed class SceneScanCache
-        {
-            private bool _loaded;
-            private IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> _segments;
-
-            private bool _emptyAnnounced;
-
-            public IReadOnlyList<Cad.QuickLine.QuickLineCadSegment> Get(CadContext ctx)
-            {
-                if (_loaded) return _segments;
-                _segments = Cad.QuickLine.QuickLineCadService.Scan(ctx,
-                    new Cad.QuickLine.QuickLineScanOptions { IncludeUnlabelled = true });
-                _loaded = true;
-                return _segments;
-            }
-
-            /// <summary>整张图没有任何 U1L 线段（此时逐帧构建场景纯属浪费）。</summary>
-            public bool IsEmpty(CadContext ctx) => Get(ctx).Count == 0;
-
-            /// <summary>空图提示只记一次日志。</summary>
-            public bool TryAnnounceEmpty()
-            {
-                if (_emptyAnnounced) return false;
-                _emptyAnnounced = true;
-                return true;
-            }
-        }
-
-        internal sealed class SceneUploadBudget
-        {
-            private long _remaining;
-
-            public SceneUploadBudget(long totalChars)
-            {
-                _remaining = Math.Max(0L, totalChars);
-            }
-
-            public long Remaining => _remaining;
-            public int Skipped { get; private set; }
-
-            public bool CanBuildScene => _remaining > 0;
-
-            public void Consume(int chars)
-            {
-                if (chars <= 0) return;
-                _remaining = Math.Max(0L, _remaining - chars);
-            }
-
-            public void CountSkipped() => Skipped++;
-        }
-
-        /// <summary>
-        /// U1F/U1U 成功后的数据上传：最小单位是**回路**（= 一个图框），提交该回路的
-        /// 清单编号/名称/数量/单位，**以及该图框的等轴测（3D）场景**（U1L3D 用的同一份
-        /// envelope，网页端的「ISO 图」就是它）。不提交 frameinfo_json、BOQ 全量或任何图纸大对象。
-        ///
-        /// **场景必须在 CAD 线程上构建**（要读图框内的 U1L 线段），因此这里先同步构建 JSON，
-        /// 再连同清单一起排队到后台线程上传；上传失败不影响图纸与本地刷新。
-        /// 返回是否已排队（缺机台/回路标识时不排队）。单图框与批量 U1U 共用本方法。
-        /// </summary>
-        internal static bool UploadCircuitSubmission(CadContext ctx, MachineRow picked,
-            List<TableFillRow> rows, bool updateMode, FillSelection selection,
-            SceneUploadBudget sceneBudget = null, SceneScanCache sceneScan = null)
-        {
-            if (picked == null) return false;
-            string machineId = (picked.MachineId ?? "").Trim();
-            string circuitName = (picked.CircuitName ?? "").Trim();
-            if (machineId.Length == 0 || circuitName.Length == 0) return false;
-            string frameHandle = FirstFrameHandle(selection?.FrameBlockIds);
-            string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
-            // 上传队列已熔断/已满时，连场景都不要构建（构建才是这里最贵的一步）。
-            BackgroundUploadQueue uploadQueue = BackgroundUploadQueue.Shared;
-            if (uploadQueue.Suspended || uploadQueue.Pending >= uploadQueue.Limit)
-            {
-                Log.Info("上传队列繁忙或已熔断，跳过本回路上传：" + machineId + " " + circuitName);
-                return false;
-            }
-            string sceneJson = "";
-            bool allowScene = sceneBudget == null || sceneBudget.CanBuildScene;
-            // 整图没有 U1L 线段时，逐帧进事务构建场景纯属浪费（现场 236 框全是这种情况）。
-            if (allowScene && sceneScan != null && sceneScan.IsEmpty(ctx))
-            {
-                if (sceneScan.TryAnnounceEmpty())
-                    Log.Info("整张图没有带毫米标注的 U1L 线段：本批跳过等轴测场景构建。");
-                allowScene = false;
-            }
-            if (allowScene)
-            {
-                sceneJson = BuildSceneJson(ctx, machineId, circuitName,
-                    selection?.FrameBlockIds, selection?.Region, sceneScan, picked);
-                sceneBudget?.Consume(sceneJson.Length);
-            }
-            else
-            {
-                sceneBudget.CountSkipped();
-                Log.Info("批量过大，跳过等轴测场景上传：" + machineId + " " + circuitName);
-            }
-            var captured = rows == null ? new List<TableFillRow>() : new List<TableFillRow>(rows);
-            // 单线程串行队列 + 有界 + 连续失败熔断：避免上千个阻塞上传把线程池和内存打爆。
-            return BackgroundUploadQueue.Shared.Enqueue(() =>
-            {
-                try
-                {
-                    ClientSubmissionUploader.Default.SubmitCircuit(machineId, circuitName,
-                        command, frameHandle, captured, sceneJson);
-                    return true;
-                }
-                catch (System.Exception ex)
-                {
-                    // 上传链路的任何异常都不得影响已完成的写入结果。
-                    Log.Warn("U1F/U1U 上传异常（已忽略）: " + ex.Message);
-                    return false;
-                }
-            });
-        }
-
-        /// <summary>
-        /// 构建该图框的等轴测场景 JSON（超大 / 构建失败 / 图框内没有 U1L 标注时返回空串，
-        /// 此时只上传清单，不影响主流程）。扫描耗时写日志，便于真机上发现批量 U1U 的退化。
-        /// </summary>
-        private static string BuildSceneJson(CadContext ctx, string machineId,
-            string circuitName, ObjectId[] frameBlockIds, FrameRegionGroup region = null,
-            SceneScanCache sceneScan = null, MachineRow knownMachine = null)
-        {
-            if (ctx == null || frameBlockIds == null || frameBlockIds.Length == 0) return "";
-            try
-            {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                string sceneJson;
-                string issue;
-                // 已知图框区域时直接复用：CollectForLayout 是全空间扫描，批量里再调一次就是 O(N²)。
-                bool built;
-                if (region != null && sceneScan != null)
-                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
-                        sceneScan.Get(ctx), knownMachine, out sceneJson, out issue);
-                else if (region != null)
-                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, region,
-                        out sceneJson, out issue);
-                else
-                    built = Unl.QuickLine3dPreviewFeature.TryBuildSceneJson(ctx, frameBlockIds,
-                        out sceneJson, out issue);
-                watch.Stop();
-                if (!built)
-                {
-                    // "图框内没有 U1L 标注"是正常情况，只记日志，不当失败。
-                    Log.Info("未上传等轴测场景（" + machineId + " " + circuitName + "）：" + issue);
-                    return "";
-                }
-                Log.Info("等轴测场景已构建：" + machineId + " " + circuitName + "（"
-                    + sceneJson.Length.ToString("N0") + " 字符，耗时 "
-                    + watch.ElapsedMilliseconds + " ms）");
-                if (sceneJson.Length > MaximumSceneChars)
-                {
-                    Log.Warn("等轴测场景超过上限（" + sceneJson.Length + " > "
-                        + MaximumSceneChars + " 字符），本次不上传：" + machineId + " "
-                        + circuitName);
-                    return "";
-                }
-                return sceneJson;
-            }
-            catch (System.Exception ex)
-            {
-                // 场景只是"锦上添花"，任何异常都不得影响清单上传与图纸。
-                Log.Warn("构建等轴测场景失败（已忽略，清单照常上传）: " + ex.Message);
-                return "";
-            }
-        }
-
-        /// <summary>取图框块参照的句柄作为 frameHandle；不可用时返回空串（不上报句柄）。</summary>
-        private static string FirstFrameHandle(ObjectId[] frameBlockIds)
-        {
-            if (frameBlockIds == null) return "";
-            foreach (ObjectId id in frameBlockIds)
-            {
-                if (id.IsNull) continue;
-                try { return id.Handle.ToString(); }
-                catch (System.Exception) { /* 已删除/无效对象：忽略，继续找下一个 */ }
-            }
-            return "";
-        }
-
-        /// <summary>
-        /// 图框 →（机台ID, 回路名）的**唯一推导**：与 U1U 上报清单/更新时完全同一套
         /// （<see cref="FrameIdentityReader.ReadIdentity"/> 读图框持久身份 +
         /// <see cref="ExistingFillIdentityResolver.MatchMachine"/> 匹配 SQLite 快照行）。
         /// U1PDF 必须复用它：两处口径漂移会让 PDF 挂到错误的回路上。
@@ -1224,13 +1031,95 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// U1F/U1U 电缆预留：盘内/箱内按上游类型固定（I-Line 3400 盘内 / 插座盘 1000 盘内 /
-        /// 插接箱 500 箱内），设备内预留从 frameinfo_json 读取（首次按 0 进清单确认窗口填写），
-        /// 业主统一预留默认 3000（U1SET 可改）。
+        /// 整机回路校验（2.10.0）：一个机台必须把机台数据里的**所有回路**都框选进来，
+        /// 否则不生成 BOQ/DWG。这是"清单必须整机齐全"的现场规则；关闭开关即回到旧行为。
+        /// 校验只读快照，不修改图纸，失败时图纸与 BOQ 均未改动。
+        /// </summary>
+        /// <summary>把 BOQ 输出路径登记到操作记录（FilePath 可能是多个文件用 ";" 拼接）。</summary>
+        internal static void RecordOutputs(CadContext ctx, string kind, string filePath)
+        {
+            if (ctx?.Operation == null || string.IsNullOrWhiteSpace(filePath)) return;
+            foreach (string part in filePath.Split(new[] { ';' },
+                StringSplitOptions.RemoveEmptyEntries))
+            {
+                string path = part.Trim();
+                if (path.Length > 0) ctx.Operation.Output(kind, path);
+            }
+        }
+
+        internal static bool EnsureCircuitCoverage(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command, string machineId,
+            string circuitName)
+            => EnsureCircuitCoverage(ctx, workbook, command,
+                new[]
+                {
+                    new KeyValuePair<string, string>(machineId, circuitName)
+                });
+
+        internal static bool EnsureCircuitCoverage(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+        {
+            if (ctx == null || workbook == null) return true;
+            if (!Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true)) return true;
+            List<KeyValuePair<string, string>> pairs = (machineCircuits
+                    ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+                .ToList();
+            if (pairs.Count == 0) return true;
+
+            var failed = new List<CircuitCoverageResult>();
+            foreach (IGrouping<string, KeyValuePair<string, string>> group in pairs
+                .GroupBy(pair => pair.Key.Trim(), IdentityTextNormalizer.Comparer))
+            {
+                string machineId = group.Key;
+                List<string> expected;
+                try
+                {
+                    expected = workbook.FindRows(machineId)
+                        .Select(row => row.CircuitName).ToList();
+                }
+                catch (System.Exception ex)
+                {
+                    // 快照查询失败时不要误判为"回路不全"，交给后续流程给出真实错误。
+                    Log.Warn("整机回路校验读取机台数据失败: " + machineId + " → "
+                        + ex.Message);
+                    continue;
+                }
+                if (expected.Count == 0) continue;
+                CircuitCoverageResult result = CircuitCoverage.Evaluate(machineId,
+                    expected, group.Select(pair => pair.Value));
+                if (!result.Complete) failed.Add(result);
+            }
+            if (failed.Count == 0) return true;
+
+            foreach (CircuitCoverageResult result in failed.Take(12))
+            {
+                string missing = string.Join("、", result.Missing.Take(12));
+                if (result.Missing.Count > 12) missing += " 等";
+                ctx.Write("\n[" + command + "] 整机回路校验未通过：机台 "
+                    + result.MachineId + " 共 " + result.Expected.Count
+                    + " 个回路，本次只选中 " + result.Selected.Count
+                    + " 个；缺少：" + missing + "。");
+            }
+            if (failed.Count > 12)
+                ctx.Write("\n[" + command + "] 另有 " + (failed.Count - 12)
+                    + " 个机台回路不全，未逐条列出。");
+            ctx.Write("\n[" + command + "] 按现场规则：回路不全不生成 BOQ/DWG，本次图纸与 BOQ 均未修改。"
+                + "请补选缺失图框后重试；若该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
+            Log.Info(command + " 整机回路校验未通过，机台数 " + failed.Count);
+            return false;
+        }
+
+        /// <summary>
+        /// U1F/U1U 电缆预留：盘内/箱内按上游类型（I-Line 电盘 / 插座盘 / 母线插接箱，
+        /// 默认 3400/1000/500，U1SET 可改），设备内预留从 frameinfo_json 读取
+        /// （首次按 0 进清单确认窗口填写），业主统一预留默认 3000（U1SET 可改）。
         /// </summary>
         internal static CableReserveInfo ResolveCableReserve(FrameInfoJsonRecord previous,
             MachineRow machine, CableStatResult statistics,
-            double ownerReserveMillimeters = CableReservePolicy.DefaultOwnerReserveMillimeters)
+            double ownerReserveMillimeters = CableReservePolicy.DefaultOwnerReserveMillimeters,
+            CableReserveSettings reserveSettings = null)
         {
             // 没有实测电缆长度时不要凭预留凭空生成电缆清单；等有测量值的那次再处理。
             if (statistics == null || statistics.CableSum <= 0d)
@@ -1243,7 +1132,7 @@ namespace UNCAD.Features.Fill
                     System.Globalization.CultureInfo.InvariantCulture, out device);
             }
             return CableReservePolicy.Apply(statistics, machine?.Next, device,
-                ownerReserveMillimeters);
+                ownerReserveMillimeters, reserveSettings);
         }
 
         /// <summary>清单确认窗口：把预留明细交给 GUI 显示/编辑，并让电缆长度先按明细同步。</summary>
