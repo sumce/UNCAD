@@ -60,7 +60,7 @@ namespace UNCAD.Tests
         {
             var settings = new CableReserveSettings(4000d, 1100d, 600d);
             FillRuntimeOptions options = FillRuntimeOptions.Create("m.xlsx", 1, 11, 500d, 250d,
-                "", FillPlanningOptions.Default, null, 20d, 1000d, true, true, 3000d, settings);
+                FillPlanningOptions.Default, null, 20d, 1000d, true, true, 3000d, settings);
 
             Assert.Same(settings, options.CableReserve);
         }

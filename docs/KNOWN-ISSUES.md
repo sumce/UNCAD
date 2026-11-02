@@ -17,8 +17,10 @@ deferred, or important for support diagnosis.
 - HTTP/HTTPS machine-workbook sources are intentionally rejected in 2.10.0;
   use a local or UNC path and refresh via U1DATA/U1SET.
 - The whole-machine circuit gate can block BOQ/DWG for a machine whose circuits
-  are not all drawn yet. This is intentional; disable `UNC_FILL_REQUIRE_ALL_CIRCUITS`
-  in U1SET if the project really needs partial output.
+  are not all drawn yet (U1F/U1S/U1DWG abort; D-033). U1U is exempt since the
+  D-034 amendment: it updates the selected frames and only skips that machine's
+  BOQ. Disable `UNC_FILL_REQUIRE_ALL_CIRCUITS` in U1SET if a project really
+  needs partial output everywhere.
 - A Base64 config share code never contains licence/account values, so a shared
   profile does not transfer authorization.
 

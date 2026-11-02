@@ -77,7 +77,7 @@ namespace UNCAD.Tests
         {
             var target = new MemoryStore();
             target.Values[ConfigKeys.UnlHeight] = "180";
-            target.Values[ConfigKeys.UnqText] = "旧文字";
+            target.Values[ConfigKeys.UnqHeight] = "180";
 
             ConfigSharePayload payload = new ConfigSharePayload
             {
@@ -86,7 +86,7 @@ namespace UNCAD.Tests
                 Items = new SortedDictionary<string, string>(StringComparer.Ordinal)
                 {
                     [ConfigKeys.UnlHeight] = "180",
-                    [ConfigKeys.UnqText] = "桥架200*100 2500mm"
+                    [ConfigKeys.UnqHeight] = "200"
                 }
             };
             ConfigSharePreview preview = Service(target).PreviewCode(
@@ -95,9 +95,9 @@ namespace UNCAD.Tests
             Assert.Equal("2.10.0", preview.Version);
             Assert.Equal(2, preview.Items.Count);
             ConfigShareChange change = Assert.Single(preview.Changes);
-            Assert.Equal(ConfigKeys.UnqText, change.Key);
-            Assert.Equal("旧文字", change.CurrentValue);
-            Assert.Equal("桥架200*100 2500mm", change.SharedValue);
+            Assert.Equal(ConfigKeys.UnqHeight, change.Key);
+            Assert.Equal("180", change.CurrentValue);
+            Assert.Equal("200", change.SharedValue);
             Assert.False(change.IsNew);
         }
 
@@ -106,7 +106,7 @@ namespace UNCAD.Tests
         {
             var source = new MemoryStore();
             source.Values[ConfigKeys.UnlHeight] = "180";
-            source.Values[ConfigKeys.UnqText] = "桥架200*100 2500mm";
+            source.Values[ConfigKeys.UnqHeight] = "200";
             string code = Service(source).ExportCode();
 
             var target = new MemoryStore();
@@ -117,11 +117,11 @@ namespace UNCAD.Tests
             ConfigShareImportResult result = Service(target).ImportCode(code);
 
             Assert.Equal(1, target.SetManyCalls);
-            Assert.Equal(new[] { ConfigKeys.UnlHeight, ConfigKeys.UnqText },
+            Assert.Equal(new[] { ConfigKeys.UnlHeight, ConfigKeys.UnqHeight },
                 result.Applied);
             Assert.Empty(result.Skipped);
             Assert.Equal("180", target.Values[ConfigKeys.UnlHeight]);
-            Assert.Equal("桥架200*100 2500mm", target.Values[ConfigKeys.UnqText]);
+            Assert.Equal("200", target.Values[ConfigKeys.UnqHeight]);
         }
 
         [Fact]

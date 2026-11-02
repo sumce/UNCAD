@@ -100,7 +100,7 @@ namespace UNCAD.Core.Fill
 
         private FillRuntimeOptions(string machineWorkbookPath,
             int startRow, int clearRows,
-            double textHeight, double mmPerGrid, string bridgeInfo,
+            double textHeight, double mmPerGrid,
             FillPlanningOptions planning, FillAutoFillOptions autoFill,
             double downstreamSocketAmps, double downstreamPanelAmps,
             bool downstreamSocketEnabled, bool downstreamPanelEnabled,
@@ -111,7 +111,6 @@ namespace UNCAD.Core.Fill
             ClearRows = clearRows;
             TextHeight = textHeight;
             MmPerGrid = mmPerGrid;
-            BridgeInfo = bridgeInfo;
             Planning = planning;
             AutoFill = autoFill;
             DownstreamSocketAmps = downstreamSocketAmps;
@@ -127,7 +126,6 @@ namespace UNCAD.Core.Fill
         public int ClearRows { get; }
         public double TextHeight { get; }
         public double MmPerGrid { get; }
-        public string BridgeInfo { get; }
         public FillPlanningOptions Planning { get; }
         public FillAutoFillOptions AutoFill { get; }
         /// <summary>
@@ -164,7 +162,7 @@ namespace UNCAD.Core.Fill
 
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
-            string bridgeInfo, FillPlanningOptions planning,
+            FillPlanningOptions planning,
             FillAutoFillOptions autoFill = null,
             double downstreamSocketAmps = DefaultDownstreamSocketAmps,
             double downstreamPanelAmps = DefaultDownstreamPanelAmps,
@@ -180,7 +178,6 @@ namespace UNCAD.Core.Fill
                 PositiveWithin(textHeight, MaximumTextHeight,
                     TableFillFormatter.DefaultTextHeight),
                 PositiveWithin(mmPerGrid, MaximumMmPerGrid, 250.0),
-                (bridgeInfo ?? "").Trim(),
                 planning ?? FillPlanningOptions.Default,
                 autoFill ?? FillAutoFillOptions.Default,
                 PositiveWithin(downstreamSocketAmps, MaximumDownstreamSocketAmps,

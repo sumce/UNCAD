@@ -31,8 +31,9 @@ namespace UNCAD.Features.Unq
 
         protected override void Execute(CadContext ctx, object state)
         {
-            string requestedContent = state as string
-                ?? Settings.Get(ConfigKeys.UnqText, "桥架200*100 2500mm");
+            // U1Q1/Q2/Q4 与兼容别名都经 Run(规格) 固定传入；空回退只保留
+            // 历史默认值，UNQ_TEXT 死配置键已删除（2026-11-01）。
+            string requestedContent = state as string ?? "桥架200*100 2500mm";
             double mmPerGrid = Settings.GetDouble(ConfigKeys.UnaddMmPerGrid, 250.0);
             if (double.IsNaN(mmPerGrid) || double.IsInfinity(mmPerGrid) || mmPerGrid <= 0)
                 mmPerGrid = 250.0;
@@ -46,8 +47,6 @@ namespace UNCAD.Features.Unq
                 ctx.Write("\n[U1Q] 已将桥架标识规范为“" + content
                     + "”（长度统一使用毫米；旧格数按 " + TextFormatter.FormatNum(mmPerGrid)
                     + " mm/格换算）。");
-                if (state == null)
-                    Settings.Set(ConfigKeys.UnqText, content);
             }
             // Legacy UNQ commands route through the same implementation, so diagnostics use
             // the corresponding current U1Q name determined from the selected specification.

@@ -59,19 +59,19 @@ namespace UNCAD.Tests
         [Fact]
         public void BuildValues_MapsExcelTags_WithoutStatistics()
         {
-            var v = FrameBlockFiller.BuildValues(Row(), "");
+            var v = FrameBlockFiller.BuildValues(Row());
             Assert.Equal("MDAPT01-泵1", v[FrameBlockFiller.TagDevice]);
             Assert.Equal("MDAPT01-POWER", v[FrameBlockFiller.TagPower]);
             Assert.Equal("电缆ZB-YJV-3*70+1*35", v[FrameBlockFiller.TagCable]);
-            Assert.Equal("", v[FrameBlockFiller.TagBridge]);
             Assert.Equal("", v[FrameBlockFiller.TagConduit]);
         }
 
         [Fact]
-        public void BuildValues_IncludesBridgeTag_WhenBridgeInfoProvided()
+        public void BuildValues_NoBridgeTag_AfterXframeV2Removal()
         {
-            var v = FrameBlockFiller.BuildValues(Row(), "桥架400*100 10格");
-            Assert.Equal("桥架400*100 10格", v[FrameBlockFiller.TagBridge]);
+            // BRIDGE_FRAME_INFO 已随 xframe_v2 移除（D-035/D-033 之后的图框
+            // 不携带该属性）；桥架数据只进 BOQ 表与 DATA 工作表。
+            Assert.False(FrameBlockFiller.IsKnownTag("BRIDGE_FRAME_INFO"));
         }
 
         [Fact]
@@ -79,7 +79,7 @@ namespace UNCAD.Tests
         {
             var row = Row();
             row.Cable = "  ";
-            var v = FrameBlockFiller.BuildValues(row, "");
+            var v = FrameBlockFiller.BuildValues(row);
             Assert.Equal("", v[FrameBlockFiller.TagCable]);
         }
 
@@ -92,7 +92,7 @@ namespace UNCAD.Tests
                 "⌀20线管 2500mm",
                 "⌀25线管 3000mm"
             }, 250.0);
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+            var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal("⌀20线管 4.5M，⌀25线管 3M",
                 v[FrameBlockFiller.TagConduit]);
@@ -105,7 +105,7 @@ namespace UNCAD.Tests
             {
                 "2000mm", "3000mm", "3000mm", "4000mm", "4400mm"
             }, 250.0);
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+            var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal("电缆ZB-YJV-3*70+1*35mm²: 2000+3000+3000+4000+4400mm",
                 v[FrameBlockFiller.TagCable]);
@@ -119,7 +119,7 @@ namespace UNCAD.Tests
                 "2000mm", "3000mm"
             }, 250.0);
             CableReservePolicy.Apply(stat, "I-Line盘", 500d);
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+            var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
                 "电缆ZB-YJV-3*70+1*35mm²: 2000+3000+3400（盘内）+500（设备内）"
@@ -132,7 +132,7 @@ namespace UNCAD.Tests
         {
             var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
             CableReservePolicy.Apply(stat, "插座盘", 500d);
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+            var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
                 "电缆ZB-YJV-3*70+1*35mm²: 2000+1000（盘内）+500（设备内）"
@@ -145,7 +145,7 @@ namespace UNCAD.Tests
         {
             var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
             CableReservePolicy.Apply(stat, "I-Line盘", 0d);
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
+            var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
                 "电缆ZB-YJV-3*70+1*35mm²: 2000+3400（盘内）+3000（预留）=8400mm",
@@ -162,7 +162,7 @@ namespace UNCAD.Tests
             var row = Row();
             row.Cable = workbookCable;
             var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
-            var v = FrameBlockFiller.BuildValues(row, "", stat);
+            var v = FrameBlockFiller.BuildValues(row, stat);
 
             Assert.Equal("电缆" + expected + "mm²: 2000mm", v[FrameBlockFiller.TagCable]);
         }
@@ -173,56 +173,13 @@ namespace UNCAD.Tests
             // 没有统计文字时图框只写型号，同样要带前缀，保持前后一致。
             var row = Row();
             row.Cable = "3*2.5";
-            var v = FrameBlockFiller.BuildValues(row, "", new CableStatResult());
+            var v = FrameBlockFiller.BuildValues(row, new CableStatResult());
 
             Assert.Equal("电缆ZB-YJVR-3*2.5", v[FrameBlockFiller.TagCable]);
         }
 
-        [Fact]
-        public void BuildValues_ResolvesBoqBridgeModelWithoutPlannerSideEffects()
-        {
-            var stat = StatCalculator.Calculate(new[]
-            {
-                "桥架200*100 10格",
-                "桥架200*100 2格",
-                "桥架400*100 4格"
-            }, 250.0);
-            var v = FrameBlockFiller.BuildValues(Row(), "手工桥架信息", stat);
 
-            Assert.Equal("梯形桥架200Wx100H 3M; 梯形桥架400Wx100H 1M",
-                v[FrameBlockFiller.TagBridge]);
-        }
 
-        [Fact]
-        public void BuildValues_UnknownBridgeSpecFallsBackToDrawingSpec()
-        {
-            var stat = new CableStatResult();
-            var bridge = new BridgeStat { Spec = "桥架250*80", MmPerGrid = 250.0 };
-            bridge.Grids.Add(10);
-            stat.Bridges.Add(bridge);
-
-            var values = FrameBlockFiller.BuildValues(Row(), "", stat);
-
-            Assert.Equal("桥架250*80 2.5M", values[FrameBlockFiller.TagBridge]);
-        }
-
-        [Fact]
-        public void BuildValues_PrefersBoqBridgeModelOverDrawingSpec()
-        {
-            var stat = StatCalculator.Calculate(new[]
-            {
-                "桥架200*100 10格",
-                "桥架200*100 2格",
-                "桥架400*100 4格"
-            }, 250.0);
-            stat.Bridges[0].CatalogModel = "梯形桥架200Wx100H";
-            stat.Bridges[1].CatalogModel = "梯形桥架400Wx100H";
-
-            var v = FrameBlockFiller.BuildValues(Row(), "", stat);
-
-            Assert.Equal("梯形桥架200Wx100H 3M; 梯形桥架400Wx100H 1M",
-                v[FrameBlockFiller.TagBridge]);
-        }
 
         [Fact]
         public void BuildValues_UpdateModeOmitsStatisticsTagsWithoutFreshMeasurements()
@@ -230,10 +187,9 @@ namespace UNCAD.Tests
             var empty = new CableStatResult();
 
             Dictionary<string, string> values = FrameBlockFiller.BuildValues(
-                Row(), "", empty, true);
+                Row(), empty, true);
 
             Assert.False(values.ContainsKey(FrameBlockFiller.TagCable));
-            Assert.False(values.ContainsKey(FrameBlockFiller.TagBridge));
             Assert.False(values.ContainsKey(FrameBlockFiller.TagConduit));
             Assert.Equal("MDAPT01-泵1", values[FrameBlockFiller.TagDevice]);
         }

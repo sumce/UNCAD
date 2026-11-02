@@ -119,32 +119,27 @@ namespace UNCAD.Features.Fill
         }
 
         public static FillWriteResult FillFrame(CadContext ctx, ObjectId[] blockIds,
-            MachineRow selected, string bridgeInfo, CableStatResult statistics)
+            MachineRow selected, CableStatResult statistics)
             => RunStandalone(ctx, transaction =>
-                FillFrame(ctx, transaction, blockIds, selected, bridgeInfo, statistics));
+                FillFrame(ctx, transaction, blockIds, selected, statistics));
 
         internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
-            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
-            CableStatResult statistics)
-            => FillFrame(ctx, transaction, blockIds, selected, bridgeInfo,
-                statistics, false);
+            ObjectId[] blockIds, MachineRow selected, CableStatResult statistics)
+            => FillFrame(ctx, transaction, blockIds, selected, statistics, false);
 
         internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
-            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
-            CableStatResult statistics, bool preserveMissingStatistics)
-            => FillFrame(ctx, transaction, blockIds, selected, bridgeInfo, statistics,
-                preserveMissingStatistics, preserveMissingStatistics,
-                preserveMissingStatistics);
+            ObjectId[] blockIds, MachineRow selected, CableStatResult statistics,
+            bool preserveMissingStatistics)
+            => FillFrame(ctx, transaction, blockIds, selected, statistics,
+                preserveMissingStatistics, preserveMissingStatistics);
 
         internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
-            ObjectId[] blockIds, MachineRow selected, string bridgeInfo,
-            CableStatResult statistics, bool preserveCable, bool preserveBridge,
-            bool preserveConduit)
+            ObjectId[] blockIds, MachineRow selected, CableStatResult statistics,
+            bool preserveCable, bool preserveConduit)
         {
             if (blockIds == null || blockIds.Length == 0) return FillWriteResult.Empty;
             Dictionary<string, string> values = FrameBlockFiller.BuildValues(
-                selected, bridgeInfo, statistics, preserveCable, preserveBridge,
-                preserveConduit);
+                selected, statistics, preserveCable, preserveConduit);
             if (values.Count == 0) return FillWriteResult.Empty;
 
             int blocks = 0, attributes = 0;

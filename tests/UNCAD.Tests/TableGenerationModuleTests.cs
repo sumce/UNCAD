@@ -76,32 +76,6 @@ namespace UNCAD.Tests
                 request.Statistics.Bridges[0].CatalogModel);
         }
 
-        [Fact]
-        public void FillTablePlan_PropagatesBridgeBoqModelToFrameStatistics()
-        {
-            CableStatResult statistics = StatCalculator.Calculate(
-                new[] { "桥架200*100 10格" }, 250.0);
-            var catalog = new BoqCatalogIndex(new[]
-            {
-                new ListItem
-                {
-                    Category = "桥架",
-                    Code = "2.6",
-                    Name = "桥架",
-                    Feature = "1.名称:梯形桥架200Wx100H\n2.材质:铝合金",
-                    Unit = "m",
-                    Spec = "200*100"
-                }
-            });
-
-            FillTableModule.Plan(new MachineRow(), catalog, statistics,
-                FillPlanningOptions.Default);
-            Dictionary<string, string> values = FrameBlockFiller.BuildValues(
-                new MachineRow(), "", statistics);
-
-            Assert.Equal("梯形桥架200Wx100H 2.5M",
-                values[FrameBlockFiller.TagBridge]);
-        }
 
         [Fact]
         public void Plan_CarriesAutoFillPolicyIntoReview()

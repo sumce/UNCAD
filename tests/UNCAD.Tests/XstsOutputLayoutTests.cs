@@ -7,9 +7,9 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// XSTS 输出接入统一 OutputLayout 的契约（2.10.0）：
-    /// 报告写入 &lt;输出根&gt;\&lt;图纸&gt;\XSTS\UNCAD_XSTS_&lt;时间&gt;.xlsx，
-    /// 保留原文件名规则；写盘前做占用预检；未配置输出根时默认“我的文档\UNCAD输出”。
+    /// XSTS 输出契约（D-035，2026-11-01 恢复 2.9.x 现场习惯）：
+    /// 报告直接写入 &lt;输出根&gt;\UNCAD_XSTS_&lt;时间&gt;.xlsx，不按图纸/类型分层；
+    /// 写盘前保留占用预检；未配置输出根时默认“我的文档\UNCAD输出”。
     /// </summary>
     public sealed class XstsOutputLayoutTests
     {
@@ -17,34 +17,28 @@ namespace UNCAD.Tests
             new DateTime(2026, 11, 1, 12, 34, 56, 789);
 
         [Fact]
-        public void ResolveOutputFile_UsesXstsKindFolderAndKeepsFileNameRule()
+        public void ResolveOutputFile_WritesReportDirectlyIntoRoot()
         {
             string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(),
                 "uncad-xsts-layout-root"));
 
-            string byDrawingAndKind = XstsFeature.ResolveOutputFile(root, "一号厂房",
-                FixedNow, true, true);
-            Assert.Equal(Path.Combine(root, "一号厂房", "XSTS",
-                "UNCAD_XSTS_20261101_123456_789.xlsx"), byDrawingAndKind);
+            string path = XstsFeature.ResolveOutputFile(root, FixedNow);
 
-            // 关闭“按图纸/分类”开关时退化为 <输出根>\UNCAD_XSTS_时间.xlsx。
-            string flat = XstsFeature.ResolveOutputFile(root, "一号厂房", FixedNow,
-                false, false);
-            Assert.Equal(Path.Combine(root, "UNCAD_XSTS_20261101_123456_789.xlsx"), flat);
+            Assert.Equal(Path.Combine(root,
+                "UNCAD_XSTS_20261101_123456_789.xlsx"), path);
         }
 
         [Fact]
-        public void ResolveOutputFile_SanitizesDrawingNameAndUsesDefaultRoot()
+        public void ResolveOutputFile_UsesDefaultRootWhenUnconfigured()
         {
             string documents = Environment.GetFolderPath(
                 Environment.SpecialFolder.MyDocuments);
             if (string.IsNullOrWhiteSpace(documents)) return;   // 无“我的文档”的宿主不测默认值
 
             string root = OutputLayout.NormalizeRoot("");
-            string path = XstsFeature.ResolveOutputFile(root, "厂房/一期:*", FixedNow,
-                true, true);
+            string path = XstsFeature.ResolveOutputFile(root, FixedNow);
 
-            Assert.Equal(Path.Combine(documents, "UNCAD输出", "厂房_一期__", "XSTS",
+            Assert.Equal(Path.Combine(documents, "UNCAD输出",
                 "UNCAD_XSTS_20261101_123456_789.xlsx"), path);
         }
 
@@ -54,8 +48,7 @@ namespace UNCAD.Tests
             string directory = Path.Combine(Path.GetTempPath(),
                 "uncad-xsts-lock-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
-            string path = XstsFeature.ResolveOutputFile(directory, "图纸A", FixedNow,
-                true, true);
+            string path = XstsFeature.ResolveOutputFile(directory, FixedNow);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
             File.WriteAllText(path, "x");
             try

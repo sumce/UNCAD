@@ -51,8 +51,9 @@ U1SET / U1DATA refresh
 
 U1F/U1U/U1S/U1DWG output gate
   before any CAD/BOQ write, require every circuit of each selected machine to be
-  in the selection (UNC_FILL_REQUIRE_ALL_CIRCUITS) -> otherwise abort with the
-  missing circuit list and leave drawing + BOQ untouched
+  in the selection (UNC_FILL_REQUIRE_ALL_CIRCUITS) -> U1F/U1S/U1DWG abort with
+  the missing circuit list; U1U (D-034) keeps updating the selected frames and
+  only skips that machine's BOQ -> the drawing is refreshed either way
 
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels

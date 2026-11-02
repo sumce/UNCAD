@@ -39,7 +39,7 @@ namespace UNCAD.Tests
             source.AddAttribute(FrameBlockFiller.TagDevice, "MQBAN01-中央实验台1-1");
             source.AddAttribute(DeviceBlockFiller.TagDeviceName, "中央实验台1-1");
             source.AddAttribute(FrameBlockFiller.TagCable, "ZB-YJVR-3*2.5mm²: 2+3=5M");
-            source.AddAttribute(FrameBlockFiller.TagBridge,
+            source.AddAttribute("BRIDGE_FRAME_INFO",
                 "桥架200*100 3M; 桥架400*100 1.5M");
             source.AddAttribute(FrameBlockFiller.TagConduit,
                 "⌀20线管 2M，⌀25线管 3M");
@@ -339,7 +339,7 @@ namespace UNCAD.Tests
             source.AddAttribute(FrameBlockFiller.TagPower, "M01-POWER");
             source.AddAttribute(DeviceBlockFiller.TagDeviceName, "设备1");
             source.AddAttribute(FrameBlockFiller.TagCable, "OLD-CABLEmm²: 2+3=5M");
-            source.AddAttribute(FrameBlockFiller.TagBridge, "旧桥架 4M");
+            source.AddAttribute("BRIDGE_FRAME_INFO", "旧桥架 4M");
             source.AddAttribute(FrameBlockFiller.TagConduit, "旧线管 6M");
             source.AddTableRow("1", "自定义供电线", "NEW-CABLE", "M", "18.5", "1.9");
             source.AddTableRow("2", "用户修改托盘", "任意特征", "M", "7.25", "2.9");

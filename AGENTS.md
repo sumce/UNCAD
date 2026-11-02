@@ -45,9 +45,10 @@ when their version numbers or counts are stale.
   in U1SET/U1DATA and commands never touch the network.
 - Nothing is uploaded. Account/licence validation is the only network feature;
   do not reintroduce upload code without a new decision in `docs/DECISIONS.md`.
-- U1F/U1U/U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
+- U1F/U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
   machine is in the selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on;
-  missing circuits are listed before any write). Output layout is
+  missing circuits are listed before any write). U1U keeps updating frames on
+  partial selections but skips that machine's BOQ (D-034). Output layout is
   `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...`; write-occupancy is checked
   before the CAD transaction.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.

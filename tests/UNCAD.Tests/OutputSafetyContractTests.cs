@@ -134,6 +134,31 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("MachineLedgerReporter", coordinator);
         }
 
+        [Fact]
+        public void U1U_PartialCoverage_UpdatesDrawingAndSkipsOnlyBoq()
+        {
+            // D-033 修订（2026-11-01）：U1U 缺回路不再拦整条命令——图框照常更新，
+            // 只跳过该机 BOQ（部分回路的 BOQ 会丢未选回路的工程量）。
+            // U1F/U1S/U1DWG 仍是硬拦截（缺回路不写）。
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            Assert.Contains("boqBlockedByCoverage", fill);
+            Assert.Contains("本次只更新图框数据、不生成 BOQ", fill);
+            Assert.Contains("全部回路画完后", fill);
+            Assert.Contains("EvaluateCircuitCoverage", fill);
+            Assert.Contains("CoverageIncompleteMachines", fill);
+            // U1F 的硬拦截文案必须保留。
+            Assert.Contains("回路不全不生成 BOQ/DWG，", fill);
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            Assert.Contains("CoverageIncompleteMachines", batch);
+            Assert.Contains("boqPlans", batch);
+            Assert.Contains("不生成该机 BOQ", batch);
+            // 旧的"整批取消"路径不得回流。
+            Assert.DoesNotContain("本次批量更新已取消", batch);
+        }
+
         private static string Repo(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

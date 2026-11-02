@@ -25,7 +25,7 @@ namespace UNCAD.Tests
         public void RuntimeOptions_ClampUnsafePersistedValues()
         {
             FillRuntimeOptions options = FillRuntimeOptions.Create(" source.xlsx ",
-                -8, 999, -1, double.PositiveInfinity, " bridge ", null);
+                -8, 999, -1, double.PositiveInfinity, null);
 
             // 用户唯一提供的文件就是机台/设备表；不再存在清单路径配置。
             Assert.Equal("source.xlsx", options.MachineWorkbookPath);
@@ -33,7 +33,6 @@ namespace UNCAD.Tests
             Assert.Equal(TableClearPolicy.DefaultRows, options.ClearRows);
             Assert.Equal(TableFillFormatter.DefaultTextHeight, options.TextHeight);
             Assert.Equal(250, options.MmPerGrid);
-            Assert.Equal("bridge", options.BridgeInfo);
             Assert.Same(FillPlanningOptions.Default, options.Planning);
             Assert.Same(FillAutoFillOptions.Default, options.AutoFill);
         }

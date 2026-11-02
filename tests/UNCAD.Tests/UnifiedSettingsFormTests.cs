@@ -488,9 +488,11 @@ namespace UNCAD.Tests
             Assert.Contains("ConfigShareService.Import(", source);
             Assert.Contains("OperationLog.ReadRecent(", source);
             Assert.Contains("OperationLog.OpenFolder()", source);
-            // 无效设置：桥架默认规格由命令固定传入，UI 不得再写 UNQ_TEXT。
-            // 注意 UNQ_TEXT_OFF 是有效的偏移设置，必须用带逗号的精确前缀区分。
-            Assert.DoesNotContain("Settings.Set(ConfigKeys.UnqText,", source);
+            // 无效设置：UNQ_TEXT（桥架规格由命令固定传入）与 UNC_FILL_BRIDGE
+            // （xframe_v2 已无 BRIDGE_FRAME_INFO 属性）都是已删除的死键，
+            // U1SET 不得再引用；UNQ_TEXT_OFF 是有效键，注意精确匹配。
+            Assert.DoesNotContain("ConfigKeys.UnqText,", source);
+            Assert.DoesNotContain("ConfigKeys.FillBridge", source);
         }
 
         [Fact]

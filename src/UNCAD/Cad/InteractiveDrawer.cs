@@ -79,8 +79,11 @@ namespace UNCAD.Cad
             }
             catch (Autodesk.AutoCAD.Runtime.Exception ex) when (ex.ErrorStatus == ErrorStatus.UserBreak)
             {
-                // ESC：与 L 命令一致——清除已绘制的全部内容
-                Erase(ctx, allIds);
+                // ESC：保留已画段（D-036，2026-11-01 裁定）。每段已独立提交，
+                // 直接结束即可；allIds 仍可用于后续 U 撤销。真正的异常路径
+                // 仍整体清除，不留半成品。
+                ctx.Write("\n[U1L] Esc 结束，已保留本次绘制的 "
+                    + drawn.Count + " 段。");
             }
             catch
             {

@@ -95,27 +95,33 @@ namespace UNCAD.Features.Fill
             }
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
 
-            // 首次使用的图框：在 GUI 里统一填写设备内预留；已有 frameinfo_json 记录的
-            // 图框保持原值，不再询问。命令行不出现任何输入提示。
+            // 首次使用的图框：在 GUI 里逐框填写设备内预留（不同设备预留通常
+            // 不同，不能整批共用一个值）；已有 frameinfo_json 记录的图框保持
+            // 原值，不再询问。命令行不出现任何输入提示。
             List<Plan> reserveMissing = plans.Where(plan => plan.Reserve != null
                 && (plan.PreviousRecord == null
                     || string.IsNullOrWhiteSpace(plan.PreviousRecord.DeviceReserveMm)))
                 .ToList();
             if (reserveMissing.Count > 0)
             {
-                using (var reserveForm = new DeviceReserveForm(reserveMissing.Count))
+                var reserveRows = reserveMissing.ConvertAll(plan =>
+                    new DeviceReserveRow(plan.Machine?.MachineId ?? "",
+                        plan.Machine?.CircuitName ?? ""));
+                using (var reserveForm = new DeviceReserveForm(reserveRows))
                 {
                     if (AcApplication.ShowModalDialog(reserveForm) != DialogResult.OK)
                     {
                         ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
                         return;
                     }
-                    foreach (Plan plan in reserveMissing)
+                    for (int i = 0; i < reserveMissing.Count; i++)
                     {
+                        Plan plan = reserveMissing[i];
+                        double reserveMillimeters = reserveForm.ReserveMillimeters(i);
                         FillFeature.ApplyDeviceReserve(plan.Statistics, plan.Reserve,
-                            reserveForm.ReserveMillimeters);
-                        plan.Review.DeviceReserveMm = UNCAD.Core.Text.TextFormatter.FormatNum(
-                            reserveForm.ReserveMillimeters);
+                            reserveMillimeters);
+                        plan.Review.DeviceReserveMm =
+                            UNCAD.Core.Text.TextFormatter.FormatNum(reserveMillimeters);
                         plan.Review.SyncCableReserveMeters();
                     }
                 }
@@ -224,30 +230,38 @@ namespace UNCAD.Features.Fill
             foreach (Plan plan in plans)
                 ctx.Operation?.Machine(plan.Machine.MachineId, plan.Machine.CircuitName);
 
-            // 2.10.0：整机回路校验——每个机台的所有回路都必须被框选，否则不生成 BOQ/DWG。
-            if (!FillFeature.EnsureCircuitCoverage(ctx, workbook, CommandIds.FillUpdate,
-                    plans.Select(plan => new KeyValuePair<string, string>(
-                        plan.Machine.MachineId, plan.Machine.CircuitName))))
+            // 2.10.0 整机回路校验（U1SET 可关闭）：缺回路的机台只更新图纸、
+            // 跳过该机 BOQ（部分回路的 BOQ 会丢掉未选回路的工程量），不再拦
+            // 整批更新；补全回路后由用户执行 U1S 补清单。
+            List<string> coverageIncomplete = FillFeature.CoverageIncompleteMachines(
+                ctx, workbook, CommandIds.FillUpdate,
+                plans.Select(plan => new KeyValuePair<string, string>(
+                    plan.Machine.MachineId, plan.Machine.CircuitName)));
+            List<Plan> boqPlans = plans;
+            if (coverageIncomplete.Count > 0)
             {
-                MessageBox.Show(Owner(), "整机回路校验未通过，本次批量更新已取消（图纸与 BOQ 均未修改）。"
-                    + "\r\n\r\n缺少的回路见 CAD 命令行；补选后再执行。"
-                    + "\r\n如该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。",
-                    "U1U 整机回路校验", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                var incompleteSet = new HashSet<string>(coverageIncomplete,
+                    UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
+                boqPlans = plans.Where(plan => !incompleteSet.Contains(
+                    plan.Machine.MachineId)).ToList();
+                foreach (string machineId in coverageIncomplete)
+                    ctx.Write("\n[U1U] 机台 " + machineId + " 回路不全：本次只更新"
+                        + "图纸、不生成该机 BOQ；全部回路画完后执行 "
+                        + CommandIds.Submit + " 生成清单。");
             }
 
             string automaticExcelPath;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions;
             try
             {
-                AutomaticSubmissionService.ValidateIdentityKeys(plans.Select(plan =>
+                AutomaticSubmissionService.ValidateIdentityKeys(boqPlans.Select(plan =>
                     new KeyValuePair<string, string>(plan.Machine.MachineId,
                         plan.Machine.CircuitName)));
                 automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                    plans.Select(plan => plan.Machine.MachineId),
+                    boqPlans.Select(plan => plan.Machine.MachineId),
                     AutomaticSubmissionService.CurrentDrawingName(ctx));
                 automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
-                    automaticExcelPath, plans.Select(plan => plan.Machine.MachineId));
+                    automaticExcelPath, boqPlans.Select(plan => plan.Machine.MachineId));
             }
             catch (System.Exception ex)
             {
@@ -307,7 +321,7 @@ namespace UNCAD.Features.Fill
             short upstreamColorIndex = FillColorSettings.UpstreamColorIndex();
             using (var outputBatch = new FileBatchRollback(
                 AutomaticSubmissionService.TargetPaths(automaticExcelPath,
-                    plans.Select(plan => plan.Machine.MachineId))))
+                    boqPlans.Select(plan => plan.Machine.MachineId))))
             {
             // Close the gap between the post-confirmation check and batch snapshot.
             // BeginWrite performs the final check after the CAD work is prepared.
@@ -357,11 +371,8 @@ namespace UNCAD.Features.Fill
 
                         FillWriteResult frame = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                             plan.Selection.FrameBlockIds, plan.Machine,
-                            plan.Statistics.BridgeState == MeasurementState.ConfirmedEmpty
-                                ? "" : options.BridgeInfo,
                             plan.Statistics,
                             plan.Statistics.CableState == MeasurementState.Unknown,
-                            plan.Statistics.BridgeState == MeasurementState.Unknown,
                             plan.Statistics.ConduitState == MeasurementState.Unknown);
                         FillWriteResult device = CadBlockAttributeWriter.FillDeviceName(ctx,
                             transaction, plan.Selection.DeviceBlockIds,
@@ -445,7 +456,7 @@ namespace UNCAD.Features.Fill
                 using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
                 {
                     automaticExcel = AutomaticSubmissionService.Write(ctx, readTransaction,
-                        automaticExcelPath, plans.Select(plan => plan.Selection.SourceIds),
+                        automaticExcelPath, boqPlans.Select(plan => plan.Selection.SourceIds),
                         outputBatch);
                     readTransaction.Commit();
                 }
@@ -497,7 +508,11 @@ namespace UNCAD.Features.Fill
                     + UNCAD.Core.Text.TextFormatter.FormatNum(options.MmPerGrid)
                     + " mm/格）。" : "")
                 + " BOQ 文件处理 " + automaticExcel.AddedCount + " 条，覆盖 "
-                + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath);
+                + automaticExcel.ReplacedCount + " 个文件；路径 " + automaticExcel.FilePath
+                + (coverageIncomplete.Count > 0
+                    ? "；机台 " + string.Join("、", coverageIncomplete)
+                        + " 回路不全，本次未生成其 BOQ。"
+                    : ""));
         }
 
         private static void Preflight(CadContext ctx, Transaction readTransaction,

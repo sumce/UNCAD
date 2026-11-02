@@ -4,6 +4,56 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-036: U1L Esc Keeps The Drawn Segments (2026-11-01)
+
+- Status: accepted
+- Decision: pressing Esc during `U1L` ends the command and **keeps** every
+  already-committed segment and its millimetre labels. The per-segment
+  transaction model stays; `U` continues to undo segment by segment. Real
+  exceptions during drawing still erase the pending batch so no half-built
+  geometry survives.
+- Rationale: field users draw long polylines segment by segment; losing minutes
+  of confirmed work because Esc was pressed at the end was the complaint.
+  This also aligns the code with the COMMAND-AUDIT matrix, which already
+  documented "Esc 结束并保留已完成段" while the implementation erased.
+- Consequence: do not "restore L-command parity" by re-adding the erase.
+
+## D-035: XSTS Report Writes Directly Into The Configured Output Root (2026-11-01)
+
+- Status: accepted (amends D-033's layered output for XSTS only)
+- Decision: the XSTS report goes to `<输出根>\UNCAD_XSTS_<时间戳>.xlsx` —
+  directly in the configured output root (`UNC_SUBMIT_FOLDER`, default
+  `Documents\UNCAD输出`), not into `<输出根>\<图纸>\XSTS\`. The write-occupancy
+  precheck and the default-root write-back are kept. BOQ/DWG/PDF keep the
+  layered `<root>\<drawing>\<kind>\<machine>` layout unchanged.
+- Rationale: field users collect XSTS reports per work session in one folder;
+  burying them under a per-drawing subfolder made the reports appear "missing".
+  XSTS reports are ad-hoc statistics, not per-machine deliverables, so the
+  per-drawing layering has no aggregation value for them.
+- Consequence: `ResolveOutputFile(root, now)` is the single path rule; the
+  `UNC_OUTPUT_BY_DRAWING`/`UNC_OUTPUT_SEPARATE_KINDS` switches no longer affect
+  XSTS (they keep governing BOQ/DWG/PDF). Restoring a layered XSTS path
+  requires a new decision.
+
+## D-034: U1U Partial-Circuit Updates Proceed And Skip Only That Machine's BOQ (2026-11-01)
+
+- Status: accepted (amends D-033)
+- Decision: the whole-machine circuit gate stays a hard abort for `U1F` (new
+  BOQ), `U1S`, and `U1DWG`. `U1U` — single-frame and batch — no longer aborts
+  when a selected machine's circuits are not all in the selection: the selected
+  frames are updated normally, and only that machine's BOQ output is skipped
+  with a command-line note ("回路不全…不生成 BOQ；补全后执行 U1S").
+- Rationale: U1U exists to refresh whichever frames changed; blocking the whole
+  command because other circuits are not drawn yet made frame-by-frame updates
+  unusable. The partial-machine BOQ remains forbidden — a BOQ rebuilt from a
+  subset of circuits loses the missing circuits' quantities, so skipping the
+  file is the safe side.
+- Consequence: `UNC_FILL_REQUIRE_ALL_CIRCUITS` (default on) still suppresses
+  the check when disabled. `EnsureCircuitCoverage` remains the hard gate;
+  `EvaluateCircuitCoverage`/`CoverageIncompleteMachines` are the U1U evaluation
+  entry points. Reintroducing a U1U abort, or writing a partial-machine BOQ,
+  both require a new decision.
+
 ## D-033: 2.10.0 — No Cloud Sync, Whole-Machine Circuit Gate, Layered Output, Local History (2026-11-01)
 
 - Status: accepted

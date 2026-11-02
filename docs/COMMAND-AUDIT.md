@@ -71,7 +71,7 @@ Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25
 | `U1DWG` / `U1D` | 身份读取只读事务；导出为磁盘 IO（Wblock + SaveAs + 原子替换），不修改当前图纸 | 占用预检失败/无图框 → 中止且不生成文件；逐机台失败原因写日志+命令行 | `SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `DwgExportLayoutTests`、`DwgPathDiscoveryTests` |
 | `U1PDF` | 无 CAD 写入；打印设置逐字段恢复，失败按 `PdfPlotCommitPolicy` 回滚本次布局改动；占用预检在出图前 | 缺 “DWG To PDF.pc3”、图框身份无法解析、文件被占用 → 中止；单份出图失败聚合为首个诊断，不影响其它份 | `SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `PdfExportTests`、`PdfPlotPipelineTests`、`PdfPlotCommitPolicyTests` |
 | `XLAYOUT` | 身份读取只读事务 + 排版写事务；排版只移动图框/写机台 ID 文字 | 身份错误聚合后提示；重复执行追加机台 ID 文字是 **D-009 设计行为**，性能优化不得消除 | `FillExcelPath`（只用于快照路径） | `XLayoutFeatureContractTests`、`XLayoutLayoutTests`、`XLayoutDiagnosticTests`、`XLayoutSelectionFilterTests` |
-| `XSTS` | 只读事务读取图框身份；随后写 xlsx 到 `<输出根>\<图纸>\XSTS\`，不写 CAD | 无图框/身份失败逐条列出；期望数据来自 SQLite 快照，未刷新时显式提示执行 `U1DATA`；目录准备失败/报告被占用在写盘前中文中止 | `FillExcelPath`、`SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `XstsReportTests`、`XstsExcelReporterTests`、`XstsFormTests`、`XstsOutputLayoutTests` |
+| `XSTS` | 只读事务读取图框身份；随后写 xlsx 到 `<输出根>\UNCAD_XSTS_时间.xlsx`（D-035，直接放输出根），不写 CAD | 无图框/身份失败逐条列出；期望数据来自 SQLite 快照，未刷新时显式提示执行 `U1DATA`；目录准备失败/报告被占用在写盘前中文中止 | `FillExcelPath`、`SubmitFolder` | `XstsReportTests`、`XstsExcelReporterTests`、`XstsFormTests`、`XstsOutputLayoutTests` |
 | `Xmerge` | `XmergeService` 内事务合并，失败整体回滚；源 DWG 只读不修改 | 未选文件 → 提示；同定义不兼容按 D-022 分离重试；未定位实体有数量提示 | 无 | `XmergeFeatureContractTests`、`FrameRegionCollectorTests` |
 | `U1C` | **一个**事务同时写 Ruanguan 块属性与线管标注并提交 | 固定清单无对应型号 → 写图前中止（D-016）；预选图框但无 Ruanguan → 仍可只做曲线标注 | `ConduitDiameter`、`ConduitHeight/LineOff/TextOff/Side`（= UNQ_* 键） | `ConduitLabelFormatterTests`、`ConduitDiameterTests`、`FlexibleConduitCableMapTests`、`RuanguanLabelFormatterTests` |
 | `U1C20/25/38/51` | 同 `U1C`，管径固定不读默认值 | 清单缺该管径 → 中止；标注长度固定 2000mm 占位（`DEVELOPMENT.md` 约定） | 同 `U1C`（不读 `ConduitDiameter`） | 同 `U1C` + `CommandRegistrationTests` |
@@ -102,13 +102,13 @@ Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25
 | C-06 | P2 | `Infra/CommandHelpCatalog.cs`（U1SET） | 2.10.0 新增日志/操作记录/配置分享页签后帮助未同步 | 已补充 Notes |
 | C-07 | P2 | `tests/UNCAD.Tests` | 命令审计结论没有自动校验，文档会与注册表漂移 | 新增 `CommandAuditTests`：审计文档必须覆盖全部 `CommandIds.Registered`，且已删除的废弃入口不得回流 |
 | C-08 | P1 | `Infra/CommandHelpCatalog.cs`（U1PDF/U1S/U1DWG/U1DATA） | 2.10.0 移除全部云端上传与远程数据源后，帮助仍写“上传到服务端供在线预览”“本地或远程机台工作簿”，与新硬约束冲突 | 已改为“本地输出目录，不上传、不联网”“只支持本地/UNC”；全帮助文本复查再无上传承诺（Ribbon 提示由 UI scope 同步） |
-| C-09 | P2 | `Features/Stat/XstsFeature.cs` | XSTS 直接写 `UNC_SUBMIT_FOLDER` 根目录，未走统一 `OutputLayout`（按图纸/分类型）与写占用预检，输出结构与 U1S/U1DWG/U1PDF 不一致 | 已接入 `OutputLayout.NormalizeRoot` + `ResolveKindDirectory(..., "XSTS", ...)` + `ValidateNotLocked`，空根写回 `UNC_SUBMIT_FOLDER`；文件名/报告内容不变；新增 `XstsOutputLayoutTests` |
+| C-09 | P2 | `Features/Stat/XstsFeature.cs` | XSTS 直接写 `UNC_SUBMIT_FOLDER` 根目录，未走统一 `OutputLayout`（按图纸/分类型）与写占用预检，输出结构与 U1S/U1DWG/U1PDF 不一致 | 已接入 `OutputLayout`（占用预检与默认根保留）；**2026-11-01 D-035 修订：分层目录部分撤销**，报告恢复直接写入输出根 `<输出根>\UNCAD_XSTS_时间.xlsx`，现场反馈按图纸套子文件夹等于"报表丢失" |
 
 ### 4.2 已上报，需其它 scope 处理
 
 | 编号 | 严重度 | 位置 | 问题 | 上报对象 |
 | --- | --- | --- | --- | --- |
-| C-10 | P2 | `ConfigKeys.UnqText` | `U1Q1/U1Q2/U1Q4` 都传入固定规格，`Settings.Get(UnqText)` 只在 `state == null` 的防御分支可达；U1SET 里保存的“桥架标识”对已注册命令没有实际作用（历史遗留） | Lead（配置键与 U1SET 页签属 Lead/UI scope，需决定保留还是移除） |
+| C-10 | P2 | `ConfigKeys.UnqText` | `U1Q1/U1Q2/U1Q4` 都传入固定规格，`Settings.Get(UnqText)` 只在 `state == null` 的防御分支可达；U1SET 里保存的“桥架标识”对已注册命令没有实际作用（历史遗留） | **已处理（2026-11-01）**：键删除，防御分支改回历史默认值；含 `CommandAuditTests` 防回流断言 |
 
 ### 4.3 确认不是缺陷（不得“顺手修”）
 
@@ -135,7 +135,7 @@ Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25
 | `UncadRibbon()` | `Features/About/AboutFeature.cs` | 无 `[CommandMethod]`，无调用（Ribbon 由 Bootstrap 注册） | 已删除（Lead 授权） |
 | `SettingsFeature.Show(int tabIndex)` 的 0/1/2 映射 | `Features/ConfigCenter/SettingsFeature.cs` | 1/2 页签只被已删除的旧 SET 入口使用 | 收敛为 `Show()` |
 | `ConfigKeys.FillIncludeUnmatchedConduits` | `Infra/ConfigKeys.cs` | 运行期固定忽略的历史兼容键 | Lead 已删除（含 `ConfigKeysTests` 断言） |
-| `ConfigKeys.FillBridge` | `Infra/ConfigKeys.cs`、`Infra/FillSettings.cs`、UI | 图框块 BRIDGE_FRAME_INFO 写入内容（空=不写） | 测试断言已由 Lead 清理；`ConfigKeys`/`FillSettings`/U1SET 引用按 Lead 安排在本轮后续删除（不在 C 的写 scope） |
+| `ConfigKeys.FillBridge` | `Infra/ConfigKeys.cs`、`Infra/FillSettings.cs`、UI | 图框块 BRIDGE_FRAME_INFO 写入内容（空=不写） | **已删除（2026-11-01）**：xframe_v2 已无 BRIDGE_FRAME_INFO 属性，U1SET 字段、`FillOptions.BridgeInfo` 与 `FrameBlockFiller.TagBridge` 写入链一并清除（桥架数据仍进 BOQ 表与 DATA 工作表）；`CommandAuditTests` 防回流 |
 
 ## 6. 验证
 

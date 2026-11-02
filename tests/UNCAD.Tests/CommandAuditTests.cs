@@ -43,6 +43,13 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("public void UncadTray()", File.ReadAllText(
                 RepoFile("src", "UNCAD", "Features", "Unq", "UnqFeature.cs")));
 
+            // UNQ_TEXT / UNC_FILL_BRIDGE 是 2026-11-01 删除的死配置键，
+            // 不得回流（UNQ_TEXT_OFF / 其它 UNQ_* 有效键不受影响）。
+            string configKeysSource = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Infra", "ConfigKeys.cs"));
+            Assert.DoesNotContain("UnqText =", configKeysSource);
+            Assert.DoesNotContain("FillBridge =", configKeysSource);
+
             foreach (string name in forbidden)
             {
                 foreach (string file in Directory.GetFiles(RepoDir(

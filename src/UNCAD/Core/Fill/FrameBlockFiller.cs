@@ -10,12 +10,13 @@ namespace UNCAD.Core.Fill
 {
     /// <summary>
     /// 图框块属性填充：按属性标签把机台回路数据写进选中的块参照。
-    /// 标签与 TEXTS.dwg 图框（frame_20260812）一致：
+    /// 标签与 xframe_v2 图框一致：
     ///   MACHINEID-DEVICE   机台ID-设备名称
     ///   MACHINEID-POWER    机台ID-POWER，例如 "MDAPT01-POWER"
-    ///   CABLE_INFO         电缆型号mm²: 实测分段(mm)=实测合计mm（盘内预留）+xxxmm（设备预留）+xxxmm=总长mm
-    ///   BRIDGE_FRAME_INFO  UNADD 桥架规格 + 总长度（无统计结果时回退配置）
+    ///   CABLE_INFO         电缆型号mm²: 实测分段(mm)+盘内+设备内+预留=总长mm
     ///   CONDUIT_INFO       各管径线管总长度，多个用中文逗号分隔
+    /// （BRIDGE_FRAME_INFO 已随 xframe_v2 迁移移除：桥架数据只进 BOQ 表与
+    /// DATA 工作表，D-035/D-033 之后的图框不再携带该属性。）
     /// 可选统计标签始终返回；无数据时写空字符串，避免保留上一次填充内容。
     /// </summary>
     public static class FrameBlockFiller
@@ -23,11 +24,10 @@ namespace UNCAD.Core.Fill
         public const string TagDevice = "MACHINEID-DEVICE";
         public const string TagPower = "MACHINEID-POWER";
         public const string TagCable = "CABLE_INFO";
-        public const string TagBridge = "BRIDGE_FRAME_INFO";
         public const string TagConduit = "CONDUIT_INFO";
 
         private static readonly HashSet<string> KnownTags = new HashSet<string>(
-            new[] { TagDevice, TagPower, TagCable, TagBridge, TagConduit },
+            new[] { TagDevice, TagPower, TagCable, TagConduit },
             System.StringComparer.OrdinalIgnoreCase);
 
         public static bool IsKnownTag(string tag) => KnownTags.Contains(tag ?? "");
@@ -51,32 +51,32 @@ namespace UNCAD.Core.Fill
 
         /// <summary>兼容入口：无框选统计结果时只填 Excel 可确定的属性。</summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
-            MachineRow row, string bridgeInfo)
+            MachineRow row)
         {
-            return BuildValues(row, bridgeInfo, null);
+            return BuildValues(row, null);
         }
 
         /// <summary>
         /// 构建 标签→值 映射。统计结果来自 U1F 同一次框选，
-        /// CABLE_INFO 写电缆公式，BRIDGE_FRAME_INFO 写桥架总长，CONDUIT_INFO 写各管径线管总长。
+        /// CABLE_INFO 写电缆公式，CONDUIT_INFO 写各管径线管总长。
         /// </summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
-            MachineRow row, string bridgeInfo, CableStatResult stat)
-            => BuildValues(row, bridgeInfo, stat, false);
+            MachineRow row, CableStatResult stat)
+            => BuildValues(row, stat, false);
 
         /// <summary>
         /// Builds frame values while optionally leaving statistics-backed attributes
         /// untouched when an update did not receive a fresh measurement text.
         /// </summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
-            MachineRow row, string bridgeInfo, CableStatResult stat,
+            MachineRow row, CableStatResult stat,
             bool preserveMissingStatistics)
-            => BuildValues(row, bridgeInfo, stat, preserveMissingStatistics,
-                preserveMissingStatistics, preserveMissingStatistics);
+            => BuildValues(row, stat, preserveMissingStatistics,
+                preserveMissingStatistics);
 
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
-            MachineRow row, string bridgeInfo, CableStatResult stat,
-            bool preserveCable, bool preserveBridge, bool preserveConduit)
+            MachineRow row, CableStatResult stat,
+            bool preserveCable, bool preserveConduit)
         {
             var d = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
 
@@ -136,18 +136,8 @@ namespace UNCAD.Core.Fill
                         : "";
             }
 
-            if (stat != null && stat.Bridges.Count > 0)
-            {
-                // 图框始终优先显示固定清单的 BOQ 型号。规划结果没有携带型号时，
-                // 在最终格式化处按规格查内嵌清单，避免调用链差异让图框退回旧写法。
-                d[TagBridge] = string.Join("; ", stat.Bridges.Select(b =>
-                    BridgeDisplayModel(b) + " " + TextFormatter.FormatNum(b.TotalM) + "M"));
-            }
-            else
-            {
-                if (!preserveBridge) d[TagBridge] = (bridgeInfo ?? "").Trim();
-            }
-
+            // 桥架不再写图框属性：BRIDGE_FRAME_INFO 已随 xframe_v2 移除，
+            // 桥架数据只进 BOQ 清单表与 DATA 工作表。
             if (stat != null && stat.Conduits.Count > 0)
                 d[TagConduit] = string.Join("，", stat.Conduits.Select(c =>
                     c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"));
@@ -171,16 +161,5 @@ namespace UNCAD.Core.Fill
                 out double current) ? current : 0d;
         }
 
-        private static string BridgeDisplayModel(BridgeStat bridge)
-        {
-            string model = (bridge?.CatalogModel ?? "").Trim();
-            if (model.Length > 0) return model;
-
-            string spec = (bridge?.Spec ?? "").Trim();
-            ListItem item = ListItemReader.EmbeddedCatalogIndex.FindBridge(
-                BoqCatalogIndex.NormalizeBridgeSpec(spec));
-            model = BoqFeatureName.Extract(item?.Feature);
-            return model.Length > 0 ? model : spec;
-        }
     }
 }

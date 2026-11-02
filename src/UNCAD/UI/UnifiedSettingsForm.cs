@@ -91,7 +91,6 @@ namespace UNCAD.UI
         private readonly NumericUpDown _fillTblRow = IntegerBox(1m, 1m, 1000m);
         private readonly NumericUpDown _fillClearRows = IntegerBox(11m, 1m, 100m);
         private readonly NumericUpDown _fillTextHeight = NumberBox(500m, 1m, 100000m);
-        private readonly TextBox _fillBridge = new TextBox { Width = 220 };
         private readonly NumericUpDown _fillFlexibleMeters = NumberBox(1.5m, 0.1m, 100m);
         private readonly NumericUpDown _fillOwnerReserve = NumberBox(3000m, 0m, 100000m);
         private readonly NumericUpDown _fillDownstreamAmps = IntegerBox(20m, 1m, 1000m);
@@ -317,7 +316,6 @@ namespace UNCAD.UI
             SetNumber(_fillClearRows, Settings.GetDouble(ConfigKeys.FillClearRows, 11.0));
             SetNumber(_fillTextHeight, Settings.GetDouble(ConfigKeys.FillTextHeight,
                 TableFillFormatter.DefaultTextHeight));
-            _fillBridge.Text = Settings.Get(ConfigKeys.FillBridge, "");
             SetNumber(_fillFlexibleMeters, Settings.GetDouble(
                 ConfigKeys.FillFlexibleConduitMeters,
                 FillPlanningOptions.DefaultFlexibleConduitMeters));
@@ -446,7 +444,6 @@ namespace UNCAD.UI
                 .ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillClearRows, ((int)_fillClearRows.Value).ToString(CultureInfo.InvariantCulture));
             Settings.Set(ConfigKeys.FillTextHeight, Value(_fillTextHeight));
-            Settings.Set(ConfigKeys.FillBridge, _fillBridge.Text.Trim());
             Settings.Set(ConfigKeys.FillFlexibleConduitMeters, Value(_fillFlexibleMeters));
             Settings.Set(ConfigKeys.FillCableOwnerReserve, Value(_fillOwnerReserve));
             Settings.Set(ConfigKeys.FillDownstreamSocketAmps,
@@ -792,7 +789,6 @@ namespace UNCAD.UI
             AddField(table, 1, "每次清空数据行数", _fillClearRows);
             AddField(table, 2, "表格文字高度", _fillTextHeight);
             AddField(table, 3, "软管手动数量（m）", _fillFlexibleMeters);
-            AddField(table, 4, "桥架信息（块属性）", _fillBridge);
             AddField(table, 5, "电缆业主预留（mm）", _fillOwnerReserve);
             // 电缆盘内/箱内预留：现场默认值来自 CableReserveSettings，随项目可调。
             AddField(table, 6, "I-Line 盘内预留（mm）", _cableReserveILine);

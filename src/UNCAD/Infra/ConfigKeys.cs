@@ -10,7 +10,6 @@ namespace UNCAD.Infra
         public const string UnlOffset = "UNL_OFFSET";
 
         // 桥架标注（U1Q1/U1Q2/U1Q4；注册表键名保持不变）
-        public const string UnqText = "UNQ_TEXT";
         public const string UnqHeight = "UNQ_HEIGHT";
         public const string UnqLineOff = "UNQ_LINE_OFF";
         public const string UnqTextOff = "UNQ_TEXT_OFF";
@@ -52,7 +51,6 @@ namespace UNCAD.Infra
         public const string FillTableRow = "UNC_FILL_TABLE_ROW"; // Table 起始行（1 基）
         public const string FillClearRows = "UNC_FILL_CLEAR_ROWS"; // 每次先清空的模板数据行数，默认 11
         public const string FillTextHeight = "UNC_FILL_TEXT_HEIGHT"; // 写入单元格文字高度，默认 500
-        public const string FillBridge = "UNC_FILL_BRIDGE";      // 图框块 BRIDGE_FRAME_INFO 内容（空=不写）
         public const string FillFlexibleConduitMeters =
             "UNC_FILL_FLEXIBLE_CONDUIT_METERS"; // 软管默认长度，单位米
         // 电缆业主统一预留（毫米），默认 3000；CABLE_INFO 中标注为「（预留）」。

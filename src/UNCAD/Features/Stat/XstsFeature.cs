@@ -33,15 +33,13 @@ namespace UNCAD.Features.Stat
         public void Statistics() => Run();
 
         /// <summary>
-        /// XSTS 报告文件路径（纯路径计算，不创建目录）：<c>&lt;root&gt;\&lt;图纸&gt;\XSTS\UNCAD_XSTS_时间戳.xlsx</c>。
-        /// 根目录由 <see cref="OutputLayout.NormalizeRoot"/> 归一化；文件名规则保持不变。
+        /// XSTS 报告文件路径（纯路径计算，不创建目录）：直接放输出根目录
+        /// <c>&lt;root&gt;\UNCAD_XSTS_时间戳.xlsx</c>（D-035 恢复 2.9.x 现场习惯，
+        /// 不再按图纸/类型分层；根目录由 <see cref="OutputLayout.NormalizeRoot"/> 归一化）。
         /// </summary>
-        internal static string ResolveOutputFile(string root, string drawingName, DateTime now,
-            bool outputByDrawing, bool separateKinds)
+        internal static string ResolveOutputFile(string root, DateTime now)
         {
-            string directory = OutputLayout.ResolveKindDirectory(root, drawingName, "XSTS",
-                outputByDrawing, separateKinds);
-            return Path.Combine(directory, "UNCAD_XSTS_"
+            return Path.Combine(root, "UNCAD_XSTS_"
                 + now.ToString("yyyyMMdd_HHmmss_fff") + ".xlsx");
         }
 
@@ -52,27 +50,21 @@ namespace UNCAD.Features.Stat
         private static string PrepareOutputFile(CadContext ctx)
         {
             string configuredRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            bool outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
-            bool separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
             string root = OutputLayout.NormalizeRoot(configuredRoot);
-            string drawingName = Path.GetFileNameWithoutExtension(ctx.Doc?.Name ?? "");
-            string directory = OutputLayout.ResolveKindDirectory(root, drawingName, "XSTS",
-                outputByDrawing, separateKinds);
             try
             {
-                Directory.CreateDirectory(directory);
+                Directory.CreateDirectory(root);
             }
             catch (System.Exception ex)
             {
                 throw new DirectoryNotFoundException(
-                    "无法创建 XSTS 输出文件夹：" + directory + "（" + ex.Message + "）", ex);
+                    "无法创建 XSTS 输出文件夹：" + root + "（" + ex.Message + "）", ex);
             }
-            if (!Directory.Exists(directory))
-                throw new DirectoryNotFoundException("XSTS 输出文件夹不存在：" + directory);
+            if (!Directory.Exists(root))
+                throw new DirectoryNotFoundException("XSTS 输出文件夹不存在：" + root);
             if (!string.Equals(configuredRoot, root, StringComparison.OrdinalIgnoreCase))
                 Settings.Set(ConfigKeys.SubmitFolder, root);
-            string path = ResolveOutputFile(root, drawingName, DateTime.Now,
-                outputByDrawing, separateKinds);
+            string path = ResolveOutputFile(root, DateTime.Now);
             // 报告文件若同名已存在且被占用，必须在写盘前中止并给出中文提示。
             OutputLayout.ValidateNotLocked(new[] { path });
             return path;
@@ -188,7 +180,7 @@ namespace UNCAD.Features.Stat
             report.FrameCount = regions.SelectedFrameCount;
             foreach (string error in regions.Errors)
                 report.Issues.Add(new XstsFrameIssue { Description = error });
-            // 输出与 U1S/U1DWG/U1PDF 统一走 OutputLayout：<输出根>\<图纸>\XSTS\UNCAD_XSTS_<时间>.xlsx。
+            // 输出直接放输出根目录（D-035，恢复 2.9.x 现场习惯）：<输出根>\UNCAD_XSTS_<时间>.xlsx。
             // 目录/占用预检在写盘之前完成；输出根为空时默认<我的文档>\UNCAD输出并写回 UNC_SUBMIT_FOLDER。
             string path;
             try

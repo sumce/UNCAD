@@ -142,7 +142,6 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            string bridgeInfo = options.BridgeInfo;
             int startRow = options.StartRow;
             int clearRowCount = options.ClearRows;
             double textHeight = options.TextHeight;
@@ -183,11 +182,29 @@ namespace UNCAD.Features.Fill
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
-            // 2.10.0：生成 BOQ/DWG 前要求该机台所有回路都在本次选集中（U1SET 可关闭）。
-            if (!EnsureCircuitCoverage(ctx, workbook,
-                    updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
-                    picked.MachineId, picked.CircuitName))
+            // 2.10.0 整机回路校验（U1SET 可关闭）：U1F 新建 BOQ 必须整机齐全，
+            // 缺回路中止；U1U 只更新图框数据，缺回路不再拦整条命令，只跳过
+            // 这台机的 BOQ——部分回路的 BOQ 会丢掉未选回路的工程量，宁可少
+            // 生成也不能写错数，补全后由用户执行 U1S 补清单。
+            List<CircuitCoverageResult> coverageFailures = EvaluateCircuitCoverage(
+                ctx, workbook, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
+                new[]
+                {
+                    new KeyValuePair<string, string>(
+                        picked.MachineId, picked.CircuitName)
+                });
+            if (coverageFailures.Count > 0 && !updateMode)
+            {
+                ctx.Write("\n[" + CommandIds.Fill + "] 按现场规则：回路不全不生成"
+                    + " BOQ/DWG，本次图纸与 BOQ 均未修改。请补选缺失图框后重试；"
+                    + "若该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
                 return;
+            }
+            bool boqBlockedByCoverage = coverageFailures.Count > 0;
+            if (boqBlockedByCoverage)
+                ctx.Write("\n[" + CommandIds.FillUpdate + "] 机台 " + picked.MachineId
+                    + " 回路不全：本次只更新图框数据、不生成 BOQ；全部回路画完后"
+                    + "执行 " + CommandIds.Submit + " 生成清单。");
             ctx.Operation?.Machine(picked.MachineId, picked.CircuitName);
 
             string automaticExcelPath = null;
@@ -202,7 +219,8 @@ namespace UNCAD.Features.Fill
                 picked, statistics, Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
                     CableReservePolicy.DefaultOwnerReserveMillimeters),
                 options.CableReserve);
-            if (updateMode)
+            // 缺回路的 U1U 跳过 BOQ：不准备输出路径，也就不会登记批次文件。
+            if (updateMode && !boqBlockedByCoverage)
             {
                 try
                 {
@@ -442,8 +460,10 @@ namespace UNCAD.Features.Fill
             // BOQ xlsx 不在这里写：按 docs/DEVELOPMENT.md，Excel 输出在 CAD 提交之后、
             // 读取真实 CAD 结果再写（见下面阶段7）。
             using (var outputBatch = new FileBatchRollback(
-                AutomaticSubmissionService.TargetPaths(automaticExcelPath,
-                    new[] { picked.MachineId })))
+                boqBlockedByCoverage
+                    ? new string[0]
+                    : AutomaticSubmissionService.TargetPaths(automaticExcelPath,
+                        new[] { picked.MachineId })))
             {
             // Recheck while the batch snapshot is held. BeginWrite then guards the
             // remaining CAD-processing window against another external save.
@@ -470,11 +490,8 @@ namespace UNCAD.Features.Fill
                         picked, DateTime.Now);
                     frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                         selection.FrameBlockIds, picked,
-                        updateMode && statistics.BridgeState == MeasurementState.ConfirmedEmpty
-                            ? "" : bridgeInfo,
                         statistics,
                         updateMode && statistics.CableState == MeasurementState.Unknown,
-                        updateMode && statistics.BridgeState == MeasurementState.Unknown,
                         updateMode && statistics.ConduitState == MeasurementState.Unknown);
                     deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
                         selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
@@ -530,6 +547,13 @@ namespace UNCAD.Features.Fill
             // 阶段7：CAD 已提交。按 docs/DEVELOPMENT.md 的顺序，现在才读取真实 CAD 结果
             // 并写 BOQ —— 提交前写 Excel 会在"替换完成到 Commit 之间"留下新表+旧图的窗口。
             // 代价：这一段失败不再回滚图纸，只回滚本批 BOQ 文件并明确要求重跑 U1S。
+            // 缺回路的 U1U 没有登记任何 BOQ 文件，批次直接收尾、图纸保留更新。
+            if (boqBlockedByCoverage)
+            {
+                outputBatch.Complete();
+            }
+            else
+            {
             try
             {
                 // 提交后窗口更短，但外部改动的可能性依然存在，再校验一次文件指纹。
@@ -568,6 +592,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
             }
+            }
 
             SelectionService.ClearPickFirst(ctx);
             if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
@@ -599,10 +624,16 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 颜色已校正：设备端 " + deviceColorBlocks
                     + " 个块，上游端 " + upstreamColorBlocks + " 个块。");
-            ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
-                + " 条，覆盖文件 " + automaticExcel.ReplacedCount
-                + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 " + automaticExcel.FilePath);
+            if (boqBlockedByCoverage)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 机台 " + picked.MachineId + " 回路不全，本次未生成 BOQ；"
+                    + "全部回路画完后执行 " + CommandIds.Submit + " 生成清单。");
+            else
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
+                    + " 条，覆盖文件 " + automaticExcel.ReplacedCount
+                    + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
+                    + automaticExcel.FilePath);
             if (cableReserve != null
                 && (cableReserve.PanelReserveMillimeters > 0d
                     || cableReserve.DeviceReserveMillimeters > 0d))
@@ -992,7 +1023,7 @@ namespace UNCAD.Features.Fill
         /// 实测值**并返回 false——此前无效输入会被静默清零并把图框电缆字段
         /// 抹空，只有日志痕迹。输入显式为 0 才视为"确认清空"。
         /// </summary>
-        private static bool ApplyCableLengthOverride(CableStatResult statistics, string value)
+        internal static bool ApplyCableLengthOverride(CableStatResult statistics, string value)
         {
             string text = (value ?? "").Trim();
             double meters;
@@ -1003,11 +1034,36 @@ namespace UNCAD.Features.Fill
                         System.Globalization.CultureInfo.CurrentCulture, out meters))
                 || meters < 0d)
                 return false;
+            // 预留联动不是长度覆盖：在审阅窗改设备内预留时，窗体会把
+            // 「实测+四项预留」的新总长实时回写进电缆米数框，数值与
+            // ApplyDeviceReserve 刚写入 CableSum 的总长一致。这种输入若照旧
+            // 走覆盖分支，CableFormatted 会被清空，CABLE_INFO 里 1000+700 的
+            // 实测明细塌缩成一个预先加总的数字。总长仍等于预留联动结果的
+            // 输入直接放行，明细与统计原样保留。
+            if (statistics.CableReserveApplied
+                && string.Equals(text, TextFormatter.FormatNum(statistics.CableSum),
+                    StringComparison.Ordinal))
+                return true;
             statistics.CableFormatted.Clear();
             statistics.CableSum = meters;
             if (meters > 0d)
             {
-                statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
+                if (statistics.CableReserveApplied)
+                {
+                    // 真正手工覆盖总长时，实测段必须同步扣掉预留，否则
+                    // CABLE_INFO 左侧仍写旧实测，与右侧总长和 frameinfo_json
+                    // 的 cable.measuredM 互相矛盾。
+                    statistics.MeasuredCableSum = Math.Max(0d, meters
+                        - (statistics.PanelReserveMillimeters
+                            + statistics.DeviceReserveMillimeters
+                            + statistics.OwnerReserveMillimeters) / 1000d);
+                    statistics.CableFormatted.Add(
+                        TextFormatter.FormatNum(statistics.MeasuredCableSum));
+                }
+                else
+                {
+                    statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
+                }
                 statistics.CableState = MeasurementState.Measured;
             }
             else
@@ -1056,19 +1112,38 @@ namespace UNCAD.Features.Fill
                     new KeyValuePair<string, string>(machineId, circuitName)
                 });
 
+        /// <summary>硬拦截版（U1F/U1S/U1DWG 用）：缺回路时列出明细并返回 false。</summary>
         internal static bool EnsureCircuitCoverage(CadContext ctx,
             FillWorkbookSnapshot workbook, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
         {
-            if (ctx == null || workbook == null) return true;
-            if (!Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true)) return true;
+            List<CircuitCoverageResult> failed = EvaluateCircuitCoverage(
+                ctx, workbook, command, machineCircuits);
+            if (failed.Count == 0) return true;
+            ctx.Write("\n[" + command + "] 按现场规则：回路不全不生成 BOQ/DWG，"
+                + "本次图纸与 BOQ 均未修改。请补选缺失图框后重试；若该机台不需要"
+                + "绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
+            return false;
+        }
+
+        /// <summary>
+        /// 整机回路校验（2.10.0）的评估版：只逐台列出缺失回路并返回未通过的
+        /// 机台结果，不打印“中止”类文案，也不修改图纸。U1U 用它区分
+        /// “缺回路 → 只跳过该机 BOQ”，U1F/U1S/U1DWG 继续走硬拦截版。
+        /// </summary>
+        internal static List<CircuitCoverageResult> EvaluateCircuitCoverage(
+            CadContext ctx, FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+        {
+            var failed = new List<CircuitCoverageResult>();
+            if (ctx == null || workbook == null) return failed;
+            if (!Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true)) return failed;
             List<KeyValuePair<string, string>> pairs = (machineCircuits
                     ?? Enumerable.Empty<KeyValuePair<string, string>>())
                 .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
                 .ToList();
-            if (pairs.Count == 0) return true;
+            if (pairs.Count == 0) return failed;
 
-            var failed = new List<CircuitCoverageResult>();
             foreach (IGrouping<string, KeyValuePair<string, string>> group in pairs
                 .GroupBy(pair => pair.Key.Trim(), IdentityTextNormalizer.Comparer))
             {
@@ -1091,7 +1166,7 @@ namespace UNCAD.Features.Fill
                     expected, group.Select(pair => pair.Value));
                 if (!result.Complete) failed.Add(result);
             }
-            if (failed.Count == 0) return true;
+            if (failed.Count == 0) return failed;
 
             foreach (CircuitCoverageResult result in failed.Take(12))
             {
@@ -1105,11 +1180,16 @@ namespace UNCAD.Features.Fill
             if (failed.Count > 12)
                 ctx.Write("\n[" + command + "] 另有 " + (failed.Count - 12)
                     + " 个机台回路不全，未逐条列出。");
-            ctx.Write("\n[" + command + "] 按现场规则：回路不全不生成 BOQ/DWG，本次图纸与 BOQ 均未修改。"
-                + "请补选缺失图框后重试；若该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
             Log.Info(command + " 整机回路校验未通过，机台数 " + failed.Count);
-            return false;
+            return failed;
         }
+
+        /// <summary>返回未通过整机回路校验的机台 ID（规范化键，供按机台过滤 BOQ）。</summary>
+        internal static List<string> CoverageIncompleteMachines(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => EvaluateCircuitCoverage(ctx, workbook, command, machineCircuits)
+                .Select(result => result.MachineId).ToList();
 
         /// <summary>
         /// U1F/U1U 电缆预留：盘内/箱内按上游类型（I-Line 电盘 / 插座盘 / 母线插接箱，
@@ -1320,7 +1400,7 @@ namespace UNCAD.Features.Fill
             {
                 preview.AppendLine("▼ 图框块属性（" + selection.FrameBlockIds.Length + " 个块）");
                 foreach (var value in FrameBlockFiller.BuildValues(
-                    row, options.BridgeInfo, statistics))
+                    row, statistics))
                     preview.AppendLine("  " + value.Key + " = " + value.Value);
             }
             if (selection.DeviceBlockIds.Length > 0)

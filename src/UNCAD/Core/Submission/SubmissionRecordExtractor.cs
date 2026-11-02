@@ -97,7 +97,9 @@ namespace UNCAD.Core.Submission
                 .Select(TextParser.CleanMText).Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
             string detail = infoLines.Count > 1 ? string.Join("\n", infoLines.Skip(1)) : "";
             string cableInfo = Unique(source, FrameBlockFiller.TagCable);
-            string bridgeInfo = Unique(source, FrameBlockFiller.TagBridge);
+            // BRIDGE_FRAME_INFO 已随 xframe_v2 移除；这里只兜底读取**旧图框**
+            // 迁移前可能残留的属性值，新图框返回空串，不影响 DATA 工作表。
+            string bridgeInfo = Unique(source, "BRIDGE_FRAME_INFO");
             string conduitInfo = Unique(source, FrameBlockFiller.TagConduit);
             bool hasCableRows = HasTableRows(source, IsCableRow);
             bool hasBridgeRows = HasTableRows(source, IsBridgeRow);

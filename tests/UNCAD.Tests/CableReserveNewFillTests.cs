@@ -96,13 +96,82 @@ namespace UNCAD.Tests
             };
 
             System.Collections.Generic.Dictionary<string, string> values =
-                FrameBlockFiller.BuildValues(machine, "", statistics);
+                FrameBlockFiller.BuildValues(machine, statistics);
             string info = values[FrameBlockFiller.TagCable];
 
             Assert.Contains("1000（盘内）", info);
             Assert.Contains("500（设备内）", info);
             Assert.Contains("3000（预留）", info);
             Assert.Contains("=14500mm", info);
+        }
+
+        [Fact]
+        public void CableLengthOverride_ReserveSyncedTotal_KeepsMeasuredDetail()
+        {
+            // 图上实测两段 1000mm + 700mm；预留联动（改设备内预留）把新总长
+            // 13.1 写回电缆米数框。该输入不是长度覆盖，明细不得塌缩成总数。
+            var statistics = new CableStatResult
+            {
+                CableSum = 1.7d,
+                MeasuredCableSum = 1.7d
+            };
+            statistics.CableFormatted.Add("1");
+            statistics.CableFormatted.Add("0.7");
+            CableReserveInfo reserve = CableReservePolicy.Apply(statistics,
+                "I-Line盘", 2000d);
+            FillFeature.ApplyDeviceReserve(statistics, reserve, 5000d);
+            Assert.Equal(13.1d, statistics.CableSum, 3);
+
+            Assert.True(FillFeature.ApplyCableLengthOverride(statistics, "13.1"));
+
+            Assert.Equal(2, statistics.CableFormatted.Count);
+            Assert.Equal("1", statistics.CableFormatted[0]);
+            Assert.Equal("0.7", statistics.CableFormatted[1]);
+            var machine = new MachineRow
+            {
+                MachineId = "M1", CircuitName = "C1", Cable = "ZB-YJV-3*70+1*35"
+            };
+            string info = FrameBlockFiller.BuildValues(
+                machine, statistics)[FrameBlockFiller.TagCable];
+            Assert.Contains("1000+700", info);
+            Assert.Contains("3400（盘内）", info);
+            Assert.Contains("5000（设备内）", info);
+            Assert.Contains("3000（预留）", info);
+            Assert.Contains("=13100mm", info);
+        }
+
+        [Fact]
+        public void CableLengthOverride_NewMetersWithReserve_RecomputesMeasuredSegment()
+        {
+            // 用户把电缆米数改成与预留联动值不同的新总长：左侧实测段必须
+            // 同步扣掉预留，不能继续用旧实测，否则公式左右不闭合。
+            var statistics = new CableStatResult
+            {
+                CableSum = 1.7d,
+                MeasuredCableSum = 1.7d
+            };
+            statistics.CableFormatted.Add("1");
+            statistics.CableFormatted.Add("0.7");
+            CableReserveInfo reserve = CableReservePolicy.Apply(statistics,
+                "I-Line盘", 2000d);
+
+            Assert.True(FillFeature.ApplyCableLengthOverride(statistics, "20"));
+
+            Assert.Equal(20d, statistics.CableSum, 3);
+            Assert.Equal(11.6d, statistics.MeasuredCableSum, 3);
+            Assert.Single(statistics.CableFormatted);
+            Assert.Equal("11.6", statistics.CableFormatted[0]);
+            var machine = new MachineRow
+            {
+                MachineId = "M1", CircuitName = "C1", Cable = "ZB-YJV-3*70+1*35"
+            };
+            string info = FrameBlockFiller.BuildValues(
+                machine, statistics)[FrameBlockFiller.TagCable];
+            Assert.Contains("11600", info);
+            Assert.DoesNotContain("1000+700", info);
+            Assert.Contains("=20000mm", info);
+            FillFeature.SyncCableReserveTotal(reserve, "20");
+            Assert.Equal(11.6d, reserve.MeasuredMeters, 3);
         }
     }
 }
