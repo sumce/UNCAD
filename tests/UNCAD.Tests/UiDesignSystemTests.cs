@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
+using System.Windows.Media;
 using UNCAD.UI;
 using Xunit;
 
@@ -143,6 +144,82 @@ namespace UNCAD.Tests
                 Assert.Equal(Visibility.Collapsed, window.MachineSuggest.Visibility);
                 Assert.False(window.SuggestPopup.IsOpen);
                 Assert.Equal("请输入机台 ID", window.MachineSummary.Text);
+                window.Close();
+            });
+        }
+
+        // ---------- 3.0.0.1 事故回归：页面宿主与命中 ----------
+
+        [Fact]
+        public void SettingsPages_HostedInContentFrame_NotInOverlay()
+        {
+            // 3.0.0.1 曾把页面挂到 Navi.ContentOverlay——那是全窗口浮层
+            // （Snackbar 语义，模板里 RowSpan=2 压在内容区上方），整个 U1SET
+            // 点不动。页面必须挂进模板的内容 Frame（可交互内容区）。
+            RunSta(() =>
+            {
+                var window = new SettingsWindow(5);
+                window.Show();
+                Pump(4);
+                window.ShowPage(5);
+
+                var presenter = window.Navigation.Template?.FindName(
+                    "PART_NavigationViewContentPresenter", window.Navigation)
+                    as System.Windows.Controls.Frame;
+                Assert.NotNull(presenter);
+                Assert.Same(window.MachinePage, presenter.Content);
+                Assert.Null(window.Navigation.ContentOverlay);
+                window.ShowPage(6);
+                Pump(3); // Frame 内容更新经调度器，泵一帧再断言。
+                Assert.Same(window.BomPage, presenter.Content);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void SettingsPageButton_IsTopmostHitTarget()
+        {
+            // 模拟真实点击：命中测试落在刷新按钮中心，最顶层必须是按钮自己
+            //（或其子元素），否则页面再好看也是"什么都点不动"。
+            RunSta(() =>
+            {
+                var window = new SettingsWindow(5);
+                window.Show();
+                Pump(4);
+                window.ShowPage(5);
+                Pump(3);
+
+                var button = window.MachinePage.RefreshButton;
+                Pump(2);
+                Assert.True(button.IsVisible && button.ActualWidth > 0);
+                var rootElement = (System.Windows.UIElement)window.Content;
+                var rootVisual = (Visual)window.Content;
+                // HitTest 的点必须落在被测根视觉的坐标系里。
+                Point relative = button.TranslatePoint(
+                    new Point(button.ActualWidth / 2, button.ActualHeight / 2),
+                    rootElement);
+                bool hitButton = false;
+                string hitChain = "";
+                VisualTreeHelper.HitTest(rootVisual, null,
+                    result =>
+                    {
+                        var node = result.VisualHit as DependencyObject;
+                        hitChain = node?.GetType().Name ?? "null";
+                        for (var walker = node; walker != null;
+                            walker = VisualTreeHelper.GetParent(walker))
+                        {
+                            if (ReferenceEquals(walker, button))
+                            {
+                                hitButton = true;
+                                return HitTestResultBehavior.Stop;
+                            }
+                        }
+                        return HitTestResultBehavior.Continue;
+                    },
+                    new PointHitTestParameters(relative));
+                Assert.True(hitButton,
+                    "刷新按钮被更高层元素遮挡；命中顶层=" + hitChain
+                    + "；按钮位置=" + relative);
                 window.Close();
             });
         }

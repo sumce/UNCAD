@@ -66,11 +66,15 @@ namespace UNCAD.UI
         private readonly SettingsOutputPage _output = new SettingsOutputPage();
         private readonly SettingsLogsPage _logs = new SettingsLogsPage();
 
+        /// <summary>模板内容 Frame（PART_NavigationViewContentPresenter）缓存，ShowPage 首次定位。</summary>
+        private System.Windows.Controls.Frame _contentFrame;
+
         private readonly List<NavigationViewItem> _menuItems;
         private readonly List<Type> _pageTypes;
-        /// <summary>11 个页面实例。直接作为 Navi.ContentOverlay 注入（不走 Frame 导航）：
+        /// <summary>11 个页面实例。直接挂进模板的内容 Frame（不走 Navigate）：
         /// WPF-UI NavigationView 的 Frame 不继承窗口合并的资源字典，走导航时页内
-        /// ToggleSwitch/NumberBox 等拿不到控件模板，会退化成兜底样式（D-046 复盘）。</summary>
+        /// ToggleSwitch/NumberBox 等拿不到控件模板，会退化成兜底样式（D-046 复盘）；
+        /// 页面样式由自带的 FluentKit 内嵌字典解决，宿主只负责可交互。</summary>
         private readonly object[] _pages;
         private readonly int _initialPage;
         private int _currentPage = -1;
@@ -125,15 +129,22 @@ namespace UNCAD.UI
         }
 
         /// <summary>切换到指定导航页（越界钳回范围内）；测试与校验定位共用。
-        /// 页面实例直接挂 Navi.ContentOverlay（不走 Frame 导航，见 _pages 注释）；
-        /// 选中态由控件在用户点击时自同步，程序化切换由 SelectedPageIndex 的
-        /// _currentPage 兜底。</summary>
+        /// 页面实例直接挂进模板的内容 Frame（PART_NavigationViewContentPresenter，
+        /// 正常内容区，可交互）；ContentOverlay 是全窗口浮层（Snackbar 语义），
+        /// 挂那里页面会压住一切且吃掉整个窗口的点击（3.0.0.1 事故复盘）。</summary>
         internal void ShowPage(int index)
         {
             if (!IsLoaded) return;
             int clamped = Math.Max(0, Math.Min(index, _pages.Length - 1));
             _currentPage = clamped;
-            Navi.ContentOverlay = _pages[clamped];
+            // 模板 part 首次找到后缓存：FindName 依赖模板 name scope，
+            // 内容变化后二次查找不可靠，缓存保证后续切换稳定。
+            if (_contentFrame == null)
+                _contentFrame = Navi.Template?.FindName(
+                    "PART_NavigationViewContentPresenter", Navi)
+                    as System.Windows.Controls.Frame;
+            if (_contentFrame != null)
+                _contentFrame.Content = _pages[clamped];
         }
 
         private void OnNavItemInvoked(NavigationView sender, RoutedEventArgs args)
