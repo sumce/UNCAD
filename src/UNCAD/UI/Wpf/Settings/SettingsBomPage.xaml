@@ -8,6 +8,10 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Frame 资源黑洞（D-046 复盘）：页面必须自带 WPF-UI 字典，
+                     否则 ToggleSwitch/NumberBox 退化为兜底模板（蓝条/无微调按钮）。
+                     主题目前只在窗口构造时确定；若将来加运行时换肤，
+                     需同步刷新各页的 ThemesDictionary。 -->
                 <kit:FluentKit />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
@@ -92,12 +96,20 @@
                             BorderThickness="0,1,0,0"
                             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
                         <StackPanel>
-                            <ui:ToggleSwitch x:Name="DeviceReserveAutoDetect" x:FieldModifier="internal"
-                                             Style="{DynamicResource UncadToggle}" Margin="0,0,0,2"
-                                             Content="设备内预留自动识别：吸收设备旁横排毫米标并删除标注（多处时不自动取值）" />
-                            <ui:ToggleSwitch x:Name="RequireAllCircuits" x:FieldModifier="internal"
-                                             Style="{DynamicResource UncadToggle}"
-                                             Content="整机回路校验：该机台所有回路都在本次选集中才生成 BOQ / DWG" />
+                            <StackPanel>
+                                <ui:ToggleSwitch x:Name="DeviceReserveAutoDetect" x:FieldModifier="internal"
+                                                 Style="{DynamicResource UncadToggle}" Margin="0"
+                                                 Content="设备内预留自动识别" />
+                                <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                           Text="吸收设备旁横排毫米标并删除标注，自动填入设备内预留；发现多处时不自动取值，点名交人工确认。" />
+                            </StackPanel>
+                            <StackPanel Margin="0,10,0,0">
+                                <ui:ToggleSwitch x:Name="RequireAllCircuits" x:FieldModifier="internal"
+                                                 Style="{DynamicResource UncadToggle}" Margin="0"
+                                                 Content="整机回路校验" />
+                                <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                           Text="该机台所有回路都在本次选集中才生成 BOQ / DWG；关闭后允许只画部分回路。" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>

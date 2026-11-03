@@ -2,6 +2,15 @@
                     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <!-- 故障复盘（D-046）：设置页宿主在 NavigationView 内，看不到窗口级字典；
+             认令牌样式的 BasedOn 又只能在本字典解析期找到隐式样式，
+             所以 WPF-UI 字典直接内嵌在 FluentKit 里，页面/窗口合并 FluentKit 即全量生效。
+             主题目前只在窗口构造时确定；若将来加运行时换肤，
+             需同步刷新各处合并的 ThemesDictionary。 -->
+        <ui:ThemesDictionary Theme="Light" />
+        <ui:ControlsDictionary />
+    </ResourceDictionary.MergedDictionaries>
     <!--
       UNCAD WPF 统一设计令牌（2026-11-03，随 UiShell.ApplyFluentTheme 按窗口合并；
       与 2.10 的 WinForms UiKit 组件库同一套设计语言，命名错开避免撞类）：
@@ -53,19 +62,77 @@
     </Style>
 
     <!-- 卡片容器：统一内边距与下间距（最后一卡不再单独改边距） -->
-    <Style x:Key="UncadCard" TargetType="ui:Card">
+    <Style x:Key="UncadCard" TargetType="ui:Card"
+           BasedOn="{StaticResource {x:Type ui:Card}}">
         <Setter Property="Padding" Value="18,16" />
         <Setter Property="Margin" Value="0,0,0,12" />
     </Style>
 
-    <!-- 开关行（13 号字，行距统一） -->
-    <Style x:Key="UncadToggle" TargetType="ui:ToggleSwitch">
+    <!--
+      Win11 风格开关模板（隐式样式，随 FluentKit 全应用生效）。
+      WPF-UI 4.0.2 的 ControlsDictionary 漏了 ToggleSwitch 隐式样式，
+      控件会退化成"蓝底按钮条"（开/关不可辨），此处补齐。
+      内容短标题 + UncadToggleHint 说明的行布局见各设置页。
+    -->
+    <Style TargetType="ui:ToggleSwitch">
         <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ui:ToggleSwitch">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Track" Width="40" Height="20" CornerRadius="10"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                            <Ellipse x:Name="Knob" Width="12" Height="12"
+                                     HorizontalAlignment="Left" Margin="3,0,0,0"
+                                     Fill="White" />
+                        </Border>
+                        <ContentPresenter VerticalAlignment="Center" Margin="10,0,0,0"
+                                          RecognizesAccessKey="True" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background"
+                                    Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            <Setter TargetName="Track" Property="BorderBrush"
+                                    Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,3,0" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.9" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 开关行（13 号字，行距统一） -->
+    <Style x:Key="UncadToggle" TargetType="ui:ToggleSwitch"
+           BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}">
         <Setter Property="Margin" Value="0,10,0,0" />
     </Style>
 
+    <!-- 开关的补充说明（跟在开关下方，缩进对齐标题文字） -->
+    <Style x:Key="UncadToggleHint" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="50,2,0,0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    </Style>
+
+
     <!-- 数值输入（宽 160 靠左，微调按钮紧凑） -->
-    <Style x:Key="UncadNumberBox" TargetType="ui:NumberBox">
+    <Style x:Key="UncadNumberBox" TargetType="ui:NumberBox"
+           BasedOn="{StaticResource {x:Type ui:NumberBox}}">
         <Setter Property="Width" Value="160" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="SpinButtonPlacementMode" Value="Compact" />
@@ -73,13 +140,15 @@
     </Style>
 
     <!-- 单行文本字段（宽 160 靠左） -->
-    <Style x:Key="UncadFieldBox" TargetType="ui:TextBox">
+    <Style x:Key="UncadFieldBox" TargetType="ui:TextBox"
+           BasedOn="{StaticResource {x:Type ui:TextBox}}">
         <Setter Property="Width" Value="160" />
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
 
     <!-- 下拉字段（宽 160 靠左） -->
-    <Style x:Key="UncadCombo" TargetType="ComboBox">
+    <Style x:Key="UncadCombo" TargetType="ComboBox"
+           BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Width" Value="160" />
         <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>

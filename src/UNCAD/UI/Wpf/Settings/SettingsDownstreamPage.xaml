@@ -8,6 +8,10 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Frame 资源黑洞（D-046 复盘）：页面必须自带 WPF-UI 字典，
+                     否则 ToggleSwitch/NumberBox 退化为兜底模板（蓝条/无微调按钮）。
+                     主题目前只在窗口构造时确定；若将来加运行时换肤，
+                     需同步刷新各页的 ThemesDictionary。 -->
                 <kit:FluentKit />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
@@ -25,12 +29,18 @@
                     <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="自动添加开关（独立）" />
                     <TextBlock Margin="0,4,0,4" Style="{DynamicResource UncadCaption}"
                                Text="这两项只控制 Downstream 块自己的自动添加，与「清单与表格」里的通用类别开关互不影响：通用开关只管上游规则。所以可以做到“只开 Downstream、不开上游”。" />
-                    <ui:ToggleSwitch x:Name="DownstreamSocketEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}"
-                                     Content="socket box 时自动加一行 4.x 插座箱/盘" />
-                    <ui:ToggleSwitch x:Name="DownstreamPanelEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}"
-                                     Content="I-line_Panel 时自动加一行电盘（不带断路器）" />
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="DownstreamSocketEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="socket box 自动添加" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="Downstream 块状态为 socket box 时，额外加一行 4.x 插座箱/盘（额定电流见下方）。" />
+                    </StackPanel>
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="DownstreamPanelEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="I-line_Panel 自动添加" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="Downstream 块状态为 I-line_Panel 时，额外加一行电盘；永不带断路器（断路器只由上游 I-Line盘 产生）。" />
+                    </StackPanel>
                 </StackPanel>
             </ui:Card>
 

@@ -8,6 +8,10 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Frame 资源黑洞（D-046 复盘）：页面必须自带 WPF-UI 字典，
+                     否则 ToggleSwitch/NumberBox 退化为兜底模板（蓝条/无微调按钮）。
+                     主题目前只在窗口构造时确定；若将来加运行时换肤，
+                     需同步刷新各页的 ThemesDictionary。 -->
                 <kit:FluentKit />
             </ResourceDictionary.MergedDictionaries>
             <DataTemplate x:Key="CadColorChoiceTemplate">

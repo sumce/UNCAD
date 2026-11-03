@@ -8,6 +8,10 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Frame 资源黑洞（D-046 复盘）：页面必须自带 WPF-UI 字典，
+                     否则 ToggleSwitch/NumberBox 退化为兜底模板（蓝条/无微调按钮）。
+                     主题目前只在窗口构造时确定；若将来加运行时换肤，
+                     需同步刷新各页的 ThemesDictionary。 -->
                 <kit:FluentKit />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
@@ -23,15 +27,24 @@
             <ui:Card Style="{DynamicResource UncadCard}">
                 <StackPanel>
                     <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="文字来源" />
-                    <ui:ToggleSwitch x:Name="StatTextEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="单行文字 (TEXT)"
-                                     ToolTip="读取AutoCAD单行文字实体，每个实体必须整行符合规则。" />
-                    <ui:ToggleSwitch x:Name="StatMTextEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="支持多行文本识别 (MTEXT)"
-                                     ToolTip="开启后读取 MTEXT；同一实体内的固定清单型号和长度会严格配对，其余行独立匹配。" />
-                    <ui:ToggleSwitch x:Name="StatDimensionEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="尺寸标注文字 (DIMENSION)"
-                                     ToolTip="开启后，U1F/U1U/UNADD 读取对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。" />
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatTextEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="单行文字 (TEXT)" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="读取 AutoCAD 单行文字实体，每个实体必须整行符合规则。" />
+                    </StackPanel>
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatMTextEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="多行文本 (MTEXT)" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="开启后读取 MTEXT；同一实体内的固定清单型号和长度严格配对，其余行独立匹配。" />
+                    </StackPanel>
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatDimensionEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="尺寸标注文字 (DIMENSION)" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="读取对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。" />
+                    </StackPanel>
                 </StackPanel>
             </ui:Card>
 
@@ -39,15 +52,24 @@
             <ui:Card Style="{DynamicResource UncadCard}">
                 <StackPanel>
                     <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="统计类别" />
-                    <ui:ToggleSwitch x:Name="StatCableEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="电缆长度"
-                                     ToolTip="严格格式示例：2000mm；不允许前后缀或备注。" />
-                    <ui:ToggleSwitch x:Name="StatBridgeEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="桥架长度"
-                                     ToolTip="严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。" />
-                    <ui:ToggleSwitch x:Name="StatConduitEnabled" x:FieldModifier="internal"
-                                     Style="{DynamicResource UncadToggle}" Content="线管长度"
-                                     ToolTip="严格格式示例：Φ20线管 2000mm；兼容旧图的“线管20 2000mm”。" />
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatCableEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="电缆长度" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="严格格式示例：2000mm；不允许前后缀或备注。" />
+                    </StackPanel>
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatBridgeEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="桥架长度" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。" />
+                    </StackPanel>
+                    <StackPanel>
+                        <ui:ToggleSwitch x:Name="StatConduitEnabled" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="线管长度" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="严格格式示例：Φ20线管 2000mm；兼容旧图的“线管20 2000mm”。" />
+                    </StackPanel>
                 </StackPanel>
             </ui:Card>
 
@@ -67,12 +89,10 @@
                                           Minimum="1" Maximum="100000" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
-                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="桥架每格长度（mm）"
-                                       ToolTip="只用于把桥架格数换算成毫米。" />
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="桥架每格长度（mm）" />
                             <ui:NumberBox x:Name="UnaddMmPerGrid" x:FieldModifier="internal"
                                           Style="{DynamicResource UncadNumberBox}"
-                                          Minimum="1" Maximum="100000"
-                                          ToolTip="只用于把桥架格数换算成毫米。" />
+                                          Minimum="1" Maximum="100000" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>

@@ -68,6 +68,10 @@ namespace UNCAD.UI
 
         private readonly List<NavigationViewItem> _menuItems;
         private readonly List<Type> _pageTypes;
+        /// <summary>11 个页面实例。直接作为 Navi.ContentOverlay 注入（不走 Frame 导航）：
+        /// WPF-UI NavigationView 的 Frame 不继承窗口合并的资源字典，走导航时页内
+        /// ToggleSwitch/NumberBox 等拿不到控件模板，会退化成兜底样式（D-046 复盘）。</summary>
+        private readonly object[] _pages;
         private readonly int _initialPage;
         private int _currentPage = -1;
         private bool _machineRefreshInProgress;
@@ -94,9 +98,13 @@ namespace UNCAD.UI
                 typeof(SettingsColorPage), typeof(SettingsOutputPage),
                 typeof(SettingsLogsPage)
             };
+            _pages = new object[]
+            {
+                _overview, _draw, _stat, _style, _startup, _machine,
+                _bom, _downstream, _color, _output, _logs
+            };
             _initialPage = Math.Max(0, Math.Min(pageIndex, _pageTypes.Count - 1));
 
-            Navi.SetServiceProvider(new SettingsPageProvider(this));
             WireActions();
             OutputPage.DirectoryHintText.Text = "默认：<根目录>\\<机台ID>\\（BOQ / DWG / PDF 都在各自的机台文件夹里）；根目录留空使用 "
                 + DefaultOutputRoot();
@@ -117,22 +125,24 @@ namespace UNCAD.UI
         }
 
         /// <summary>切换到指定导航页（越界钳回范围内）；测试与校验定位共用。
-        /// v4 的 NavigationView.SelectedItem 无公开 setter，选中态由 Navigate 同步。</summary>
+        /// 页面实例直接挂 Navi.ContentOverlay（不走 Frame 导航，见 _pages 注释）；
+        /// 选中态由控件在用户点击时自同步，程序化切换由 SelectedPageIndex 的
+        /// _currentPage 兜底。</summary>
         internal void ShowPage(int index)
         {
             if (!IsLoaded) return;
-            int clamped = Math.Max(0, Math.Min(index, _pageTypes.Count - 1));
+            int clamped = Math.Max(0, Math.Min(index, _pages.Length - 1));
             _currentPage = clamped;
-            Navi.Navigate(_pageTypes[clamped], null);
+            Navi.ContentOverlay = _pages[clamped];
         }
 
         private void OnNavItemInvoked(NavigationView sender, RoutedEventArgs args)
         {
             // v4 的 ItemInvoked 只给 RoutedEventArgs：被点项从 OriginalSource 取。
-            if (args.OriginalSource is NavigationViewItem item && item.TargetPageType != null)
+            if (args.OriginalSource is NavigationViewItem item)
             {
-                int index = _pageTypes.IndexOf(item.TargetPageType);
-                if (index >= 0) _currentPage = index;
+                int index = _menuItems.IndexOf(item);
+                if (index >= 0) ShowPage(index);
             }
         }
 
@@ -871,33 +881,6 @@ namespace UNCAD.UI
                 if (deeper != null) return deeper;
             }
             return null;
-        }
-
-        /// <summary>把预建页面实例按 Type 提供给 NavigationView（免 DI 容器，页面状态常驻）。</summary>
-        private sealed class SettingsPageProvider : IServiceProvider
-        {
-            private readonly SettingsWindow _owner;
-
-            public SettingsPageProvider(SettingsWindow owner)
-            {
-                _owner = owner;
-            }
-
-            public object GetService(Type serviceType)
-            {
-                if (serviceType == typeof(SettingsOverviewPage)) return _owner._overview;
-                if (serviceType == typeof(SettingsDrawPage)) return _owner._draw;
-                if (serviceType == typeof(SettingsStatisticsPage)) return _owner._stat;
-                if (serviceType == typeof(SettingsStylePage)) return _owner._style;
-                if (serviceType == typeof(SettingsStartupPage)) return _owner._startup;
-                if (serviceType == typeof(SettingsMachinePage)) return _owner._machine;
-                if (serviceType == typeof(SettingsBomPage)) return _owner._bom;
-                if (serviceType == typeof(SettingsDownstreamPage)) return _owner._downstream;
-                if (serviceType == typeof(SettingsColorPage)) return _owner._color;
-                if (serviceType == typeof(SettingsOutputPage)) return _owner._output;
-                if (serviceType == typeof(SettingsLogsPage)) return _owner._logs;
-                return null;
-            }
         }
 
         /// <summary>把 WPF 窗口句柄暴露给 WinForms FolderBrowserDialog 做属主。</summary>
