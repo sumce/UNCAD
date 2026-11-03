@@ -78,7 +78,8 @@ namespace UNCAD.Tests
             AssertAllEmptyStrings(root, "cable", "original", "boq", "busPlugBoxCode",
                 "measuredM", "panelReserveMm", "deviceReserveMm", "totalM");
             AssertAllEmptyStrings(root, "drawing", "detail", "seq", "hoseDiameter");
-            AssertAllEmptyStrings(root, "meta", "updatedUtc", "updatedBy");
+            // 2.11.0 起 meta 还必出 frameHandle（框句柄绑定，空串=老图无绑定）。
+            AssertAllEmptyStrings(root, "meta", "updatedUtc", "updatedBy", "frameHandle");
             var changes = Assert.IsAssignableFrom<IEnumerable>(root["changes"]);
             Assert.Empty(changes);
         }

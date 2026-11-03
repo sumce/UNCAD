@@ -12,10 +12,11 @@ namespace UNCAD.Infra
     }
 
     /// <summary>
-    /// Runs a **local/UNC** machine-workbook refresh away from the AutoCAD thread while
-    /// commands continue reading the last successful SQLite snapshot.
+    /// Runs a local/UNC **or HTTP/HTTPS (D-041, download-only)** machine-workbook
+    /// refresh away from the AutoCAD thread while commands continue reading the
+    /// last successful SQLite snapshot.
     ///
-    /// 2.10.0 起远程机台数据源、后台台账上报与"后台提示"通知队列全部移除：
+    /// 台账上报、云端上传与"后台提示"通知队列保持移除（D-033）：
     /// 刷新结果只写日志；U1DATA/U1SET 的界面反馈由命令本身负责。
     /// </summary>
     internal sealed class MachineDataRefreshCoordinator

@@ -1,0 +1,118 @@
+<ui:FluentWindow x:Class="UNCAD.UI.XLayoutSelectionWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="XLAYOUT · 选择要排版的机台/回路"
+                 Width="720" Height="660" MinWidth="560" MinHeight="460"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <ui:FluentWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </ui:FluentWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="XLAYOUT · 选择要排版的机台/回路" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="选择要排版的机台/回路"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="勾选后只重排这些回路；筛选框支持空格/逗号分隔多个关键词（任一命中即可，可整段粘贴机台ID）" />
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                <TextBlock Text="排列方案" VerticalAlignment="Center" FontSize="13"
+                           Margin="0,0,10,0" />
+                <ComboBox x:Name="ArrangeModeBox" x:FieldModifier="internal" Width="220"
+                          VerticalAlignment="Center" SelectionChanged="OnArrangeModeChanged">
+                    <ComboBoxItem Content="按机台完整性（完整在前）" />
+                    <ComboBoxItem Content="按机台ID顺序" />
+                    <ComboBoxItem Content="按上游编号（同上游一行）" />
+                </ComboBox>
+                <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="行内回路按机台 Excel 行顺序排列" />
+            </StackPanel>
+        </StackPanel>
+
+        <Grid Grid.Row="2" Margin="24,12,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="筛选" VerticalAlignment="Center"
+                       FontSize="13" Margin="0,0,10,0" />
+            <ui:TextBox x:Name="FilterBox" Grid.Column="1" TextChanged="OnFilterTextChanged"
+                        KeyDown="OnFilterKeyDown" />
+            <ui:Button x:Name="CheckAllButton" Grid.Column="2" Content="全选"
+                       Margin="14,0,0,0" Click="OnCheckAll" />
+            <ui:Button x:Name="UncheckAllButton" Grid.Column="3" Content="全不选"
+                       Margin="8,0,0,0" Click="OnUncheckAll" />
+            <ui:Button x:Name="InvertButton" Grid.Column="4" Content="反选"
+                       Margin="8,0,0,0" Click="OnInvert" />
+            <ui:Button x:Name="ExpandAllButton" Grid.Column="5" Content="展开全部"
+                       Margin="14,0,0,0" Click="OnExpandAll" />
+            <ui:Button x:Name="CollapseAllButton" Grid.Column="6" Content="折叠全部"
+                       Margin="8,0,0,0" Click="OnCollapseAll" />
+        </Grid>
+
+        <TreeView x:Name="SelectionTree" Grid.Row="3" Margin="24,12,24,8"
+                  VerticalAlignment="Stretch"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}"
+                  BorderThickness="1"
+                  BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                  FontSize="13" VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling">
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                </Style>
+            </TreeView.ItemContainerStyle>
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  VerticalAlignment="Center"
+                                  Visibility="{Binding ShowCheckBox, Converter={StaticResource BoolToVisibility}}" />
+                        <TextBlock Text="{Binding Header}" Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+        </TreeView>
+
+        <StackPanel Grid.Row="4" Margin="24,0,24,20">
+            <ui:InfoBar x:Name="WarningBar" IsOpen="False" IsClosable="False"
+                        Severity="Warning" Margin="0,0,0,10" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="SelectionCountText" Grid.Column="0"
+                           VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消"
+                           MinWidth="100" Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="开始排版"
+                           MinWidth="120" IsDefault="True" Appearance="Primary"
+                           Click="OnConfirm" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

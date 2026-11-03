@@ -78,7 +78,7 @@ switch ($Area) {
         Add-SourceDirectory "src\UNCAD\Features\Unl"
         Add-SourceDirectory "src\UNCAD\Core\QuickLine"
         Add-SourceDirectory "src\UNCAD\Cad\QuickLine"
-        Add-RelativeFile "src\UNCAD\UI\U1L3DPreviewForm.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\U1L3DPreviewWindow.xaml.cs"
         Add-RelativeFile "src\UNCAD\Web\QuickLine3D\index.html"
         Add-RelativeFile "src\UNCAD\Web\QuickLine3D\app.js"
         Add-RelativeFile "src\UNCAD\Web\QuickLine3D\styles.css"
@@ -101,9 +101,11 @@ switch ($Area) {
     }
     "Settings" {
         Add-SourceDirectory "src\UNCAD\Features\ConfigCenter"
+        Add-SourceDirectory "src\UNCAD\UI\Wpf\Settings"
         Add-RelativeFile "src\UNCAD\Infra\ConfigKeys.cs"
         Add-RelativeFile "src\UNCAD\Infra\FillSettings.cs"
-        Add-RelativeFile "src\UNCAD\UI\UnifiedSettingsForm.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\SettingsWindow.xaml.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\ConfigSharePreviewWindow.xaml.cs"
     }
     "Submit" {
         Add-SourceDirectory "src\UNCAD\Features\Submit"

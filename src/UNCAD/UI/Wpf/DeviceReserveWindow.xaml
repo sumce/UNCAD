@@ -1,0 +1,104 @@
+<ui:FluentWindow x:Class="UNCAD.UI.DeviceReserveWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1U 设备内预留"
+                 Width="880" Height="560" MinWidth="720" MinHeight="380" SizeToContent="Height"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1U 设备内预留" ShowMaximize="False" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="设备内预留"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="{Binding Heading, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+        </StackPanel>
+
+        <!-- 统一值快捷行：整批同一个预留一次填完，特殊图框再逐行改 -->
+        <ui:Card Grid.Row="2" Margin="24,12,24,0" Padding="14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="180" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="统一值 (mm)" VerticalAlignment="Center"
+                           FontSize="13" Margin="0,0,10,0" />
+                <ui:TextBox x:Name="UniformBox" Grid.Column="1" KeyDown="OnUniformKeyDown" />
+                <ui:Button x:Name="ApplyAllButton" Grid.Column="2" Content="应用到全部"
+                           Margin="10,0,0,0" Click="OnApplyAll" />
+                <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="11"
+                           Margin="14,0,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="应用到全部行后仍可逐行修改；留空按 0。" />
+            </Grid>
+        </ui:Card>
+
+        <DataGrid x:Name="ReserveGrid" Grid.Row="3" Margin="24,12,24,8"
+                  MinHeight="120" MaxHeight="360"
+                  AutoGenerateColumns="False" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  BorderThickness="0" RowHeight="34" FontSize="13"
+                  SelectionMode="Single" SelectionUnit="Cell"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="序" Binding="{Binding Index}" Width="48" IsReadOnly="True" />
+                <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="150" IsReadOnly="True" />
+                <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DeviceName}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="设备内预留 (mm)" Width="170"
+                                    Binding="{Binding ReserveMm, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextAlignment" Value="Right" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="4" Margin="24,8,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ui:InfoBar x:Name="ErrorBar" Grid.Row="0" Margin="0,0,0,10"
+                        IsOpen="False" IsClosable="False" Severity="Error" />
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="确认后写入 frameinfo_json，后续 U1U 自动预填；已有记录的图框不在此列。" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确定" MinWidth="100"
+                           IsDefault="True" Appearance="Primary" Click="OnConfirm" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

@@ -18,7 +18,7 @@ namespace UNCAD.Infra
     /// <c>ConfigKeys</c> / <see cref="Settings"/>——搬回去就等于把设备身份绑到
     /// AutoCAD 配置档上，会重新引入"用户把自己顶掉"的问题。
     ///   HKCU\SOFTWARE\UNSIAO\UNCAD\UNC_DEVICE_ID
-    ///   HKCU\SOFTWARE\UNSIAO\UNCAD\UNC_LICENSE_TOKEN
+    ///   HKCU\SOFTWARE\UNSIAO\UNCAD\UNC_LICENSE_TOKEN（DPAPI 密文，dpapi:Base64）
     /// </summary>
     internal static class DeviceIdentity
     {
@@ -72,14 +72,23 @@ namespace UNCAD.Infra
                 ? parsed.ToString() : Guid.NewGuid().ToString();
         }
 
-        /// <summary>本机登录凭证；未登录或写入失败时为空串（fail-closed）。</summary>
+        /// <summary>本机登录凭证；未登录或写入失败时为空串（fail-closed）。
+        /// 存储为 DPAPI 密文（见 <see cref="TokenCipher"/>）；旧版明文仍可读，
+        /// 首次读取时顺手升级为密文。解密失败按未登录处理。</summary>
         internal static string GetToken()
         {
-            string token = ReadValue(TokenValueName) ?? "";
-            return token.Trim().Length > MaximumTokenLength ? "" : token.Trim();
+            string stored = (ReadValue(TokenValueName) ?? "").Trim();
+            if (TokenCipher.LooksEncrypted(stored))
+                return TokenCipher.TryDecrypt(stored) ?? "";
+            if (stored.Length == 0 || stored.Length > MaximumTokenLength) return "";
+            // 旧明文凭证（2.10.0.x 及更早登录的机器）：本次仍可用，写回时升级为密文；
+            // 升级失败不影响返回，下次登录会再写一次。
+            if (TryWriteValue(TokenValueName, TokenCipher.Encrypt(stored)))
+                Log.Info("本机登录凭证已升级为加密存储。");
+            return stored;
         }
 
-        /// <summary>登录成功后由 ClientLoginForm 写入回调返回的 token。</summary>
+        /// <summary>登录成功后由 ClientLoginForm 写入回调返回的 token（密文存储）。</summary>
         internal static void SaveToken(string token)
         {
             string value = (token ?? "").Trim();
@@ -87,7 +96,7 @@ namespace UNCAD.Infra
                 throw new InvalidOperationException("登录凭证为空，未写入本机。");
             if (value.Length > MaximumTokenLength)
                 throw new InvalidOperationException("登录凭证过长，已拒绝写入。");
-            if (!TryWriteValue(TokenValueName, value))
+            if (!TryWriteValue(TokenValueName, TokenCipher.Encrypt(value)))
                 throw new InvalidOperationException(
                     "登录凭证无法写入注册表，请检查当前用户的注册表权限后重试。");
         }

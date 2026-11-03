@@ -1,0 +1,197 @@
+<ui:FluentWindow x:Class="UNCAD.UI.MachinePickerWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1F · 机台选择"
+                 Width="820" Height="640" MinWidth="700" MinHeight="520"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <!-- 列表:预览 = 2:1 弹性分配，窗口拉伸时两块一起伸缩 -->
+            <RowDefinition Height="2*" MinHeight="150" />
+            <RowDefinition Height="*" MinHeight="110" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="HeaderBar" Grid.Row="0" Title="U1F · 机台选择" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="机台选择"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="输入机台 ID（回车/点击相似建议选择）；选中后可用筛选框快速定位回路。" />
+        </StackPanel>
+
+        <!-- ① 机台ID 输入；相似建议挂在 Popup 浮层里，不把下方内容顶下去 -->
+        <StackPanel Grid.Row="2" Margin="24,12,24,0">
+            <TextBlock FontSize="12" Margin="0,0,0,4"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="机台 ID" />
+            <ui:TextBox x:Name="MachineInput" FontSize="14"
+                        TextChanged="OnMachineInputTextChanged"
+                        KeyDown="OnMachineInputKeyDown" />
+        </StackPanel>
+        <Popup x:Name="SuggestPopup" Grid.Row="2"
+               PlacementTarget="{Binding ElementName=MachineInput}"
+               Placement="Bottom" VerticalOffset="4"
+               AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
+            <Border Background="{DynamicResource ApplicationBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorSecondaryBrush}"
+                    BorderThickness="1" CornerRadius="6"
+                    Margin="14,0,14,14" Padding="0,4"
+                    MinWidth="300" MaxWidth="520">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.28" />
+                </Border.Effect>
+                <ListBox x:Name="MachineSuggest" BorderThickness="0" Background="Transparent"
+                         MaxHeight="216" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         KeyDown="OnSuggestKeyDown"
+                         MouseLeftButtonUp="OnSuggestMouseClick">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="FontSize" Value="13" />
+                            <Setter Property="MinHeight" Value="30" />
+                            <Setter Property="Padding" Value="12,2,12,2" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Border>
+        </Popup>
+
+        <!-- 机台摘要 + 回路计数 -->
+        <Grid Grid.Row="3" Margin="24,10,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="MachineSummary" Grid.Column="0"
+                       FontSize="13" FontWeight="SemiBold" Text="请输入机台 ID" />
+            <TextBlock x:Name="CircuitCountText" x:FieldModifier="internal" Grid.Column="1"
+                       VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <!-- 回路筛选（机台回路多时快速定位） -->
+        <Grid Grid.Row="4" Margin="24,8,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="筛选回路" VerticalAlignment="Center"
+                       FontSize="13" Margin="0,0,10,0" />
+            <ui:TextBox x:Name="CircuitFilterBox" x:FieldModifier="internal" Grid.Column="1"
+                        PlaceholderText="设备 / 回路 / 盘柜类型 / 配电详情"
+                        TextChanged="OnCircuitFilterTextChanged" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
+                       FontSize="12" TextWrapping="NoWrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="命中任一关键词即可；清空恢复全部" />
+        </Grid>
+
+        <!-- ② 回路列表 -->
+        <DataGrid x:Name="CircuitGrid" Grid.Row="5" Margin="24,10,24,8"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  BorderThickness="0" RowHeight="34" FontSize="13"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  SelectionChanged="OnCircuitSelectionChanged"
+                  MouseDoubleClick="OnCircuitDoubleClick"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DisplayName}" Width="215">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding DisplayName}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="盘柜类型" Binding="{Binding PanelType}" Width="110">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding PanelType}" Value="I-Line盘">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding PanelType}" Value="母线插接口">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource SystemFillColorCautionBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding PanelType}" Value="插座盘">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="配电详情" Binding="{Binding Detail}" Width="*">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding Detail}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <!-- ③ 回路详情 / 写入预览（随窗口拉伸） -->
+        <TabControl x:Name="LowerTabs" Grid.Row="6" Margin="24,0,24,8"
+                    Background="Transparent" BorderThickness="0">
+            <TabItem Header="回路详情">
+                <TextBox x:Name="CircuitDetailBox" Margin="4,8,4,4"
+                         IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         VerticalContentAlignment="Top"
+                         Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            </TabItem>
+            <TabItem Header="写入预览">
+                <TextBox x:Name="PreviewBox" Margin="4,8,4,4"
+                         IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         VerticalContentAlignment="Top" FontFamily="Cascadia Mono, Consolas"
+                         Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            </TabItem>
+        </TabControl>
+
+        <Grid Grid.Row="7" Margin="24,4,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ui:InfoBar x:Name="WarningBar" Grid.Row="0" Margin="0,0,0,10"
+                        IsOpen="False" IsClosable="True" Severity="Warning" />
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="双击回路 = 确定并进入清单评审。" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确定" MinWidth="100"
+                           IsDefault="True" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

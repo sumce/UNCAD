@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.UI;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
@@ -83,8 +84,7 @@ namespace UNCAD.Features.PdfExport
                 ctx.Write("\n[U1PDF] 已跳过：" + problem);
 
             // 输出目录：统一走 OutputLayout（<root>\<图纸>\PDF），不再使用 %TEMP%。
-            if (!TryPrepareOutputDirectory(ctx, out string root, out string drawingName,
-                out bool outputByDrawing, out bool separateKinds, out string outputDirectory,
+            if (!TryPrepareOutputDirectory(ctx, out string root, out string outputDirectory,
                 out string directoryError))
             {
                 ctx.Write("\n[U1PDF] " + directoryError);
@@ -98,8 +98,8 @@ namespace UNCAD.Features.PdfExport
             {
                 string fileName = PdfExportNaming.AllocateFileName(target.MachineId,
                     target.CircuitName, usedNames);
-                target.FilePath = OutputLayout.ComposePdfPath(root, drawingName, fileName,
-                    outputByDrawing, separateKinds);
+                target.FilePath = OutputLayout.ComposePdfPath(root, target.MachineId,
+                    fileName);
             }
             try
             {
@@ -112,8 +112,14 @@ namespace UNCAD.Features.PdfExport
                 return;
             }
 
-            // 渲染在主线程同步逐份执行并打印进度；PDF 直接写最终输出目录，不做任何上传。
+            // 渲染在主线程同步逐份执行；进度在进度窗（命令行不再逐份刷屏），
+            // PDF 直接写最终输出目录，不做任何上传。
+            PdfExportRun run;
             var rendered = new List<PdfExportTarget>();
+            var renderProgress = new ProgressWindow("U1PDF 出图");
+            renderProgress.Show();
+            try
+            {
             var coordinator = new PdfExportCoordinator(
                 target =>
                 {
@@ -124,23 +130,29 @@ namespace UNCAD.Features.PdfExport
                     if (result.Ok) rendered.Add(target);
                     return result;
                 },
-                message => ctx.Write("\n[U1PDF] " + message));
+                message => Log.Info("[U1PDF] " + message));
 
-            PdfExportRun run = coordinator.Run(targets);
+                run = coordinator.Run(targets, (done, total, label) =>
+                    renderProgress.Update("出图 " + label, done, total));
+            }
+            finally { renderProgress.Close(); }
             // 操作记录：只登记真正出图成功的回路与 PDF 文件。
             foreach (PdfExportTarget target in rendered)
             {
                 ctx.Operation?.Machine(target.MachineId, target.CircuitName);
                 ctx.Operation?.Output("PDF", target.FilePath);
             }
-            ctx.Write("\n[U1PDF] " + run.BuildSummary());
-            ctx.Write("\n[U1PDF] 输出目录：" + outputDirectory);
-            if (run.Failed > 0 && run.FirstFailureDetails.Count > 0)
-            {
-                ctx.Write("\n[U1PDF] 首个失败诊断（" + run.FirstFailureLabel + "，详见日志）：");
-                foreach (string line in run.FirstFailureDetails)
-                    ctx.Write("\n[U1PDF]   " + line);
-            }
+            // D-042 UI 信息完整性：每份 PDF 一行的结果窗（状态/原因/文件），
+            // 命令行只留一行摘要；失败明细在结果窗与日志里。
+            ctx.Write("\n[U1PDF] " + run.BuildSummary() + "；明细见结果窗。");
+            Log.Info("[U1PDF] 输出目录：" + outputDirectory
+                + (run.Failed > 0
+                    ? "；首失败 " + run.FirstFailureLabel + "：" + string.Join(" | ",
+                        run.FirstFailureDetails)
+                    : ""));
+            var resultWindow = new UNCAD.UI.PdfExportResultWindow(targets,
+                run.Rendered, run.Failed, outputDirectory);
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(resultWindow);
         }
 
         /// <summary>
@@ -148,15 +160,11 @@ namespace UNCAD.Features.PdfExport
         /// &lt;我的文档&gt;\UNCAD输出 并写回 UNC_SUBMIT_FOLDER。失败返回中文原因。
         /// </summary>
         private static bool TryPrepareOutputDirectory(CadContext ctx, out string root,
-            out string drawingName, out bool outputByDrawing, out bool separateKinds,
             out string outputDirectory, out string error)
         {
             root = "";
-            drawingName = AutomaticSubmissionService.CurrentDrawingName(ctx);
             outputDirectory = "";
             error = "";
-            outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
-            separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
             try
             {
                 string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
@@ -166,12 +174,8 @@ namespace UNCAD.Features.PdfExport
                     throw new DirectoryNotFoundException("输出文件夹不存在：" + root);
                 if (!string.Equals(configured, root, StringComparison.OrdinalIgnoreCase))
                     Settings.Set(ConfigKeys.SubmitFolder, root);
-                outputDirectory = OutputLayout.ResolvePdfDirectory(root, drawingName,
-                    outputByDrawing, separateKinds);
-                Directory.CreateDirectory(outputDirectory);
-                if (!Directory.Exists(outputDirectory))
-                    throw new DirectoryNotFoundException(
-                        "PDF 输出文件夹不存在：" + outputDirectory);
+                // D-042：PDF 与 BOQ/DWG 一样落在 <root><机台> 文件夹里，
+                // 每份 PDF 的目录在分配路径时按机台创建。
                 return true;
             }
             catch (System.Exception ex)

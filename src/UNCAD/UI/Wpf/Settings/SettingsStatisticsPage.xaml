@@ -1,0 +1,82 @@
+<UserControl x:Class="UNCAD.UI.SettingsStatisticsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="统计汇总" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="UNADD 与 U1F / U1U 的文字统计范围" />
+
+            <!-- 文字来源 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="文字来源" />
+                    <ui:ToggleSwitch x:Name="StatTextEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="单行文字 (TEXT)"
+                                     ToolTip="读取AutoCAD单行文字实体，每个实体必须整行符合规则。" />
+                    <ui:ToggleSwitch x:Name="StatMTextEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="支持多行文本识别 (MTEXT)"
+                                     ToolTip="开启后读取 MTEXT；同一实体内的固定清单型号和长度会严格配对，其余行独立匹配。" />
+                    <ui:ToggleSwitch x:Name="StatDimensionEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="尺寸标注文字 (DIMENSION)"
+                                     ToolTip="开启后，U1F/U1U/UNADD 读取对齐/转角标注中人工输入的文字（如 2000mm）；自动测量的标注不参与统计。" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 统计类别 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="统计类别" />
+                    <ui:ToggleSwitch x:Name="StatCableEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="电缆长度"
+                                     ToolTip="严格格式示例：2000mm；不允许前后缀或备注。" />
+                    <ui:ToggleSwitch x:Name="StatBridgeEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="桥架长度"
+                                     ToolTip="严格格式示例：桥架200*100 12格；不允许“共用”等附加内容。" />
+                    <ui:ToggleSwitch x:Name="StatConduitEnabled" x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}" Content="线管长度"
+                                     ToolTip="严格格式示例：Φ20线管 2000mm；兼容旧图的“线管20 2000mm”。" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 换算与输出 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="换算与输出" />
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="输出文字高度" />
+                            <ui:NumberBox x:Name="UnaddHeight" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="桥架每格长度（mm）"
+                                       ToolTip="只用于把桥架格数换算成毫米。" />
+                            <ui:NumberBox x:Name="UnaddMmPerGrid" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100000"
+                                          ToolTip="只用于把桥架格数换算成毫米。" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

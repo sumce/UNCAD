@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>UNCAD.UiPreview</RootNamespace>
+    <AssemblyName>UNCAD.UiPreview</AssemblyName>
+    <Nullable>disable</Nullable>
+    <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
+    <!-- 预览/截图工具：实例化主工程里已迁移的真实 WPF 窗体并截图。
+         不进主解决方案、不进安装包；仅 UI/UX 评审与视觉回归用。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\UNCAD\UNCAD.csproj" />
+  </ItemGroup>
+
+  <!-- 引用了带 XAML 的 UNCAD.dll，XAML 编译与 BAML 资源加载都需要它的 AutoCAD 依赖；
+       Private=True 把四个托管封装复制到预览输出目录（仅 demo，不发布）。 -->
+  <ItemGroup>
+    <Reference Include="AcMgd">
+      <HintPath>$(AutoCADDir)\AcMgd.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="AdWindows">
+      <HintPath>$(AutoCADDir)\AdWindows.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

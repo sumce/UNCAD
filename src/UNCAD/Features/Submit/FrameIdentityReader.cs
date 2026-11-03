@@ -21,12 +21,22 @@ namespace UNCAD.Features.Submit
         internal static ExistingFillIdentity ReadIdentity(Transaction transaction,
             FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
         {
+            string foreignJsonNote;
+            return ReadIdentity(transaction, region, definitions, out foreignJsonNote);
+        }
+
+        /// <summary>带外来 JSON 检测的轻量身份读取（XSTS/排版等统计入口用）。</summary>
+        internal static ExistingFillIdentity ReadIdentity(Transaction transaction,
+            FrameRegionGroup region, CadBlockDefinitionReader definitions,
+            out string foreignJsonNote)
+        {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             if (region == null) throw new ArgumentNullException(nameof(region));
             FillSelection selection = FillSelectionCollector.Split(transaction,
                 region.EntityIds.ToArray(), false, definitions);
             if (!FillSelectionCollector.TryReadExistingIdentity(transaction, selection,
-                out ExistingFillIdentity identity, out string error))
+                    region.Handle, out ExistingFillIdentity identity, out string error,
+                    out foreignJsonNote))
                 throw new InvalidDataException(error);
             return identity;
         }

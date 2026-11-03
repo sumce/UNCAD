@@ -7,8 +7,9 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 机台数据源刷新契约（2.10.0）：只支持本地/共享文件夹工作簿，**不再下载远程数据**。
-    /// 网络地址必须在刷新入口给出明确中文提示，绝不发起网络请求。
+    /// 机台数据源刷新契约（D-041）：本地/UNC 文件与 HTTP/HTTPS 网络地址都支持。
+    /// 网络下载只在显式刷新时进行（GET、零上传）；下载失败且无历史快照时给明确
+    /// 中文错误，有历史快照时回退旧快照（UsedCachedFallback）。
     /// </summary>
     public sealed class MachineWorkbookSourceTests
     {
@@ -60,27 +61,62 @@ namespace UNCAD.Tests
             }
         }
 
-        [Theory]
-        [InlineData("https://example.test/machines.xlsx")]
-        [InlineData("http://127.0.0.1:8080/machines.xlsx?sign=test")]
-        public void Refresh_RejectsHttpSourceWithoutAnyNetworkRequest(string url)
+        [Fact]
+        public void Refresh_RemoteUnreachableWithoutSnapshot_ThrowsChineseError()
         {
+            // 端口 1 在本机几乎必然立即连接拒绝：快速失败，不依赖外网可达性。
+            string url = "http://127.0.0.1:1/machines.xlsx";
             Assert.True(MachineWorkbookSource.IsRemote(url));
-            string database = Path.Combine(Path.GetTempPath(),
-                "uncad-remote-" + Guid.NewGuid().ToString("N") + ".db");
-            var store = new MachineWorkbookSnapshotStore(database);
+            string root = TempDirectory("source_remote_dead");
             try
             {
-                InvalidDataException error = Assert.Throws<InvalidDataException>(() =>
-                    MachineWorkbookSource.Refresh(url, store));
-                Assert.Contains("不再支持网络机台数据源", error.Message);
-                Assert.Contains("U1SET", error.Message);
-                Assert.False(File.Exists(database), "拒绝网络源时不得创建本地快照数据库");
+                var store = new MachineWorkbookSnapshotStore(
+                    Path.Combine(root, "machine.db"));
+
+                IOException error = Assert.Throws<IOException>(() =>
+                    MachineWorkbookSource.Refresh(url, store,
+                        Path.Combine(root, "cache")));
+
+                Assert.Contains("无法下载网络机台 Excel", error.Message);
+                Assert.Contains("SQLite 快照", error.Message);
+                Assert.False(store.TryGetSnapshot(url, out _), "下载失败不得写入快照");
             }
             finally
             {
-                try { if (File.Exists(database)) File.Delete(database); }
-                catch { }
+                DeleteDirectory(root);
+            }
+        }
+
+        [Fact]
+        public void Refresh_RemoteUnreachableWithPreviousSnapshot_FallsBack()
+        {
+            string url = "http://127.0.0.1:1/machines.xlsx";
+            string root = TempDirectory("source_remote_fallback");
+            try
+            {
+                string workbookPath = Path.Combine(root, "machines.xlsx");
+                File.WriteAllBytes(workbookPath, WorkbookBytes());
+                var store = new MachineWorkbookSnapshotStore(
+                    Path.Combine(root, "machine.db"));
+                // 用同一 URL 键先写入一份成功快照，模拟"上一次刷新成功"。
+                store.RefreshFromFile(url, workbookPath);
+
+                MachineWorkbookSourceResult result = MachineWorkbookSource.Refresh(
+                    url, store, Path.Combine(root, "cache"));
+
+                Assert.True(result.UsedCachedFallback);
+                Assert.False(result.Updated);
+                Assert.NotNull(result.Snapshot);
+                Assert.Equal(1, result.Snapshot.RowCount);
+                Assert.False(string.IsNullOrWhiteSpace(result.Warning),
+                    "回退时必须带上失败原因");
+                // 旧快照仍在：命令可继续使用。
+                Assert.True(store.TryGetSnapshot(url, out MachineWorkbookSnapshotInfo kept));
+                Assert.Equal(1, kept.RowCount);
+            }
+            finally
+            {
+                DeleteDirectory(root);
             }
         }
 

@@ -1,0 +1,145 @@
+<UserControl x:Class="UNCAD.UI.SettingsDrawPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="绘制标注" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="U1L / U1Q / U1C / U1R 的默认标注参数" />
+
+            <!-- 线段文字（U1L） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="线段文字（U1L）" />
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="占位文字" />
+                            <ui:TextBox x:Name="UnlText" x:FieldModifier="internal"
+                                        Style="{DynamicResource UncadFieldBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="文字高度" />
+                            <ui:NumberBox x:Name="UnlHeight" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="文字位置" />
+                            <ComboBox x:Name="UnlPos" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadCombo}"
+                                      SelectedValuePath="Tag">
+                                <ComboBoxItem Content="居中" Tag="0" />
+                                <ComboBoxItem Content="靠边下" Tag="1" />
+                                <ComboBoxItem Content="靠边上" Tag="2" />
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="偏移距离（0 = 贴线）" />
+                            <ui:NumberBox x:Name="UnlOffset" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 桥架文字与位置（U1Q） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="桥架文字与位置（U1Q）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="规格由 U1Q1 / U1Q2 / U1Q4 分别固定为 100 / 200 / 400 桥架型号，本页只调整文字高度、偏移和标注侧。" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="文字高度" />
+                            <ui:NumberBox x:Name="UnqHeight" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="红线距基线（0 = 15）" />
+                            <ui:NumberBox x:Name="UnqLineOff" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="文字距红线（0 = 贴线）" />
+                            <ui:NumberBox x:Name="UnqTextOff" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="标注侧" />
+                            <ComboBox x:Name="UnqSide" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadCombo}"
+                                      SelectedValuePath="Tag">
+                                <ComboBoxItem Content="上方" Tag="1" />
+                                <ComboBoxItem Content="下方" Tag="0" />
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 线管规格（U1C） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="线管规格（U1C）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="文字高度、偏移距离和标注侧与桥架标注共用。" />
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="默认管径" />
+                        <ComboBox x:Name="ConduitDiameter" x:FieldModifier="internal"
+                                  Style="{DynamicResource UncadCombo}" IsEditable="True">
+                            <ComboBoxItem Content="20" />
+                            <ComboBoxItem Content="25" />
+                            <ComboBoxItem Content="38" />
+                            <ComboBoxItem Content="51" />
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 拱桥开洞（U1R） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="拱桥开洞（U1R）" />
+                    <StackPanel Margin="0,12,0,0">
+                        <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="拱桥直径" />
+                        <ui:NumberBox x:Name="UnrDiameter" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadNumberBox}"
+                                      Minimum="1" Maximum="100000" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -3,6 +3,8 @@
 
   <PropertyGroup>
     <TargetFramework>net48</TargetFramework>
+    <!-- 3.0 WPF 窗体测试（D-038）需要 WPF 程序集 -->
+    <UseWPF>true</UseWPF>
     <!-- AutoCAD 2022 涓庢湰鎻掍欢閮芥槸 x64-only锛汚nyCPU 浼氳娴嬭瘯瀹夸富鎸?x86 鍚姩锛?         鍔犺浇 AcDbMgd 澶辫触鍚庢祴璇曡闈欓粯璺宠繃锛? 椤癸級銆?-->
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>13</LangVersion>
@@ -19,6 +21,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- 3.0 WPF 窗体测试（D-038）直接使用 Wpf.Ui 类型 -->
+    <PackageReference Include="WPF-UI" Version="4.0.2" />
   </ItemGroup>
 
   <ItemGroup>

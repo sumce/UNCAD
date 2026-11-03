@@ -157,20 +157,64 @@ namespace UNCAD.Features.Fill
 
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, out ExistingFillIdentity identity, out string error)
+            => TryReadExistingIdentity(transaction, selection, null,
+                out identity, out error, out _);
+
+        /// <summary>
+        /// 带图框句柄校验的身份读取：归属不符的外来 frameinfo_json 会被忽略
+        /// （foreignJsonNote 说明来源），身份回退到设备块/标签推断——防止图框
+        /// 移动后遗留 JSON 被几何错误认领成幽灵机台（2026-11-02）。
+        /// 第二轮加固：JSON 与图框物理标注分歧时信物理标注（复制图框的旧 JSON
+        /// 不再压过用户已改新的机台号），分歧信息并入 foreignJsonNote。
+        /// </summary>
+        internal static bool TryReadExistingIdentity(Transaction transaction,
+            FillSelection selection, string expectedFrameHandle,
+            out ExistingFillIdentity identity, out string error, out string foreignJsonNote)
         {
             FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(transaction,
-                selection?.FrameInfoJsonBlockIds);
+                selection?.FrameInfoJsonBlockIds, expectedFrameHandle, out foreignJsonNote);
+            ExistingFillIdentity jsonIdentity = null;
             if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
                 && !string.IsNullOrWhiteSpace(json.DeviceName))
             {
-                identity = new ExistingFillIdentity
+                jsonIdentity = new ExistingFillIdentity
                 {
                     MachineId = json.MachineId.Trim(),
                     DeviceName = json.DeviceName.Trim()
                 };
+            }
+
+            ExistingFillIdentity physicalIdentity = null;
+            string physicalError = "";
+            if (!TryReadPhysicalIdentity(transaction, selection,
+                    out physicalIdentity, out physicalError))
+            {
+                physicalIdentity = null;
+            }
+
+            ExistingFillIdentity decided = UNCAD.Core.Fill.FrameIdentityArbiter.Decide(
+                jsonIdentity, physicalIdentity,
+                out bool physicalWins, out string divergenceNote);
+            if (physicalWins)
+            {
+                if (foreignJsonNote.Length > 0) foreignJsonNote += " ";
+                foreignJsonNote += divergenceNote;
+            }
+            if (decided != null)
+            {
+                identity = decided;
                 error = "";
                 return true;
             }
+            identity = null;
+            error = physicalError;
+            return false;
+        }
+
+        /// <summary>从图框/设备块的 MACHINEID 属性与标注推断物理身份。</summary>
+        private static bool TryReadPhysicalIdentity(Transaction transaction,
+            FillSelection selection, out ExistingFillIdentity identity, out string error)
+        {
             var powers = new List<string>();
             var composites = new List<string>();
             var devices = new List<string>();

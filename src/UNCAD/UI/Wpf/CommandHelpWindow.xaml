@@ -1,0 +1,111 @@
+<ui:FluentWindow x:Class="UNCAD.UI.CommandHelpWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1HELP · 命令帮助"
+                 Width="980" Height="640" MinWidth="760" MinHeight="480"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" Title="UNCAD 命令帮助" />
+
+        <Grid Grid.Row="1" Margin="24,12,24,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontSize="22" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                       Text="命令帮助" />
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,12" FontSize="12"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="使用方法、功能和注意事项；按命令或关键字搜索。" />
+
+            <!-- 左侧：搜索 + 命令列表 -->
+            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,16,0">
+                <ui:TextBox x:Name="SearchBox" PlaceholderText="搜索命令或关键字"
+                            Icon="{ui:SymbolIcon Search24}" ClearButtonEnabled="True"
+                            TextChanged="OnSearchChanged" />
+                <ListBox x:Name="CommandList" Margin="0,10,0,0" MinHeight="220"
+                         BorderThickness="0" Background="Transparent"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="OnCommandSelected">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="4,6" Orientation="Vertical">
+                                <TextBlock FontFamily="Cascadia Mono, Consolas" FontSize="13"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                           Text="{Binding Command}" />
+                                <TextBlock FontSize="12" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Text="{Binding Name}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <TextBlock x:Name="Count" Margin="4,10,0,0" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <!-- 右侧：选中命令的说明 -->
+            <Border Grid.Row="2" Grid.Column="1"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    CornerRadius="8" Padding="24,18,24,18">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,8,0">
+                        <TextBlock x:Name="DetailCommand" FontSize="20" FontWeight="SemiBold"
+                                   FontFamily="Cascadia Mono, Consolas"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="DetailName" Margin="0,6,0,0" FontSize="13"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="DetailUsageHeading" Margin="0,20,0,4" FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="使用方法" />
+                        <TextBlock x:Name="DetailUsage" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="DetailFunctionHeading" Margin="0,16,0,4" FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="功能" />
+                        <TextBlock x:Name="DetailFunction" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="DetailNotesHeading" Margin="0,16,0,4" FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="注意事项" />
+                        <TextBlock x:Name="DetailNotes" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="帮助内容来自 CommandHelpCatalog；只读，不随图纸变化。" />
+            <ui:Button Grid.Column="1" x:Name="CloseButton" Content="关闭" MinWidth="110"
+                       IsDefault="True" IsCancel="True" Click="OnClose" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

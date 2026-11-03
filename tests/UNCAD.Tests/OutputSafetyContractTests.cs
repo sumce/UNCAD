@@ -47,19 +47,18 @@ namespace UNCAD.Tests
         {
             string submit = File.ReadAllText(Repo("src", "UNCAD", "Features", "Submit",
                 "AutomaticSubmissionService.cs"));
-            Assert.Contains("OutputLayout.ResolveBoqDirectory(root, drawingName,", submit);
             Assert.Contains("OutputLayout.ValidateNotLocked(targets)", submit);
             Assert.Contains("OutputLayout.ValidateNotLocked(new[] { target })", submit);
-            Assert.Contains("string drawingName = null", submit);
-            Assert.Contains("ConfigKeys.OutputByDrawing", submit);
-            Assert.Contains("ConfigKeys.OutputSeparateKinds", submit);
+            // D-042：机台文件夹布局，无图纸/类别分层，也不再有两个布局开关。
+            Assert.DoesNotContain("ConfigKeys.OutputByDrawing", submit);
+            Assert.DoesNotContain("ConfigKeys.OutputSeparateKinds", submit);
 
             string dwg = File.ReadAllText(Repo("src", "UNCAD", "Features", "DwgExport",
                 "DwgFrameExportService.cs"));
             Assert.Contains("OutputLayout.ComposeDwgPath(", dwg);
             Assert.Contains("OutputLayout.ValidateNotLocked(paths)", dwg);
-            Assert.Contains("ConfigKeys.OutputByDrawing", dwg);
-            Assert.Contains("ConfigKeys.OutputSeparateKinds", dwg);
+            Assert.DoesNotContain("ConfigKeys.OutputByDrawing", dwg);
+            Assert.DoesNotContain("ConfigKeys.OutputSeparateKinds", dwg);
 
             string pdf = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
                 "PdfExportFeature.cs"));
@@ -119,19 +118,25 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void NoRemoteWorkbookDownloadOrStartupRefreshRemains()
+        public void RemoteWorkbookDownloadIsExplicitAndLedgerStaysDeleted()
         {
+            // D-041：恢复只下载的网络机台数据源；上传/台账/启动自动刷新保持移除。
             string source = File.ReadAllText(Repo("src", "UNCAD", "Core", "Excel",
                 "MachineWorkbookSource.cs"));
-            Assert.DoesNotContain("HttpWebRequest", source);
-            Assert.DoesNotContain("WebRequest.CreateHttp", source);
-            Assert.DoesNotContain("TryGetCachedPath", source);
-            Assert.Contains("不再支持网络机台数据源", source);
+            Assert.Contains("WebRequest.CreateHttp", source);
+            Assert.Contains("request.Method = \"GET\"", source);
+            Assert.DoesNotContain("UploadValues", source);
+            Assert.DoesNotContain("PostAsync", source);
+            Assert.DoesNotContain("MachineLedgerReporter", source);
 
             string coordinator = File.ReadAllText(Repo("src", "UNCAD", "Infra",
                 "MachineDataRefreshCoordinator.cs"));
             Assert.DoesNotContain("TryStartStartupRefresh", coordinator);
             Assert.DoesNotContain("MachineLedgerReporter", coordinator);
+
+            string bootstrap = File.ReadAllText(Repo("src", "UNCAD", "Bootstrap.cs"));
+            Assert.DoesNotContain("MachineDataRefreshCoordinator", bootstrap);
+            Assert.DoesNotContain("MachineWorkbookSource.Refresh", bootstrap);
         }
 
         [Fact]
@@ -139,16 +144,20 @@ namespace UNCAD.Tests
         {
             // D-033 修订（2026-11-01）：U1U 缺回路不再拦整条命令——图框照常更新，
             // 只跳过该机 BOQ（部分回路的 BOQ 会丢未选回路的工程量）。
-            // U1F/U1S/U1DWG 仍是硬拦截（缺回路不写）。
+            // D-044（2026-11-03）：U1F 与 U1U 同口径——缺回路照常填写图框、只跳
+            // BOQ（边画边填；每框数据只依赖自己的统计与机台行）。
+            // U1S/U1DWG 仍是硬拦截（缺回路不出清单/图）。
             string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "FillFeature.cs"));
             Assert.Contains("boqBlockedByCoverage", fill);
-            Assert.Contains("本次只更新图框数据、不生成 BOQ", fill);
-            Assert.Contains("全部回路画完后", fill);
+            Assert.Contains("本次照常填写图框数据、", fill);
+            Assert.Contains("不生成 BOQ；全部回路画完后", fill);
             Assert.Contains("EvaluateCircuitCoverage", fill);
             Assert.Contains("CoverageIncompleteMachines", fill);
-            // U1F 的硬拦截文案必须保留。
-            Assert.Contains("回路不全不生成 BOQ/DWG，", fill);
+            // 旧的 U1F 硬拦截文案不得回流。
+            Assert.DoesNotContain("回路不全不生成 BOQ/DWG，", fill);
+            // U1F 的 BOQ 路径准备同样按门禁跳过（ !updateMode && !boqBlockedByCoverage ）。
+            Assert.Contains("!updateMode && !boqBlockedByCoverage", fill);
 
             string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs"));

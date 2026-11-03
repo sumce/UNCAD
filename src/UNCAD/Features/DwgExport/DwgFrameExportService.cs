@@ -24,11 +24,13 @@ namespace UNCAD.Features.DwgExport
     }
 
     /// <summary>一个机台的导出结果：DWG 文件路径 + 覆盖的回路（回路 = 一个图框的设备名）。</summary>
-    internal sealed class DwgExportMachine
+    public sealed class DwgExportMachine
     {
         public string MachineId { get; set; }
         public string FilePath { get; set; }
         public List<string> Circuits { get; set; } = new List<string>();
+        /// <summary>该机台本次导出的图框数量（结果窗展示用）。</summary>
+        public int Frames { get; set; }
     }
 
     /// <summary>Source frame with the recognized machine and device identity.</summary>
@@ -82,18 +84,17 @@ namespace UNCAD.Features.DwgExport
         /// 句柄一直持有到导出结束。身份读取拆到 <see cref="ReadFrames"/> 的短事务里。
         /// </summary>
         internal static DwgExportResult Export(CadContext ctx,
-            IReadOnlyList<DwgExportFrame> frames, string drawingName = null)
+            IReadOnlyList<DwgExportFrame> frames)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             if (frames == null) throw new ArgumentNullException(nameof(frames));
 
-            string outputRoot = ResolveOutputRoot(out bool outputByDrawing,
-                out bool separateKinds);
+            string outputRoot = ResolveOutputRoot();
             // 统一走 OutputLayout：与 BOQ/PDF 相同的 <root>\<图纸>\<类别> 布局。
             var machineGroups = frames.GroupBy(frame => frame.MachineId,
                 IdentityTextNormalizer.Comparer).ToList();
             var paths = machineGroups.Select(machine => OutputLayout.ComposeDwgPath(
-                outputRoot, drawingName, machine.Key, outputByDrawing, separateKinds)).ToList();
+                outputRoot, machine.Key)).ToList();
             // 写占用预检：目标 DWG 可能正被另一台 AutoCAD/看图程序打开。
             OutputLayout.ValidateNotLocked(paths);
             // FileBatchRollback also protects first-time outputs that do not exist yet. Ensure
@@ -132,6 +133,7 @@ namespace UNCAD.Features.DwgExport
                     MachineId = machine.Key,
                     FilePath = paths[exportIndex],
                     // 回路 = 图框的设备名；去重保持顺序，空名不上报。
+                    Frames = machine.Count(),
                     Circuits = machine.Select(frame => (frame.DeviceName ?? "").Trim())
                         .Where(name => name.Length > 0)
                         .Distinct(StringComparer.Ordinal)
@@ -151,12 +153,9 @@ namespace UNCAD.Features.DwgExport
         /// 解析输出根目录与布局开关。根为空时默认 &lt;我的文档&gt;\UNCAD输出 并写回
         /// UNC_SUBMIT_FOLDER，与 BOQ/PDF 输出保持一致。
         /// </summary>
-        private static string ResolveOutputRoot(out bool outputByDrawing,
-            out bool separateKinds)
+        private static string ResolveOutputRoot()
         {
             string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
-            separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
             string folder = OutputLayout.NormalizeRoot(configured);
             try
             {

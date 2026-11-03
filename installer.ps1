@@ -144,6 +144,7 @@ function Get-PackageInfo {
         "NPOI.OpenXmlFormats.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
+        "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
         "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
         "Web\QuickLine3D\styles.css", "Web\QuickLine3D\vendor\three\OrbitControls.js",
         "Web\QuickLine3D\vendor\three\three.core.min.js",
@@ -172,7 +173,15 @@ function Get-PackageInfo {
     }
     $fileVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($modulePath).FileVersion
     # Accept exact four-part patch versions such as 1.9.7.1; retain compatibility with three-part packages.
-    if ($fileVersion -ne $version -and $fileVersion -ne ($version + ".0")) {
+    # D-039 开发版通道：AppVersion 允许 X.Y.Z-dev，校验按去掉 -dev 的前三段
+    # 与 DLL FileVersion 的前三段一致即可（第四位是自由递增的 dev 构建号）。
+    $versionOk = ($fileVersion -eq $version) -or ($fileVersion -eq ($version + ".0"))
+    if (-not $versionOk -and $version -like "*-dev") {
+        $base = $version.Substring(0, $version.Length - 4)   # strip "-dev"
+        $fileBase = ($fileVersion -split '\.')[0..2] -join '.'
+        $versionOk = ($fileBase -eq $base)
+    }
+    if (-not $versionOk) {
         throw "Version mismatch: Package=$version, DLL=$fileVersion"
     }
     # Surface the service-pack suffix carried in the assembly's

@@ -18,15 +18,8 @@ namespace UNCAD.Features.ConfigCenter
         protected override void Execute(CadContext ctx)
         {
             string source = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
-            // 2.10.0：远程机台数据源已移除，U1DATA 只刷新本地/共享文件夹工作簿。
-            if (MachineWorkbookSource.IsRemote(source))
-            {
-                ctx.Write("\n[U1DATA] 不再支持网络机台数据源（HTTP/HTTPS 下载已移除）："
-                    + source);
-                ctx.Write("\n[U1DATA] 请把机台 Excel 保存到本地或共享文件夹，"
-                    + "并在 U1SET 中重新选择后再刷新。");
-                return;
-            }
+            // D-041：本地/UNC 文件与 HTTP/HTTPS 网络地址都支持显式刷新；
+            // 网络地址只在这里或 U1SET 的“刷新”按钮处下载，命令本身不联网。
             MachineDataRefreshStartStatus status = MachineDataRefreshCoordinator.Default
                 .TryStartManualRefresh(source);
             if (status == MachineDataRefreshStartStatus.NoSource)
@@ -40,7 +33,9 @@ namespace UNCAD.Features.ConfigCenter
                 return;
             }
 
-            ctx.Write("\n[U1DATA] 已开始后台刷新；完成前 U1F/U1U 等命令继续使用当前 SQLite 快照。");
+            ctx.Write("\n[U1DATA] 已开始后台刷新"
+                + (MachineWorkbookSource.IsRemote(source) ? "（网络数据源，正在下载）" : "")
+                + "；完成前 U1F/U1U 等命令继续使用当前 SQLite 快照。");
         }
     }
 }

@@ -1,0 +1,75 @@
+<ui:FluentWindow x:Class="UNCAD.UI.BatchCatalogSelectionWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 x:ClassModifier="internal"
+                 Title="U1U 未匹配规格选择"
+                 Width="1060" Height="620" MinWidth="840" MinHeight="460"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1U 未匹配规格选择" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="未匹配规格选择"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock x:Name="NoticeText" Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <DataGrid x:Name="CatalogGrid" Grid.Row="2" Margin="24,12,24,8"
+                  AutoGenerateColumns="False" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  BorderThickness="0" RowHeight="36" FontSize="13"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="机台 / 回路" Binding="{Binding Frame}" Width="250" IsReadOnly="True" />
+                <DataGridTextColumn Header="项目" Binding="{Binding Category}" Width="110" IsReadOnly="True" />
+                <DataGridTextColumn Header="原型号 / 配电信息" Binding="{Binding Original}" Width="220" IsReadOnly="True">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextWrapping" Value="Wrap" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="替代固定清单规格" Width="*" MinWidth="150">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <ComboBox Margin="2" VerticalAlignment="Center"
+                                      ItemsSource="{Binding Candidates}"
+                                      DisplayMemberPath="Alias"
+                                      SelectedValuePath="Code"
+                                      SelectedValue="{Binding SelectedCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="每一项都必须选择替代规格后才能继续；规格按类别限定，只用于本次批量更新。" />
+            <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                       Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+            <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确认全部选择" MinWidth="110"
+                       IsDefault="True" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

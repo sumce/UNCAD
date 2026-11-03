@@ -16,8 +16,9 @@ namespace UNCAD.Features.Help
 
         protected override void Execute(CadContext ctx)
         {
-            using (var form = new CommandHelpForm(CommandHelpCatalog.All))
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+            // 3.0 WPF 窗体（D-038，P5 内容阅读）；只读展示，无返回结果。
+            var window = new CommandHelpWindow(CommandHelpCatalog.All);
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
         }
     }
 }

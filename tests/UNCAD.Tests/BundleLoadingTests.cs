@@ -17,9 +17,15 @@ namespace UNCAD.Tests
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
         {
             XElement package = LoadManifest();
-            Version version = typeof(CommandIds).Assembly.GetName().Version;
-            string expected = version.ToString();
-            Assert.Equal(expected, (string)package.Attribute("AppVersion"));
+            // D-032/D-039：AppVersion 必须与 VersionLabel 一致，或为
+            // “label+第四位”的四段式（开发版直接用 label，含 -dev 后缀）。
+            string appVersion = (string)package.Attribute("AppVersion");
+            Assert.True(
+                string.Equals(appVersion, ProductMetadata.VersionLabel, StringComparison.Ordinal)
+                || appVersion != null && appVersion.StartsWith(
+                    ProductMetadata.VersionLabel + ".", StringComparison.Ordinal),
+                "AppVersion '" + appVersion + "' 与 VersionLabel '"
+                + ProductMetadata.VersionLabel + "' 不一致");
             Assert.Equal("UNCAD Pro", (string)package.Attribute("Name"));
             Assert.Equal("Online", (string)package.Attribute("LicenseMode"));
             Assert.Equal("", (string)package.Attribute("LicenseExpiresUtc"));
@@ -60,6 +66,14 @@ namespace UNCAD.Tests
         public void ReleaseNoteDocument_ExistsForVersionLabel()
         {
             string path = RepoFile("docs", "RELEASE-" + ProductMetadata.VersionLabel + ".md");
+            if (ProductMetadata.VersionLabel.EndsWith("-dev",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                // D-039：开发版没有发布页；去掉 -dev 切正式版时本测试会重新要求它。
+                Assert.False(File.Exists(path),
+                    "开发版不应有发布页: " + path);
+                return;
+            }
             Assert.True(File.Exists(path),
                 "Release note document is missing: docs/RELEASE-" + ProductMetadata.VersionLabel + ".md");
             Assert.NotEmpty(File.ReadAllText(path).Trim());
@@ -184,6 +198,7 @@ namespace UNCAD.Tests
                 "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll",
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
+                "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
                 "Web\\QuickLine3D\\index.html", "Web\\QuickLine3D\\app.js",
                 "Web\\QuickLine3D\\styles.css",
@@ -222,7 +237,7 @@ namespace UNCAD.Tests
             Assert.Contains("Microsoft.Web.WebView2", csproj);
             Assert.Contains("Content Include=\"Web\\QuickLine3D", csproj);
             Assert.Contains("SetVirtualHostNameToFolderMapping", File.ReadAllText(
-                RepoFile("src", "UNCAD", "UI", "U1L3DPreviewForm.cs")));
+                RepoFile("src", "UNCAD", "UI", "Wpf", "U1L3DPreviewWindow.xaml.cs")));
             Assert.Contains("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);

@@ -1,0 +1,90 @@
+<ui:FluentWindow x:Class="UNCAD.UI.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:settings="clr-namespace:UNCAD.UI"
+                 Title="U1SET · 配置中心"
+                 Width="1080" Height="720" MinWidth="900" MinHeight="600"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1SET · 配置中心" />
+
+        <!-- P1 导航枢纽：左 NavigationView + 右内容页，一页一个导航项 -->
+        <ui:NavigationView x:Name="Navi" x:FieldModifier="internal"
+                           Grid.Row="1"
+                           IsBackButtonVisible="Collapsed"
+                           IsPaneToggleVisible="True"
+                           IsPaneOpen="True"
+                           PaneDisplayMode="Left"
+                           PaneTitle="U1SET"
+                           OpenPaneLength="216"
+                           Background="{DynamicResource ApplicationBackgroundBrush}"
+                           ItemInvoked="OnNavItemInvoked">
+            <ui:NavigationView.MenuItems>
+                <ui:NavigationViewItem x:Name="NavOverview" x:FieldModifier="internal" Content="概览"
+                                       TargetPageType="{x:Type settings:SettingsOverviewPage}"
+                                       Icon="{ui:SymbolIcon Home24}" />
+                <ui:NavigationViewItem x:Name="NavDraw" x:FieldModifier="internal" Content="绘制标注"
+                                       TargetPageType="{x:Type settings:SettingsDrawPage}"
+                                       Icon="{ui:SymbolIcon Ruler24}" />
+                <ui:NavigationViewItem x:Name="NavStat" x:FieldModifier="internal" Content="统计汇总"
+                                       TargetPageType="{x:Type settings:SettingsStatisticsPage}"
+                                       Icon="{ui:SymbolIcon Production24}" />
+                <ui:NavigationViewItem x:Name="NavStyle" x:FieldModifier="internal" Content="文字样式"
+                                       TargetPageType="{x:Type settings:SettingsStylePage}"
+                                       Icon="{ui:SymbolIcon TextFont24}" />
+                <ui:NavigationViewItem x:Name="NavStartup" x:FieldModifier="internal" Content="界面与启动"
+                                       TargetPageType="{x:Type settings:SettingsStartupPage}"
+                                       Icon="{ui:SymbolIcon Window24}" />
+                <ui:NavigationViewItem x:Name="NavMachine" x:FieldModifier="internal" Content="机台数据"
+                                       TargetPageType="{x:Type settings:SettingsMachinePage}"
+                                       Icon="{ui:SymbolIcon Database24}" />
+                <ui:NavigationViewItem x:Name="NavBom" x:FieldModifier="internal" Content="清单与表格"
+                                       TargetPageType="{x:Type settings:SettingsBomPage}"
+                                       Icon="{ui:SymbolIcon Table24}" />
+                <ui:NavigationViewItem x:Name="NavDownstream" x:FieldModifier="internal" Content="Downstream 自动添加"
+                                       TargetPageType="{x:Type settings:SettingsDownstreamPage}"
+                                       Icon="{ui:SymbolIcon Flow24}" />
+                <ui:NavigationViewItem x:Name="NavColor" x:FieldModifier="internal" Content="颜色"
+                                       TargetPageType="{x:Type settings:SettingsColorPage}"
+                                       Icon="{ui:SymbolIcon Color24}" />
+                <ui:NavigationViewItem x:Name="NavOutput" x:FieldModifier="internal" Content="输出与分享"
+                                       TargetPageType="{x:Type settings:SettingsOutputPage}"
+                                       Icon="{ui:SymbolIcon Share24}" />
+                <ui:NavigationViewItem x:Name="NavLogs" x:FieldModifier="internal" Content="日志与记录"
+                                       TargetPageType="{x:Type settings:SettingsLogsPage}"
+                                       Icon="{ui:SymbolIcon History24}" />
+            </ui:NavigationView.MenuItems>
+        </ui:NavigationView>
+
+        <StackPanel Grid.Row="2" Margin="24,8,24,20">
+            <ui:InfoBar x:Name="ValidationBar" x:FieldModifier="internal"
+                        Margin="0,0,0,10" IsOpen="False" IsClosable="True"
+                        Severity="Warning" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="保存后立即生效；绘图命令只读快照、不联网；网络数据源仅在刷新时下载。" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="SaveButton" Grid.Column="2" Content="保存" MinWidth="110"
+                           IsDefault="True" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Save24}" Click="OnSave" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

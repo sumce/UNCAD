@@ -1,0 +1,157 @@
+<UserControl x:Class="UNCAD.UI.SettingsOverviewPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="概览" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="本机就绪状态：数据源、输出目录与版本一眼可查；出错先来这里" />
+
+            <!-- 三张就绪状态卡（2026-11-03 仪表盘化） -->
+            <Grid Margin="0,0,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <ui:Card Grid.Column="0" Style="{DynamicResource UncadCard}" Margin="0,0,10,12">
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource UncadCaption}" Text="产品" />
+                        <TextBlock x:Name="ProductText" x:FieldModifier="internal"
+                                   FontSize="20" FontWeight="SemiBold" Margin="0,4,0,2" />
+                        <TextBlock x:Name="VersionText" x:FieldModifier="internal"
+                                   Style="{DynamicResource UncadCaption}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </ui:Card>
+                <ui:Card Grid.Column="1" Style="{DynamicResource UncadCard}" Margin="0,0,10,12">
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource UncadCaption}" Text="机台数据" />
+                        <TextBlock x:Name="DataSourceText" x:FieldModifier="internal"
+                                   FontSize="15" FontWeight="SemiBold" Margin="0,4,0,2"
+                                   TextWrapping="Wrap" Text="检查中…" />
+                        <TextBlock x:Name="DataSourceDetailText" x:FieldModifier="internal"
+                                   Style="{DynamicResource UncadCaption}" />
+                        <ui:Button x:Name="GoMachineButton" x:FieldModifier="internal"
+                                   Margin="0,8,0,0" Content="去配置数据源"
+                                   Icon="{ui:SymbolIcon Database24}" />
+                    </StackPanel>
+                </ui:Card>
+                <ui:Card Grid.Column="2" Style="{DynamicResource UncadCard}">
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource UncadCaption}" Text="输出目录" />
+                        <TextBlock x:Name="OutputText" x:FieldModifier="internal"
+                                   FontSize="15" FontWeight="SemiBold" Margin="0,4,0,2"
+                                   TextWrapping="Wrap" Text="检查中…" />
+                        <TextBlock x:Name="OutputDetailText" x:FieldModifier="internal"
+                                   Style="{DynamicResource UncadCaption}" />
+                        <ui:Button x:Name="GoOutputButton" x:FieldModifier="internal"
+                                   Margin="0,8,0,0" Content="去配置输出"
+                                   Icon="{ui:SymbolIcon FolderOpen24}" />
+                    </StackPanel>
+                </ui:Card>
+            </Grid>
+
+            <!-- 现场工作流：每步做什么、产出什么 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="现场工作流" />
+                    <TextBlock Margin="0,4,0,10" Style="{DynamicResource UncadCaption}"
+                               Text="四步交付；每步的窗口都会汇报结果并给出下一步。" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}"
+                                   Text="1 · U1SET 刷新数据" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="选机台 Excel 或网络地址，点“刷新”写入本机快照（机台数据页）" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}"
+                                   Text="2 · XLAYOUT 排版" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="按机台分行排版；绿=完整、黄=重复或未知、红=缺回路" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}"
+                                   Text="3 · XSTS 核对" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="对照台账点名缺少/多出回路，导出核对 Excel" />
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}"
+                                   Text="4 · U1U 出清单" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Text="批量更新图框并生成 BOQ；结果窗里看每台状态与文件位置" />
+                    </Grid>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 下游 Downstream 规则 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="下游 Downstream 规则" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="块名精确等于 Downstream（含 $0$ 后缀）时按可见性状态自动补清单。" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}" Text="socket box" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Text="额外一行 4.x 插座箱/盘（受“插座盘”开关控制）" />
+                    </Grid>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}" Text="I-line_Panel" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Text="额外一行电盘（受“电盘”开关控制，不带断路器）" />
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{DynamicResource UncadBodyStrong}" Text="busbar connector" />
+                        <TextBlock Grid.Column="1" Style="{DynamicResource UncadBody}"
+                                   Text="只上色，不产生物料" />
+                    </Grid>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

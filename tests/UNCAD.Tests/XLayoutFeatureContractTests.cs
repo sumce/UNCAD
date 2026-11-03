@@ -16,7 +16,13 @@ namespace UNCAD.Tests
             Assert.Contains("FrameIdentityReader.Read", source);
             Assert.Contains("XLayoutLayout.Arrange", source);
             Assert.Contains("transaction.Commit();", source);
-            Assert.Contains("XLayoutSummaryForm", source);
+            // 3.0 WPF 窗体（D-038）：统计窗必须走新窗体，WinForms 版已删除。
+            Assert.Contains("XLayoutSummaryWindow", source);
+            Assert.DoesNotContain("XLayoutSummaryForm", source);
+            // 3.0 大批量响应性（2026-11-02）：写入必须边写边刷 + 跳过已在位图框。
+            Assert.Contains("QueueForGraphicsFlush", source);
+            Assert.Contains("UpdateScreen", source);
+            Assert.Contains("displacement.Length", source);
             Assert.Contains("PromptPointOptions", source);
             Assert.Contains("AllowNone = true", source);
             Assert.Contains("layoutOrigin.X", source);

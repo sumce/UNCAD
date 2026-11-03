@@ -11,7 +11,7 @@ namespace UNCAD.Tests
         {
             string source = Read("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");
-            Assert.Equal(1, Count(source, "new FillUpdateCompareForm("));
+            Assert.Equal(1, Count(source, "new FillUpdateCompareWindow("));
         }
 
         [Fact]
@@ -45,6 +45,30 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void SingleUpdate_CompareShowsFinalRowsAfterReviewEditing()
+        {
+            // 设备内预留/电缆米数在清单确认窗里编辑：对比窗必须在确认窗之后、
+            // 用确认后的最终行构建，否则用户改完预留，先弹的变更记录就是假数据。
+            string source = Read("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
+            int review = source.IndexOf("FillReviewStage.ShowReview(",
+                StringComparison.Ordinal);
+            int compareCall = source.IndexOf("ShowUpdateCompare(ctx",
+                StringComparison.Ordinal);
+            int metersOverride = source.IndexOf("ApplyCableLengthOverride(statistics",
+                StringComparison.Ordinal);
+            int write = source.IndexOf("new FileBatchRollback(",
+                StringComparison.Ordinal);
+            Assert.True(review >= 0 && compareCall > review,
+                "对比窗必须在清单确认窗之后弹出");
+            Assert.True(metersOverride >= 0 && compareCall > metersOverride,
+                "对比窗必须在米数覆盖之后构建");
+            Assert.True(compareCall >= 0 && compareCall < write,
+                "对比窗必须在写表之前");
+            Assert.Contains("ShowUpdateCompare(ctx, selection, picked, tableRows)",
+                source);
+        }
+
+        [Fact]
         public void UpdateFlows_RecheckBoqAfterConfirmationBeforeCadWrite()
         {
             string single = Read("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
@@ -66,7 +90,7 @@ namespace UNCAD.Tests
                 "BatchFillUpdateCoordinator.cs");
             int batchCapture = batch.IndexOf("CaptureTargetRevisions(",
                 StringComparison.Ordinal);
-            int batchCompare = batch.IndexOf("new FillUpdateCompareForm(",
+            int batchCompare = batch.IndexOf("new FillUpdateCompareWindow(",
                 StringComparison.Ordinal);
             int batchValidate = batch.IndexOf("ValidateTargetRevisions(",
                 StringComparison.Ordinal);

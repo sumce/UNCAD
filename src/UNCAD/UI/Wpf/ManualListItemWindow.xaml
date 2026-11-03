@@ -1,0 +1,156 @@
+<ui:FluentWindow x:Class="UNCAD.UI.ManualListItemWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="从固定清单添加"
+                 Width="980" Height="660" MinWidth="760" MinHeight="520"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="HeaderBar" Grid.Row="0" Title="从固定清单添加" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock x:Name="HeaderTextBlock" FontSize="20" FontWeight="SemiBold"
+                       Text="从固定清单添加"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="材料身份只读，仅数量属于本次评审；分词搜索、类别筛选、最近使用置顶、双击连续添加。" />
+        </StackPanel>
+
+        <!-- 类别胶囊：值只来自“类”列，不根据名称或编码推断 -->
+        <ScrollViewer Grid.Row="2" Margin="24,12,24,0" HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+            <ListBox x:Name="CategoryList" SelectionChanged="OnCategoryChanged"
+                     BorderThickness="0" Background="Transparent">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Border CornerRadius="10" Padding="14,5" Margin="0,0,8,0"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}">
+                            <TextBlock Text="{Binding}" FontSize="12"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" Margin="24,10,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="搜索:" VerticalAlignment="Center" FontSize="13"
+                       Margin="0,0,10,0" />
+            <ui:TextBox x:Name="SearchBox" Grid.Column="1" TextChanged="OnSearchTextChanged" />
+            <TextBlock Grid.Column="3" x:Name="ResultCountText" VerticalAlignment="Center"
+                       FontSize="12" Margin="14,0,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <DataGrid x:Name="CatalogGrid" Grid.Row="4" Margin="24,10,24,8"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  BorderThickness="0" RowHeight="34" FontSize="13"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  SelectionChanged="OnGridSelectionChanged"
+                  MouseDoubleClick="OnGridDoubleClick"
+                  Sorting="OnColumnHeaderSort"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="类别" Binding="{Binding Category}" Width="90"
+                                    SortMemberPath="Category" />
+                <DataGridTextColumn Header="项目编码" Binding="{Binding Code}" Width="90"
+                                    SortMemberPath="Code" />
+                <DataGridTextColumn Header="项目名称" Binding="{Binding Name}" Width="190"
+                                    SortMemberPath="Name" />
+                <DataGridTextColumn Header="别名" Binding="{Binding Alias}" Width="130"
+                                    SortMemberPath="Alias" />
+                <DataGridTextColumn Header="别名1" Binding="{Binding Alias1}" Width="110"
+                                    SortMemberPath="Alias1" />
+                <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="60"
+                                    SortMemberPath="Unit" />
+                <DataGridTextColumn Header="项目特征" Binding="{Binding Feature}" Width="*"
+                                    SortMemberPath="Feature">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTipService.ShowDuration" Value="30000" />
+                            <Setter Property="ToolTip" Value="{Binding Tooltip}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="5" Margin="24,4,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="0,0,0,10" x:Name="QuantityBar">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="170" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="数量:" VerticalAlignment="Center"
+                           FontSize="13" Margin="0,0,10,0" />
+                <ui:NumberBox x:Name="QuantityBox" Grid.Column="1" Value="1"
+                              Minimum="0" Maximum="1000000" SmallChange="1" LargeChange="10"
+                              MaxDecimalPlaces="3"
+                              SpinButtonPlacementMode="Compact" />
+                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="12"
+                           Margin="14,0,0,0"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="双击项目 = 添加并继续；回车 = 添加后关闭" />
+            </Grid>
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ContinueButton" Grid.Column="2" Content="添加并继续"
+                           MinWidth="110" Margin="0,0,10,0" Click="OnContinueAdd" />
+                <ui:Button x:Name="ConfirmButton" Grid.Column="3" Content="添加所选清单"
+                           MinWidth="110" IsDefault="True" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

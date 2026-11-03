@@ -1,0 +1,86 @@
+<ResourceDictionary x:Class="UNCAD.UI.FluentKit"
+                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <!--
+      UNCAD WPF 统一设计令牌（2026-11-03，随 UiShell.ApplyFluentTheme 按窗口合并；
+      与 2.10 的 WinForms UiKit 组件库同一套设计语言，命名错开避免撞类）：
+      所有 3.0 WPF 窗体/设置页共用同一套字号、间距与卡片外观，改观感只动这一个文件。
+      页面引用一律 Style="{DynamicResource …}"：独立实例化（单元测试）时查不到
+      令牌只会退回默认外观，不会崩。
+    -->
+
+    <!-- 页面大标题（20 半粗） -->
+    <Style x:Key="UncadPageTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!-- 卡片内小节标题（14 半粗） -->
+    <Style x:Key="UncadSectionTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!-- 次要说明文字（12 灰，自动换行） -->
+    <Style x:Key="UncadCaption" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    </Style>
+
+    <!-- 正文（13 主色，自动换行） -->
+    <Style x:Key="UncadBody" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!-- 正文加粗（规则名/工作流步骤名） -->
+    <Style x:Key="UncadBodyStrong" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!-- 字段标签（13，下距 6） -->
+    <Style x:Key="UncadFieldLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="0,0,0,6" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    </Style>
+
+    <!-- 卡片容器：统一内边距与下间距（最后一卡不再单独改边距） -->
+    <Style x:Key="UncadCard" TargetType="ui:Card">
+        <Setter Property="Padding" Value="18,16" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <!-- 开关行（13 号字，行距统一） -->
+    <Style x:Key="UncadToggle" TargetType="ui:ToggleSwitch">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="0,10,0,0" />
+    </Style>
+
+    <!-- 数值输入（宽 160 靠左，微调按钮紧凑） -->
+    <Style x:Key="UncadNumberBox" TargetType="ui:NumberBox">
+        <Setter Property="Width" Value="160" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="SpinButtonPlacementMode" Value="Compact" />
+        <Setter Property="ClearButtonEnabled" Value="False" />
+    </Style>
+
+    <!-- 单行文本字段（宽 160 靠左） -->
+    <Style x:Key="UncadFieldBox" TargetType="ui:TextBox">
+        <Setter Property="Width" Value="160" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!-- 下拉字段（宽 160 靠左） -->
+    <Style x:Key="UncadCombo" TargetType="ComboBox">
+        <Setter Property="Width" Value="160" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+</ResourceDictionary>

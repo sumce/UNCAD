@@ -60,6 +60,8 @@ namespace UNCAD.Core.Fill
                 LastModifiedUtc = utcNow.ToUniversalTime().ToString("o"),
                 LastModifiedUser = FirstNonEmpty(updateUser, Environment.UserName,
                     Environment.MachineName),
+                // 框句柄绑定跨更新保留；写入方（FrameInfoJsonBlockWriter）负责盖章。
+                FrameHandle = previous.FrameHandle ?? "",
                 MeasuredCableM = reserve == null
                     ? (previous.MeasuredCableM ?? "")
                     : FormatDouble(reserve.MeasuredMeters),

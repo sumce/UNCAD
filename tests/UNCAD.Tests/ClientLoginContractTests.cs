@@ -56,10 +56,10 @@ namespace UNCAD.Tests
         [Fact]
         public void LoginUrl_UsesSameTrustedHostAsLicenseEndpoint()
         {
-            Uri login = ClientLoginForm.BuildLoginUrl(Nonce, Device, "WORKSTATION-A");
+            Uri login = ClientLoginWindow.BuildLoginUrl(Nonce, Device, "WORKSTATION-A");
 
             Assert.Equal(OnlineLicenseMonitor.BuildEndpoint(Account).Host, login.Host);
-            Assert.Equal(ClientLoginForm.LicenseHost, login.Host);
+            Assert.Equal(ClientLoginWindow.LicenseHost, login.Host);
             Assert.Equal(Uri.UriSchemeHttps, login.Scheme);
             Assert.Equal(443, login.Port);
             Assert.Equal("/client/login", login.AbsolutePath);
@@ -69,20 +69,43 @@ namespace UNCAD.Tests
             Assert.True(OnlineLicenseMonitor.IsExpectedEndpoint(login));
         }
 
+        /// <summary>
+        /// 登录入口（UNC_LOGIN 命令、Idle 激活、关于页按钮）必须都指向
+        /// 3.0 WPF 的 ClientLoginWindow（D-038），旧 WinForms ClientLoginForm 已删除。
+        /// </summary>
+        [Fact]
+        public void LoginEntryPoints_UseWpfClientLoginWindowOnly()
+        {
+            string feature = System.IO.File.ReadAllText(
+                FindSource("src", "UNCAD", "Features", "About", "ClientLoginFeature.cs"));
+            Assert.Contains("ClientLoginWindow", feature);
+            Assert.DoesNotContain("ClientLoginForm", feature);
+
+            string bootstrap = System.IO.File.ReadAllText(
+                FindSource("src", "UNCAD", "Bootstrap.cs"));
+            Assert.Contains("ClientLoginWindow", bootstrap);
+            Assert.DoesNotContain("ClientLoginForm", bootstrap);
+
+            string about = System.IO.File.ReadAllText(
+                FindSource("src", "UNCAD", "UI", "Wpf", "AboutWindow.xaml.cs"));
+            Assert.Contains("ClientLoginWindow", about);
+            Assert.DoesNotContain("ClientLoginForm", about);
+        }
+
         [Fact]
         public void LoginUrl_RequiresStateAndDevice()
         {
             Assert.Throws<ArgumentException>(
-                () => ClientLoginForm.BuildLoginUrl("", Device, "PC"));
+                () => ClientLoginWindow.BuildLoginUrl("", Device, "PC"));
             Assert.Throws<ArgumentException>(
-                () => ClientLoginForm.BuildLoginUrl(Nonce, "", "PC"));
+                () => ClientLoginWindow.BuildLoginUrl(Nonce, "", "PC"));
         }
 
         [Fact]
         public void StateNonce_IsRandomHexAndSingleUse()
         {
-            string first = ClientLoginForm.CreateStateNonce();
-            string second = ClientLoginForm.CreateStateNonce();
+            string first = ClientLoginWindow.CreateStateNonce();
+            string second = ClientLoginWindow.CreateStateNonce();
 
             Assert.Equal(32, first.Length);
             Assert.Matches("^[0-9a-f]{32}$", first);
@@ -149,7 +172,7 @@ namespace UNCAD.Tests
         {
             Uri uri = CallbackUri(Token, Device, Nonce);
 
-            Assert.True(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.True(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out string token, out string device, out string state, out string account,
                 out string error));
 
@@ -169,7 +192,7 @@ namespace UNCAD.Tests
                 + Uri.EscapeDataString(Token) + "&device=" + Uri.EscapeDataString(Device)
                 + "&state=" + Uri.EscapeDataString(Nonce));
 
-            Assert.True(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.True(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out string token, out string device, out _, out string account, out string error));
 
             Assert.Equal(Token, token);
@@ -181,10 +204,10 @@ namespace UNCAD.Tests
         [Fact]
         public void Callback_RejectsMismatchedState()
         {
-            string forged = ClientLoginForm.CreateStateNonce();
+            string forged = ClientLoginWindow.CreateStateNonce();
             Uri uri = CallbackUri(Token, Device, forged);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out string token, out _, out string state, out _, out string error));
 
             Assert.Equal("", token);
@@ -200,7 +223,7 @@ namespace UNCAD.Tests
             const string otherDevice = "11111111-2222-3333-4444-555555555555";
             Uri uri = CallbackUri(Token, otherDevice, Nonce);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out string token, out string device, out _, out _, out string error));
 
             Assert.Equal("", token);
@@ -212,19 +235,19 @@ namespace UNCAD.Tests
         [Fact]
         public void Callback_RejectsMissingTokenDeviceOrState()
         {
-            Assert.False(ClientLoginForm.TryParseCallback(
+            Assert.False(ClientLoginWindow.TryParseCallback(
                 new Uri("https://uncad.aosa.me/client/callback?device=" + Device
                     + "&account=" + Account + "&state=" + Nonce), Nonce, Device,
                 out _, out _, out _, out _, out string noToken));
             Assert.Contains("凭证", noToken);
 
-            Assert.False(ClientLoginForm.TryParseCallback(
+            Assert.False(ClientLoginWindow.TryParseCallback(
                 new Uri("https://uncad.aosa.me/client/callback?token=" + Token
                     + "&account=" + Account + "&state=" + Nonce), Nonce, Device,
                 out _, out _, out _, out _, out string noDevice));
             Assert.Contains("设备", noDevice);
 
-            Assert.False(ClientLoginForm.TryParseCallback(
+            Assert.False(ClientLoginWindow.TryParseCallback(
                 new Uri("https://uncad.aosa.me/client/callback?token=" + Token
                     + "&device=" + Device + "&account=" + Account), Nonce, Device,
                 out _, out _, out _, out _, out string noState));
@@ -236,11 +259,11 @@ namespace UNCAD.Tests
         {
             Uri uri = CallbackUri(Token, Device, Nonce);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, "", Device,
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, "", Device,
                 out _, out _, out _, out _, out string noNonce));
             Assert.Contains("state", noNonce);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, Nonce, "",
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, Nonce, "",
                 out _, out _, out _, out _, out string noLocalDevice));
             Assert.Contains("设备", noLocalDevice);
         }
@@ -251,7 +274,7 @@ namespace UNCAD.Tests
             Uri uri = new Uri("https://evil.example/client/callback?token=" + Token
                 + "&device=" + Device + "&account=" + Account + "&state=" + Nonce);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out _, out _, out _, out _, out string error));
             Assert.Contains("受信任", error);
         }
@@ -262,7 +285,7 @@ namespace UNCAD.Tests
             Uri uri = new Uri("https://uncad.aosa.me/client/callback/extra?token=" + Token
                 + "&device=" + Device + "&account=" + Account + "&state=" + Nonce);
 
-            Assert.False(ClientLoginForm.TryParseCallback(uri, Nonce, Device,
+            Assert.False(ClientLoginWindow.TryParseCallback(uri, Nonce, Device,
                 out _, out _, out _, out _, out string error));
             Assert.Contains("路径", error);
         }
@@ -273,7 +296,7 @@ namespace UNCAD.Tests
             string json = "{\"token\":\"" + Token + "\",\"device\":\"" + Device
                 + "\",\"account\":\"" + Account + "\",\"state\":\"" + Nonce + "\"}";
 
-            Assert.True(ClientLoginForm.TryParseCallbackPayload(json, Nonce, Device,
+            Assert.True(ClientLoginWindow.TryParseCallbackPayload(json, Nonce, Device,
                 out string token, out string device, out string account, out string error));
 
             Assert.Equal(Token, token);
@@ -288,7 +311,7 @@ namespace UNCAD.Tests
             string json = "{\"token\":\"" + Token + "\",\"device\":\"" + Device
                 + "\",\"state\":\"" + Nonce + "\"}";
 
-            Assert.True(ClientLoginForm.TryParseCallbackPayload(json, Nonce, Device,
+            Assert.True(ClientLoginWindow.TryParseCallbackPayload(json, Nonce, Device,
                 out _, out _, out string account, out string error));
 
             Assert.Equal("", account);
@@ -300,22 +323,22 @@ namespace UNCAD.Tests
         {
             string wrongState = "{\"token\":\"" + Token + "\",\"device\":\"" + Device
                 + "\",\"account\":\"" + Account + "\",\"state\":\""
-                + ClientLoginForm.CreateStateNonce() + "\"}";
-            Assert.False(ClientLoginForm.TryParseCallbackPayload(wrongState, Nonce, Device,
+                + ClientLoginWindow.CreateStateNonce() + "\"}";
+            Assert.False(ClientLoginWindow.TryParseCallbackPayload(wrongState, Nonce, Device,
                 out _, out _, out _, out string stateError));
             Assert.Contains("state", stateError);
 
             string wrongDevice = "{\"token\":\"" + Token
                 + "\",\"device\":\"11111111-2222-3333-4444-555555555555\",\"account\":\""
                 + Account + "\",\"state\":\"" + Nonce + "\"}";
-            Assert.False(ClientLoginForm.TryParseCallbackPayload(wrongDevice, Nonce, Device,
+            Assert.False(ClientLoginWindow.TryParseCallbackPayload(wrongDevice, Nonce, Device,
                 out _, out _, out _, out string deviceError));
             Assert.Contains("设备", deviceError);
         }
 
         [Fact]
         public void CallbackPayload_RejectsMalformedJson()
-            => Assert.False(ClientLoginForm.TryParseCallbackPayload("not-json", Nonce, Device,
+            => Assert.False(ClientLoginWindow.TryParseCallbackPayload("not-json", Nonce, Device,
                 out _, out _, out _, out string _));
 
         [Fact]
@@ -323,7 +346,7 @@ namespace UNCAD.Tests
         {
             string json = "{\"kind\":\"account\",\"account\":\"devuser\"}";
 
-            Assert.True(ClientLoginForm.TryParseMessage(json,
+            Assert.True(ClientLoginWindow.TryParseMessage(json,
                 out LicenseCallbackPayload payload, out string error));
 
             Assert.Equal("account", payload.kind);
@@ -355,13 +378,13 @@ namespace UNCAD.Tests
         {
             // 心跳端点 /d/key/{account}/pro.key 必须有账号：回调带 account 时以它为准。
             Assert.Equal("server-user",
-                ClientLoginForm.ResolveAccount("server-user", "stale-typed-user"));
+                ClientLoginWindow.ResolveAccount("server-user", "stale-typed-user"));
             Assert.Equal("server-user",
-                ClientLoginForm.ResolveAccount("  server-user  ", ""));
+                ClientLoginWindow.ResolveAccount("  server-user  ", ""));
             // 缺失时退回输入框/同源识别兜底，且不抛异常。
-            Assert.Equal("typed-user", ClientLoginForm.ResolveAccount("", "typed-user"));
-            Assert.Equal("typed-user", ClientLoginForm.ResolveAccount(null, " typed-user "));
-            Assert.Equal("", ClientLoginForm.ResolveAccount(null, null));
+            Assert.Equal("typed-user", ClientLoginWindow.ResolveAccount("", "typed-user"));
+            Assert.Equal("typed-user", ClientLoginWindow.ResolveAccount(null, " typed-user "));
+            Assert.Equal("", ClientLoginWindow.ResolveAccount(null, null));
         }
 
         private static Uri CallbackUri(string token, string device, string state)
@@ -370,5 +393,18 @@ namespace UNCAD.Tests
                 + "&device=" + Uri.EscapeDataString(device)
                 + "&account=" + Uri.EscapeDataString(Account)
                 + "&state=" + Uri.EscapeDataString(state));
+
+        private static string FindSource(params string[] parts)
+        {
+            var directory = new System.IO.DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (directory != null)
+            {
+                string candidate = System.IO.Path.Combine(directory.FullName,
+                    System.IO.Path.Combine(parts));
+                if (System.IO.File.Exists(candidate)) return candidate;
+                directory = directory.Parent;
+            }
+            throw new InvalidOperationException("找不到源文件：" + string.Join("/", parts));
+        }
     }
 }

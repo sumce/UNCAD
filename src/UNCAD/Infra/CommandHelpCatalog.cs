@@ -55,16 +55,16 @@ namespace UNCAD.Infra
                 E(CommandIds.Conduit51, "51 mm 线管标注", "U1C51", "按固定清单 51 mm 型号生成线管平行标注", "固定生成 2000mm 占位长度；不改变 U1SET 默认管径。"),
                 E(CommandIds.About, "关于与授权", "U1A", "查看版本、授权、开发者和使用条款", "只读操作。"),
                 E(CommandIds.Settings, "配置中心", "U1SET", "集中设置绘图、统计、清单、输出、日志与操作记录参数", "保存前验证路径和数值范围；支持导出/导入 Base64 配置分享码（包含变更预览，只含可分享配置项）。"),
-                E(CommandIds.DataRefresh, "刷新机台数据", "U1DATA", "在后台刷新 U1SET 配置的本地或 UNC 机台工作簿", "只支持本地/UNC 文件（HTTP/HTTPS 数据源已移除，不联网）；刷新完成前各命令继续读取上一次成功的 SQLite 快照，失败不会替换旧数据。"),
+                E(CommandIds.DataRefresh, "刷新机台数据", "U1DATA", "在后台刷新 U1SET 配置的机台工作簿（本地/UNC 文件或网络地址）", "支持本地/UNC 与 HTTP/HTTPS 地址；网络下载只在刷新时进行，其余命令不联网。刷新完成前各命令继续读取上一次成功的 SQLite 快照，失败不会替换旧数据。"),
                 E(CommandIds.DwgExportShort, "DWG 自动导出快捷命令", "U1D", "调用 U1DWG 导出选中的图框", "与 U1DWG 功能完全相同。"),
-                E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe/xframe_v2 图框", "同机台图框在独立 DWG 中横向排列；文件写到本地输出目录（按图纸/机台分层），不上传、不联网。"),
-                E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "直接回车使用原点；每行首框左侧生成高度 25000 的机台 ID 文字；重复执行会再追加机台 ID 文字（设计行为）。"),
+                E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe/xframe_v2 图框", "同机台图框在独立 DWG 中横向排列；文件写到输出目录的机台文件夹（与 BOQ/PDF 同夹），不上传、不联网。"),
+                E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "选择窗里可选排列方案：按机台完整性（完整在前，默认）/按机台ID顺序/按上游编号（同上游一行），行内回路按机台 Excel 行序；直接回车使用原点；每行首框左侧生成行标签文字（机台 ID 或上游编号）；重复执行会再追加标签文字（设计行为）。"),
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路读取 U1DATA/U1SET 刷新后的 SQLite 机台快照，命令执行时不读取 Excel、不联网。"),
                 E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),
                 E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "多行文字和统计分类可在 U1SET 独立开关。"),
                 E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。"),
                 E(CommandIds.ClientLogin, "在线登录", "UNC_LOGIN", "使用 UNCAD 账号登录并在本机上线；一个账号同时只有一台设备在线", "授权缺失、过期或被其它设备顶掉时仍可运行，是在线授权的恢复入口；重新登录即在本机抢回授权（服务端不支持免密抢回），成功后立即做一次心跳校验。"),
-                E(CommandIds.PdfExport, "PDF 出图", "U1PDF", "框选图框，每个图框（一个回路）导出一份彩色 PDF 到本地输出目录", "一台机台有多个回路时会有多份 PDF；文件写到本地输出目录（按图纸/机台分层，同名自动去重），不上传、不联网；回路名取自图框已填充身份，与 U1F/U1U 生成口径一致。需要 AutoCAD 自带的“DWG To PDF.pc3”打印设备；出图较慢时命令行会逐份显示进度。")
+                E(CommandIds.PdfExport, "PDF 出图", "U1PDF", "框选图框，每个图框（一个回路）导出一份彩色 PDF 到本地输出目录", "一台机台有多个回路时会有多份 PDF；文件写到输出目录的机台文件夹（与 BOQ/DWG 同夹，同名自动去重），不上传、不联网；回路名取自图框已填充身份，与 U1F/U1U 生成口径一致。需要 AutoCAD 自带的“DWG To PDF.pc3”打印设备；出图较慢时命令行会逐份显示进度。")
             };
 
         public static IReadOnlyList<CommandHelpEntry> All => Entries;

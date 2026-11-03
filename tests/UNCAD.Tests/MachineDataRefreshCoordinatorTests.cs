@@ -11,7 +11,7 @@ namespace UNCAD.Tests
     /// <summary>
     /// 机台数据后台刷新契约（2.10.0）：只支持本地/共享文件夹工作簿；远程下载、
     /// 启动时远程刷新、后台台账上报与命令行通知队列都已移除，刷新结果只写日志。
-    /// U1DATA 对 HTTP/HTTPS 数据源给出明确中文拒绝。
+    /// U1DATA 与协调器对 HTTP/HTTPS 数据源的支持方式（D-041 恢复下载）。
     /// </summary>
     public sealed class MachineDataRefreshCoordinatorTests
     {
@@ -83,18 +83,18 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("TryTakeNotice", source);
             Assert.DoesNotContain("EnqueueNotice", source);
             Assert.DoesNotContain("MachineLedgerReporter", source);
-            Assert.DoesNotContain("IsRemote", source);
             Assert.Contains("MachineWorkbookSource.Refresh", source);
         }
 
         [Fact]
-        public void U1Data_RejectsRemoteSourceWithChineseReason()
+        public void U1Data_RemoteSourceRefreshesViaCoordinator_NoRejectionBranch()
         {
             string source = File.ReadAllText(Repo("src", "UNCAD", "Features", "ConfigCenter",
                 "MachineDataRefreshFeature.cs"));
+            // D-041：网络地址与本地文件走同一条刷新链路，不再有拒绝分支。
+            Assert.DoesNotContain("不再支持网络机台数据源", source);
+            Assert.Contains("MachineDataRefreshCoordinator.Default", source);
             Assert.Contains("MachineWorkbookSource.IsRemote(source)", source);
-            Assert.Contains("不再支持网络机台数据源", source);
-            Assert.Contains("U1SET", source);
         }
 
         [Fact]
@@ -104,7 +104,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("MachineWorkbookSource.Refresh", source);
             Assert.DoesNotContain("MachineWorkbookSource.IsRemote", source);
             Assert.DoesNotContain("MachineDataRefreshCoordinator", source);
-            Assert.Contains("云端上传与远程机台数据刷新已移除", source);
+            Assert.Contains("云端上传/台账上报保持移除", source);
+            Assert.Contains("启动时不自动刷新", source);
         }
 
         private static string Repo(params string[] parts)

@@ -31,6 +31,24 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("3.0.0-dev", "2026-11-02",
+                    "开发版（D-039 版本通道）：3.0 迭代第一个开发版。图框 JSON 存储重构（D-040，用户模板 FRAME_20261102）：JSON 改为图框块内 FRAMEINFO 文字属性，随图框复制/移动零丢失，U1F/U1U 自动把四代旧图框迁移到新模板，独立 frameinfo_json 块与旧内嵌属性降级为遗留读源；含幽灵机台全套修复（句柄绑定/身份仲裁/继承守卫）、UI 全量 WPF 迁移、FillFeature 拆分、性能与迁移双门禁、大批量进度窗与三色机台标签、安全加固；真机验收通过后以 3.0.0 正式版发布。",
+                    "改进：UI/UX 全面修缮（2026-11-03）——① 窗口自适应：所有窗体尺寸钳制到屏幕工作区 92% 并居中启动（小屏/低分屏不再被截断，SizeToContent 的窗不碰）；② WPF 统一设计令牌 FluentKit：11 个设置页与机台选择窗共用一套字号/间距/卡片样式（卡片内边距 18/16、下间距 12 统一，字段标签/说明文字/开关行一致），改观感只动一个文件；③ U1F 机台选择窗：相似建议改浮层下拉（不再把下方内容顶下去）、新增回路筛选框与计数（显示 X / N）、长文本省略号+悬浮看全文、列表与预览按 2:1 弹性随窗口拉伸；④ XSTS/XLAYOUT/批量/DWG/PDF 五个结果窗长文本列（路径/备注/原因/回路）省略号+悬浮提示；⑤ 修复清单与表格页网格缺行定义、统计页开关底距缺失等细节。",
+                    "修复：XSTS/身份读取的幽灵机台——图框移动后遗留的 frameinfo_json 块会被几何归属错误认领（JSON 身份优先级最高，导致统计多出机台、更可能让 U1U 认错机台）；现写入时在 meta 打上图框句柄（frameHandle），读取时句柄不符即忽略外块并提示用户清理，老 JSON 无句柄保持兼容。",
+                    "新增：UI 全量迁移 WPF（Fluent 风格，D-038）——全部 21 个业务窗体完成迁移并删除 WinForms 旧版：批量确认/设备内预留/排版统计与选择/XSTS/Xmerge/机台选择/更新对比/清单评审/手动条目/目录选择×2/设置中心（11 页导航枢纽）/配置分享/在线授权/登录（WebView2 WPF 控件）/命令帮助/更新日志/关于/启动画面/3D 预览外壳；深浅色主题、卡片式布局、Enter 确认/Esc 取消；设计语言规范 docs/UI-3.0-DESIGN.md。",
+                    "重构：FillFeature 上帝类 1425 行拆为 8 个阶段服务（求和/数据加载/机台选定/回路门禁/规划/评审/软管/电缆预留），降为 695 行；电缆预留纯逻辑下沉 Core 可独立单测；调用方与测试零改动；新增行数守卫测试防回潮。",
+                    "新增：性能冒烟门禁——UNCAD_PERF_SMOKE 真机自检在 accoreconsole 生成大图（36 框+5136 实体）计时图框收集与统计求和（批量 U1U 同链），超预算即 FAIL；release.ps1 默认执行该门禁（-SkipPerf 可跳过）。",
+                    "加固：登录凭证改为 Windows DPAPI 加密存储（旧明文首次读取自动升级，无感）；日志中的账户名统一脱敏（z***@域名）；在线登录页拦截一切新开窗口，防钓鱼跳转。",
+                    "加固：分层守卫测试上线——Core 禁止依赖 AutoCAD/WinForms/WPF、Excel 读取(NPOI)限定 Core 层、UI 除 Ribbon 构造器外禁止依赖 AutoCAD、四代图框块名（frame/frame_20260812/xframe/xframe_v2）冻结为兼容契约。",
+                    "新增（D-045）：XLAYOUT 排列方案三选一——按机台完整性（完整在前，默认）、按机台 ID 顺序、按上游编号（同一 U_上游编号 的回路排到一行，未配上游的归最后一行）；行内回路一律按机台 Excel 行顺序排列（快照不可用时退回图上位置）；选择窗新增排列方案下拉并记住上次选择；按上游模式行首标签显示上游编号。",
+                    "变更（D-044）：U1F 缺回路与 U1U 同口径——整机回路校验未通过时图纸照常填写（机台ID/清单/块属性/预留），只跳过该机 BOQ，补全后执行 U1S 补清单；不再出现“图纸与 BOQ 均未修改”的空跑（U1S/U1DWG 保持硬门禁；U1SET 开关不变）。现场可以边画边填了。",
+                    "新增（D-043）：设备内预留自动识别——U1F/U1U 在本次框选范围内识别现场老习惯画的横排毫米数标注（如设备旁手写的 2000），自动吸收为设备内预留并在写图时删除该标注（恰有一处才自动取值；发现多处不乱取，点名交人工确认，防把轴号/序号误当预留）；吸收值走既有链路（frameinfo_json 持久化 + CABLE_INFO 数值（设备内）+ 确认窗可改）；U1SET 清单页新增开关（默认开）。",
+                    "改进：U1DWG / U1PDF 完成后弹结果窗——DWG 按机台列出图框数/回路/DWG 文件，PDF 每份一行（成功/失败/原因/文件），失败不再只给首个诊断；出图进度改进度窗，命令行只留一行摘要；U1SET 概览页改就绪仪表盘——机台数据源快照状态与输出目录状态两张实时卡（带跳转按钮）+ 现场四步工作流指引。",
+                    "改进：XSTS / XLAYOUT 窗口顶部新增机台状态徽章行（完整/缺回路/多出/无基准 或 完整/警告/缺回路/未判断，各带台数与语义色），配下一步行动指引（缺的补画→重跑→U1U 出清单）；XSTS 命令行摘要同步输出机台分布，并修正把图框数写作“张图纸”的用词。",
+                    "变更（D-042）：输出目录一个机台一个文件夹——BOQ / DWG / PDF 都写在 <输出根>\\<机台ID>\\ 里，不再按打开的图纸名或类别分层，U1SET 的两个布局开关移除；批量 U1U 结束后弹结果窗（每台一行：图框数/表格行/属性项/BOQ 状态与文件路径/备注，可一键打开输出目录），命令行只留一行摘要——逐步进度与逐个 BOQ 路径不再刷终端（进度在进度窗、明细在结果窗与日志）。",
+                    "修复：XLAYOUT 与 XSTS 结论相反——回路齐全但有重复图框的机台，XLAYOUT 旧逻辑把“重复→黄”写在永远走不到的死分支里，实际标成红“缺回路”（XSTS 按去重集合比对显示不缺）；现红只留给“应有的回路本次没见到”，重复/多出归黄，统计窗新增“详情”列点名缺少/多出的回路（最多列 5 个），命令行与日志逐台输出原因；只排一部分回路时仍标红但列出没排的回路名。",
+                    "修复：单框 U1U 变更对比失真——对比窗原来弹在清单确认窗之前，用户随后在确认窗里改设备内预留/电缆米数，先展示的米数变更就成了假数据；现改为确认窗之后、用最终清单行构建（批量 U1U 本就先编辑后对比，不受影响），取消确认窗时也不再白弹对比。",
+                    "新增：网络机台数据源恢复（D-041）——U1SET/U1DATA 再次支持 HTTP/HTTPS 地址，只下载、零上传、100MB 上限、20 秒超时；下载或解析失败时保留上一次成功快照并给出中文原因；机台数据页重做（占位提示/主按钮刷新/数据源类型与快照状态分卡展示，每次刷新写日志）。绘图命令仍只读 SQLite 快照、永不联网；启动时也不自动联网（老版 D-023 的启动自动刷新不再恢复）。"),
                 new VersionChangeLogEntry("2.10.0", "2026-11-01",
                     "新增：U1SET「输出与分享」支持配置分享码（Base64，可导出/预览/导入，敏感授权键永不分享）；「日志与记录」可查看最近操作记录（本地 JSONL，默认保留 6 个月），文件日志按天滚动、可配级别与保留天数。",
                     "新增：整机回路校验——U1F/U1U/U1S/U1DWG 生成 BOQ/DWG 前要求该机台所有回路都在本次选集中，缺回路即中止并列出缺少的回路，图纸与 BOQ 均不修改（U1SET 可关闭）；盘内预留（I-Line/插座盘/插接箱）可在 U1SET 分别调整。",
@@ -196,19 +214,33 @@ namespace UNCAD.Infra
         public static List<VersionChangeLogEntry> EntriesNewerThan(string seenVersion)
         {
             Version seen = ParseOrNull(seenVersion);
+            bool seenIsDev = IsDevLabel(seenVersion);
             IEnumerable<VersionChangeLogEntry> entries = Entries;
             if (seen != null)
                 entries = entries.Where(entry =>
-                    ParseOrNull(entry.Version) == null || ParseOrNull(entry.Version) > seen);
+                {
+                    // D-039：开发版条目只给开发版用户看；正式版客户的更新提示
+                    // 只出现正式版本号（3.0.0 正式切出时条目名去掉 -dev）。
+                    if (IsDevLabel(entry.Version) && !seenIsDev) return false;
+                    Version parsed = ParseOrNull(entry.Version);
+                    return parsed == null || parsed > seen;
+                });
             else
                 entries = entries.Take(1); // First install: only show the latest notes.
             return entries.ToList();
         }
 
+        private static bool IsDevLabel(string value)
+            => (value ?? "").IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0;
+
         private static Version ParseOrNull(string value)
         {
+            // 开发版通道（D-039）：3.0.0-dev 按 3.0.0 参与比较。
+            string text = (value ?? "").Trim();
+            int dash = text.IndexOf('-');
+            if (dash >= 0) text = text.Substring(0, dash);
             Version parsed;
-            return Version.TryParse((value ?? "").Trim(), out parsed) ? parsed : null;
+            return Version.TryParse(text, out parsed) ? parsed : null;
         }
     }
 }

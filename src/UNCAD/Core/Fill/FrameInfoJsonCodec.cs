@@ -19,7 +19,7 @@ namespace UNCAD.Core.Fill
     ///  "cable":{"original","boq","busPlugBoxCode","measuredM","panelReserveMm",
     ///           "deviceReserveMm","totalM"},
     ///  "drawing":{"detail","seq","hoseDiameter"},
-    ///  "meta":{"updatedUtc","updatedBy"},
+    ///  "meta":{"updatedUtc","updatedBy","frameHandle"},
     ///  "changes":[{"ts","cmd","field","from","to"}]}
     /// </c>
     /// Every key is always emitted (empty strings instead of nulls), the history is
@@ -122,7 +122,8 @@ namespace UNCAD.Core.Fill
                     ("hoseDiameter", Text(record.HoseDiameter))),
                 ["meta"] = Section(
                     ("updatedUtc", Text(record.LastModifiedUtc)),
-                    ("updatedBy", Text(record.LastModifiedUser))),
+                    ("updatedBy", Text(record.LastModifiedUser)),
+                    ("frameHandle", Text(record.FrameHandle))),
                 ["changes"] = changes.Select(change => Section(
                     ("ts", Text(change.TimestampUtc)),
                     ("cmd", Text(change.Command)),
@@ -183,7 +184,9 @@ namespace UNCAD.Core.Fill
                 Seq = Get(drawing, "seq"),
                 HoseDiameter = Get(drawing, "hoseDiameter"),
                 LastModifiedUtc = Get(meta, "updatedUtc"),
-                LastModifiedUser = Get(meta, "updatedBy")
+                LastModifiedUser = Get(meta, "updatedBy"),
+                // 2.11.0 起写入的绑定；老 JSON 无此键 → 空串（读取方按兼容语义放行）。
+                FrameHandle = Get(meta, "frameHandle")
             };
             ReadChanges(root, record);
             return record;

@@ -65,8 +65,7 @@ namespace UNCAD.Features.DwgExport
             try
             {
                 // 图纸名 → <root>\<图纸>\DWG\<机台>\<机台>.dwg；占用预检在写盘之前。
-                result = DwgFrameExportService.Export(ctx, frames,
-                    AutomaticSubmissionService.CurrentDrawingName(ctx));
+                result = DwgFrameExportService.Export(ctx, frames);
             }
             catch (System.Exception ex)
             {
@@ -82,8 +81,14 @@ namespace UNCAD.Features.DwgExport
                     ctx.Operation?.Machine(machine.MachineId, circuit);
                 ctx.Operation?.Output("DWG", machine.FilePath);
             }
-            ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框，"
-                + result.MachineCount + " 个机台文件：" + result.FilePath);
+            // D-042 UI 信息完整性：结果窗按机台列出图框/回路/文件，命令行只留一行摘要。
+            string outputRoot = Core.Submission.OutputLayout.NormalizeRoot(
+                Infra.Settings.Get(Infra.ConfigKeys.SubmitFolder, ""));
+            ctx.Write("\n[U1DWG] 已导出 " + result.FrameCount + " 个设备图框 / "
+                + result.MachineCount + " 个机台；明细见结果窗。");
+            var resultWindow = new UNCAD.UI.DwgExportResultWindow(result.Machines,
+                result.FrameCount, outputRoot);
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(resultWindow);
         }
     }
 }

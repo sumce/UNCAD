@@ -15,8 +15,9 @@ namespace UNCAD.Features.About
 
         protected override void Execute(CadContext ctx)
         {
-            using (var form = new AboutForm())
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+            // 3.0 WPF 窗体（D-038，P7 品牌页）；只读展示，无返回结果。
+            var window = new AboutWindow();
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
         }
     }
 }

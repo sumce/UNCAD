@@ -1,0 +1,134 @@
+<UserControl x:Class="UNCAD.UI.SettingsBomPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="清单与表格" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="U1F / U1U 写表参数、电缆预留与自动填充类别" />
+
+            <!-- 表格参数与电缆预留 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="表格参数与电缆预留" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="电缆总长 = 实测 + 盘内/箱内预留（I-Line 电盘 / 插座盘 / 母线插接箱） + 设备内预留 + 业主预留；整机回路校验要求该机台所有回路都在本次选集中。" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="起始数据行（1 = No.1）" />
+                            <ui:NumberBox x:Name="FillTableRow" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="1000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="每次清空数据行数" />
+                            <ui:NumberBox x:Name="FillClearRows" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="表格文字高度" />
+                            <ui:NumberBox x:Name="FillTextHeight" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="软管手动数量（m）"
+                                       ToolTip="仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。" />
+                            <ui:NumberBox x:Name="FillFlexibleMeters" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0.1" Maximum="100"
+                                          ToolTip="仅作为清单确认时的手动数量；自动软管长度来自 Ruanguan 动态块。" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="电缆业主预留（mm）" />
+                            <ui:NumberBox x:Name="FillCableOwnerReserve" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="I-Line 盘内预留（mm）" />
+                            <ui:NumberBox x:Name="CableReserveILine" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="插座盘内预留（mm）" />
+                            <ui:NumberBox x:Name="CableReserveSocket" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Grid.Column="1">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="母线插接箱预留（mm）" />
+                            <ui:NumberBox x:Name="CableReserveBusbar" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                    </Grid>
+                    <!-- 两个行为开关与数值字段之间用细分隔线分组 -->
+                    <Border Margin="0,14,0,0" Padding="0,12,0,0"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                        <StackPanel>
+                            <ui:ToggleSwitch x:Name="DeviceReserveAutoDetect" x:FieldModifier="internal"
+                                             Style="{DynamicResource UncadToggle}" Margin="0,0,0,2"
+                                             Content="设备内预留自动识别：吸收设备旁横排毫米标并删除标注（多处时不自动取值）" />
+                            <ui:ToggleSwitch x:Name="RequireAllCircuits" x:FieldModifier="internal"
+                                             Style="{DynamicResource UncadToggle}"
+                                             Content="整机回路校验：该机台所有回路都在本次选集中才生成 BOQ / DWG" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ui:Card>
+
+            <!-- BOQ 自动填充类别 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="BOQ 自动填充类别" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="这里控制的是上游/通用类别；Downstream 块的自动添加有自己的独立开关（见「Downstream 自动添加」页），两者互不影响。" />
+                    <UniformGrid Columns="4" Rows="2">
+                        <ui:ToggleSwitch x:Name="AutofillCable" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,10" Content="电缆" />
+                        <ui:ToggleSwitch x:Name="AutofillBreaker" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,10" Content="断路器" />
+                        <ui:ToggleSwitch x:Name="AutofillPanel" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,10" Content="电盘" />
+                        <ui:ToggleSwitch x:Name="AutofillFlexibleConduit" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,0,10" Content="软管" />
+                        <ui:ToggleSwitch x:Name="AutofillRigidConduit" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,0" Content="线管" />
+                        <ui:ToggleSwitch x:Name="AutofillBridge" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,0" Content="桥架" />
+                        <ui:ToggleSwitch x:Name="AutofillOutletPanel" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0,0,12,0" Content="插座盘" />
+                        <ui:ToggleSwitch x:Name="AutofillBusPlugBox" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Content="插接箱" />
+                    </UniformGrid>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

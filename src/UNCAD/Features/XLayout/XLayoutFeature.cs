@@ -34,8 +34,72 @@ namespace UNCAD.Features.XLayout
         // Keep one fixed left column for every row; text grows right without alignment recalculation.
         private const double MachineLabelLeftDistance = 300000d;
         private const short MachineCompleteColorIndex = 3;
-        private const short MachineIncompleteColorIndex = 1;
-        private const short MachineUnknownColorIndex = 8;
+        private const short MachineWarningColorIndex = 2;
+        private const short MachineMissingColorIndex = 1;
+        /// <summary>本次 XLAYOUT 的排列方案（默认取上次记忆值，选择窗可改并记住）。</summary>
+        private static Core.Dwg.XLayoutArrangeMode _arrangeMode = LoadArrangeMode();
+
+        private static Core.Dwg.XLayoutArrangeMode LoadArrangeMode()
+        {
+            Core.Dwg.XLayoutArrangeModes.TryParseValue(
+                Settings.Get(ConfigKeys.XLayoutArrangeMode, ""),
+                out Core.Dwg.XLayoutArrangeMode mode);
+            return mode;
+        }
+
+        /// <summary>
+        /// D-045：排列对照数据。就绪等级来自快照对照结果（完整 0/重复或多出 1/
+        /// 缺回路 2/无基准 3）；Excel 行序与上游编号读同一份 SQLite 快照——
+        /// 快照不可用时优雅降级（行内退回按图上位置排，上游模式全部归“未配上游”）。
+        /// </summary>
+        private static Core.Dwg.XLayoutArrangeContext BuildArrangeContext(
+            IDictionary<string, XLayoutMachineSummary> summaries,
+            IReadOnlyList<XLayoutFrameItem> items, CadContext ctx)
+        {
+            var context = new Core.Dwg.XLayoutArrangeContext();
+            foreach (XLayoutMachineSummary summary in summaries.Values)
+            {
+                switch (summary.LabelStatus)
+                {
+                    case XLayoutLabelStatus.Complete:
+                        context.ReadinessRank[summary.MachineId] = 0;
+                        break;
+                    case XLayoutLabelStatus.Missing:
+                        context.ReadinessRank[summary.MachineId] = 2;
+                        break;
+                    default:
+                        // 警告（重复/多出）与未判断分开：未判断排最后。
+                        context.ReadinessRank[summary.MachineId] =
+                            summary.StatusKnown ? 1 : 3;
+                        break;
+                }
+            }
+            string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+            if (configured.Length == 0) return context;
+            try
+            {
+                if (!MachineWorkbookSource.TryGetSnapshot(configured,
+                        out MachineWorkbookSnapshotInfo snapshot))
+                    return context;
+                int order = 0;
+                foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
+                    .ReadRowsForMachines(configured, items.Select(item => item.MachineId)))
+                {
+                    string key = Core.Dwg.XLayoutArrangeContext.MakeKey(
+                        row.MachineId, row.CircuitName);
+                    if (!context.RowOrder.ContainsKey(key))
+                        context.RowOrder[key] = order;
+                    context.UpstreamOf[key] = (row.Fr ?? "").Trim();
+                    order++;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                ctx.Write("\n[XLAYOUT] SQLite 机台快照读取失败，行序/上游排列退回图上位置: "
+                    + ex.Message);
+            }
+            return context;
+        }
         private const short DuplicateMarkerColorIndex = 2;
         // 只在明显变慢时输出一行 [PERF]；用户交互/对话框时间不计入。
         private const long PerfThresholdMilliseconds = 500;
@@ -75,12 +139,18 @@ namespace UNCAD.Features.XLayout
             var identityErrors = new List<string>();
             FrameRegionGroup firstIdentityError = null;
             int index = 0;
+            var identityProgress = new ProgressWindow("XLAYOUT 读取机台身份");
+            int identityStep = Math.Max(1, regions.Groups.Count / 100);
+            try
+            {
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var definitions = new CadBlockDefinitionReader(readTransaction);
                 foreach (FrameRegionGroup group in regions.Groups)
                 {
                     index++;
+                    if (index % identityStep == 0 || index == regions.Groups.Count)
+                        identityProgress.Update("识别图框机台身份", index, regions.Groups.Count);
                     ExistingFillIdentity identity;
                     try
                     {
@@ -117,6 +187,8 @@ namespace UNCAD.Features.XLayout
                 }
                 readTransaction.Commit();
             }
+            }
+            finally { identityProgress.Close(); }
 
             long identityMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (identityErrors.Count > 0)
@@ -146,6 +218,9 @@ namespace UNCAD.Features.XLayout
                 ReadExpectedCircuits(ctx, items.Select(item => item.MachineId));
             HashSet<string> duplicateHandles = FindDuplicateCircuits(items, summaries,
                 expectedCircuits);
+            // D-045：排列对照数据（机台就绪等级 + Excel 行序 + 上游编号）。
+            Core.Dwg.XLayoutArrangeContext arrangeContext = BuildArrangeContext(
+                summaries, items, ctx);
             long prepareMilliseconds = phaseWatch.ElapsedMilliseconds;
 
             // 排版前让用户挑选机台/回路：树形勾选 + 关键词筛选（空格/逗号分隔，AND）。
@@ -153,17 +228,20 @@ namespace UNCAD.Features.XLayout
             IReadOnlyList<XLayoutFrameItem> arrangedItems = items;
             if (items.Count > 1)
             {
-                using (var selector = new XLayoutSelectionForm(items))
+                // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达，取消/关闭/Esc 一律 false。
+                var selector = new XLayoutSelectionWindow(items, _arrangeMode);
+                Autodesk.AutoCAD.ApplicationServices.Application
+                    .ShowModalWindow(selector);
+                if (!selector.Confirmed)
                 {
-                    if (Autodesk.AutoCAD.ApplicationServices.Application
-                        .ShowModalDialog(selector) != System.Windows.Forms.DialogResult.OK)
-                    {
-                        SelectionService.ClearPickFirst(ctx);
-                        ctx.Write("\n[XLAYOUT] 已取消，未执行排版。");
-                        return;
-                    }
-                    arrangedItems = selector.SelectedItems;
+                    SelectionService.ClearPickFirst(ctx);
+                    ctx.Write("\n[XLAYOUT] 已取消，未执行排版。");
+                    return;
                 }
+                arrangedItems = selector.SelectedItems;
+                _arrangeMode = selector.ArrangeMode;
+                Settings.Set(ConfigKeys.XLayoutArrangeMode,
+                    Core.Dwg.XLayoutArrangeModes.Value(_arrangeMode));
             }
             if (arrangedItems.Count == 0)
             {
@@ -172,9 +250,10 @@ namespace UNCAD.Features.XLayout
                 return;
             }
             Dictionary<string, XLayoutMachineSummary> arrangedSummaries =
-                BuildArrangedSummaries(arrangedItems, summaries);
+                BuildArrangedSummaries(arrangedItems, expectedCircuits);
             phaseWatch.Restart();
-            IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(arrangedItems);
+            IReadOnlyList<XLayoutPlacement> placements = XLayoutLayout.Arrange(
+                arrangedItems, arrangeContext, _arrangeMode);
             long arrangeMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
             {
@@ -184,6 +263,7 @@ namespace UNCAD.Features.XLayout
             }
 
             phaseWatch.Restart();
+            long commitMilliseconds = 0;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 HashSet<string> targetHandles = new HashSet<string>(
@@ -191,6 +271,13 @@ namespace UNCAD.Features.XLayout
                     StringComparer.OrdinalIgnoreCase);
                 RemoveDuplicateMarkers(ctx, transaction, targetHandles);
                 var moved = new HashSet<ObjectId>();
+                int written = 0, skippedInPlace = 0;
+                // 千/万级图框：进度窗 + 边写边刷，替代“无响应到最后一次性蹦完”。
+                var progress = new ProgressWindow("XLAYOUT 排版写入");
+                progress.Show();
+                int progressStep = Math.Max(1, placements.Count / 100);
+                try
+                {
                 foreach (XLayoutPlacement placement in placements)
                 {
                     FrameRegionGroup group = groupsByItem[placement.Item];
@@ -198,6 +285,18 @@ namespace UNCAD.Features.XLayout
                         placement.TranslationX + layoutOrigin.X,
                         placement.TranslationY + layoutOrigin.Y,
                         layoutOrigin.Z);
+                    // 已在目标位的图框整框跳过：重复排版时避免十几万次无谓的
+                    // 实体改写（每次改写都产生 undo 记录，这是重复 XLAYOUT
+                    // 又慢又肿的主因之一）。
+                    if (displacement.Length <= 1e-9)
+                    {
+                        skippedInPlace++;
+                        continue;
+                    }
+                    written++;
+                    if (written % progressStep == 0 || written == placements.Count)
+                        progress.Update("排版写入图框（已跳过 "
+                            + skippedInPlace + " 个在位图框）", written, placements.Count);
                     foreach (ObjectId id in group.EntityIds)
                     {
                         if (!moved.Add(id)) continue;
@@ -205,7 +304,23 @@ namespace UNCAD.Features.XLayout
                         if (entity == null || entity.IsErased) continue;
                         entity.TransformBy(Matrix3d.Displacement(displacement));
                     }
+                    // 大批量时边写边刷：定期冲刷图形，
+                    // 替代“憋在事务里 30 秒无响应、最后一次性蹦完”。
+                    if (written % 50 == 0)
+                    {
+                        ctx.Db.TransactionManager.QueueForGraphicsFlush();
+                        Autodesk.AutoCAD.ApplicationServices.Application
+                            .DocumentManager.MdiActiveDocument.Editor.UpdateScreen();
+                    }
                 }
+                // 提交段（AutoCAD 统一重生成被移动实体 + 写撤销记录）才是真正的
+                // 重活：1537 框实测约 50s 全在 Commit。进度窗转不确定态罩住它，
+                // 不再“进度条飞完后死画面”。
+                progress.SetIndeterminate("提交变更：AutoCAD 正在重生成 "
+                    + written + " 个图框（大图可能需要几十秒）…");
+                if (skippedInPlace > 0)
+                    ctx.Write("\n[XLAYOUT] " + skippedInPlace
+                        + " 个图框已在目标位，未重复改写。");
 
                 ObjectId textStyle = StyleManager.GetDrawingStandardStyle(ctx, transaction);
                 foreach (IGrouping<int, XLayoutPlacement> row in placements.GroupBy(
@@ -226,7 +341,9 @@ namespace UNCAD.Features.XLayout
                         firstFrameMin.X - MachineLabelLeftDistance,
                         firstFrameMin.Y + first.Item.Boundary.Height / 2d,
                         firstFrameMin.Z);
-                    DBText label = EntityFactory.DBText(ctx, first.Item.MachineId,
+                    string rowLabelText = string.IsNullOrWhiteSpace(first.RowLabel)
+                        ? first.Item.MachineId : first.RowLabel;
+                    DBText label = EntityFactory.DBText(ctx, rowLabelText,
                         labelAnchor, MachineLabelTextHeight, 0d,
                         AttachmentPoint.BaseLeft,
                         colorIndex: MachineLabelColor(arrangedSummaries, first.Item.MachineId),
@@ -239,7 +356,12 @@ namespace UNCAD.Features.XLayout
                     if (!duplicateHandles.Contains(placement.Item.Handle)) continue;
                     DrawDuplicateMarker(ctx, transaction, placement, layoutOrigin);
                 }
+                var commitWatch = System.Diagnostics.Stopwatch.StartNew();
                 transaction.Commit();
+                commitWatch.Stop();
+                commitMilliseconds = commitWatch.ElapsedMilliseconds;
+            }
+            finally { progress.Close(); }
             }
             long writeMilliseconds = phaseWatch.ElapsedMilliseconds;
             long perfTotal = collectMilliseconds + identityMilliseconds
@@ -252,6 +374,7 @@ namespace UNCAD.Features.XLayout
                     + " prepare=" + prepareMilliseconds + "ms"
                     + " arrange=" + arrangeMilliseconds + "ms"
                     + " write=" + writeMilliseconds + "ms"
+                    + " commit=" + commitMilliseconds + "ms"
                     + " frames=" + regions.SelectedFrameCount
                     + " machines=" + summaries.Count
                     + " arranged=" + arrangedItems.Count);
@@ -260,52 +383,110 @@ namespace UNCAD.Features.XLayout
             SelectionService.ClearPickFirst(ctx);
             ctx.Write("\n[XLAYOUT] 排版完成：" + arrangedItems.Count
                 + " 个图框，" + arrangedSummaries.Count + " 个机台；图框间距 10000。");
-            using (var form = new XLayoutSummaryForm(arrangedSummaries.Values.ToList(),
-                arrangedItems.Count))
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+            // 与 XSTS 同样的可诊断性：非完整机台逐台写日志，命令行点名列出
+            // 缺少/多出/重复（最多 10 台），避免"红标签但不知道缺什么"。
+            int attention = 0;
+            foreach (XLayoutMachineSummary summary in arrangedSummaries.Values
+                .Where(item => !item.IsComplete))
+            {
+                attention++;
+                Log.Info("[XLAYOUT] 机台 " + summary.MachineId + "：应有 "
+                    + summary.ExpectedCircuitCount + " 回路，本次参与 "
+                    + summary.CircuitCount + " 框，"
+                    + summary.StatusText
+                    + (summary.DetailText.Length > 0
+                        ? "（" + summary.DetailText + "）" : ""));
+                if (attention <= 10)
+                    ctx.Write("\n[XLAYOUT] 机台 " + summary.MachineId + " "
+                        + summary.StatusText
+                        + (summary.DetailText.Length > 0
+                            ? "（" + summary.DetailText + "）" : ""));
+            }
+            if (attention > 10)
+                ctx.Write("\n[XLAYOUT] 其余 " + (attention - 10)
+                    + " 个机台详见统计窗。");
+            if (attention > 0)
+                ctx.Write("\n[XLAYOUT] 红色=缺回路（应有的回路本次没见到）；黄色=重复或多出，不算缺。");
+
+            // 3.0 WPF 窗体（D-038）：只读统计窗。
+            var summaryWindow = new XLayoutSummaryWindow(arrangedSummaries.Values.ToList(),
+                arrangedItems.Count);
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(summaryWindow);
         }
 
         /// <summary>
         /// 按"实际参与排版"的回路重建机台统计：机台标签颜色与完成统计窗只反映本次
-        /// 重排的图框，避免勾选子集后仍显示整机回路数造成误导。
+        /// 重排的图框。直接用本次参与集合对照 Excel 基准重算缺少/多出/重复——
+        /// 只排一部分时缺的是"没排的那些回路"（红，正确信号）；重复与多出走黄，
+        /// 不再被误标成"缺回路"。
         /// </summary>
         private static Dictionary<string, XLayoutMachineSummary> BuildArrangedSummaries(
             IReadOnlyList<XLayoutFrameItem> arrangedItems,
-            IDictionary<string, XLayoutMachineSummary> all)
+            IDictionary<string, HashSet<string>> expectedCircuits)
         {
             var result = new Dictionary<string, XLayoutMachineSummary>(
                 IdentityTextNormalizer.Comparer);
             if (arrangedItems == null) return result;
             foreach (IGrouping<string, XLayoutFrameItem> machine in arrangedItems
+                .Where(item => item != null)
                 .GroupBy(item => (item.MachineId ?? "").Trim(),
                     IdentityTextNormalizer.Comparer))
             {
-                int count = machine.Count();
-                var summary = new XLayoutMachineSummary(machine.Key) { CircuitCount = count };
-                if (all != null
-                    && all.TryGetValue(machine.Key, out XLayoutMachineSummary full))
+                var summary = new XLayoutMachineSummary(machine.Key)
                 {
-                    summary.ExpectedCircuitCount = full.ExpectedCircuitCount;
-                    summary.DuplicateCircuitCount = full.DuplicateCircuitCount;
-                    summary.StatusKnown = full.StatusKnown;
-                    // 只排了一部分回路时，相对于应有回路仍然算"缺少回路"，这是正确信号。
-                    summary.IsComplete = full.IsComplete && count == full.CircuitCount;
-                }
+                    CircuitCount = machine.Count()
+                };
+                FillMachineStatus(summary, machine.ToList(), expectedCircuits);
                 result[machine.Key] = summary;
             }
             return result;
         }
 
+        /// <summary>按机台回路集合对照 Excel 基准填充统计：缺少/多出的数量与
+        /// 回路名、重复组数、IsComplete（三者全零）。基准缺失时保持未判断。</summary>
+        private static void FillMachineStatus(XLayoutMachineSummary summary,
+            IReadOnlyList<XLayoutFrameItem> machineItems,
+            IDictionary<string, HashSet<string>> expectedCircuits)
+        {
+            summary.DuplicateCircuitCount = machineItems
+                .GroupBy(item => (item.DeviceName ?? "").Trim(),
+                    IdentityTextNormalizer.Comparer)
+                .Count(group => group.Count() > 1);
+            var selected = new HashSet<string>(
+                machineItems.Select(item => (item.DeviceName ?? "").Trim())
+                    .Where(value => value.Length > 0),
+                IdentityTextNormalizer.Comparer);
+            if (expectedCircuits == null || !expectedCircuits.TryGetValue(
+                    summary.MachineId, out HashSet<string> expected))
+                return;
+            summary.ExpectedCircuitCount = expected.Count;
+            summary.StatusKnown = true;
+            List<string> missing = expected.Except(selected,
+                    IdentityTextNormalizer.Comparer)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+            List<string> extra = selected.Except(expected,
+                    IdentityTextNormalizer.Comparer)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+            summary.MissingCircuitCount = missing.Count;
+            summary.MissingCircuitNames.AddRange(missing);
+            summary.ExtraCircuitCount = extra.Count;
+            summary.ExtraCircuitNames.AddRange(extra);
+            summary.IsComplete = missing.Count == 0 && extra.Count == 0
+                && summary.DuplicateCircuitCount == 0;
+        }
+
         private static short MachineLabelColor(
             IDictionary<string, XLayoutMachineSummary> summaries, string machineId)
         {
+            // 现场口径（2026-11-02）：绿=完整无异常；黄=完整但有重复或未知；红=缺回路。
             if (summaries != null && summaries.TryGetValue(machineId ?? "",
                 out XLayoutMachineSummary summary))
             {
-                if (summary.DuplicateCircuitCount > 0
-                    || (summary.StatusKnown && !summary.IsComplete))
-                    return MachineIncompleteColorIndex;
-                if (!summary.StatusKnown) return MachineUnknownColorIndex;
+                switch (summary.LabelStatus)
+                {
+                    case XLayoutLabelStatus.Missing: return MachineMissingColorIndex;
+                    case XLayoutLabelStatus.Warning: return MachineWarningColorIndex;
+                }
             }
             return MachineCompleteColorIndex;
         }
@@ -343,17 +524,7 @@ namespace UNCAD.Features.XLayout
             {
                 if (summaries == null || !summaries.TryGetValue(machine.Key,
                     out XLayoutMachineSummary summary)) continue;
-                var selected = new HashSet<string>(machine.Select(item =>
-                    (item.DeviceName ?? "").Trim()).Where(value => value.Length > 0),
-                    IdentityTextNormalizer.Comparer);
-                if (expectedCircuits != null && expectedCircuits.TryGetValue(machine.Key,
-                    out HashSet<string> expected))
-                {
-                    summary.ExpectedCircuitCount = expected.Count;
-                    summary.StatusKnown = true;
-                    summary.IsComplete = expected.SetEquals(selected)
-                        && summary.DuplicateCircuitCount == 0;
-                }
+                FillMachineStatus(summary, machine.ToList(), expectedCircuits);
             }
             return duplicateHandles;
         }

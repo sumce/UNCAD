@@ -1,0 +1,160 @@
+<ui:FluentWindow x:Class="UNCAD.UI.FillUpdateCompareWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1U · 清单更新对比"
+                 Width="920" Height="640" MinWidth="860" MinHeight="480"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <ui:FluentWindow.Resources>
+        <Style x:Key="CompareRowStyle" TargetType="DataGridRow">
+            <Setter Property="Foreground"
+                    Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Role}" Value="removed">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Role}" Value="added">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Role}" Value="quantity">
+                    <Setter Property="Foreground"
+                            Value="{DynamicResource SystemFillColorCautionBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </ui:FluentWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1U · 清单更新对比" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="清单更新对比"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="左为上次清单（表格现有内容），右为本次将写入的清单；变化行着色。继续更新前请核对差异。" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" Margin="24,12,24,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="FrameListColumn" Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧：图框列表（仅多框） -->
+            <Grid x:Name="FrameListPanel" Grid.Column="0" Width="240" Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="FrameListHeader" Grid.Row="0" FontSize="12"
+                           FontWeight="SemiBold" Margin="0,0,0,6"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <ListBox x:Name="FrameList" Grid.Row="1"
+                         SelectionChanged="OnFrameSelected"
+                         Background="{DynamicResource ControlFillColorDefaultBrush}"
+                         BorderThickness="1"
+                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" />
+            </Grid>
+
+            <!-- 右侧：标题 + 更新信息 + 并排清单 -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="TitleText" Grid.Row="0" FontSize="14" FontWeight="SemiBold"
+                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="HistoryText" Grid.Row="1" Margin="0,4,0,0" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="SummaryText" Grid.Row="2" Margin="0,4,0,8" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" Margin="0,0,6,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="上次清单（表格现有内容）" FontSize="12"
+                                   Margin="0,0,0,4"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <DataGrid x:Name="PreviousGrid" Grid.Row="1"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal" BorderThickness="0"
+                                  RowHeight="30" FontSize="12"
+                                  SelectionMode="Single" SelectionUnit="FullRow"
+                                  Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                  RowStyle="{StaticResource CompareRowStyle}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="序号" Binding="{Binding Ordinal}" Width="44" />
+                                <DataGridTextColumn Header="项目名称" Binding="{Binding Name}" Width="*" />
+                                <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="44" />
+                                <DataGridTextColumn Header="数量" Binding="{Binding Quantity}" Width="76" />
+                                <DataGridTextColumn Header="项次编码" Binding="{Binding Code}" Width="70" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                    <Grid Grid.Column="1" Margin="6,0,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="本次清单（将写入）" FontSize="12"
+                                   Margin="0,0,0,4"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <DataGrid x:Name="PlannedGrid" Grid.Row="1"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal" BorderThickness="0"
+                                  RowHeight="30" FontSize="12"
+                                  SelectionMode="Single" SelectionUnit="FullRow"
+                                  Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                  RowStyle="{StaticResource CompareRowStyle}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="序号" Binding="{Binding Ordinal}" Width="44" />
+                                <DataGridTextColumn Header="项目名称" Binding="{Binding Name}" Width="*" />
+                                <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="44" />
+                                <DataGridTextColumn Header="数量" Binding="{Binding Quantity}" Width="76" />
+                                <DataGridTextColumn Header="项次编码" Binding="{Binding Code}" Width="70" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="“继续更新”才会写入图纸；取消则本次更新不做任何修改。" />
+            <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                       Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+            <ui:Button x:Name="ContinueButton" Grid.Column="2" Content="继续更新" MinWidth="110"
+                       IsDefault="True" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Checkmark24}" Click="OnContinue" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

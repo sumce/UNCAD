@@ -75,6 +75,23 @@ namespace UNCAD.Core.Stat
         public int MissingCircuitCount => Machines.Sum(item => item.MissingCircuits.Count);
         public int UnexpectedCircuitCount => Machines.Sum(item => item.UnexpectedCircuits.Count);
         public int UnknownMachineCount => Machines.Count(item => !item.ExpectedDataAvailable);
+        /// <summary>回路齐全（无缺、无多出）的机台数——只统计有 Excel 基准的机台。</summary>
+        public int CompleteMachineCount => Machines.Count(item =>
+            item.ExpectedDataAvailable && item.MissingCircuits.Count == 0
+            && item.UnexpectedCircuits.Count == 0);
+        /// <summary>缺回路的机台数（哪怕同时有多出也算缺）。</summary>
+        public int MachinesWithMissingCount => Machines.Count(item =>
+            item.ExpectedDataAvailable && item.MissingCircuits.Count > 0);
+        /// <summary>只有多出回路（图纸有、Excel 基准没有）的机台数。</summary>
+        public int MachinesWithExtraOnlyCount => Machines.Count(item =>
+            item.ExpectedDataAvailable && item.MissingCircuits.Count == 0
+            && item.UnexpectedCircuits.Count > 0);
+        /// <summary>机台状态分布一句话（徽章行/命令行摘要共用口径）。</summary>
+        public string MachineStatusText
+            => "完整 " + CompleteMachineCount + " 台 · 缺回路 "
+                + MachinesWithMissingCount + " 台 · 多出 "
+                + MachinesWithExtraOnlyCount + " 台 · 无基准 "
+                + UnknownMachineCount + " 台";
         public bool HasUnknownMachineBaseline
             => ExpectedDataAvailable && UnknownMachineCount > 0;
         public string ExpectedCircuitText => ExpectedDataAvailable

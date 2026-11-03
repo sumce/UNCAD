@@ -89,9 +89,9 @@ namespace UNCAD.Infra
 
         // ---- 2.10.0 输出结构、整机回路校验、可配置预留、日志与操作记录 ----
         // 输出目录结构（"1"=开启，默认开启）：按图纸名建子目录 / BOQ、DWG、PDF 分目录。
-        public const string OutputByDrawing = "UNC_OUTPUT_BY_DRAWING";
-        public const string OutputSeparateKinds = "UNC_OUTPUT_SEPARATE_KINDS";
         // 整机回路校验：生成 BOQ/DWG 前要求该机台的所有回路都在本次选集中（"1"=开启，默认开启）。
+        public const string FillDeviceReserveAutoDetect = "UNC_FILL_DEVICE_RESERVE_AUTO";
+        public const string XLayoutArrangeMode = "UNC_XLAYOUT_ARRANGE";
         public const string FillRequireAllCircuits = "UNC_FILL_REQUIRE_ALL_CIRCUITS";
         // 电缆盘内/箱内预留（毫米）：I-Line 电盘 3400 / 插座盘 1000 / 母线插接箱 500。
         public const string CableReserveILine = "UNC_CABLE_RESERVE_ILINE_MM";

@@ -8,6 +8,7 @@ using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Infra;
 
 namespace UNCAD.Features.Fill
 {
@@ -48,19 +49,39 @@ namespace UNCAD.Features.Fill
 
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds)
+            => Read(transaction, blockIds, null, out _);
+
+        /// <summary>
+        /// 带图框句柄校验的读取：JSON 记录里带 frameHandle 且与当前图框不符时
+        /// 视为外块（图框移动后遗留/几何归属认错），跳过并在 foreignJsonNote 里
+        /// 说明，调用方可提示用户清理。老 JSON 无句柄 → 不校验（兼容旧图）。
+        /// </summary>
+        internal static FrameInfoJsonRecord Read(Transaction transaction,
+            ObjectId[] blockIds, string expectedFrameHandle, out string foreignJsonNote)
         {
+            foreignJsonNote = "";
             FrameInfoJsonRecord result = null;
             foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
             {
                 BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
                     as BlockReference;
+                if (block == null) continue;
                 if (!IsJsonHostBlock(transaction, block)) continue;
                 List<AttributeReference> attributes = Attributes(transaction, block).ToList();
                 foreach (AttributeReference attribute in attributes)
                 {
                     if (!IsJsonTag(attribute.Tag) && attributes.Count != 1) continue;
                     FrameInfoJsonRecord record = ParsePayload(AttributeText(attribute), id);
-                    if (record != null) result = Merge(result, record, id);
+                    if (record == null) continue;
+                    if (record.IsForeignTo(expectedFrameHandle))
+                    {
+                        foreignJsonNote = "图框 " + expectedFrameHandle
+                            + " 范围内发现归属不符的 frameinfo_json 块（块 "
+                            + id.Handle + "，机台 " + record.MachineId
+                            + "），已忽略——多为图框移动后遗留，建议删除该块。";
+                        continue;
+                    }
+                    result = Merge(result, record, id);
                 }
                 if (block.IsDynamicBlock)
                 {
@@ -73,126 +94,23 @@ namespace UNCAD.Features.Fill
                     {
                         FrameInfoJsonRecord record = ParsePayload(
                             Convert.ToString(property.Value), id);
-                        if (record != null) result = Merge(result, record, id);
+                        if (record == null) continue;
+                        if (record.IsForeignTo(expectedFrameHandle))
+                        {
+                            foreignJsonNote = "图框 " + expectedFrameHandle
+                                + " 范围内发现归属不符的 frameinfo_json 块（块 "
+                                + id.Handle + "，机台 " + record.MachineId
+                                + "），已忽略——多为图框移动后遗留，建议删除该块。";
+                            continue;
+                        }
+                        result = Merge(result, record, id);
                     }
                 }
             }
             return result;
         }
 
-        internal static FillWriteResult Fill(CadContext ctx, Transaction transaction,
-            ObjectId[] blockIds, MachineRow machine, FillReviewData review,
-            string commandName, FrameInfoJsonRecord previousRecord = null,
-            CableReserveInfo reserve = null, ObjectId[] legacyFrameIds = null)
-        {
-            if (ctx == null || transaction == null || blockIds == null
-                || blockIds.Length == 0 || machine == null) return FillWriteResult.Empty;
 
-            int blocks = 0;
-            int values = 0;
-            var visited = new HashSet<ObjectId>();
-            var targets = new List<ObjectId>();
-            foreach (ObjectId id in blockIds)
-            {
-                if (!visited.Add(id)) continue;
-                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
-                    as BlockReference;
-                if (!IsFrameInfoJsonBlock(transaction, block)) continue;
-
-                // Older standalone metadata inserts may predate the JSON attribute
-                // definition; retrofit only the standalone block itself.
-                EnsureJsonAttributeReference(ctx.Db, transaction, block);
-                targets.Add(id);
-            }
-
-            // A frame can temporarily contain both a standalone metadata insert and a
-            // legacy embedded FRAMEINFO_JSON attribute. Read them as one source of truth
-            // (newest record wins) before writing so a stale second copy cannot silently
-            // overwrite a user's confirmed replacement.
-            if (previousRecord == null)
-            {
-                foreach (ObjectId id in targets)
-                {
-                    BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
-                        as BlockReference;
-                    FrameInfoJsonRecord current = ReadBlock(transaction, block);
-                    if (current != null)
-                        previousRecord = Merge(previousRecord, current, id);
-                }
-            }
-
-            FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previousRecord,
-                machine, review, commandName, DateTime.UtcNow, null, reserve);
-            string payload = FrameInfoJsonCodec.Serialize(next);
-            foreach (ObjectId id in targets)
-            {
-                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
-                    as BlockReference;
-                if (block == null) continue;
-
-                bool touched = false;
-                List<AttributeReference> attributes = Attributes(transaction, block).ToList();
-                List<AttributeReference> jsonAttributes = attributes
-                    .Where(attribute => IsJsonTag(attribute.Tag)).ToList();
-                if (jsonAttributes.Count == 0 && attributes.Count == 1)
-                    jsonAttributes = attributes;
-                foreach (AttributeReference attribute in jsonAttributes)
-                {
-                    if (string.Equals(attribute.TextString, payload,
-                        StringComparison.Ordinal)) continue;
-                    attribute.UpgradeOpen();
-                    attribute.TextString = payload;
-                    if (attribute.IsMTextAttribute)
-                    {
-                        using (MText mtext = attribute.MTextAttribute)
-                        {
-                            if (mtext != null)
-                            {
-                                mtext.Contents = payload;
-                                attribute.MTextAttribute = mtext;
-                            }
-                        }
-                        attribute.UpdateMTextAttribute();
-                    }
-                    attribute.AdjustAlignment(ctx.Db);
-                    values++;
-                    touched = true;
-                }
-
-                if (!touched && jsonAttributes.Count == 0 && block.IsDynamicBlock)
-                {
-                    DynamicBlockReferenceProperty[] dynamicProperties = block
-                        .DynamicBlockReferencePropertyCollection.Cast<DynamicBlockReferenceProperty>()
-                        .ToArray();
-                    foreach (DynamicBlockReferenceProperty property
-                        in dynamicProperties.Where(property => IsJsonTag(property.PropertyName)
-                            || (dynamicProperties.Length == 1 && property.Value is string)))
-                    {
-                        if (property.ReadOnly
-                            || !(property.Value is string)) continue;
-                        if (string.Equals(Convert.ToString(property.Value), payload,
-                            StringComparison.Ordinal))
-                        {
-                            touched = true;
-                            continue;
-                        }
-                        block.UpgradeOpen();
-                        property.Value = payload;
-                        values++;
-                        touched = true;
-                        break;
-                    }
-                }
-                if (touched) blocks++;
-                else if (jsonAttributes.Count == 0)
-                    ctx.Write("\n[U1F/U1U] frameinfo_json 块没有可写入的 JSON 属性，已跳过。");
-            }
-
-            // 旧图框内嵌的 FRAMEINFO_JSON 属性已迁移到独立块：清空旧值，避免同一图框
-            // 留下两份 JSON（新图框模板已删除该属性，不能再往图框定义里补）。
-            values += ClearEmbeddedJson(transaction, legacyFrameIds);
-            return new FillWriteResult(blocks, values);
-        }
 
         /// <summary>
         /// One sweep over the current space listing every standalone frameinfo_json insert and
@@ -259,62 +177,217 @@ namespace UNCAD.Features.Fill
             MetadataBlockIndex sharedIndex, CableReserveInfo reserve = null,
             FrameInfoJsonRecord previousRecord = null)
         {
-            var targets = new List<ObjectId>();
+            // D-040（2026-11-02，用户模板）：JSON 主存储 = 图框块内的 FRAMEINFO
+            // 文字属性（FRAME_20261102 模板自带）。元数据跟着图框实体走，复制/
+            // 移动零丢失，几何“就近归属”的整类问题就此消失。独立 frameinfo_json
+            // 块与旧内嵌 FRAMEINFO_JSON 属性降级为遗留读源：读取照常，写入后
+            // 清空属于本框的遗留副本。
+            var legacyJsonBlocks = new List<ObjectId>();
             var seen = new HashSet<ObjectId>();
-            // 只写独立 frameinfo_json 块；旧图框内嵌的 FRAMEINFO_JSON 属性在下面迁移并清空。
             foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
             {
                 if (id.IsNull || !seen.Add(id)) continue;
                 BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
                     as BlockReference;
                 if (block != null && IsFrameInfoJsonBlock(transaction, block))
-                    targets.Add(id);
+                    legacyJsonBlocks.Add(id);
             }
 
             var legacyFrames = new List<ObjectId>();
+            var frames = new List<ObjectId>();
             FrameInfoJsonRecord previous = previousRecord;
+            string owningFrameHandle = "";
             foreach (ObjectId frameId in frameBlockIds ?? Array.Empty<ObjectId>())
             {
                 if (frameId.IsNull) continue;
                 BlockReference frame = transaction.GetObject(frameId, OpenMode.ForRead, true)
                     as BlockReference;
                 if (frame == null) continue;
+                frames.Add(frameId);
+                if (owningFrameHandle.Length == 0) owningFrameHandle = frame.Handle.ToString();
 
                 if (HasJsonAttribute(transaction, frame))
                 {
-                    legacyFrames.Add(frameId);
+                    // 块内 JSON 属性（新 FRAMEINFO 或旧 FRAMEINFO_JSON）是首选档案源。
                     FrameInfoJsonRecord embedded = ReadBlock(transaction, frame);
-                    if (embedded != null)
+                    // 继承担卫：内嵌旧 JSON 同样不得是他机遗留（见 Fill 内注释）。
+                    if (embedded != null && embedded.BelongsToMachine(machine.MachineId))
                         previous = Merge(previous, embedded, frameId);
+                    // 只有旧式 FRAMEINFO_JSON 属性需要迁移后清空；FRAMEINFO 是主存储。
+                    if (HasLegacyJsonAttribute(transaction, frame))
+                        legacyFrames.Add(frameId);
                 }
 
-                // Prefer an existing standalone metadata insert so legacy drawings that
-                // already carry one do not gain a second JSON source of truth.
+                // 就近的遗留独立块（几何找块只用于识别历史遗留）：属于本框的
+                // 稍后清空；绑定在别的图框上的不动——那是别人的数据。
                 ObjectId existing = FindExistingNearFrame(ctx, transaction, frame,
                     sharedIndex ?? MetadataBlockIndex.Scan(ctx, transaction));
-                if (!existing.IsNull)
-                {
-                    if (seen.Add(existing)) targets.Add(existing);
-                    continue;
-                }
-
-                ObjectId created = CreateMetadataBlock(ctx, transaction, frame);
-                if (!created.IsNull && seen.Add(created)) targets.Add(created);
+                if (!existing.IsNull && seen.Add(existing))
+                    legacyJsonBlocks.Add(existing);
             }
 
             if (previous == null)
             {
-                foreach (ObjectId id in targets)
+                foreach (ObjectId id in legacyJsonBlocks)
                 {
                     BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
                         as BlockReference;
                     FrameInfoJsonRecord record = block == null ? null : ReadBlock(transaction, block);
-                    if (record != null) previous = Merge(previous, record, id);
+                    // 继承担卫：遗留独立块上的既有 JSON 不得是他机遗留（见 Fill 内注释）。
+                    if (record != null && record.BelongsToMachine(machine.MachineId))
+                        previous = Merge(previous, record, id);
                 }
             }
 
-            return Fill(ctx, transaction, targets.ToArray(), machine, review, commandName,
-                previous, reserve, legacyFrames.ToArray());
+            // 入参 previousRecord 可能来自调用方的未过滤读取：他机遗留记录
+            // 不得继承（身份仲裁选对了机台，型号/预留/历史也不能被前任污染）。
+            if (previous != null && !previous.BelongsToMachine(machine.MachineId))
+            {
+                Log.Warn("丢弃他机遗留 frameinfo_json（记录机台 "
+                    + previous.MachineId + "，本次填表机台 "
+                    + machine.MachineId + "），不继承其型号/预留/历史。");
+                previous = null;
+            }
+
+            FrameInfoJsonRecord next = FrameInfoJsonRecordUpdater.Update(previous,
+                machine, review, commandName, DateTime.UtcNow, null, reserve);
+            // 盖上所属图框句柄（meta.frameHandle）：遗留独立块的读取路径仍按句柄
+            // 拒绝几何错误归属的外块（幽灵机台修复，2026-11-02）。
+            string stampedHandle = (owningFrameHandle ?? "").Trim();
+            if (stampedHandle.Length > 0) next.FrameHandle = stampedHandle;
+            string payload = FrameInfoJsonCodec.Serialize(next);
+
+            int blocks = 0, values = 0;
+            foreach (ObjectId frameId in frames)
+            {
+                BlockReference frame = transaction.GetObject(frameId, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (frame == null) continue;
+                if (WriteFrameJsonAttribute(ctx, transaction, frame, payload) > 0)
+                {
+                    blocks++;
+                    values++;
+                }
+                else
+                {
+                    ctx.Write("\n[U1F/U1U] 图框 " + frame.Handle
+                        + " 缺少 FRAMEINFO 属性且无法补建，JSON 未写入该图框。");
+                }
+            }
+
+            // 清空属于本框的遗留副本，防止同一图框两份 JSON 互相覆盖。
+            values += ClearEmbeddedJson(transaction, legacyFrames.ToArray());
+            values += ClearStandaloneJson(transaction, legacyJsonBlocks, stampedHandle);
+
+            return new FillWriteResult(blocks, values);
+        }
+
+        /// <summary>图框块内 JSON 的首选属性名（2026-11-02 用户模板 FRAME_20261102）。</summary>
+        internal const string FrameInfoTag = "FRAMEINFO";
+
+        /// <summary>写 JSON 到图框块的 FRAMEINFO 属性；缺失时从块定义补建属性引用。
+        /// 返回 1=写入/已一致，0=失败。</summary>
+        private static int WriteFrameJsonAttribute(CadContext ctx, Transaction transaction,
+            BlockReference frame, string payload)
+        {
+            AttributeReference chosen = null;
+            AttributeReference fallback = null;
+            foreach (AttributeReference attribute in Attributes(transaction, frame))
+            {
+                if (!IsJsonTag(attribute.Tag)) continue;
+                if (string.Equals(attribute.Tag, FrameInfoTag,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    chosen = attribute;
+                    break;
+                }
+                fallback = fallback ?? attribute;
+            }
+            if (chosen == null) chosen = fallback;
+            if (chosen == null) return AppendFrameInfoAttribute(ctx, transaction, frame, payload);
+            if (string.Equals(chosen.TextString, payload, StringComparison.Ordinal)) return 1;
+            chosen.UpgradeOpen();
+            chosen.TextString = payload;
+            if (chosen.IsMTextAttribute)
+            {
+                using (MText mtext = chosen.MTextAttribute)
+                {
+                    if (mtext != null)
+                    {
+                        mtext.Contents = payload;
+                        chosen.MTextAttribute = mtext;
+                    }
+                }
+                chosen.UpdateMTextAttribute();
+            }
+            chosen.AdjustAlignment(ctx.Db);
+            return 1;
+        }
+
+        /// <summary>图框实例缺 FRAMEINFO 属性引用时，从块定义克隆补建并写入。</summary>
+        private static int AppendFrameInfoAttribute(CadContext ctx, Transaction transaction,
+            BlockReference frame, string payload)
+        {
+            foreach (ObjectId definitionId in Cad.FrameRegionCollector.DefinitionIds(frame))
+            {
+                BlockTableRecord definition;
+                try
+                {
+                    definition = transaction.GetObject(definitionId, OpenMode.ForRead, true)
+                        as BlockTableRecord;
+                }
+                catch { continue; }
+                if (definition == null) continue;
+                foreach (ObjectId entityId in definition)
+                {
+                    AttributeDefinition attributeDefinition =
+                        transaction.GetObject(entityId, OpenMode.ForRead, true)
+                            as AttributeDefinition;
+                    if (attributeDefinition == null
+                        || !string.Equals(attributeDefinition.Tag, FrameInfoTag,
+                            StringComparison.OrdinalIgnoreCase)) continue;
+                    var reference = new AttributeReference();
+                    reference.SetAttributeFromBlock(attributeDefinition, frame.BlockTransform);
+                    reference.TextString = payload;
+                    frame.UpgradeOpen();
+                    frame.AttributeCollection.AppendAttribute(reference);
+                    transaction.AddNewlyCreatedDBObject(reference, true);
+                    return 1;
+                }
+            }
+            return 0;
+        }
+
+        /// <summary>块上是否带旧式（含 JSON 字样）内嵌 JSON 属性——迁移后要清空的
+        /// 只有这一种；FRAMEINFO 是新主存储，永不清空。</summary>
+        private static bool HasLegacyJsonAttribute(Transaction transaction, BlockReference block)
+            => block != null && Attributes(transaction, block)
+                .Any(attribute => (attribute.Tag ?? "")
+                    .IndexOf("JSON", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        /// <summary>清空属于本框（无绑定或句柄相符）的遗留独立块 JSON；
+        /// 绑定在其他图框上的块不动——那不是本框的数据。</summary>
+        private static int ClearStandaloneJson(Transaction transaction,
+            List<ObjectId> blockIds, string owningFrameHandle)
+        {
+            int cleared = 0;
+            foreach (ObjectId id in blockIds ?? new List<ObjectId>())
+            {
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block == null) continue;
+                FrameInfoJsonRecord record = ReadBlock(transaction, block);
+                if (record != null && record.IsForeignTo(owningFrameHandle)) continue;
+                foreach (AttributeReference attribute in Attributes(transaction, block))
+                {
+                    if (!IsJsonTag(attribute.Tag)) continue;
+                    if (attribute.TextString.Length == 0) continue;
+                    attribute.UpgradeOpen();
+                    attribute.TextString = "";
+                    cleared++;
+                }
+            }
+            return cleared;
         }
 
         internal static bool IsFrameInfoJsonBlock(Transaction transaction,
@@ -408,7 +481,9 @@ namespace UNCAD.Features.Fill
                 if (block == null) continue;
                 foreach (AttributeReference attribute in Attributes(transaction, block))
                 {
-                    if (!IsJsonTag(attribute.Tag)) continue;
+                    // 只清旧式（含 JSON 字样）内嵌属性；FRAMEINFO 是 D-040 主存储。
+                    if ((attribute.Tag ?? "").IndexOf("JSON",
+                            StringComparison.OrdinalIgnoreCase) < 0) continue;
                     if (string.IsNullOrEmpty(attribute.TextString)
                         && !attribute.IsMTextAttribute) continue;
                     attribute.UpgradeOpen();
@@ -462,68 +537,6 @@ namespace UNCAD.Features.Fill
             return ObjectId.Null;
         }
 
-        private static ObjectId CreateMetadataBlock(CadContext ctx,
-            Transaction transaction, BlockReference frame)
-        {
-            Database database = ctx.Db;
-            BlockTable table = transaction.GetObject(database.BlockTableId,
-                OpenMode.ForRead) as BlockTable;
-            if (table == null) return ObjectId.Null;
-
-            ObjectId definitionId;
-            if (table.Has(DefinitionName))
-            {
-                definitionId = table[DefinitionName];
-                BlockTableRecord existing = transaction.GetObject(definitionId,
-                    OpenMode.ForRead, true) as BlockTableRecord;
-                EnsureJsonAttributeDefinition(database, transaction, existing);
-            }
-            else
-            {
-                table.UpgradeOpen();
-                var definition = new BlockTableRecord { Name = DefinitionName };
-                definitionId = table.Add(definition);
-                transaction.AddNewlyCreatedDBObject(definition, true);
-                AddJsonAttributeDefinition(database, transaction, definition);
-            }
-
-            Point3d position = frame.Position;
-            try
-            {
-                Extents3d extents = frame.GeometricExtents;
-                position = new Point3d(
-                    (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
-                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
-                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
-            }
-            catch { }
-
-            BlockTableRecord space = transaction.GetObject(database.CurrentSpaceId,
-                OpenMode.ForWrite) as BlockTableRecord;
-            if (space == null) return ObjectId.Null;
-            var reference = new BlockReference(position, definitionId);
-            reference.SetDatabaseDefaults(database);
-            reference.Layer = "0";
-            space.AppendEntity(reference);
-            transaction.AddNewlyCreatedDBObject(reference, true);
-
-            BlockTableRecord definitionRecord = transaction.GetObject(definitionId,
-                OpenMode.ForRead, true) as BlockTableRecord;
-            if (definitionRecord == null) return reference.ObjectId;
-            foreach (ObjectId entityId in definitionRecord)
-            {
-                AttributeDefinition definition = transaction.GetObject(entityId,
-                    OpenMode.ForRead, true) as AttributeDefinition;
-                if (definition == null || definition.Constant) continue;
-                var attribute = new AttributeReference();
-                attribute.SetDatabaseDefaults(database);
-                attribute.SetAttributeFromBlock(definition, reference.BlockTransform);
-                attribute.TextString = "";
-                reference.AttributeCollection.AppendAttribute(attribute);
-                transaction.AddNewlyCreatedDBObject(attribute, true);
-            }
-            return reference.ObjectId;
-        }
 
         private static void EnsureJsonAttributeDefinition(Database database,
             Transaction transaction, BlockTableRecord definition)
@@ -620,7 +633,13 @@ namespace UNCAD.Features.Fill
         }
 
         private static bool IsJsonTag(string tag)
-            => (tag ?? "").IndexOf("JSON", StringComparison.OrdinalIgnoreCase) >= 0;
+        {
+            string value = tag ?? "";
+            // FRAMEINFO：2026-11-02 用户模板（FRAME_20261102）的块内 JSON 属性名；
+            // 旧体系用 FRAMEINFO_JSON / 含 JSON 的标签。
+            return value.IndexOf("JSON", StringComparison.OrdinalIgnoreCase) >= 0
+                || string.Equals(value, "FRAMEINFO", StringComparison.OrdinalIgnoreCase);
+        }
 
         private static IEnumerable<AttributeReference> Attributes(Transaction transaction,
             BlockReference block)

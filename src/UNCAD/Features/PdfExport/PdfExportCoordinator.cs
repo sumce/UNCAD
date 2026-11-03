@@ -5,7 +5,7 @@ using System.Text;
 namespace UNCAD.Features.PdfExport
 {
     /// <summary>一份 PDF 的目标：**一个图框 = 一个回路 = 一份 PDF**（与按机台的 DWG 不同）。</summary>
-    internal sealed class PdfExportTarget
+    public sealed class PdfExportTarget
     {
         public string MachineId { get; set; } = "";
         public string CircuitName { get; set; } = "";
@@ -13,6 +13,8 @@ namespace UNCAD.Features.PdfExport
         public string FrameHandle { get; set; } = "";
         /// <summary>本份 PDF 的最终输出路径（命令层按输出布局 + 唯一文件名预先分配）。</summary>
         public string FilePath { get; set; } = "";
+        /// <summary>本份出图失败时的原因（结果窗展示用；成功为空）。</summary>
+        public string LastError { get; set; } = "";
 
         internal string Label
             => (CircuitName ?? "").Length > 0 ? CircuitName : "(未识别回路)";
@@ -135,7 +137,9 @@ namespace UNCAD.Features.PdfExport
             _report = report ?? (_ => { });
         }
 
-        internal PdfExportRun Run(IReadOnlyList<PdfExportTarget> targets)
+        /// <param name="progress">(已完成份数, 总份数, 当前回路标签)——结果窗/进度窗展示用；null 表示不回调。</param>
+        internal PdfExportRun Run(IReadOnlyList<PdfExportTarget> targets,
+            Action<int, int, string> progress = null)
         {
             var run = new PdfExportRun { Total = targets?.Count ?? 0 };
             if (targets == null || targets.Count == 0) return run;
@@ -144,11 +148,12 @@ namespace UNCAD.Features.PdfExport
             for (int index = 0; index < targets.Count; index++)
             {
                 PdfExportTarget target = targets[index];
-                _report("正在出图 " + (index + 1) + "/" + targets.Count + "：" + target.Label + "…");
+                progress?.Invoke(index + 1, targets.Count, target.Label);
                 if (string.IsNullOrWhiteSpace(target.MachineId)
                     || string.IsNullOrWhiteSpace(target.CircuitName))
                 {
-                    run.AddFailure(target.Label, "缺少机台ID或回路名，未出图");
+                    target.LastError = "缺少机台ID或回路名，未出图";
+                    run.AddFailure(target.Label, target.LastError);
                     continue;
                 }
 
@@ -163,7 +168,8 @@ namespace UNCAD.Features.PdfExport
                 }
                 if (!rendered.Ok)
                 {
-                    run.AddFailure(target.Label, "出图失败：" + rendered.Error, rendered.Details);
+                    target.LastError = "出图失败：" + rendered.Error;
+                    run.AddFailure(target.Label, target.LastError, rendered.Details);
                     continue;
                 }
                 run.Rendered++;

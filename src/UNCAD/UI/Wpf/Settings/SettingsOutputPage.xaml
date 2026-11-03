@@ -1,0 +1,65 @@
+<UserControl x:Class="UNCAD.UI.SettingsOutputPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="输出与分享" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="生成文件的落盘结构，以及跨设备迁移 U1SET 配置" />
+
+            <!-- 输出目录 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="输出目录" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="每个机台一个文件夹：BOQ / DWG / PDF 都写在 &lt;根目录&gt;\&lt;机台ID&gt;\ 里（D-042，不再按图纸名或类别分层）。" />
+                    <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="输出根目录" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox x:Name="SubmitFolder" x:FieldModifier="internal" Grid.Column="0" />
+                        <ui:Button x:Name="BrowseButton" x:FieldModifier="internal"
+                                   Grid.Column="1" Content="浏览..." Margin="8,0,0,0" />
+                        <ui:Button x:Name="OpenButton" x:FieldModifier="internal"
+                                   Grid.Column="2" Content="打开目录" Margin="8,0,0,0" />
+                    </Grid>
+                    <TextBlock x:Name="DirectoryHintText" x:FieldModifier="internal"
+                               Style="{DynamicResource UncadCaption}" Margin="0,0,0,0" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 配置分享 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="配置分享" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="把本机 U1SET 配置导出为 Base64 分享码，或在另一台电脑粘贴导入。分享码不包含授权账号、时钟水位线和界面记忆。" />
+                    <ui:InfoBar x:Name="ShareStatus" x:FieldModifier="internal"
+                                Margin="0,0,0,10" IsOpen="False" IsClosable="True"
+                                Severity="Informational" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:Button x:Name="CopyShareButton" x:FieldModifier="internal"
+                                   Content="复制配置到剪贴板" MinWidth="140" />
+                        <ui:Button x:Name="ImportShareButton" x:FieldModifier="internal"
+                                   Content="从剪贴板导入" MinWidth="120" Margin="10,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

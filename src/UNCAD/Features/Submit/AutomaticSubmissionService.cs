@@ -38,12 +38,9 @@ namespace UNCAD.Features.Submit
         /// 输出根为空时使用默认 <c>&lt;我的文档&gt;\UNCAD输出</c> 并写回
         /// <see cref="ConfigKeys.SubmitFolder"/>，保证下次 U1S/U1F/U1U 与 U1DWG/U1PDF 落到同一处。
         /// </summary>
-        public static string PrepareTargetPath(IEnumerable<string> machineIds = null,
-            string drawingName = null)
+        public static string PrepareTargetPath(IEnumerable<string> machineIds = null)
         {
             string configured = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
-            bool outputByDrawing = Settings.GetBool(ConfigKeys.OutputByDrawing, true);
-            bool separateKinds = Settings.GetBool(ConfigKeys.OutputSeparateKinds, true);
             string root = OutputLayout.NormalizeRoot(configured);
             try
             {
@@ -59,25 +56,11 @@ namespace UNCAD.Features.Submit
             if (!string.Equals(configured, root, StringComparison.OrdinalIgnoreCase))
                 Settings.Set(ConfigKeys.SubmitFolder, root);
 
-            string boqRoot = OutputLayout.ResolveBoqDirectory(root, drawingName,
-                outputByDrawing, separateKinds);
-            try
-            {
-                Directory.CreateDirectory(boqRoot);
-            }
-            catch (System.Exception ex)
-            {
-                throw new DirectoryNotFoundException(
-                    "无法创建 BOQ 输出文件夹：" + boqRoot + "（" + ex.Message + "）", ex);
-            }
-            if (!Directory.Exists(boqRoot))
-                throw new DirectoryNotFoundException("BOQ 输出文件夹不存在：" + boqRoot);
-
             string template = null;
             var targets = new List<string>();
             foreach (string machineId in machineIds ?? Enumerable.Empty<string>())
             {
-                string target = BoqWorkbookWriter.ComposeTargetPath(boqRoot, machineId);
+                string target = BoqWorkbookWriter.ComposeTargetPath(root, machineId);
                 targets.Add(target);
                 if (!File.Exists(target) && template == null)
                     template = BoqWorkbookWriter.ResolveTemplatePath();
@@ -85,21 +68,7 @@ namespace UNCAD.Features.Submit
             }
             // 写占用预检：BOQ 文件可能正被 Excel 打开。必须在 CAD 事务之前中止并给中文提示。
             OutputLayout.ValidateNotLocked(targets);
-            return boqRoot;
-        }
-
-        /// <summary>当前图纸名（不含扩展名）；未保存图纸退回 AutoCAD 的默认名，空名会被布局层清洗为"未命名图纸"。</summary>
-        public static string CurrentDrawingName(CadContext ctx)
-        {
-            if (ctx == null) return "";
-            try
-            {
-                return Path.GetFileNameWithoutExtension(ctx.Doc?.Name ?? "");
-            }
-            catch (System.Exception)
-            {
-                return "";
-            }
+            return root;
         }
 
         public static void ValidateIdentityKeys(

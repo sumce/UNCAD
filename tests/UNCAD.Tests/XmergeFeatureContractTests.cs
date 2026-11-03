@@ -28,15 +28,22 @@ namespace UNCAD.Tests
                 "XLayout", "XmergeFeature.cs"));
             string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "XLayout", "XmergeService.cs"));
-            string form = File.ReadAllText(RepoFile("src", "UNCAD", "UI", "XmergeForm.cs"));
+            // 3.0 WPF 窗体（D-038）：扫描仍在窗体后台线程，拖放/确认走 Fluent 窗体。
+            string window = File.ReadAllText(RepoFile("src", "UNCAD", "UI", "Wpf",
+                "XmergeWindow.xaml.cs"));
+            string featureXaml = File.ReadAllText(RepoFile("src", "UNCAD", "UI", "Wpf",
+                "XmergeWindow.xaml"));
             Assert.Contains("CommandMethod(CommandIds.Merge)", feature);
-            Assert.Contains("ShowModalDialog", feature);
+            Assert.Contains("ShowModalWindow", feature);
             Assert.Contains("ctx.Ed.Regen()", feature);
             Assert.Contains("WblockCloneObjects", service);
             Assert.Contains("XLayoutLayout.Arrange", service);
-            Assert.Contains("Task.Run", form);
-            Assert.Contains("DwgPathDiscovery.Find", form);
-            Assert.Contains("AllowDrop = true", form);
+            Assert.Contains("Task.Run", window);
+            Assert.Contains("DwgPathDiscovery.Find", window);
+            Assert.Contains("AllowDrop = true", window);
+            Assert.DoesNotContain("XmergeForm", window);
+            Assert.Contains("XmergeWindow", feature);
+            Assert.Contains("FluentWindow", featureXaml);
             Assert.Contains("BlockTableRecord.ModelSpace", service);
             Assert.Contains("new Database(true, true)", service);
             Assert.Contains("FrameRegionCollector.CollectForLayout(", service);

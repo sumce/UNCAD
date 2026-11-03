@@ -1,0 +1,121 @@
+<ui:FluentWindow x:Class="UNCAD.UI.ConfigSharePreviewWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="配置分享预览"
+                 Width="760" Height="560" MinWidth="640" MinHeight="460"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 ResizeMode="NoResize"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="配置分享预览" ShowMaximize="False" ShowMinimize="False" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="配置分享预览"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="确认要导入的配置项；相同值的键不会出现在变更列表里。" />
+        </StackPanel>
+
+        <!-- 来源摘要（P3：先讲清楚要发生什么） -->
+        <Grid Grid.Row="2" Margin="24,12,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition />
+                <ColumnDefinition />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition />
+                <RowDefinition />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,8">
+                <TextBlock Text="来源" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="SourceText" x:FieldModifier="internal"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,2,0,0"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,8">
+                <TextBlock Text="生成时间" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="CreatedText" x:FieldModifier="internal"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+                <TextBlock Text="可应用配置" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="ItemsCountText" x:FieldModifier="internal"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Row="1" Grid.Column="1">
+                <TextBlock Text="文件格式" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="FormatText" x:FieldModifier="internal"
+                           FontSize="14" FontWeight="SemiBold" Margin="0,2,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="24,12,24,0">
+            <DataGrid x:Name="ConfigShareChanges" x:FieldModifier="internal"
+                      AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                      BorderThickness="0" RowHeight="30" FontSize="12" SelectionMode="Single"
+                      Background="{DynamicResource ControlFillColorDefaultBrush}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="配置键" Binding="{Binding Key}" Width="200"
+                                        IsReadOnly="True" />
+                    <DataGridTextColumn Header="本机当前值" Binding="{Binding Current}" Width="150"
+                                        IsReadOnly="True" />
+                    <DataGridTextColumn Header="将导入值" Binding="{Binding Shared}" Width="*"
+                                        MinWidth="160" IsReadOnly="True" />
+                </DataGrid.Columns>
+            </DataGrid>
+            <Border x:Name="EmptyPanel" x:FieldModifier="internal"
+                    Padding="24,20,24,20" CornerRadius="4"
+                    Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock FontSize="14" FontWeight="SemiBold"
+                               Text="分享码与本机配置一致" />
+                    <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="没有需要变更的配置项；导入不会改动本机设置。" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Margin="24,8,24,20">
+            <ui:InfoBar IsOpen="True" IsClosable="False" Severity="Informational" Margin="0,0,0,10"
+                        Message="分享码不包含授权账号、时钟水位线和界面记忆；导入后请在 U1SET 中按需复核。" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="只有在这里点“导入”才会写配置；取消不改变本机任何设置。" />
+                <ui:Button x:Name="CancelButton" x:FieldModifier="internal"
+                           Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ImportButton" x:FieldModifier="internal" Grid.Column="2"
+                           Content="导入" MinWidth="120" IsDefault="False"
+                           Appearance="Primary" Icon="{ui:SymbolIcon ArrowImport24}"
+                           Click="OnImport" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

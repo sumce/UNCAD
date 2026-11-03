@@ -150,6 +150,7 @@ namespace UNCAD.Tests
         {
             var messages = new List<string>();
             var rendered = new List<string>();
+            var progress = new List<string>();
             var coordinator = new PdfExportCoordinator(
                 target =>
                 {
@@ -158,18 +159,21 @@ namespace UNCAD.Tests
                 },
                 messages.Add);
 
+            // 2026-11-03（D-042）：逐份进度走 progress 回调（进度窗展示），
+            // 命令行消息只保留一次性信息（如出图设置摘要）。
             PdfExportRun run = coordinator.Run(new List<PdfExportTarget>
             {
                 Target(Circuit),
                 Target("MDIDA03-2")
-            });
+            }, (done, total, label) => progress.Add(done + "/" + total + ":" + label));
 
             Assert.Equal(2, run.Total);
             Assert.Equal(2, run.Rendered);
             Assert.Equal(0, run.Failed);
             Assert.Equal(new[] { Circuit, "MDIDA03-2" }, rendered);
-            Assert.Contains(messages, message => message.Contains("正在出图 1/2"));
-            Assert.Contains(messages, message => message.Contains("正在出图 2/2"));
+            Assert.Contains(progress, item => item.Contains("1/2:"));
+            Assert.Contains(progress, item => item.Contains("2/2:"));
+            Assert.DoesNotContain(messages, message => message.Contains("正在出图"));
             Assert.Contains("成功 2 份 / 失败 0 份", run.BuildSummary());
             Assert.Contains("PDF 已保存到输出目录", run.BuildSummary());
         }

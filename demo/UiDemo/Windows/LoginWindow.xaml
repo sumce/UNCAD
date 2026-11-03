@@ -1,0 +1,51 @@
+<ui:FluentWindow x:Class="UNCAD.UiDemo.LoginWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="登录 UNCAD 3.0"
+                 Width="440" Height="600" ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="None"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" Title="登录" ShowMaximize="False" ShowMinimize="False" />
+
+        <StackPanel Grid.Row="1" Margin="48,16,48,32" VerticalAlignment="Center">
+            <!-- 品牌区 -->
+            <Border Width="72" Height="72" CornerRadius="18" HorizontalAlignment="Center"
+                    Background="{DynamicResource AccentFillColorDefaultBrush}">
+                <TextBlock Text="U3" FontSize="26" FontWeight="Bold" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Text="UNCAD 3.0" FontSize="24" FontWeight="SemiBold" Margin="0,18,0,4"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Text="账户验证登录" FontSize="13" Margin="0,0,0,28" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+            <TextBlock Text="账户" FontSize="13" Margin="0,0,0,6"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:TextBox PlaceholderText="name@company.cn" Margin="0,0,0,16" />
+
+            <TextBlock Text="密码" FontSize="13" Margin="0,0,0,6"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:PasswordBox PlaceholderText="••••••••" RevealButtonEnabled="True" Margin="0,0,0,24" />
+
+            <ui:Button Content="登录" Appearance="Primary" HorizontalAlignment="Stretch"
+                       Icon="{ui:SymbolIcon SignOut24}" Padding="0,10" />
+
+            <TextBlock Text="没有账户？联系管理员开通" FontSize="12" Margin="0,14,0,0"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+
+            <ui:InfoBar Margin="0,24,0,0" IsOpen="True" IsClosable="False" Severity="Informational"
+                        Message="登录仅用于授权验证（D-033），不上传任何图纸与数据。" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

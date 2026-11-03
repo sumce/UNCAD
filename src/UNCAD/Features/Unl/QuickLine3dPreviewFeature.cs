@@ -87,8 +87,8 @@ namespace UNCAD.Features.Unl
                     + " frameEntities=" + (region.EntityIds?.Count ?? 0));
             }
 
-            using (var form = new U1L3DPreviewForm(envelope))
-                AcApplication.ShowModalDialog(form);
+            // 3.0 WPF 外壳（D-038 P5）；内容仍是 WebView2（D-025）。
+            AcApplication.ShowModalWindow(new U1L3DPreviewWindow(envelope));
         }
 
         /// <summary>
@@ -319,8 +319,7 @@ namespace UNCAD.Features.Unl
                     + " frames=" + frames.Count
                     + " scanned=" + scanned.Count);
             }
-            using (var form = new U1L3DPreviewForm(envelope))
-                AcApplication.ShowModalDialog(form);
+            AcApplication.ShowModalWindow(new U1L3DPreviewWindow(envelope));
         }
 
         private static QuickLineIsometricScene BuildScene(

@@ -6,86 +6,47 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 输出布局契约（2.10.0）：
-    /// <c>&lt;root&gt;\&lt;图纸&gt;\BOQ\&lt;机台&gt;\[BOQ]&lt;机台&gt;.xlsx</c>，
-    /// DWG/PDF 各自分类；图纸名清洗/截断/空名回退；写占用预检给出中文原因。
+    /// 输出布局契约（D-042，2026-11-03）：一个机台一个文件夹，
+    /// BOQ/DWG/PDF 同夹、不按图纸名或类别分层：
+    /// <c>&lt;root&gt;\&lt;机台&gt;\[BOQ]&lt;机台&gt;.xlsx</c>。
+    /// 写占用预检给出中文原因。
     /// </summary>
     public sealed class OutputLayoutTests
     {
-        [Theory]
-        [InlineData("A/B:C*D?", "A_B_C_D_")]
-        [InlineData("  图纸A  ", "图纸A")]
-        [InlineData("末尾有点...", "末尾有点")]
-        [InlineData("", "未命名图纸")]
-        [InlineData("   ", "未命名图纸")]
-        [InlineData(null, "未命名图纸")]
-        public void SanitizeDrawingName_ReplacesIllegalCharactersAndFallsBack(
-            string drawingName, string expected)
-            => Assert.Equal(expected, OutputLayout.SanitizeDrawingName(drawingName));
-
         [Fact]
-        public void SanitizeDrawingName_TruncatesToSixtyCharacters()
-        {
-            string name = OutputLayout.SanitizeDrawingName(new string('图', 100));
-            Assert.Equal(60, name.Length);
-            Assert.Equal(new string('图', 60), name);
-        }
-
-        [Fact]
-        public void ResolveKindDirectory_FollowsByDrawingAndSeparateKindsSwitches()
+        public void ComposeBoqPath_PutsBoqInsideTheMachineFolder()
         {
             string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(),
                 "uncad-layout-root"));
 
-            Assert.Equal(Path.Combine(root, "图纸A", "BOQ"),
-                OutputLayout.ResolveKindDirectory(root, "图纸A", OutputLayout.KindBoq,
-                    true, true));
-            Assert.Equal(Path.Combine(root, "BOQ"),
-                OutputLayout.ResolveKindDirectory(root, "图纸A", OutputLayout.KindBoq,
-                    false, true));
-            Assert.Equal(Path.Combine(root, "图纸A"),
-                OutputLayout.ResolveKindDirectory(root, "图纸A", OutputLayout.KindBoq,
-                    true, false));
-            Assert.Equal(root,
-                OutputLayout.ResolveKindDirectory(root, "图纸A", OutputLayout.KindBoq,
-                    false, false));
+            Assert.Equal(Path.Combine(root, "M-01", "[BOQ]M-01.xlsx"),
+                OutputLayout.ComposeBoqPath(root, "M-01"));
         }
 
         [Fact]
-        public void ComposeBoqPath_MatchesTheRequiredStructure()
+        public void ComposeDwgPath_PutsDwgInsideTheSameMachineFolder()
         {
             string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(),
                 "uncad-layout-root"));
 
-            string path = OutputLayout.ComposeBoqPath(root, "一号厂房", "M-01", true, true);
-
-            Assert.Equal(Path.Combine(root, "一号厂房", "BOQ", "M-01", "[BOQ]M-01.xlsx"),
-                path);
+            Assert.Equal(Path.Combine(root, "M-01", "M-01.dwg"),
+                OutputLayout.ComposeDwgPath(root, "M-01"));
         }
 
         [Fact]
-        public void ComposeDwgAndPdfPaths_UseTheirOwnKindFolders()
+        public void ComposePdfPath_PutsPdfInsideTheSameMachineFolder()
         {
             string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(),
                 "uncad-layout-root"));
 
-            Assert.Equal(Path.Combine(root, "一号厂房", "DWG", "M-01", "M-01.dwg"),
-                OutputLayout.ComposeDwgPath(root, "一号厂房", "M-01", true, true));
-            Assert.Equal(Path.Combine(root, "一号厂房", "PDF", "M-01_C-1.pdf"),
-                OutputLayout.ComposePdfPath(root, "一号厂房", "M-01_C-1.pdf", true, true));
+            Assert.Equal(Path.Combine(root, "M-01", "M-01_C-1.pdf"),
+                OutputLayout.ComposePdfPath(root, "M-01", "M-01_C-1.pdf"));
         }
 
         [Fact]
-        public void ComposePaths_SanitizeDrawingNameBeforeUsingItAsAFolder()
-        {
-            string root = Path.GetFullPath(Path.Combine(Path.GetTempPath(),
-                "uncad-layout-root"));
-
-            string path = OutputLayout.ComposeBoqPath(root, "厂房/一期:*", "M1", true, true);
-
-            Assert.Equal(Path.Combine(root, "厂房_一期__", "BOQ", "M1", "[BOQ]M1.xlsx"),
-                path);
-        }
+        public void ResolveMachineDirectory_RejectsBlankMachineId()
+            => Assert.Throws<ArgumentException>(() =>
+                OutputLayout.ResolveMachineDirectory(@"C:\out", "   "));
 
         [Fact]
         public void NormalizeRoot_UsesDocumentsUncadOutputWhenEmpty()
@@ -139,10 +100,5 @@ namespace UNCAD.Tests
                 "uncad-missing-" + Guid.NewGuid().ToString("N") + ".xlsx");
             OutputLayout.ValidateNotLocked(new[] { missing, "", "   ", null });
         }
-
-        [Fact]
-        public void ResolveKindDirectory_RejectsBlankKindWhenSeparateKindsEnabled()
-            => Assert.Throws<ArgumentException>(() =>
-                OutputLayout.ResolveKindDirectory(@"C:\out", "图纸", "", true, true));
     }
 }

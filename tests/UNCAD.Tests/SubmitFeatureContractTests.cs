@@ -42,7 +42,9 @@ namespace UNCAD.Tests
             // 2.6.4：BOQ 输出移到 CAD 提交之后（读真实 CAD 结果再写）。
             Assert.Contains("Write(ctx, readTransaction", fill);
             Assert.Contains("Write(ctx, readTransaction", batch);
-            Assert.Contains("BatchFillConfirmationForm", batch);
+            Assert.Contains("BatchFillConfirmationWindow", batch);
+            // 3.0 WPF 窗体（D-038）：不得再出现 WinForms 版批量确认窗。
+            Assert.DoesNotContain("BatchFillConfirmationForm", batch);
             Assert.DoesNotContain("MessageBox.Show(Owner(), summary", batch);
             int fillCommit = fill.IndexOf("transaction.Commit();", StringComparison.Ordinal);
             Assert.True(fillCommit >= 0 && fill.IndexOf(

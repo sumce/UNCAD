@@ -1,0 +1,256 @@
+<ui:FluentWindow x:Class="UNCAD.UI.FillReviewWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="清单确认"
+                 Width="1080" Height="700" MinWidth="900" MinHeight="580"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <ui:FluentWindow.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground"
+                    Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+        </Style>
+    </ui:FluentWindow.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="HeaderBar" Grid.Row="0" Title="清单确认" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="清单确认"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="核对机台/回路身份与清单行；未匹配型号必须显式替换或删除后再确认。" />
+        </StackPanel>
+
+        <TabControl x:Name="ReviewTabs" Grid.Row="2" Margin="24,10,24,4" Background="Transparent"
+                    BorderThickness="0">
+            <TabItem Header="基础信息">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="4,12,4,4">
+                        <ui:Card Padding="14" Margin="0,0,0,12">
+                            <TextBlock FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="来源：电缆型号决定软管直径；Ruanguan 决定软管长度；Device_Build20260716 动态状态决定是否输出插座。" />
+                        </ui:Card>
+
+                        <ui:Card Padding="14" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock FontSize="14" FontWeight="SemiBold" Text="机台与回路"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="机台ID" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="MachineBox" Grid.Row="0" Grid.Column="1" Margin="0,4,16,4" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="区域" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="RegionBox" Grid.Row="0" Grid.Column="3" Margin="0,4,0,4" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="设备 / 回路" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="CircuitBox" Grid.Row="1" Grid.Column="1" Margin="0,4,16,4" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="盘柜类型" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox x:Name="PanelBox" Grid.Row="1" Grid.Column="3" Margin="0,4,0,4"
+                                              IsEditable="True" StaysOpenOnEdit="True" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="FR" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="FrBox" Grid.Row="2" Grid.Column="1" Margin="0,4,16,4" />
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="项目序号" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="SeqBox" Grid.Row="2" Grid.Column="3" Margin="0,4,0,4" />
+                                </Grid>
+                            </StackPanel>
+                        </ui:Card>
+
+                        <ui:Card Padding="14" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock FontSize="14" FontWeight="SemiBold" Text="电缆与预留"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                           Text="电缆总长 = 实测 + 盘内/箱内预留 + 设备内预留（毫米）；只读值是图框/统计结果。" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="设备原电缆" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="OriginalCableBox" Grid.Row="0" Grid.Column="1" Margin="0,4,16,4" IsReadOnly="True" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="清单电缆" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="CableBox" Grid.Row="0" Grid.Column="3" Margin="0,4,0,4" IsReadOnly="True" />
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="实测电缆 (m)" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="MeasuredCableBox" Grid.Row="1" Grid.Column="1" Margin="0,4,16,4" IsReadOnly="True" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="电缆长度 (m)" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="CableMetersBox" Grid.Row="1" Grid.Column="3" Margin="0,4,0,4"
+                                                TextChanged="OnCableMetersChanged" />
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="设备内预留 (mm)" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="DeviceReserveBox" Grid.Row="2" Grid.Column="1" Margin="0,4,16,4"
+                                                TextChanged="OnDeviceReserveChanged" />
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="盘内/箱内 (mm)" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="PanelReserveBox" Grid.Row="2" Grid.Column="3" Margin="0,4,0,4" IsReadOnly="True" />
+                                </Grid>
+                            </StackPanel>
+                        </ui:Card>
+
+                        <ui:Card Padding="14">
+                            <StackPanel>
+                                <TextBlock FontSize="14" FontWeight="SemiBold" Text="软管与轴位"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="软管直径" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="DiameterBox" Grid.Row="0" Grid.Column="1" Margin="0,4,16,4"
+                                                TextChanged="OnDiameterChanged" />
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="下游轴位" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="DownstreamBox" Grid.Row="0" Grid.Column="3" Margin="0,4,0,4" />
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="上游轴位" Style="{StaticResource FieldLabel}" />
+                                    <ui:TextBox x:Name="UpstreamBox" Grid.Row="1" Grid.Column="3" Margin="0,4,0,4" />
+                                </Grid>
+                                <TextBlock Margin="0,12,0,4" FontSize="12" Text="配电详情"
+                                           HorizontalAlignment="Left"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                <ui:TextBox x:Name="DetailBox" Height="84" TextWrapping="Wrap"
+                                            AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
+                            </StackPanel>
+                        </ui:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="清单选择">
+                <Grid Margin="0,10,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,8">
+                        <ui:Button x:Name="AddManualButton" Content="从固定清单添加" MinWidth="110"
+                                   Margin="0,0,8,0" Click="OnAddCatalogItem" />
+                        <ui:Button x:Name="ReplaceItemButton" Content="替换为固定清单" MinWidth="110"
+                                   Margin="0,0,8,0" Click="OnReplaceSelectedItem" />
+                        <ui:Button x:Name="ResolveMissingButton" Content="选择未匹配项" MinWidth="110"
+                                   Margin="0,0,8,0" Click="OnResolveFirstUnmatched" />
+                        <ui:Button x:Name="RemoveItemButton" Content="删除选中项" MinWidth="100"
+                                   Appearance="Danger" Margin="0,0,24,0" Click="OnRemoveSelectedItem" />
+                        <ui:Button Content="全部勾选" MinWidth="80" Margin="0,0,8,0"
+                                   Click="OnCheckAll" />
+                        <ui:Button Content="全部取消" MinWidth="80" Margin="0,0,8,0"
+                                   Click="OnUncheckAll" />
+                        <ui:Button Content="恢复默认" MinWidth="80" Margin="0,0,24,0"
+                                   Click="OnRestoreDefaults" />
+                        <TextBlock x:Name="CountText" VerticalAlignment="Center" FontSize="12"
+                                   Margin="0,0,16,0"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <ProgressBar x:Name="CountProgress" Width="160" Height="6"
+                                     VerticalAlignment="Center" Minimum="0" Maximum="1" />
+                    </WrapPanel>
+                    <ui:InfoBar x:Name="CatalogWarningBar" Grid.Row="1" Margin="0,0,0,8"
+                                IsOpen="False" IsClosable="False" Severity="Warning" />
+                    <DataGrid x:Name="ReviewGrid" Grid.Row="3"
+                              AutoGenerateColumns="False" CanUserAddRows="False"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BorderThickness="0" RowHeight="34" FontSize="13"
+                              SelectionMode="Single" SelectionUnit="FullRow"
+                              SelectionChanged="OnGridSelectionChanged"
+                              Background="{DynamicResource ControlFillColorDefaultBrush}">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsUnmatched}" Value="True">
+                                        <Setter Property="Background"
+                                                Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="生成" Width="52">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  IsChecked="{Binding Included, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEnabled="{Binding CanToggleIncluded}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="类别" Binding="{Binding CategoryLabel}" Width="80" IsReadOnly="True" />
+                            <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="150" IsReadOnly="True" />
+                            <DataGridTextColumn Header="特征 / 型号" Binding="{Binding Description}" Width="*" MinWidth="260" IsReadOnly="True">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        <Setter Property="ToolTip" Value="{Binding Description}" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="58" IsReadOnly="True" />
+                            <DataGridTextColumn Header="数量 / 长度" Width="92"
+                                                Binding="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <DataGridTextColumn Header="项目编码" Binding="{Binding Code}" Width="90" IsReadOnly="True" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <Grid Grid.Row="3" Margin="24,6,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ui:InfoBar x:Name="ErrorBar" Grid.Row="0" Margin="0,0,0,10"
+                        IsOpen="False" IsClosable="True" Severity="Error" />
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="未匹配型号必须显式替换或删除；确认后按勾选行生成清单。" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确认填充" MinWidth="110"
+                           IsDefault="True" Appearance="Primary"
+                           Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

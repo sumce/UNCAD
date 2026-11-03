@@ -28,6 +28,43 @@ namespace UNCAD.Features.Fill
         /// 这是图框版式要求（每行最大 78300），不要在写入时把宽度重置为 0。
         /// </summary>
         internal const double CableInfoMTextWidth = 78300d;
+
+        /// <summary>读取块实例上指定标签的属性文本（第一个命中；没有返回 null）。
+        /// U1U 设备内预留恢复用：从图框现有 CABLE_INFO 文本取「数值（设备内）」。</summary>
+        internal static string ReadFirstTagged(Transaction transaction,
+            ObjectId[] blockIds, string tag)
+        {
+            foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
+            {
+                if (id.IsNull) continue;
+                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block?.AttributeCollection == null) continue;
+                foreach (ObjectId attributeId in block.AttributeCollection)
+                {
+                    AttributeReference attribute = transaction.GetObject(attributeId,
+                        OpenMode.ForRead, true) as AttributeReference;
+                    if (attribute != null
+                        && string.Equals(attribute.Tag, tag, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return attribute.TextString;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>开只读事务读取属性文本（单框路径用，照 RunStandalone 惯例）。</summary>
+        internal static string ReadTagged(CadContext ctx, ObjectId[] blockIds, string tag)
+        {
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                string result = ReadFirstTagged(transaction, blockIds, tag);
+                transaction.Commit();
+                return result;
+            }
+        }
+
         public static FillWriteResult FillDeviceName(CadContext ctx, ObjectId[] blockIds,
             string circuitName)
             => RunStandalone(ctx, transaction =>

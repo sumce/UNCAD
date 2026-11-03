@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
@@ -20,14 +17,15 @@ using UNCAD.UI;
 
 namespace UNCAD.Features.Fill
 {
-    internal enum RuanguanLengthState
-    {
-        Valid,
-        ConfirmedAbsent,
-        InvalidOrUnknown
-    }
-
-    /// <summary>Coordinates selection, Excel lookup, preview, and specialized CAD writers.</summary>
+    /// <summary>
+    /// U1F/U1U 命令编排：按 docs/DEVELOPMENT.md 的阶段顺序（检测→求和→规划→
+    /// 评审→清除/写入→完成）串联各阶段服务，并亲自持有阶段6/7 的 CAD 事务与
+    /// BOQ 批次回滚边界。具体阶段逻辑在 FillStatisticsStage / FillWorkbookStage /
+    /// FillMachinePickStage / FillCoverageGate / FillPlanningStage /
+    /// FillReviewStage / FillRuanguanStage 与 Core 的 CableReserveReview；
+    /// 本类保留被 BatchFillUpdateCoordinator、CircuitCoverageGuard、
+    /// PdfExportFeature 和测试引用的兼容薄壳。
+    /// </summary>
     [Feature("fill", "Excel 填充清单表",
         Commands = CommandIds.FillFeatureCommands,
         Description = "动态填充清单，并可读取已填充身份按当前统计重新生成")]
@@ -92,55 +90,18 @@ namespace UNCAD.Features.Fill
 
             // 阶段2：冻结配置并按实际标注求和，后续预览和写入复用同一结果。
             FillRuntimeOptions options = FillSettings.Current();
-            SummationOutput summation = FillStatisticsModule.Execute(ctx,
-                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
+            SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
+                options, updateMode);
             CableStatResult statistics = summation.Statistics;
-            if (updateMode) WriteMeasurementState(ctx, statistics);
 
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
 
             // 阶段3：加载机台/盘柜数据（用户唯一的外部 Excel）和内嵌固定清单。
             // 清单随插件版本固化，不再检查外部清单文件；资源缺失属于程序集缺陷。
-            FillWorkbookSnapshot workbook;
-            try
-            {
-                stageClock.Restart();
-                workbook = FillWorkbookSnapshot.Load(path);
-                stageClock.Stop();
-                Log.Info((updateMode ? "U1U" : "U1F") + " 机台SQLite快照加载"
-                    + (workbook.MachineCacheHit ? "(已刷新快照)" : "(未知状态)") + ": "
-                    + stageClock.ElapsedMilliseconds + " ms");
-            }
-            catch (System.Exception ex)
-            {
-                ctx.Write("\n[U1F] 读取机台 SQLite 快照失败: " + ex.Message);
-                Log.Error("U1F read machine SQLite snapshot failed", ex);
-                return;
-            }
-            ctx.Write("\n[U1F] 机台数据 "
-                + (workbook.MachineCacheHit ? "已使用SQLite快照" : "状态未知")
-                + "：" + workbook.MachineSourcePath
-                + "；内嵌固定清单 " + workbook.CatalogItemCount + " 项。");
-
-            List<string> machineIds = workbook.MachineIds;
-            List<ListItem> listItems = workbook.ListItems;
+            FillWorkbookSnapshot workbook = FillWorkbookStage.Load(ctx, path, updateMode);
+            if (workbook == null) return;
             BoqCatalogIndex catalog = workbook.Catalog;
-            if (machineIds.Count == 0)
-            {
-                ctx.Write("\n[U1F] Excel 中无机台ID数据。");
-                return;
-            }
-            if (listItems.Count == 0)
-            {
-                // 固定清单为空代表插件资源或发布包损坏，不能让用户确认生成无编码项目。
-                MessageBox.Show(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                    "插件内没有固定清单数据，已停止本次填充。请重新安装完整版本。",
-                    "U1F 固定清单异常", MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-                return;
-            }
 
             int startRow = options.StartRow;
             int clearRowCount = options.ClearRows;
@@ -164,47 +125,37 @@ namespace UNCAD.Features.Fill
                     return;
                 }
                 originalCableModel = (picked.Cable ?? "").Trim();
-                ResolveUpdateCableFromExistingTable(ctx, selection, picked, catalog);
+                FillMachinePickStage.ResolveUpdateCableFromExistingTable(ctx, selection,
+                    picked, catalog);
                 ctx.Write("\n[U1U] 已自动读取: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
             else
             {
-                Func<MachineRow, string> preview = selected => BuildPreview(ctx, selected, catalog,
-                    statistics, selection, options);
-                using (var form = new MachinePickerForm(machineIds, workbook.FindRows, preview))
-                {
-                    if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)
-                        != DialogResult.OK) return;
-                    picked = form.Selected;
-                }
+                picked = FillMachinePickStage.PickNewMachine(ctx, workbook, selection,
+                    statistics, options);
+                if (picked == null) return;
                 ctx.Write("\n[U1F] 已选择: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
 
-            // 2.10.0 整机回路校验（U1SET 可关闭）：U1F 新建 BOQ 必须整机齐全，
-            // 缺回路中止；U1U 只更新图框数据，缺回路不再拦整条命令，只跳过
-            // 这台机的 BOQ——部分回路的 BOQ 会丢掉未选回路的工程量，宁可少
-            // 生成也不能写错数，补全后由用户执行 U1S 补清单。
-            List<CircuitCoverageResult> coverageFailures = EvaluateCircuitCoverage(
+            // 整机回路校验（U1SET 可关闭）。D-034：部分回路的 BOQ 会丢掉未选
+            // 回路的工程量，宁可少生成也不能写错数。D-044（2026-11-03）：U1F 与
+            // U1U 同口径——缺回路时图纸照常填写（每框只依赖自己的统计与机台行），
+            // 只跳过 BOQ；补全后执行 U1S 补清单。
+            List<CircuitCoverageResult> coverageFailures = FillCoverageGate.EvaluateCircuitCoverage(
                 ctx, workbook, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 new[]
                 {
                     new KeyValuePair<string, string>(
                         picked.MachineId, picked.CircuitName)
                 });
-            if (coverageFailures.Count > 0 && !updateMode)
-            {
-                ctx.Write("\n[" + CommandIds.Fill + "] 按现场规则：回路不全不生成"
-                    + " BOQ/DWG，本次图纸与 BOQ 均未修改。请补选缺失图框后重试；"
-                    + "若该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
-                return;
-            }
             bool boqBlockedByCoverage = coverageFailures.Count > 0;
             if (boqBlockedByCoverage)
-                ctx.Write("\n[" + CommandIds.FillUpdate + "] 机台 " + picked.MachineId
-                    + " 回路不全：本次只更新图框数据、不生成 BOQ；全部回路画完后"
-                    + "执行 " + CommandIds.Submit + " 生成清单。");
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 机台 " + picked.MachineId + " 回路不全：本次照常填写图框数据、"
+                    + "不生成 BOQ；全部回路画完后执行 " + CommandIds.Submit + " 生成清单。"
+                    + "若该机台不需要绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
             ctx.Operation?.Machine(picked.MachineId, picked.CircuitName);
 
             string automaticExcelPath = null;
@@ -213,10 +164,56 @@ namespace UNCAD.Features.Fill
             // 独立 JSON 块 + 图框块上的记录；U1F 也要读，否则旧图框首次 U1F 会丢身份/历史。
             FrameInfoJsonRecord frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
                 FrameInfoJsonBlockWriter.ReadSources(selection));
+            // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
+            // CABLE_INFO 文本里已有的「数值（设备内）」——清单确认窗直接预填，
+            // 用户仍可改；恢复值写回记录并随 JSON 持久化。
+            if (frameInfoPrevious == null
+                || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm))
+            {
+                string existingCableInfo = CadBlockAttributeWriter.ReadTagged(ctx,
+                    selection.FrameBlockIds, UNCAD.Core.Fill.FrameBlockFiller.TagCable);
+                if (UNCAD.Core.Fill.CableReserveReview.TryParseDeviceReserveMillimeters(
+                        existingCableInfo, out double recoveredDeviceReserve))
+                {
+                    frameInfoPrevious = frameInfoPrevious ?? new FrameInfoJsonRecord();
+                    frameInfoPrevious.DeviceReserveMm =
+                        UNCAD.Core.Text.TextFormatter.FormatNum(recoveredDeviceReserve);
+                }
+            }
+            // D-043：识别老版设备内预留标记——现场在设备旁横排手写的毫米数文字
+            // （本次框选范围内，水平、纯数字±mm）。恰好一处→吸收为设备内预留并
+            // 在写事务里删除该标注；多处→不乱取，提示人工确认。
+            List<ObjectId> deviceReserveEraseIds = new List<ObjectId>();
+            DeviceReserveMarkerReader.Result reserveMarkers =
+                DeviceReserveMarkerReader.CollectInSelection(ctx, selection.TextIds);
+            if (reserveMarkers.Hits.Count == 1)
+            {
+                DeviceReserveMarkerHit marker = reserveMarkers.Hits[0];
+                double? decided = DeviceReserveMarker.Decide(
+                    options.DeviceReserveAutoDetect, reserveMarkers.Hits,
+                    ParseJsonReserve(frameInfoPrevious), out List<int> absorbed);
+                if (absorbed.Count > 0)
+                {
+                    frameInfoPrevious = frameInfoPrevious ?? new FrameInfoJsonRecord();
+                    frameInfoPrevious.DeviceReserveMm =
+                        UNCAD.Core.Text.TextFormatter.FormatNum(decided.Value);
+                    deviceReserveEraseIds = reserveMarkers.EntityIds;
+                    ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                        + "] 已识别设备内预留标记 " + marker.Text + " mm，将删除图上标注并计入预留。");
+                }
+            }
+            else if (reserveMarkers.Hits.Count > 1)
+            {
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 发现 " + reserveMarkers.Hits.Count + " 处横排毫米标（"
+                    + string.Join("、", reserveMarkers.Hits.ConvertAll(hit => hit.Text))
+                    + "），无法确认哪处是设备内预留，未自动吸收；请人工确认或删掉多余标注。");
+            }
             // U1F（新建）与 U1U（更新）共用同一套电缆预留：盘内预留按上游类型，
             // 设备内预留从 frameinfo_json 复用；没有记录时在清单确认窗里填写。
-            CableReserveInfo cableReserve = ResolveCableReserve(frameInfoPrevious,
-                picked, statistics, Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
+            CableReserveInfo cableReserve = CableReserveReview.ResolveCableReserve(
+                frameInfoPrevious, picked, statistics,
+                Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
                     CableReservePolicy.DefaultOwnerReserveMillimeters),
                 options.CableReserve);
             // 缺回路的 U1U 跳过 BOQ：不准备输出路径，也就不会登记批次文件。
@@ -225,8 +222,7 @@ namespace UNCAD.Features.Fill
                 try
                 {
                     automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                        new[] { picked.MachineId },
-                        AutomaticSubmissionService.CurrentDrawingName(ctx));
+                        new[] { picked.MachineId });
                     automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
                         automaticExcelPath, new[] { picked.MachineId });
                 }
@@ -239,186 +235,60 @@ namespace UNCAD.Features.Fill
             }
 
             // 阶段4：根据机台、盘柜和实际求和结果生成有序默认清单。
-            FlexibleConduitCableMap.ApplyTo(picked);
-            TableGenerationOutput tablePlan = FillTableModule.Plan(
-                picked, catalog, statistics, options.Planning, options.AutoFill);
-            WriteCablePlanNote(ctx, picked, tablePlan);
-            List<TableFillRow> plannedRows = tablePlan.CopyDefaultRows();
-            if (updateMode)
-                plannedRows = FillUpdateRowMerger.Merge(ctx, selection, plannedRows, statistics);
-            // U1U treats existing CAD outlet rows as authoritative for quantity and
-            // material.  U1F starts from a clean generated list instead.
-            List<TableFillRow> existingOutlets = updateMode
-                ? CadExistingOutletReader.Read(ctx, selection.TableIds,
-                    startRow, clearRowCount)
-                : new List<TableFillRow>();
-            CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
-                selection.DeviceBlockIds, out bool deviceHasOutlet,
-                out bool deviceOutletStateKnown, out string deviceState);
-            // Downstream 块（精确名 Downstream）与 upstream 用同一套三态；只有 socket box
-            // 会额外加一套 4.x 插座箱/盘，且永不添加断路器（见 DownstreamStatePolicy）。
-            CadDynamicBlockStateService.TryReadDownstreamState(ctx,
-                selection.DeviceBlockIds, out DownstreamState downstreamEquipment,
-                out bool downstreamStateKnown, out string downstreamState,
-                out int downstreamBlocks);
-            TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
-            List<TableFillRow> socketAdjustedRows;
-            if (updateMode && !deviceOutletStateKnown)
-            {
-                // Missing/legacy Device blocks do not prove that an outlet was removed.
-                // Preserve the current CAD outlet rows and let the user decide in review.
-                socketAdjustedRows = UpdateOutletPolicy.PreserveExisting(
-                    plannedRows, existingOutlets);
-            }
-            else
-            {
-                socketAdjustedRows = updateMode
-                    ? DeviceOutletPolicy.ApplyForUpdate(plannedRows,
-                        deviceHasOutlet, deviceOutlet, existingOutlets)
-                    : DeviceOutletPolicy.Apply(plannedRows,
-                        deviceHasOutlet, deviceOutlet);
-            }
-            socketAdjustedRows = DownstreamStatePolicy.Apply(socketAdjustedRows, catalog,
-                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
-                downstreamEquipment, options.DownstreamSocketAmps,
-                options.DownstreamPanelAmps);
-            tablePlan = new TableGenerationOutput(socketAdjustedRows,
-                tablePlan.DefaultCableMeters, tablePlan.AutoFill);
-            ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                + "] Device 状态: " + deviceState + "；插座清单: "
-                + (deviceHasOutlet ? "输出 " + (deviceOutlet.Code.Length > 0
-                    ? deviceOutlet.Code : "未匹配") : "不输出"));
-            if (downstreamBlocks > 0)
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] Downstream 状态: " + downstreamState + "；附加清单: "
-                    + DescribeDownstreamExtra(downstreamEquipment, options));
-            string defaultCableMeters = tablePlan.DefaultCableMeters;
-            FillReviewData review = tablePlan.CreateReview(picked, options.Planning,
-                updateMode ? originalCableModel : null);
-            if (updateMode)
-                review.RestoreBusPlugBoxChoice(frameInfoPrevious
-                    ?? FrameInfoJsonBlockWriter.Read(ctx,
-                        selection.FrameInfoJsonBlockIds), catalog);
-            if (cableReserve != null)
-                InitializeReserveReview(review, cableReserve);
-            ResolveMissingCableCatalog(review, catalog);
+            FillPlanResult plan = FillPlanningStage.Build(ctx, selection, picked, catalog,
+                statistics, options, updateMode, frameInfoPrevious, cableReserve,
+                originalCableModel);
             // Resolve a replacement before reading Ruanguan so an initially unknown
             // cable can still create the correctly mapped hose row.
-            if (!ApplyRuanguanLength(ctx, selection, review, catalog,
+            if (!FillRuanguanStage.Apply(ctx, selection, plan.Review, catalog,
                     options.Planning, updateMode)) return;
-            bool hoseWasMissingBeforeReview = review.FlexibleConduitItem() == null;
-            // U1U 强化:写表之前先展示上次更新时间/用户与字段级变化对比。
-            if (updateMode && !ShowUpdateCompare(ctx, selection, picked, review)) return;
+            bool hoseWasMissingBeforeReview = plan.Review.FlexibleConduitItem() == null;
+
             // 阶段5：用户修改、增加、删除或取消清单项；异常型号必须明确确认。
             string updateMachineId = picked.MachineId;
             string updateDeviceName = picked.CircuitName;
-            Log.Info("U1F 审阅窗前清单: " + Describe(review));
-            using (var form = new FillReviewForm(review, catalog, options.Planning,
-                updateMode))
-            {
-                if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form)
-                    != DialogResult.OK) return;
-                review = form.Data;
-            }
+            Log.Info("U1F 审阅窗前清单: " + Describe(plan.Review));
+            if (!FillReviewStage.ShowReview(plan.Review, catalog, options.Planning,
+                    updateMode, out FillReviewData review)) return;
             if (cableReserve != null)
-                ApplyReviewReserve(statistics, cableReserve, review);
+                CableReserveReview.ApplyReviewReserve(statistics, cableReserve, review);
             Log.Info("U1F 审阅窗后清单: " + Describe(review));
-            if (updateMode && (!IdentityTextNormalizer.Equals(updateMachineId,
-                    review.Machine?.MachineId)
-                || !IdentityTextNormalizer.Equals(updateDeviceName,
-                    review.Machine?.CircuitName)))
-            {
-                MessageBox.Show(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                    "U1U 不允许在更新清单时修改机台 ID 或设备名称。请使用 U1F 为新身份建立清单。",
-                    "U1U 身份锁定", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (updateMode)
-            {
-                MachineRow validated = ExistingFillIdentityResolver.MatchMachine(
-                    new ExistingFillIdentity
-                    {
-                        MachineId = review.Machine?.MachineId,
-                        DeviceName = review.Machine?.CircuitName
-                    }, workbook.FindRows(review.Machine?.MachineId), out string identityError);
-                if (validated == null)
-                {
-                    ctx.Write("\n[U1U] " + identityError);
-                    return;
-                }
-            }
+            if (!FillReviewStage.ValidateIdentityAfterReview(ctx, updateMode,
+                    updateMachineId, updateDeviceName, review, workbook)) return;
             // If the user resolved an unknown cable inside the review dialog, the hose row
             // did not exist when the first Ruanguan read ran. Apply the block length once
             // after that replacement, while still honoring an explicit user deletion made
             // in the review itself.
             if (hoseWasMissingBeforeReview && review.FlexibleConduitItem() != null
-                && !ApplyRuanguanLength(ctx, selection, review, catalog,
+                && !FillRuanguanStage.Apply(ctx, selection, review, catalog,
                     options.Planning, updateMode)) return;
             // Machine.Cable remains the source-device value. A BOQ replacement updates only
             // the reviewed cable row, so frame/block attributes never receive a catalog substitute.
             picked = review.Machine;
             List<TableFillRow> tableRows = review.SelectedRows();
             // Device visibility is the final socket authority; DETAIL selects 8.2/8.3 when possible.
-            deviceOutlet = TableFillPlanner.BuildOutletRow(picked.Detail, catalog);
-            if (deviceHasOutlet && !deviceOutlet.CatalogMatched)
-            {
-                TableFillRow reviewedOutlet = tableRows.FirstOrDefault(row =>
-                    UpdateOutletPolicy.IsOutlet(row) && row.CatalogMatched);
-                if (reviewedOutlet == null)
-                {
-                    MessageBox.Show(new WindowWrapper(
-                            Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                        "Device 当前为插座状态，但 DETAIL 电流无法匹配插座 8.2/8.3。"
-                            + "请在清单确认中选择对应插座型号。",
-                        "U1F 插座型号未匹配", MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                    return;
-                }
-                deviceOutlet = reviewedOutlet;
-            }
-            if (updateMode && !deviceOutletStateKnown)
-            {
-                tableRows = UpdateOutletPolicy.PreserveExisting(tableRows, existingOutlets);
-            }
-            else
-            {
-                tableRows = updateMode
-                    ? DeviceOutletPolicy.ApplyForUpdate(tableRows, deviceHasOutlet,
-                        deviceOutlet, existingOutlets)
-                    : DeviceOutletPolicy.Apply(tableRows, deviceHasOutlet, deviceOutlet);
-            }
+            tableRows = FillPlanningStage.ApplyReviewedOutlets(ctx, tableRows, picked,
+                plan, catalog, updateMode);
+            if (tableRows == null) return;
             // 记录用户确认后的真实输出，而不是默认规划行，便于直接核对取消勾选是否生效。
             Log.Info("U1F confirmed BOQ rows: " + string.Join(" | ",
                 tableRows.ConvertAll(row => row.Code + ":" + row.Name)));
-            if (tableRows.Count == 0
-                && MessageBox.Show(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                    "当前没有要生成的清单项。继续将只清空模板数据区，不写入新清单。",
-                    "U1F 空清单确认", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
-                    != DialogResult.Yes)
-                return;
-            int tableCapacity = ResolveTableWriteCapacity(ctx, selection.TableIds,
-                startRow, clearRowCount);
-            if (tableRows.Count > tableCapacity)
-            {
-                MessageBox.Show(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
-                    "清单共 " + tableRows.Count + " 项，所选表格实际可写范围只有 "
-                        + tableCapacity + " 行。请删除部分清单项，或在 U1SET 中调整起始行和清除行数。",
-                    "U1F 表格容量不足", MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
-            }
+            if (!FillReviewStage.ConfirmRowsAndCapacity(ctx, tableRows, selection,
+                    options, out int tableCapacity)) return;
             string reviewedCableMeters = review.CableMeters ?? "";
-            if (!string.Equals(defaultCableMeters, reviewedCableMeters,
+            if (!string.Equals(plan.DefaultCableMeters, reviewedCableMeters,
                 StringComparison.OrdinalIgnoreCase)
-                && !ApplyCableLengthOverride(statistics, reviewedCableMeters))
+                && !CableReserveReview.ApplyCableLengthOverride(statistics,
+                    reviewedCableMeters))
                 ctx.Write("\n[U1F/U1U] 电缆米数 \"" + reviewedCableMeters
                     + "\" 无法识别，已保留图上实测值。");
             if (cableReserve != null)
-                SyncCableReserveTotal(cableReserve, reviewedCableMeters);
+                CableReserveReview.SyncCableReserveTotal(cableReserve, reviewedCableMeters);
+
+            // U1U 强化：写表前展示上次更新时间/用户与字段级变化对比。
+            // 必须放在清单确认窗之后、用确认后的最终行构建——用户在确认窗里
+            // 改设备内预留或电缆米数之后，先弹的对比就成了假数据。
+            if (updateMode && !ShowUpdateCompare(ctx, selection, picked, tableRows)) return;
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
@@ -427,11 +297,10 @@ namespace UNCAD.Features.Fill
 
             try
             {
-                if (!updateMode)
+                if (!updateMode && !boqBlockedByCoverage)
                 {
                     automaticExcelPath = AutomaticSubmissionService.PrepareTargetPath(
-                        new[] { picked.MachineId },
-                        AutomaticSubmissionService.CurrentDrawingName(ctx));
+                        new[] { picked.MachineId });
                     automaticExcelRevisions = AutomaticSubmissionService.CaptureTargetRevisions(
                         automaticExcelPath, new[] { picked.MachineId });
                 }
@@ -475,8 +344,12 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         new[] { selection });
-                    int migratedCapacity = ResolveTableWriteCapacity(transaction,
-                        selection.TableIds, startRow, clearRowCount);
+                    // D-043：删除已吸收的老版设备预留横排标注（吸收判定在读阶段）。
+                    DeviceReserveMarkerReader.EraseAbsorbed(transaction,
+                        deviceReserveEraseIds.ToArray(),
+                        updateMode ? CommandIds.FillUpdate : CommandIds.Fill);
+                    int migratedCapacity = FillPlanningStage.ResolveWriteCapacity(
+                        transaction, selection.TableIds, startRow, clearRowCount);
                     if (tableRows.Count > migratedCapacity)
                         throw new InvalidOperationException("图框迁移后的新版清单表容量只有 "
                             + migratedCapacity + " 行，当前清单需要 " + tableRows.Count
@@ -644,142 +517,50 @@ namespace UNCAD.Features.Fill
                     + " mm = 总长 " + TextFormatter.FormatNum(cableReserve.TotalMeters) + " m。");
         }
 
-        /// （<see cref="FrameIdentityReader.ReadIdentity"/> 读图框持久身份 +
-        /// <see cref="ExistingFillIdentityResolver.MatchMachine"/> 匹配 SQLite 快照行）。
-        /// U1PDF 必须复用它：两处口径漂移会让 PDF 挂到错误的回路上。
-        /// </summary>
-        internal static bool TryResolveFrameCircuit(Transaction transaction,
-            FrameRegionGroup region, FillWorkbookSnapshot workbook,
-            CadBlockDefinitionReader definitions,
-            out string machineId, out string circuitName, out string error)
+        /// <summary>读 frameinfo_json 里已记录的设备内预留（无记录返回 null）。</summary>
+        internal static double? ParseJsonReserve(FrameInfoJsonRecord previous)
         {
-            machineId = "";
-            circuitName = "";
-            error = "";
-            if (transaction == null || region == null || workbook == null)
-            {
-                error = "缺少图框或机台数据。";
-                return false;
-            }
-            ExistingFillIdentity identity;
+            string text = previous?.DeviceReserveMm;
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            if (double.TryParse(text, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double value)
+                && value >= 0d) return value;
+            return null;
+        }
+
+        /// <summary>
+        /// U1U 写表前的清单对比窗（最终确认闸）：用清单确认窗之后的最终行构建，
+        /// 显示的米数/数量与即将写入的内容一致。返回 false 表示用户取消本次更新。
+        /// 上次清单直接读 CAD 表格现有行(老图框同样有效);上次更新
+        /// 时间/用户来自 frameinfo_json,旧图回退到制图信息表日期。
+        /// </summary>
+        private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
+            MachineRow picked, List<TableFillRow> plannedRows)
+        {
             try
             {
-                identity = FrameIdentityReader.ReadIdentity(transaction, region, definitions);
+                FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.Read(ctx,
+                    selection?.FrameInfoJsonBlockIds);
+                List<TableFillRow> existing = FillRowDiffBuilder.ReadRows(
+                    CadSubmissionReader.Read(ctx, selection?.TableIds));
+                FillUpdateCompareItem item = FillReviewStage.BuildCompareItem(picked,
+                    plannedRows, existing, previous, "",
+                    FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection));
+                // 没有任何更新信息的图框不弹对比,直接进入审阅。
+                if (!item.HasHistory) return true;
+                // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
+                var window = new FillUpdateCompareWindow(
+                    new List<FillUpdateCompareItem> { item });
+                Autodesk.AutoCAD.ApplicationServices.Application
+                    .ShowModalWindow(window);
+                return window.Confirmed;
             }
             catch (System.Exception ex)
             {
-                error = ex.Message;
+                Log.Error("U1U 更新对比读取失败，已停止更新", ex);
+                ctx.Write("\n[U1U] 更新对比读取失败，图纸未修改: " + ex.Message);
                 return false;
             }
-            MachineRow machine = ExistingFillIdentityResolver.MatchMachine(identity,
-                workbook.FindRows(identity.MachineId), out string matchError);
-            if (machine == null)
-            {
-                error = matchError;
-                return false;
-            }
-            machineId = (machine.MachineId ?? "").Trim();
-            circuitName = (machine.CircuitName ?? "").Trim();
-            if (machineId.Length == 0 || circuitName.Length == 0)
-            {
-                error = "图框缺少机台ID或回路名。";
-                return false;
-            }
-            return true;
-        }
-
-        internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
-            int startRow, int configuredRows)
-        {
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
-            {
-                int capacity = ResolveTableWriteCapacity(transaction, tableIds,
-                    startRow, configuredRows);
-                transaction.Commit();
-                return capacity;
-            }
-        }
-
-        internal static int ResolveTableWriteCapacity(Transaction transaction,
-            ObjectId[] tableIds, int startRow, int configuredRows)
-        {
-            // Multiple selected tables are written together, so the smallest resolved
-            // capacity is the only value that can guarantee the atomic write will fit.
-            int capacity = int.MaxValue;
-            foreach (ObjectId id in tableIds ?? Array.Empty<ObjectId>())
-            {
-                Table table = transaction.GetObject(id, OpenMode.ForRead, true) as Table;
-                if (table == null) continue;
-                int zeroBasedStart = CadTableFillWriter.ResolveWriteStartRow(table, startRow);
-                int available = zeroBasedStart < 0
-                    ? 0 : table.Rows.Count - zeroBasedStart;
-                capacity = Math.Min(capacity,
-                    TableClearPolicy.ResolveRows(available, configuredRows));
-            }
-            return capacity == int.MaxValue ? 0 : capacity;
-        }
-
-        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
-            FillReviewData review)
-            => ApplyRuanguanLength(ctx, selection, review, null,
-                FillPlanningOptions.Default, false);
-
-        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
-            FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options,
-            bool updateMode = false, Transaction transaction = null)
-        {
-            if (review == null) return true;
-            if (!review.AutoFill.FlexibleConduit) return true;
-            options = options ?? FillPlanningOptions.Default;
-            ObjectId[] blockIds = selection?.RuanguanBlockIds ?? Array.Empty<ObjectId>();
-            string meters = blockIds.Length == 0 ? ""
-                : transaction != null
-                    ? FillSelectionCollector.ReadRuanguanLengthMeters(transaction, blockIds)
-                    : FillSelectionCollector.ReadRuanguanLengthMeters(ctx, blockIds);
-            RuanguanLengthState state = ClassifyRuanguanLength(blockIds.Length,
-                selection?.StatisticsScopeComplete == true, updateMode, meters);
-            if (state == RuanguanLengthState.InvalidOrUnknown)
-            {
-                string message = blockIds.Length > 0
-                    ? "已找到 Ruanguan 块，但没有可识别的软管长度"
-                    : "当前选择范围不是完整图框，无法确认 Ruanguan 块是否已删除";
-                ctx.Write("\n[U1F/U1U] " + message
-                    + "；为避免误删现有软管清单，本次操作已停止。");
-                return false;
-            }
-            if (state == RuanguanLengthState.ConfirmedAbsent)
-            {
-                FillReviewItem existing = review.FlexibleConduitItem();
-                if (existing != null) review.RemoveItem(existing);
-                return true;
-            }
-            FillReviewItem flexible = review.FlexibleConduitItem();
-            if (flexible == null && !string.IsNullOrWhiteSpace(review.Machine.Dia))
-                flexible = review.SetFlexibleConduitDiameter(review.Machine.Dia,
-                    catalog, options);
-            if (flexible == null)
-            {
-                ctx.Write("\n[U1F/U1U] 已读取 Ruanguan 长度，但电缆没有可映射的软管直径，未加入软管清单。");
-                return true;
-            }
-            if (!flexible.CatalogMatched)
-            {
-                ctx.Write("\n[U1F/U1U] 软管直径未匹配固定清单，未加入软管清单。");
-                review.RemoveItem(flexible);
-                return true;
-            }
-            flexible.Quantity = meters;
-            ctx.Write("\n[U1F/U1U] Ruanguan 软管长度: " + meters + "M。");
-            return true;
-        }
-
-        internal static RuanguanLengthState ClassifyRuanguanLength(int blockCount,
-            bool completeFrameScope, bool updateMode, string meters)
-        {
-            if (!string.IsNullOrWhiteSpace(meters)) return RuanguanLengthState.Valid;
-            if (blockCount > 0 || (updateMode && !completeFrameScope))
-                return RuanguanLengthState.InvalidOrUnknown;
-            return RuanguanLengthState.ConfirmedAbsent;
         }
 
         /// <summary>
@@ -792,305 +573,6 @@ namespace UNCAD.Features.Fill
                 item.Code + ":" + item.Name + "(含=" + item.Included
                 + ",匹配=" + item.CatalogMatched + ")"));
 
-        internal static void WriteCablePlanNote(CadContext ctx, MachineRow machine,
-            TableGenerationOutput tablePlan)
-        {
-            if (tablePlan?.AutoFill.Cable == false)
-            {
-                ctx.Write("\n[U1F/U1U] 电缆自动填充已在 U1SET 中关闭。");
-                return;
-            }
-            string model = (machine?.Cable ?? "").Trim();
-            if (model.Length == 0)
-            {
-                ctx.Write("\n[U1F/U1U] 机台电缆型号为空(Excel U_电缆型号未读到值)。");
-                Log.Info("U1F 电缆型号为空: 机台 " + (machine?.MachineId ?? "")
-                    + ",Excel 未读到 U_电缆型号。");
-                return;
-            }
-            if (TableFillPlanner.IsGroundingCableModel(model))
-            {
-                ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model
-                    + "\" → 8.5 设备接地独立连接。");
-                Log.Info("U1F 电缆型号 \"" + model + "\" 映射到 8.5 设备接地独立连接。");
-                return;
-            }
-            TableFillRow cableRow = tablePlan?.CopyDefaultRows().FirstOrDefault(row =>
-                row.Category == TableFillCategory.Cable);
-            string note = cableRow != null && cableRow.CatalogMatched
-                ? "已匹配固定清单 " + cableRow.Code
-                : "未匹配固定清单——该电缆行不会写入清单,请检查 U_电缆型号写法。";
-            ctx.Write("\n[U1F/U1U] 电缆型号 \"" + model + "\" " + note);
-            Log.Info("U1F 电缆型号 \"" + model + "\": " + note);
-        }
-
-        /// <summary>
-        /// U1U 更新前的清单对比窗。返回 false 表示用户取消本次更新。
-        /// 上次清单直接读 CAD 表格现有行(老图框同样有效);上次更新
-        /// 时间/用户来自 frameinfo_json,旧图回退到制图信息表日期。
-        /// </summary>
-        private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
-            MachineRow picked, FillReviewData review)
-        {
-            try
-            {
-                FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.Read(ctx,
-                    selection?.FrameInfoJsonBlockIds);
-                List<TableFillRow> existing = FillRowDiffBuilder.ReadRows(
-                    CadSubmissionReader.Read(ctx, selection?.TableIds));
-                FillUpdateCompareItem item = BuildCompareItem(picked,
-                    review.SelectedRows(), existing, previous, "",
-                    FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection));
-                // 没有任何更新信息的图框不弹对比,直接进入审阅。
-                if (!item.HasHistory) return true;
-                using (var form = new FillUpdateCompareForm(
-                    new List<FillUpdateCompareItem> { item }))
-                {
-                    return Autodesk.AutoCAD.ApplicationServices.Application
-                        .ShowModalDialog(form) == DialogResult.OK;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Log.Error("U1U 更新对比读取失败，已停止更新", ex);
-                ctx.Write("\n[U1U] 更新对比读取失败，图纸未修改: " + ex.Message);
-                return false;
-            }
-        }
-
-        internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
-            List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
-            FrameInfoJsonRecord previous, string selectedHandle,
-            string legacyLastUpdated = "")
-        {
-            bool hasHistory = previous != null
-                && (!string.IsNullOrWhiteSpace(previous.LastModifiedUtc)
-                    || !string.IsNullOrWhiteSpace(previous.LastModifiedUser)
-                    || !string.IsNullOrWhiteSpace(previous.MachineId));
-            string lastUpdated = "";
-            if (hasHistory
-                && DateTime.TryParse(previous.LastModifiedUtc,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    System.Globalization.DateTimeStyles.RoundtripKind,
-                    out DateTime parsed))
-                lastUpdated = parsed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
-            if (lastUpdated.Length == 0) lastUpdated = legacyLastUpdated ?? "";
-            var rowDiffs = FillRowDiffBuilder.Build(existingRows, plannedRows);
-            Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
-                FillRowDiffBuilder.BuildSides(existingRows, plannedRows);
-            return new FillUpdateCompareItem
-            {
-                MachineId = machine.MachineId ?? "",
-                DeviceName = machine.CircuitName ?? "",
-                FrameHandle = selectedHandle ?? "",
-                LastUpdatedText = lastUpdated,
-                LastUpdatedUser = hasHistory ? previous.LastModifiedUser ?? "" : "",
-                HasHistory = hasHistory || !string.IsNullOrWhiteSpace(lastUpdated),
-                AddedCount = rowDiffs.Count(diff =>
-                    diff.Status == FillRowDiff.StatusAdded),
-                RemovedCount = rowDiffs.Count(diff =>
-                    diff.Status == FillRowDiff.StatusRemoved),
-                QuantityChangedCount = rowDiffs.Count(diff =>
-                    diff.Status == FillRowDiff.StatusQuantity),
-                PreviousRows = sides.Item1,
-                PlannedRows = sides.Item2
-            };
-        }
-
-        internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
-            FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,
-            Transaction transaction = null, CadBlockDefinitionReader definitions = null)
-        {
-            if (picked == null) return;
-            if (transaction == null)
-            {
-                using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
-                {
-                    ResolveUpdateCableFromExistingTable(ctx, selection, picked, catalog,
-                        readTransaction);
-                    readTransaction.Commit();
-                }
-                return;
-            }
-            catalog = catalog ?? new BoqCatalogIndex(null);
-            string originalModel = (picked.Cable ?? "").Trim();
-            FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(transaction,
-                selection?.FrameInfoJsonBlockIds);
-            var sourceIds = new List<ObjectId>();
-            sourceIds.AddRange(selection?.FrameBlockIds ?? Array.Empty<ObjectId>());
-            sourceIds.AddRange(selection?.TableIds ?? Array.Empty<ObjectId>());
-            SubmissionSourceData tableSource = CadSubmissionReader.Read(transaction,
-                sourceIds.Distinct().ToArray(), definitions);
-
-            // The current table is authoritative for procurement. If the row was merged or
-            // deleted, frameinfo_json preserves the user's previously confirmed substitute.
-            string tableModel = SubmissionRecordExtractor.ExtractTableCableModel(tableSource);
-            ListItem tableModelMatch = catalog.FindCable(tableModel);
-            if (tableModelMatch != null)
-            {
-                picked.Cable = tableModelMatch.Alias;
-                ctx.Write("\n[U1U] 已按现有清单电缆型号匹配固定清单型号“"
-                    + tableModelMatch.Alias + "”（编号 " + tableModelMatch.Code + "）。");
-                return;
-            }
-            ListItem frameInfoMatch = catalog.FindCable(frameInfo?.BoqCableModel);
-            if (frameInfoMatch != null)
-            {
-                picked.Cable = frameInfoMatch.Alias;
-                ctx.Write("\n[U1U] 已按 frameinfo_json 保留的 BOQ 电缆替代型号匹配固定清单型号“"
-                    + frameInfoMatch.Alias + "”（编号 " + frameInfoMatch.Code + "）。");
-                return;
-            }
-
-            // The current frame attribute is the next source. It reflects a cable changed
-            // in CAD after the workbook was created, while the workbook row can be stale.
-            string frameModel = "";
-            if (tableSource.Attributes.TryGetValue(FrameBlockFiller.TagCable,
-                    out List<string> frameValues))
-                frameModel = frameValues.Select(SubmissionRecordExtractor.ExtractCableModel)
-                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "";
-            ListItem frameMatch = catalog.FindCable(frameModel);
-            if (frameMatch != null)
-            {
-                picked.Cable = frameMatch.Alias;
-                return;
-            }
-
-            string tableFeature = SubmissionRecordExtractor.ExtractTableCableFeature(tableSource);
-            ListItem featureMatch = catalog.FindCableByFeature(tableFeature);
-            if (featureMatch != null)
-            {
-                // The table's project feature identifies the fixed catalog row; use its canonical alias
-                // for planning instead of trying to compare the rendered model text again.
-                picked.Cable = featureMatch.Alias;
-                ctx.Write("\n[U1U] 原始电缆型号“" + originalModel
-                    + "”无法匹配，已按现有清单项目特征使用固定清单型号“"
-                    + featureMatch.Alias + "”（编号 " + featureMatch.Code + "）。");
-                return;
-            }
-
-            // The workbook value is still useful when the drawing carries no cable
-            // attribute at all. Leave an unmatched review row for the single-frame picker
-            // or the batch picker instead of aborting before the user can choose.
-            ListItem workbookMatch = catalog.FindCable(originalModel);
-            if (workbookMatch != null)
-            {
-                picked.Cable = workbookMatch.Alias;
-                return;
-            }
-
-            string tableValue = tableModel.Length > 0 ? tableModel
-                : tableFeature.Length > 0 ? tableFeature : "未读取到";
-            ctx.Write("\n[U1U] 电缆型号暂未匹配固定清单：原始型号“" + originalModel
-                + "”；现有清单“" + tableValue + "”。将在确认窗口中选择固定清单型号。");
-        }
-
-        private static void ResolveMissingCableCatalog(FillReviewData review,
-            BoqCatalogIndex catalog)
-        {
-            FillAnomaly anomaly = FillAnomalyDetector.MissingCable(review);
-            if (anomaly == null) return;
-            Log.Warn("U1F " + anomaly.Code + ": " + anomaly.Subject);
-            var owner = new WindowWrapper(
-                Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle);
-            DialogResult replace = MessageBox.Show(owner,
-                "固定清单找不到电缆型号：" + anomaly.Subject
-                    + "\r\n\r\n是否从固定清单选择替代型号？"
-                    + "\r\n替代型号只用于本次清单，图框和块属性中的设备原型号保持不变。",
-                "U1F 电缆型号异常", MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
-            if (replace != DialogResult.Yes) return;
-            if (catalog.Cables.Count == 0)
-            {
-                MessageBox.Show(owner, "固定清单中没有可选择的电缆型号。",
-                    "U1F 电缆型号异常", MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
-            }
-            using (var picker = new CableCatalogSelectionForm(
-                catalog.Cables, review.BoqCableModel))
-            {
-                if (Autodesk.AutoCAD.ApplicationServices.Application
-                    .ShowModalDialog(picker) != DialogResult.OK
-                    || picker.SelectedItem == null) return;
-                review.SetCableModel(picker.SelectedItem.Alias ?? picker.SelectedItem.Spec,
-                    catalog);
-            }
-        }
-
-        /// <summary>
-        /// 应用用户在审阅窗中修改的电缆米数。输入为空或无法解析时**保留图上
-        /// 实测值**并返回 false——此前无效输入会被静默清零并把图框电缆字段
-        /// 抹空，只有日志痕迹。输入显式为 0 才视为"确认清空"。
-        /// </summary>
-        internal static bool ApplyCableLengthOverride(CableStatResult statistics, string value)
-        {
-            string text = (value ?? "").Trim();
-            double meters;
-            if (text.Length == 0
-                || !(double.TryParse(text, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out meters)
-                    || double.TryParse(text, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.CurrentCulture, out meters))
-                || meters < 0d)
-                return false;
-            // 预留联动不是长度覆盖：在审阅窗改设备内预留时，窗体会把
-            // 「实测+四项预留」的新总长实时回写进电缆米数框，数值与
-            // ApplyDeviceReserve 刚写入 CableSum 的总长一致。这种输入若照旧
-            // 走覆盖分支，CableFormatted 会被清空，CABLE_INFO 里 1000+700 的
-            // 实测明细塌缩成一个预先加总的数字。总长仍等于预留联动结果的
-            // 输入直接放行，明细与统计原样保留。
-            if (statistics.CableReserveApplied
-                && string.Equals(text, TextFormatter.FormatNum(statistics.CableSum),
-                    StringComparison.Ordinal))
-                return true;
-            statistics.CableFormatted.Clear();
-            statistics.CableSum = meters;
-            if (meters > 0d)
-            {
-                if (statistics.CableReserveApplied)
-                {
-                    // 真正手工覆盖总长时，实测段必须同步扣掉预留，否则
-                    // CABLE_INFO 左侧仍写旧实测，与右侧总长和 frameinfo_json
-                    // 的 cable.measuredM 互相矛盾。
-                    statistics.MeasuredCableSum = Math.Max(0d, meters
-                        - (statistics.PanelReserveMillimeters
-                            + statistics.DeviceReserveMillimeters
-                            + statistics.OwnerReserveMillimeters) / 1000d);
-                    statistics.CableFormatted.Add(
-                        TextFormatter.FormatNum(statistics.MeasuredCableSum));
-                }
-                else
-                {
-                    statistics.CableFormatted.Add(TextFormatter.FormatNum(statistics.CableSum));
-                }
-                statistics.CableState = MeasurementState.Measured;
-            }
-            else
-            {
-                statistics.CableState = MeasurementState.ConfirmedEmpty;
-            }
-            return true;
-        }
-
-        internal static void SyncCableReserveTotal(CableReserveInfo reserve, string cableMeters)
-        {
-            if (reserve == null) return;
-            string text = (cableMeters ?? "").Trim();
-            if (!double.TryParse(text, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double total)
-                || total < 0d) return;
-            reserve.TotalMeters = total;
-            reserve.MeasuredMeters = Math.Max(0d, total
-                - (reserve.PanelReserveMillimeters + reserve.DeviceReserveMillimeters
-                    + reserve.OwnerReserveMillimeters) / 1000d);
-        }
-
-        /// <summary>
-        /// 整机回路校验（2.10.0）：一个机台必须把机台数据里的**所有回路**都框选进来，
-        /// 否则不生成 BOQ/DWG。这是"清单必须整机齐全"的现场规则；关闭开关即回到旧行为。
-        /// 校验只读快照，不修改图纸，失败时图纸与 BOQ 均未改动。
-        /// </summary>
         /// <summary>把 BOQ 输出路径登记到操作记录（FilePath 可能是多个文件用 ";" 拼接）。</summary>
         internal static void RecordOutputs(CadContext ctx, string kind, string filePath)
         {
@@ -1101,179 +583,6 @@ namespace UNCAD.Features.Fill
                 string path = part.Trim();
                 if (path.Length > 0) ctx.Operation.Output(kind, path);
             }
-        }
-
-        internal static bool EnsureCircuitCoverage(CadContext ctx,
-            FillWorkbookSnapshot workbook, string command, string machineId,
-            string circuitName)
-            => EnsureCircuitCoverage(ctx, workbook, command,
-                new[]
-                {
-                    new KeyValuePair<string, string>(machineId, circuitName)
-                });
-
-        /// <summary>硬拦截版（U1F/U1S/U1DWG 用）：缺回路时列出明细并返回 false。</summary>
-        internal static bool EnsureCircuitCoverage(CadContext ctx,
-            FillWorkbookSnapshot workbook, string command,
-            IEnumerable<KeyValuePair<string, string>> machineCircuits)
-        {
-            List<CircuitCoverageResult> failed = EvaluateCircuitCoverage(
-                ctx, workbook, command, machineCircuits);
-            if (failed.Count == 0) return true;
-            ctx.Write("\n[" + command + "] 按现场规则：回路不全不生成 BOQ/DWG，"
-                + "本次图纸与 BOQ 均未修改。请补选缺失图框后重试；若该机台不需要"
-                + "绘制全部回路，可在 U1SET 关闭「整机回路校验」。");
-            return false;
-        }
-
-        /// <summary>
-        /// 整机回路校验（2.10.0）的评估版：只逐台列出缺失回路并返回未通过的
-        /// 机台结果，不打印“中止”类文案，也不修改图纸。U1U 用它区分
-        /// “缺回路 → 只跳过该机 BOQ”，U1F/U1S/U1DWG 继续走硬拦截版。
-        /// </summary>
-        internal static List<CircuitCoverageResult> EvaluateCircuitCoverage(
-            CadContext ctx, FillWorkbookSnapshot workbook, string command,
-            IEnumerable<KeyValuePair<string, string>> machineCircuits)
-        {
-            var failed = new List<CircuitCoverageResult>();
-            if (ctx == null || workbook == null) return failed;
-            if (!Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true)) return failed;
-            List<KeyValuePair<string, string>> pairs = (machineCircuits
-                    ?? Enumerable.Empty<KeyValuePair<string, string>>())
-                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
-                .ToList();
-            if (pairs.Count == 0) return failed;
-
-            foreach (IGrouping<string, KeyValuePair<string, string>> group in pairs
-                .GroupBy(pair => pair.Key.Trim(), IdentityTextNormalizer.Comparer))
-            {
-                string machineId = group.Key;
-                List<string> expected;
-                try
-                {
-                    expected = workbook.FindRows(machineId)
-                        .Select(row => row.CircuitName).ToList();
-                }
-                catch (System.Exception ex)
-                {
-                    // 快照查询失败时不要误判为"回路不全"，交给后续流程给出真实错误。
-                    Log.Warn("整机回路校验读取机台数据失败: " + machineId + " → "
-                        + ex.Message);
-                    continue;
-                }
-                if (expected.Count == 0) continue;
-                CircuitCoverageResult result = CircuitCoverage.Evaluate(machineId,
-                    expected, group.Select(pair => pair.Value));
-                if (!result.Complete) failed.Add(result);
-            }
-            if (failed.Count == 0) return failed;
-
-            foreach (CircuitCoverageResult result in failed.Take(12))
-            {
-                string missing = string.Join("、", result.Missing.Take(12));
-                if (result.Missing.Count > 12) missing += " 等";
-                ctx.Write("\n[" + command + "] 整机回路校验未通过：机台 "
-                    + result.MachineId + " 共 " + result.Expected.Count
-                    + " 个回路，本次只选中 " + result.Selected.Count
-                    + " 个；缺少：" + missing + "。");
-            }
-            if (failed.Count > 12)
-                ctx.Write("\n[" + command + "] 另有 " + (failed.Count - 12)
-                    + " 个机台回路不全，未逐条列出。");
-            Log.Info(command + " 整机回路校验未通过，机台数 " + failed.Count);
-            return failed;
-        }
-
-        /// <summary>返回未通过整机回路校验的机台 ID（规范化键，供按机台过滤 BOQ）。</summary>
-        internal static List<string> CoverageIncompleteMachines(CadContext ctx,
-            FillWorkbookSnapshot workbook, string command,
-            IEnumerable<KeyValuePair<string, string>> machineCircuits)
-            => EvaluateCircuitCoverage(ctx, workbook, command, machineCircuits)
-                .Select(result => result.MachineId).ToList();
-
-        /// <summary>
-        /// U1F/U1U 电缆预留：盘内/箱内按上游类型（I-Line 电盘 / 插座盘 / 母线插接箱，
-        /// 默认 3400/1000/500，U1SET 可改），设备内预留从 frameinfo_json 读取
-        /// （首次按 0 进清单确认窗口填写），业主统一预留默认 3000（U1SET 可改）。
-        /// </summary>
-        internal static CableReserveInfo ResolveCableReserve(FrameInfoJsonRecord previous,
-            MachineRow machine, CableStatResult statistics,
-            double ownerReserveMillimeters = CableReservePolicy.DefaultOwnerReserveMillimeters,
-            CableReserveSettings reserveSettings = null)
-        {
-            // 没有实测电缆长度时不要凭预留凭空生成电缆清单；等有测量值的那次再处理。
-            if (statistics == null || statistics.CableSum <= 0d)
-                return null;
-            double device = 0d;
-            if (previous != null && !string.IsNullOrWhiteSpace(previous.DeviceReserveMm))
-            {
-                double.TryParse(previous.DeviceReserveMm,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out device);
-            }
-            return CableReservePolicy.Apply(statistics, machine?.Next, device,
-                ownerReserveMillimeters, reserveSettings);
-        }
-
-        /// <summary>清单确认窗口：把预留明细交给 GUI 显示/编辑，并让电缆长度先按明细同步。</summary>
-        internal static void InitializeReserveReview(FillReviewData review,
-            CableReserveInfo reserve)
-        {
-            if (review == null || reserve == null) return;
-            review.CableReserveEditable = true;
-            review.MeasuredCableMeters = TextFormatter.FormatNum(reserve.MeasuredMeters);
-            review.PanelReserveMm = TextFormatter.FormatNum(reserve.PanelReserveMillimeters);
-            review.DeviceReserveMm = TextFormatter.FormatNum(reserve.DeviceReserveMillimeters);
-            review.OwnerReserveMm = TextFormatter.FormatNum(reserve.OwnerReserveMillimeters);
-            review.SyncCableReserveMeters();
-        }
-
-        /// <summary>
-        /// 用户在 GUI 里改完设备内预留后，把最终值同步回统计结果与 JSON 预留信息。
-        /// 电缆长度若被用户手工改过，后续 ApplyCableLengthOverride / SyncCableReserveTotal 会再校准。
-        /// </summary>
-        internal static void ApplyReviewReserve(CableStatResult statistics,
-            CableReserveInfo reserve, FillReviewData review)
-        {
-            if (statistics == null || reserve == null || review == null) return;
-            double device = reserve.DeviceReserveMillimeters;
-            string text = (review.DeviceReserveMm ?? "").Trim();
-            if (text.Length > 0
-                && double.TryParse(text, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double parsed)
-                && parsed >= 0d && parsed <= 100000d)
-                device = parsed;
-            ApplyDeviceReserve(statistics, reserve, device);
-            review.DeviceReserveMm = TextFormatter.FormatNum(device);
-        }
-
-        internal static void ApplyDeviceReserve(CableStatResult statistics,
-            CableReserveInfo reserve, double deviceReserveMillimeters)
-        {
-            if (statistics == null || reserve == null) return;
-            double measured = statistics.MeasuredCableSum;
-            reserve.DeviceReserveMillimeters = deviceReserveMillimeters;
-            reserve.TotalMeters = measured + (reserve.PanelReserveMillimeters
-                + deviceReserveMillimeters + reserve.OwnerReserveMillimeters) / 1000d;
-            statistics.DeviceReserveMillimeters = deviceReserveMillimeters;
-            statistics.OwnerReserveMillimeters = reserve.OwnerReserveMillimeters;
-            statistics.CableSum = reserve.TotalMeters;
-        }
-
-        private static void WriteMeasurementState(CadContext ctx, CableStatResult statistics)
-        {
-            string StateText(MeasurementState state)
-            {
-                switch (state)
-                {
-                    case MeasurementState.Measured: return "已测量";
-                    case MeasurementState.ConfirmedEmpty: return "确认清空";
-                    default: return "未完整选择，保留旧值";
-                }
-            }
-            ctx.Write("\n[U1F/U1U] 电缆 " + StateText(statistics.CableState)
-                + "；桥架 " + StateText(statistics.BridgeState)
-                + "；线管 " + StateText(statistics.ConduitState) + "。");
         }
 
         internal static string ResolveMachineWorkbookPath(
@@ -1324,102 +633,119 @@ namespace UNCAD.Features.Fill
             return null;
         }
 
+        // ---- 以下为兼容薄壳：签名被 BatchFillUpdateCoordinator / CircuitCoverageGuard /
+        // PdfExportFeature / 测试引用，实现已按阶段拆到对应服务。----
+
+        /// <summary>
+        /// （<see cref="FillMachinePickStage.TryResolveFrameCircuit"/> 读图框持久身份 +
+        /// 匹配 SQLite 快照行）。U1PDF 复用它，两处口径漂移会让 PDF 挂到错误的回路上。
+        /// </summary>
+        internal static bool TryResolveFrameCircuit(Transaction transaction,
+            FrameRegionGroup region, FillWorkbookSnapshot workbook,
+            CadBlockDefinitionReader definitions,
+            out string machineId, out string circuitName, out string error)
+            => FillMachinePickStage.TryResolveFrameCircuit(transaction, region, workbook,
+                definitions, out machineId, out circuitName, out error);
+
+        internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
+            int startRow, int configuredRows)
+            => FillPlanningStage.ResolveWriteCapacity(ctx, tableIds, startRow, configuredRows);
+
+        internal static int ResolveTableWriteCapacity(Transaction transaction,
+            ObjectId[] tableIds, int startRow, int configuredRows)
+            => FillPlanningStage.ResolveWriteCapacity(transaction, tableIds, startRow,
+                configuredRows);
+
+        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+            FillReviewData review)
+            => FillRuanguanStage.Apply(ctx, selection, review);
+
+        internal static bool ApplyRuanguanLength(CadContext ctx, FillSelection selection,
+            FillReviewData review, BoqCatalogIndex catalog, FillPlanningOptions options,
+            bool updateMode = false, Transaction transaction = null)
+            => FillRuanguanStage.Apply(ctx, selection, review, catalog, options,
+                updateMode, transaction);
+
+        internal static RuanguanLengthState ClassifyRuanguanLength(int blockCount,
+            bool completeFrameScope, bool updateMode, string meters)
+            => FillRuanguanStage.ClassifyRuanguanLength(blockCount, completeFrameScope,
+                updateMode, meters);
+
+        internal static void WriteCablePlanNote(CadContext ctx, MachineRow machine,
+            TableGenerationOutput tablePlan)
+            => FillPlanningStage.WriteCablePlanNote(ctx, machine, tablePlan);
+
+        internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
+            List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
+            FrameInfoJsonRecord previous, string selectedHandle,
+            string legacyLastUpdated = "")
+            => FillReviewStage.BuildCompareItem(machine, plannedRows, existingRows,
+                previous, selectedHandle, legacyLastUpdated);
+
+        internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
+            FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,
+            Transaction transaction = null, CadBlockDefinitionReader definitions = null)
+            => FillMachinePickStage.ResolveUpdateCableFromExistingTable(ctx, selection,
+                picked, catalog, transaction, definitions);
+
+        /// <summary>应用审阅窗中修改的电缆米数；无效输入保留图上实测值并返回 false。</summary>
+        internal static bool ApplyCableLengthOverride(CableStatResult statistics, string value)
+            => CableReserveReview.ApplyCableLengthOverride(statistics, value);
+
+        internal static void SyncCableReserveTotal(CableReserveInfo reserve, string cableMeters)
+            => CableReserveReview.SyncCableReserveTotal(reserve, cableMeters);
+
+        /// <summary>硬拦截版整机回路校验（U1F/U1S/U1DWG 用）。</summary>
+        internal static bool EnsureCircuitCoverage(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command, string machineId,
+            string circuitName)
+            => FillCoverageGate.EnsureCircuitCoverage(ctx, workbook, command,
+                machineId, circuitName);
+
+        /// <summary>硬拦截版整机回路校验（U1F/U1S/U1DWG 用）。</summary>
+        internal static bool EnsureCircuitCoverage(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => FillCoverageGate.EnsureCircuitCoverage(ctx, workbook, command,
+                machineCircuits);
+
+        /// <summary>评估版整机回路校验：只列缺失回路，不打印中止文案（U1U 用）。</summary>
+        internal static List<CircuitCoverageResult> EvaluateCircuitCoverage(
+            CadContext ctx, FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => FillCoverageGate.EvaluateCircuitCoverage(ctx, workbook, command,
+                machineCircuits);
+
+        /// <summary>返回未通过整机回路校验的机台 ID（规范化键，供按机台过滤 BOQ）。</summary>
+        internal static List<string> CoverageIncompleteMachines(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => FillCoverageGate.CoverageIncompleteMachines(ctx, workbook, command,
+                machineCircuits);
+
+        internal static CableReserveInfo ResolveCableReserve(FrameInfoJsonRecord previous,
+            MachineRow machine, CableStatResult statistics,
+            double ownerReserveMillimeters = CableReservePolicy.DefaultOwnerReserveMillimeters,
+            CableReserveSettings reserveSettings = null)
+            => CableReserveReview.ResolveCableReserve(previous, machine, statistics,
+                ownerReserveMillimeters, reserveSettings);
+
+        internal static void InitializeReserveReview(FillReviewData review,
+            CableReserveInfo reserve)
+            => CableReserveReview.InitializeReserveReview(review, reserve);
+
+        internal static void ApplyReviewReserve(CableStatResult statistics,
+            CableReserveInfo reserve, FillReviewData review)
+            => CableReserveReview.ApplyReviewReserve(statistics, reserve, review);
+
+        internal static void ApplyDeviceReserve(CableStatResult statistics,
+            CableReserveInfo reserve, double deviceReserveMillimeters)
+            => CableReserveReview.ApplyDeviceReserve(statistics, reserve,
+                deviceReserveMillimeters);
+
         /// <summary>Downstream 状态对应的附加清单说明（命令行输出用）。</summary>
         internal static string DescribeDownstreamExtra(DownstreamState state,
             FillRuntimeOptions options)
-        {
-            switch (state)
-            {
-                case DownstreamState.SocketBox:
-                    return "插座箱一套（" + options.DownstreamSocketAmps.ToString("0.##")
-                        + "A，受“插座盘”自动填充开关控制）";
-                case DownstreamState.ILinePanel:
-                    return "电盘一套（" + options.DownstreamPanelAmps.ToString("0.##")
-                        + "A，不加断路器，受“电盘”自动填充开关控制）";
-                case DownstreamState.BusbarConnector:
-                    return "无（busbar connector 只上色）";
-                default:
-                    return "无（状态未知）";
-            }
-        }
-
-        private static string BuildPreview(CadContext ctx, MachineRow row, BoqCatalogIndex catalog,
-            CableStatResult statistics, FillSelection selection, FillRuntimeOptions options)
-        {
-            // Keep the picker preview on the same cable-derived diameter path as final planning.
-            FlexibleConduitCableMap.ApplyTo(row);
-            var preview = new StringBuilder();
-            preview.AppendLine("▼ 回路详情");
-            preview.AppendLine("  机台/设备：" + row.MachineId + " / " + row.CircuitName);
-            preview.AppendLine("  盘柜类型："
-                + (string.IsNullOrWhiteSpace(row.Next) ? "未指定" : row.Next));
-            preview.AppendLine("  FR：" + row.Fr);
-            preview.AppendLine("  配电详情：" + row.Detail);
-            preview.AppendLine("  下游轴位：" + row.DownstreamAxis + " ｜ 上游轴位："
-                + row.UpstreamAxis);
-
-            List<TableFillRow> plannedRows = TableGenerationModule.Plan(
-                new TableGenerationRequest(row, catalog, statistics, options.Planning,
-                    options.AutoFill))
-                .CopyDefaultRows();
-            CadDynamicBlockStateService.TryReadDeviceHasOutlet(ctx,
-                selection?.DeviceBlockIds, out bool previewHasOutlet,
-                out _, out string previewDeviceState);
-            plannedRows = DeviceOutletPolicy.Apply(plannedRows, previewHasOutlet,
-                TableFillPlanner.BuildOutletRow(row.Detail, catalog));
-            CadDynamicBlockStateService.TryReadDownstreamState(ctx,
-                selection?.DeviceBlockIds, out DownstreamState previewDownstream,
-                out _, out _, out _);
-            plannedRows = DownstreamStatePolicy.Apply(plannedRows, catalog,
-                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
-                previewDownstream, options.DownstreamSocketAmps,
-                options.DownstreamPanelAmps);
-            TableFillRow previewHose = plannedRows.FirstOrDefault(item =>
-                item.Category == TableFillCategory.FlexibleConduit);
-            if (previewHose != null)
-            {
-                string hoseMeters = FillSelectionCollector.ReadRuanguanLengthMeters(
-                    ctx, selection?.RuanguanBlockIds);
-                if (hoseMeters.Length == 0)
-                    plannedRows.Remove(previewHose);
-                else
-                    previewHose.Quantity = hoseMeters;
-            }
-            preview.AppendLine("▼ 表格写入（覆盖，从 No." + options.StartRow + " 行开始，共 "
-                + plannedRows.Count + " 项，文字高度 "
-                + TextFormatter.FormatNum(options.TextHeight) + "）");
-            for (int i = 0; i < plannedRows.Count; i++)
-            {
-                TableFillRow planned = plannedRows[i];
-                preview.AppendLine("  No." + (options.StartRow + i) + " " + planned.Name
-                    + " ｜ " + planned.Unit + " "
-                    + (planned.Quantity.Length > 0 ? planned.Quantity : "数量待定")
-                    + " ｜ 编号 " + (planned.Code.Length > 0 ? planned.Code : "未匹配"));
-            }
-            if (selection.FrameBlockIds.Length > 0)
-            {
-                preview.AppendLine("▼ 图框块属性（" + selection.FrameBlockIds.Length + " 个块）");
-                foreach (var value in FrameBlockFiller.BuildValues(
-                    row, statistics))
-                    preview.AppendLine("  " + value.Key + " = " + value.Value);
-            }
-            if (selection.DeviceBlockIds.Length > 0)
-                preview.AppendLine("▼ 设备动态块（" + selection.DeviceBlockIds.Length
-                    + " 个）：DEVICENAME = " + DeviceBlockFiller.BuildValue(row)
-                    + " ｜ 状态 " + previewDeviceState + " ｜ 插座 "
-                    + (previewHasOutlet ? "输出" : "不输出"));
-            if (selection.UpstreamStateBlockIds.Length > 0)
-                preview.AppendLine("▼ upstream 状态："
-                    + DynamicBlockStatePolicy.UpstreamVisibilityState(row.Next));
-            if (selection.UpstreamInfoBlockIds.Length > 0)
-                preview.AppendLine("▼ 上游信息块：" + row.Fr + " / " + row.Detail);
-            if (selection.UpstreamAxisBlockIds.Length > 0)
-                preview.AppendLine("▼ 上游轴位块：US = " + ConnectionBlockFiller.UpstreamAxis(row));
-            if (selection.DownstreamAxisBlockIds.Length > 0)
-                preview.AppendLine("▼ 下游轴位块：DS = " + ConnectionBlockFiller.DownstreamAxis(row));
-            if (selection.TextIds.Length > 0)
-                preview.AppendLine("▼ 统计源文字（" + selection.TextIds.Length + " 个，保持原内容）");
-            return preview.ToString();
-        }
+            => FillPlanningStage.DescribeDownstreamExtra(state, options);
     }
 }

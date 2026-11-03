@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
-using UNCAD.Infra;
 using UNCAD.UI;
 using Xunit;
 
@@ -152,35 +151,8 @@ namespace UNCAD.Tests
             });
         }
 
-        [Fact]
-        public void ConfigSharePreviewForm_ShowsChangesAndKeepsCancelAvailable()
-        {
-            RunSta(() =>
-            {
-                var items = new Dictionary<string, string>
-                {
-                    { "UNC_UNL_HEIGHT", "220" }
-                };
-                var changes = new List<ConfigShareChange>
-                {
-                    new ConfigShareChange("UNC_UNL_HEIGHT", "180", "220")
-                };
-                var preview = new ConfigSharePreview("UNCAD Pro", "2.10.0", 1,
-                    DateTimeOffset.Now, items, changes, Array.Empty<string>());
-                using (var form = new ConfigSharePreviewForm(preview))
-                {
-                    form.Show();
-                    Application.DoEvents();
-                    List<Button> buttons = FindAll<Button>(form);
-                    Assert.Contains(buttons, button => button.Text == "取消");
-                    Assert.Contains(buttons, button => button.Text.StartsWith("导入"));
-                    DataGridView grid = FindAll<DataGridView>(form)
-                        .Single(view => view.Name == "ConfigShareChanges");
-                    Assert.Single(grid.Rows.Cast<DataGridViewRow>());
-                    Assert.Equal("UNC_UNL_HEIGHT", grid.Rows[0].Cells[0].Value);
-                }
-            });
-        }
+        // 配置分享预览窗已随设置中心迁为 WPF（ConfigSharePreviewWindow），
+        // 其断言迁移到 ConfigSharePreviewWindowTests（WpfUiSerial 集合）。
 
         private static void RunSta(Action action)
         {

@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured local/UNC machine workbook; 2.10.0 removed all cloud uploads and remote workbook sources (account validation stays). Older command references below are historical release notes.
+The stable 2.10.0 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. The 3.0.0-dev development channel migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured local/UNC machine workbook; 2.10.0 removed all cloud uploads and remote workbook sources (account validation stays). Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -11,10 +11,18 @@ The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
 
+## v3.0.0-dev（开发版，未正式发布）
+
+- UI：**全部 21 个窗体迁移 WPF**（WPF-UI / Fluent，深浅色主题、卡片布局、Enter 确认/Esc 取消），WinForms 旧版同批删除；新增设计语言规范 `docs/UI-3.0-DESIGN.md`（D-038）。
+- 修复：**XSTS/身份读取幽灵机台**——图框移动后遗留的 frameinfo_json 块被几何错误归属（JSON 身份优先级最高，统计多出机台、甚至可能让 U1U 认错机台）；现 JSON 写入 `meta.frameHandle`，句柄不符即忽略外块并提示清理，老 JSON 无句柄保持兼容。
+- 重构：FillFeature 1425 行拆为 8 个阶段服务（余 695 行），电缆预留纯逻辑下沉 Core，行数守卫测试防回潮。
+- 发布门禁：`UNCAD_PERF_SMOKE`（合成大图时间预算）与 `UNCAD_MIGRATION_SELFTEST`（四代图框迁移不改表格尺寸）默认随 release.ps1 执行（`-SkipPerf`/`-SkipMigration` 可跳过）。
+- 加固：登录凭证 DPAPI 加密（旧明文自动升级）、日志账户脱敏、登录页拦弹窗；分层守卫测试冻结模块边界。
+
 ## v2.10.0
 
-- 移除：**全部云端上传**（回路/等轴测/DWG/PDF/台账）与**远程机台数据源**（只支持本地/UNC 文件），仅保留账户与授权验证；U1DATA 不再联网。
-- 新增：**整机回路校验**——U1F/U1U/U1S/U1DWG 生成 BOQ/DWG 前要求该机台所有回路都已框选，缺回路即中止且不修改图纸/BOQ（U1SET 可关闭）；**配置分享码**（Base64，可导出/预览/导入，不含授权键）；**操作记录**与按天滚动日志（U1SET 可查看/配置）。
+- 移除：**全部云端上传**（回路/等轴测/DWG/PDF/台账），仅保留账户与授权验证；机台数据源保持本地/UNC 文件或 HTTP/HTTPS 网络地址（D-041 恢复只下载，U1DATA/刷新时才联网）。
+- 新增：**整机回路校验**——U1S/U1DWG 生成 BOQ/DWG 前要求该机台所有回路都已框选，缺回路即中止（U1SET 可关闭）；U1F/U1U 缺回路时照常填写图框、只跳过该机 BOQ（D-034/D-044，边画边填）；**配置分享码**（Base64，可导出/预览/导入，不含授权键）；**操作记录**与按天滚动日志（U1SET 可查看/配置）。
 - 变更：输出目录改为 `<输出根>\<图纸>\BOQ|DWG|PDF\<机台>`（默认 `我的文档\UNCAD输出`），写盘前检查文件占用，PDF 按机台+回路命名去重；盘内预留三项（I-Line/插座盘/插接箱）与输出结构可在 U1SET 配置。
 - UI：统一自建组件库与商务风格，U1SET 重构为 11 页；批量 U1F/U1U 不再构建等轴测上传数据，速度与内存显著改善。
 
@@ -428,7 +436,7 @@ The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
 | `U1SET` | — | 打开全部功能的统一设置中心 |
-| `U1DATA` | — | 后台刷新配置的本地或远程机台工作簿 |
+| `U1DATA` | — | 后台刷新配置的机台工作簿（本地/UNC 或网络地址，仅下载） |
 | — | `UNADD` | 统计汇总并在图纸中生成 MTEXT |
 
 > Ribbon 只显示新版任务入口；传统命令仅作为键盘兼容入口。统计没有新增 U1 别名，继续使用 `UNADD`。
@@ -487,8 +495,8 @@ The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login
 
 `U1F` 和 `U1U` 将频繁更新的机台数据与固定 BOQ 清单分开管理：
 
-- **机台数据 Excel**：用户在 `U1SET` 选择本地或 HTTP/HTTPS 工作簿。本地源通过 `U1DATA` 或设置页“刷新”导入；远程源还会在每次 AutoCAD 启动时异步刷新一次。`U1F/U1U/XSTS/XLAYOUT` 始终只查询 SQLite 快照，刷新完成前继续使用上次成功数据。
-- 快照默认保存在 `%LOCALAPPDATA%\UNCAD\cache\machine-data.db`；下载、解析或写入失败不会替换旧快照。删除快照不会删除源 Excel，需要执行 `U1DATA`、在 `U1SET` 点击“刷新”，或重新启动以刷新远程源。
+- **机台数据 Excel**：用户在 `U1SET` 选择本地/UNC 工作簿或 HTTP/HTTPS 网络地址（D-041：只下载、不上传）。所有数据源都通过 `U1DATA` 或设置页“刷新”显式导入，启动时不自动联网。`U1F/U1U/XSTS/XLAYOUT` 始终只查询 SQLite 快照，刷新完成前继续使用上次成功数据。
+- 快照默认保存在 `%LOCALAPPDATA%\UNCAD\cache\machine-data.db`；下载、解析或写入失败不会替换旧快照。删除快照不会删除源 Excel，需要执行 `U1DATA` 或在 `U1SET` 点击“刷新”重新导入。
 - 机台数据只按表头绑定的 `U_` 列和 `回路名称` 列逐行读取；不展开、不继承合并单元格内容，空单元格保持为空。
 - 统一数据表中“回路名称”带删除线的行视为已作废，不进入 `U1F/U1U/XSTS` 的机台和回路数据。
 - 固定 BOQ 清单随插件程序集内嵌，启动填充时建立一次索引；用户不提供也不能配置外部清单文件。
@@ -535,9 +543,9 @@ The current 2.10.0 build has 35 commands (including `U1PDF` and the online-login
 | `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |
 | `UNADD_TEXT_ENABLED` / `UNADD_MTEXT_ENABLED` / `UNADD_DIMENSION_ENABLED` | 单行文字 / 多行文字 / 对齐·转角标注文字参与统计（标注只读人工输入的文字覆盖，自动测量不计） | 1 / 0 / 1 |
 | `UNADD_CABLE_ENABLED` / `UNADD_BRIDGE_ENABLED` / `UNADD_CONDUIT_ENABLED` | 电缆 / 桥架 / 线管参与统计 | 1 / 1 / 1 |
-| `UNC_FILL_EXCEL` | 用户选择的机台数据源（由 U1DATA/U1SET 刷新；远程源启动时自动刷新） | 空 |
+| `UNC_FILL_EXCEL` | 用户选择的机台数据源，本地/UNC 路径或 HTTP/HTTPS 地址（由 U1DATA/U1SET 显式刷新，仅下载） | 空 |
 | `UNC_FILL_TABLE_ROW` / `UNC_FILL_CLEAR_ROWS` / `UNC_FILL_TEXT_HEIGHT` | 清单起始数据行 / 每次清空行数 / 表格文字高度 | 1 / 11 / 500 |
-| `UNC_SUBMIT_FOLDER` | `U1F` / `U1U` 自动记录文件夹（保留旧键名兼容已有设置） | 空（默认“文档”目录） |
+| `UNC_SUBMIT_FOLDER` | 输出根目录；每个机台一个文件夹，BOQ/DWG/PDF 同夹（D-042，旧键名保留兼容） | 空（默认“文档”目录） |
 
 ## 移植差异说明
 

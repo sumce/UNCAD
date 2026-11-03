@@ -104,7 +104,8 @@ namespace UNCAD.Core.Fill
             FillPlanningOptions planning, FillAutoFillOptions autoFill,
             double downstreamSocketAmps, double downstreamPanelAmps,
             bool downstreamSocketEnabled, bool downstreamPanelEnabled,
-            double cableOwnerReserveMillimeters, CableReserveSettings cableReserve)
+            double cableOwnerReserveMillimeters, CableReserveSettings cableReserve,
+            bool deviceReserveAutoDetect = true)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -119,6 +120,7 @@ namespace UNCAD.Core.Fill
             DownstreamPanelEnabled = downstreamPanelEnabled;
             CableOwnerReserveMillimeters = cableOwnerReserveMillimeters;
             CableReserve = cableReserve ?? CableReserveSettings.Default;
+            DeviceReserveAutoDetect = deviceReserveAutoDetect;
         }
 
         public string MachineWorkbookPath { get; }
@@ -160,6 +162,12 @@ namespace UNCAD.Core.Fill
         /// <summary>盘内/箱内预留（I-Line 电盘 / 插座盘 / 母线插接箱），U1SET 可改。</summary>
         public CableReserveSettings CableReserve { get; }
 
+        /// <summary>
+        /// 老版设备内预留横排毫米标的自动识别（D-043，默认开）：开启后 U1F/U1U
+        /// 在本次框选范围内识别唯一的横排毫米数文字，吸收为设备内预留并删除标注。
+        /// </summary>
+        public bool DeviceReserveAutoDetect { get; }
+
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             FillPlanningOptions planning,
@@ -169,7 +177,8 @@ namespace UNCAD.Core.Fill
             bool downstreamSocketEnabled = DefaultDownstreamEnabled,
             bool downstreamPanelEnabled = DefaultDownstreamEnabled,
             double cableOwnerReserveMillimeters = DefaultCableOwnerReserveMillimeters,
-            CableReserveSettings cableReserve = null)
+            CableReserveSettings cableReserve = null,
+            bool deviceReserveAutoDetect = true)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -186,7 +195,8 @@ namespace UNCAD.Core.Fill
                     DefaultDownstreamPanelAmps),
                 downstreamSocketEnabled, downstreamPanelEnabled,
                 ReserveWithin(cableOwnerReserveMillimeters),
-                cableReserve ?? CableReserveSettings.Default);
+                cableReserve ?? CableReserveSettings.Default,
+                deviceReserveAutoDetect);
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)

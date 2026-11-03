@@ -1,0 +1,76 @@
+<UserControl x:Class="UNCAD.UiDemo.Pages.BatchConfirmPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <Grid Margin="28,20,36,28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="批量确认" FontSize="26" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="2,6,0,0" FontSize="13"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="U1U 将按图框边界批量更新已填图框 · 所有图框在一个事务中写入，任一失败则整批回滚" />
+        </StackPanel>
+
+        <ui:InfoBar Grid.Row="1" Margin="0,0,0,12" IsOpen="True" IsClosable="False"
+                    Severity="Warning" Title="1 个机台回路不齐"
+                    Message="M-3F-07 缺 2 个回路（本次仅更新图纸，跳过该机台 BOQ），其余 3 个图框 BOQ 正常生成（D-034）。" />
+
+        <Border Grid.Row="2" CornerRadius="8"
+                Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid ItemsSource="{Binding}" AutoGenerateColumns="False"
+                      CanUserAddRows="False" CanUserDeleteRows="False"
+                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                      BorderThickness="0" IsReadOnly="False"
+                      RowHeight="42" FontSize="13">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="图框" Binding="{Binding Handle}" Width="90" IsReadOnly="True" />
+                    <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="110" IsReadOnly="True" />
+                    <DataGridTextColumn Header="设备 / 回路" Binding="{Binding Device}" Width="*" IsReadOnly="True" />
+                    <DataGridTextColumn Header="Device" Binding="{Binding DeviceState}" Width="110" IsReadOnly="True" />
+                    <DataGridTextColumn Header="清单项" Binding="{Binding RowCount}" Width="70" IsReadOnly="True" />
+                    <DataGridTemplateColumn Header="设备内预留 (mm)" Width="160">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ui:NumberBox Value="{Binding ReserveMm, Mode=TwoWay}" Minimum="0" Maximum="100000"
+                                              Margin="0,4" SpinButtonPlacementMode="Compact"
+                                              ClearButtonEnabled="False" FontSize="13" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="状态" Width="110">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Border CornerRadius="10" Padding="10,2" HorizontalAlignment="Left"
+                                        Background="{Binding StatusBrush}">
+                                    <TextBlock Text="{Binding Status}" FontSize="12" Foreground="White" />
+                                </Border>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="4 个图框 · 设备内预留逐框填写（0 表示无设备内预留）" />
+            <ui:Button Grid.Column="1" Content="取消" Margin="0,0,12,0" MinWidth="110" />
+            <ui:Button Grid.Column="2" Content="确认更新" MinWidth="110"
+                       Appearance="Primary" Icon="{ui:SymbolIcon Checkmark24}" />
+        </Grid>
+    </Grid>
+</UserControl>

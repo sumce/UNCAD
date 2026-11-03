@@ -1,0 +1,68 @@
+<UserControl x:Class="UNCAD.UI.SettingsMachinePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="机台数据" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="绘图命令只读本地快照，不读 Excel、不联网；数据源只在下面点“刷新”时读取一次。" />
+
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="数据源" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="支持本地/共享文件夹的 Excel，或 http(s) 网络地址（仅下载，不上传）。" />
+
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox x:Name="FillExcelPath" x:FieldModifier="internal" Grid.Column="0"
+                                    PlaceholderText="D:\数据\机台台账.xlsx  或  https://服务器/机台.xlsx"
+                                    TextWrapping="NoWrap" />
+                        <ui:Button x:Name="BrowseExcelButton" x:FieldModifier="internal"
+                                   Grid.Column="1" Content="浏览…" Margin="8,0,0,0"
+                                   Icon="{ui:SymbolIcon FolderOpen24}" />
+                        <ui:Button x:Name="RefreshButton" x:FieldModifier="internal"
+                                   Grid.Column="2" Content="刷新" Margin="8,0,0,0" MinWidth="96"
+                                   Appearance="Primary"
+                                   Icon="{ui:SymbolIcon ArrowSync24}" />
+                    </Grid>
+                    <TextBlock x:Name="SourceTypeText" x:FieldModifier="internal"
+                               Style="{DynamicResource UncadCaption}" Margin="0,0,0,12"
+                               Text="未选择数据源" />
+                </StackPanel>
+            </ui:Card>
+
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="快照状态" />
+                    <TextBlock x:Name="MachineSnapshotStatus" x:FieldModifier="internal"
+                               FontSize="15" Margin="0,8,0,6"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               Text="未选择数据源" />
+                    <TextBlock Style="{DynamicResource UncadCaption}"
+                               Text="刷新会把解析结果写入本机 SQLite 快照并显示回路行数与时间；下载或解析失败时保留上一次成功的快照。" />
+                </StackPanel>
+            </ui:Card>
+
+            <ui:InfoBar x:Name="MachineInfoBar" x:FieldModifier="internal"
+                        Margin="0,4,0,0" IsOpen="False" IsClosable="True"
+                        Severity="Informational" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -32,7 +32,7 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`, version `2.10.0`.
+- Product: `UNCAD Pro`. Stable line: `2.10.0`; development channel: `3.0.0-dev` (D-039; full WPF UI, D-038).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -40,17 +40,25 @@ when their version numbers or counts are stale.
 
 ## Hard Constraints
 
-- Machine workbooks are selected by the user and must be local or UNC paths.
-  HTTP/HTTPS sources are rejected (2.10.0 removed cloud sync); refresh is explicit
-  in U1SET/U1DATA and commands never touch the network.
+- Machine workbooks are selected by the user: local/UNC paths or HTTP/HTTPS
+  URLs (download-only, D-041). Refresh is explicit in U1SET/U1DATA; drawing
+  commands never touch the network, and startup auto-refresh stays removed.
 - Nothing is uploaded. Account/licence validation is the only network feature;
   do not reintroduce upload code without a new decision in `docs/DECISIONS.md`.
-- U1F/U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
+- U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
   machine is in the selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on;
-  missing circuits are listed before any write). U1U keeps updating frames on
-  partial selections but skips that machine's BOQ (D-034). Output layout is
-  `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...`; write-occupancy is checked
-  before the CAD transaction.
+  missing circuits are listed before any write). U1F/U1U keep updating frames
+  on partial selections but skip that machine's BOQ (D-034, D-044). U1F/U1U
+  also auto-absorb the legacy horizontal millimeter reserve marker when it is
+  the sole candidate in the selection and delete the text (D-043,
+  `UNC_FILL_DEVICE_RESERVE_AUTO`, default on; multiple candidates are never
+  auto-absorbed). XLAYOUT row order has three modes — machine readiness,
+  machine ID, upstream number — with in-row order from the workbook's Excel
+  row sequence (D-045, `UNC_XLAYOUT_ARRANGE`). Output layout is one
+  folder per machine — `<root>\<machine>\` holds that machine's BOQ, DWG and
+  PDF together (D-042; the drawing-name and kind layers and their two toggles are
+  gone). Write-occupancy is checked before the CAD transaction. Batch U1U reports
+  per-machine results in a window, not by dumping paths to the command line.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

@@ -1,4 +1,3 @@
-using System.Windows.Forms;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
@@ -25,15 +24,13 @@ namespace UNCAD.Features.About
 
         protected override void Execute(CadContext ctx)
         {
-            using (var form = new ClientLoginForm())
-            {
-                DialogResult result =
-                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
-                if (result == DialogResult.OK)
-                    ctx.Write("\n[UNC_LOGIN] 本机已上线，账号授权验证成功。");
-                else
-                    ctx.Write("\n[UNC_LOGIN] 未完成登录，授权状态未改变。");
-            }
+            // 3.0 WPF 窗体（D-038，P4 聚焦输入）；结果从公开属性读。
+            var window = new ClientLoginWindow();
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            if (window.Succeeded)
+                ctx.Write("\n[UNC_LOGIN] 本机已上线，账号授权验证成功。");
+            else
+                ctx.Write("\n[UNC_LOGIN] 未完成登录，授权状态未改变。");
         }
     }
 }

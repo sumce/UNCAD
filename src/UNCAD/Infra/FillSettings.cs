@@ -51,7 +51,9 @@ namespace UNCAD.Infra
                     Settings.GetDouble(ConfigKeys.CableReserveSocket,
                         CableReserveSettings.DefaultSocketPanelMillimeters),
                     Settings.GetDouble(ConfigKeys.CableReserveBusbar,
-                        CableReserveSettings.DefaultBusbarConnectorMillimeters)));
+                        CableReserveSettings.DefaultBusbarConnectorMillimeters)),
+                // 老版设备内预留横排毫米标自动识别（D-043，默认开，U1SET 可关）。
+                Settings.GetBool(ConfigKeys.FillDeviceReserveAutoDetect, true));
         }
 
         private static int SafeInt(double value, int fallback)

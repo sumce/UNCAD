@@ -16,6 +16,8 @@ namespace UNCAD.Tests
         [InlineData("xframe$0$")]
         [InlineData("xframe_v2$0$")]
         [InlineData("XFRAME_V2$12$$3$")]
+        [InlineData("FRAME_20261102")]
+        [InlineData("FRAME_20261102$0$")]
         [InlineData("FRAME_20260812$12$$3$")]
         public void SupportedFrameNamesIncludeLegacyAndCurrentDefinitions(string name)
         {
@@ -35,22 +37,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void LegacyFrameClassificationExcludesCurrentXframe()
+        public void LegacyFrameClassificationExcludesCurrentFrameOnly()
         {
             Assert.True(FrameRegionCollector.IsLegacyFrameName("frame"));
             Assert.True(FrameRegionCollector.IsLegacyFrameName("frame_20260812"));
             Assert.True(FrameRegionCollector.IsLegacyFrameName("xframe"));
             Assert.True(FrameRegionCollector.IsLegacyFrameName("xframe$0$"));
-            Assert.False(FrameRegionCollector.IsLegacyFrameName("xframe_v2"));
-            Assert.False(FrameRegionCollector.IsLegacyFrameName("XFRAME_V2$12$$3$"));
+            // 2026-11-02（D-040）：xframe_v2 降为上一代，随旧定义一起迁移。
+            Assert.True(FrameRegionCollector.IsLegacyFrameName("xframe_v2"));
+            Assert.True(FrameRegionCollector.IsLegacyFrameName("XFRAME_V2$12$$3$"));
+            Assert.False(FrameRegionCollector.IsLegacyFrameName("FRAME_20261102"));
             Assert.False(FrameRegionCollector.IsLegacyFrameName("frameinfo_json"));
         }
 
         [Fact]
-        public void CurrentTemplateBlockIsXFrameV2()
+        public void CurrentTemplateBlockIsFrame20261102()
         {
-            Assert.Equal("xframe_v2", FrameRegionCollector.CurrentFrameName);
-            Assert.Equal("frame_20260812/frame/xframe/xframe_v2",
+            Assert.Equal("FRAME_20261102", FrameRegionCollector.CurrentFrameName);
+            Assert.Equal("frame_20260812/frame/xframe/xframe_v2/FRAME_20261102",
                 FrameRegionCollector.SupportedFrameDescription);
         }
 

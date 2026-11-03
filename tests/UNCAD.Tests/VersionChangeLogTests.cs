@@ -20,24 +20,49 @@ namespace UNCAD.Tests
             for (int index = 0; index < VersionChangeLog.Entries.Count; index++)
             {
                 VersionChangeLogEntry entry = VersionChangeLog.Entries[index];
-                Assert.True(Version.TryParse(entry.Version, out _), entry.Version);
+                // D-039：开发版条目（X.Y.Z-dev）按 X.Y.Z 参与比较与解析。
+                Version current = ParseWithDevSuffix(entry.Version);
+                Assert.NotNull(current);
                 Assert.NotEmpty(entry.Changes);
                 if (index == 0) continue;
-                Version current = Version.Parse(entry.Version);
-                Version previous = Version.Parse(VersionChangeLog.Entries[index - 1].Version);
+                Version previous = ParseWithDevSuffix(
+                    VersionChangeLog.Entries[index - 1].Version);
                 Assert.True(previous > current,
                     "更新日志必须按版本从新到旧排列: " + previous + " > " + current);
             }
         }
 
+        private static Version ParseWithDevSuffix(string label)
+        {
+            string text = (label ?? "").Trim();
+            int dash = text.IndexOf('-');
+            if (dash >= 0) text = text.Substring(0, dash);
+            return Version.TryParse(text, out Version parsed) ? parsed : null;
+        }
+
+        [Fact]
+        public void StableCustomers_NeverSeeDevChannelEntries()
+        {
+            // D-039：正式版用户（seen=2.10.0）的更新提示不得出现 dev 条目。
+            var stableSeen = VersionChangeLog.EntriesNewerThan("2.10.0");
+            Assert.DoesNotContain(stableSeen,
+                entry => entry.Version.IndexOf("-dev", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
         [Fact]
         public void PreviousSeenVersionShowsLatestEntryOnly()
         {
-            // Use the second-newest entry so this test survives future releases.
-            string previousVersion = VersionChangeLog.Entries[1].Version;
-            var previousSeen = VersionChangeLog.EntriesNewerThan(previousVersion);
+            // D-039：dev 条目对正式版用户不可见，所以“最新一条”要按正式版口径取。
+            // 看过“次新正式版”的用户只会看到“最新正式版”的说明；dev 通道期间
+            // 最新正式版可能不是 Entries[0]，未来 3.0.0 转正后本测试自动适配。
+            var stableEntries = VersionChangeLog.Entries
+                .Where(entry => entry.Version.IndexOf("-dev",
+                    StringComparison.OrdinalIgnoreCase) < 0)
+                .ToList();
+            Assert.True(stableEntries.Count >= 2, "至少要有两个正式版条目");
+            var previousSeen = VersionChangeLog.EntriesNewerThan(stableEntries[1].Version);
             Assert.Single(previousSeen);
-            Assert.Equal(ProductMetadata.VersionLabel, previousSeen[0].Version);
+            Assert.Equal(stableEntries[0].Version, previousSeen[0].Version);
         }
 
         [Fact]

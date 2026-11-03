@@ -4,6 +4,215 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-040: Frame Metadata Lives Inside The Frame Block (FRAME_20261102, 2026-11-02)
+
+- Status: accepted
+- Decision: the product requirement has **always been** that the frame JSON
+  lives in the frame block's own text attribute. The 2.9.1–2.10.0
+  implementation (a standalone `frameinfo_json` block placed near the frame,
+  associated geometrically) was a misreading of that requirement, not a design
+  choice — it silently worked until real drawings were copied and moved, which
+  produced phantom machines, hijacked JSON blocks and lost device reserves
+  (see the 2026-11-02 incidents). This decision restores the requirement: the
+  template becomes the user-authored `FRAME_20261102` block whose
+  `FRAMEINFO` text attribute stores the JSON, and U1F/U1U auto-migrate all
+  older generations (frame / frame_20260812 / xframe / xframe_v2) to it.
+  Standalone `frameinfo_json` blocks and legacy embedded `FRAMEINFO_JSON`
+  attributes remain readable as compatibility sources for drawings produced
+  during the deviation era; they are cleared (when they belong to the frame)
+  after the first write, and no new standalone blocks are created.
+- Consequence: metadata follows the frame entity natively — copying or moving
+  a frame can no longer detach its record. The 2.11.0-dev mitigations
+  (`meta.frameHandle` binding, JSON-vs-label identity arbitration,
+  `BelongsToMachine` inheritance guard) stay as compatibility layers for
+  legacy sources. Old drawings keep working unchanged; a frame whose legacy
+  JSON was already hijacked re-prompts its device reserve once.
+  XFrameTemplate.dwg (user-supplied) is the single template source and ships
+  from `Resources/XFrameTemplate.dwg`.
+
+## D-043: Legacy Device-Reserve Marker Auto-Absorption (2026-11-03)
+
+- Status: accepted
+- Decision: U1F/U1U scan the selected frame range (the same text set the
+  statistics stage reads) for the field's legacy device-reserve marker — a
+  horizontal plain-number text (optionally suffixed mm, 0-100000, tilt within
+  ~1 degrees). Exactly one candidate is absorbed as the device reserve
+  (overriding any stale JSON value) and the marker text is deleted in the write
+  transaction. Multiple candidates are never absorbed automatically (they may
+  be axis labels or sequence numbers); the candidates are surfaced in the batch
+  result window notes and the command line for manual confirmation.
+  `UNC_FILL_DEVICE_RESERVE_AUTO` (U1SET list/table page, default on) turns the
+  whole feature off.
+- Rationale: the reserve journey was JSON first-ask, then CABLE_INFO recovery;
+  drawings produced with the old manual habit still carry the horizontal mm
+  text, so crews retyped the number into the prompt and deleted the text by
+  hand. Absorb-and-erase makes the old drawing self-migrating.
+- Consequence: a horizontal mm text anywhere inside the selected range that is
+  the sole candidate will be consumed — a legit standalone number that should
+  stay must be turned into non-plain text (or the toggle turned off). The
+  absorbed value follows the existing pipeline (JSON persistence, CABLE_INFO
+  `\\数值（设备内）\\`, review-window editing), so downstream behavior is unchanged.
+
+## D-044: U1F Fills Frames On Partial Coverage Too (2026-11-03)
+
+- Status: accepted
+- Decision: amends D-033/D-034. U1F joins U1U's partial-coverage behavior: when
+  the whole-machine circuit gate fails, U1F still fills the selected frames
+  (identity, table, block attributes, reserve) and only skips that machine's
+  BOQ. U1S and U1DWG keep the hard gate. The U1SET toggle
+  (`UNC_FILL_REQUIRE_ALL_CIRCUITS`) still disables the gate entirely.
+- Rationale: field crews draw and fill one circuit at a time; the old U1F hard
+  stop left the frame untouched until every circuit existed, which fought the
+  actual workflow. Frame data depends only on that frame's own statistics and
+  machine row, so filling early is never wrong data — the data-integrity risk
+  stays confined to the BOQ, which is already gated.
+- Consequence: a partially filled machine has frames with data but no BOQ until
+  `U1S` runs after the last circuit lands.
+
+## D-045: XLAYOUT Arrange Modes (2026-11-03)
+
+- Status: accepted
+- Decision: XLAYOUT gains three arrange modes, picked in the selection window
+  (remembered as the next default via `UNC_XLAYOUT_ARRANGE`):
+  1. Machine readiness (default) — one row per machine, machines ordered by
+     health: complete > duplicated/extra > missing-circuits > no-baseline;
+  2. Machine ID order — one row per machine, alphabetical;
+  3. By upstream — all circuits sharing the same `U_\\上游编号\\` land on
+     one row (rows alphabetical, circuits without an upstream in a trailing
+     "\\未配上游\\" row, and the row label shows the upstream number instead of
+     the machine ID).
+  Within a row, circuits follow the machine workbook's Excel row order; when
+  the snapshot is unavailable the layout falls back to the drawing's left-to-
+  right order (previous behavior). Machine summary statistics, label colors and
+  the result window stay per-machine in every mode.
+- Rationale: crews stage the layout around different work units — health-first
+  for chasing incomplete machines, upstream grouping to match how cables are
+  actually pulled in the field — and the workbook's row order is the review
+  order they already trust.
+- Consequence: rows are no longer guaranteed one-machine-only in upstream mode,
+  so per-machine statistics aggregate across rows; the trailing
+  "\\未配上游\\" row signals workbook gaps to fix.
+
+## D-046: WPF Design Tokens And Window Adaptation (2026-11-03)
+
+- Status: accepted
+- Decision: all 3.0 WPF windows share one design-token dictionary
+  (`UI/Wpf/FluentKit.xaml`, merged per window by `UiShell.ApplyFluentTheme`;
+  settings pages additionally merge it per page because the WPF-UI
+  NavigationView frame does not inherit window resources). Sizes: page title
+  20 semibold, section title 14 semibold, body/field label 13, caption 12;
+  cards pad 18/16 with a uniform 12 bottom gap. Every window is clamped to
+  92% of the screen work area and centered on startup (edges managed by
+  SizeToContent are untouched).
+- Rationale: pages had grown ad-hoc margins (8/12/20 mixed), mismatched field
+  widths, and unusable behavior on small screens; the U1F machine picker's
+  suggestion list pushed the layout down and the circuit list had no filter.
+- Consequence: changing the look means editing one file; new windows get the
+  tokens automatically (styles are referenced with DynamicResource, so
+  standalone instantiation degrades to defaults instead of crashing). The
+  U1F picker keeps its suggestion list in a Popup overlay and gains a circuit
+  filter with a "显示 X / N" counter; long text columns in the five result
+  windows trim with tooltips.
+
+## D-042: One Folder Per Machine, Batch Results In A Window (2026-11-03)
+
+- Status: accepted
+- Decision: amends D-033 output clause. Every output lands in the machine own
+  folder — `<root>\\<machine>\\` holds that machine `[BOQ]<machine>.xlsx`,
+  `<machine>.dwg` and per-circuit PDFs together. The drawing-name layer, the
+  BOQ/DWG/PDF kind layer, and their two U1SET toggles (`UNC_OUTPUT_BY_DRAWING`,
+  `UNC_OUTPUT_SEPARATE_KINDS`) are removed. Batch U1U ends with a per-machine
+  result window (frames / table rows / attribute writes / BOQ status + path /
+  notes) and prints a single summary line; per-step progress and file-path lists
+  no longer stream to the command line — progress stays in the progress window,
+  details in the result window and log.
+- Rationale: this is an efficiency tool; field users read windows, not terminal
+  scroll-back. Grouping by drawing name scattered one machine BOQ/DWG/PDF into
+  three sibling trees and made handoff to customers harder.
+- Consequence: `OutputLayout` composes machine-folder paths only; XSTS report
+  still writes directly into the configured root (D-035 unchanged). Old layered
+  folders on disk are left as-is; rerunning a machine writes to the new location.
+
+## D-041: Download-Only Network Workbook Sources Return (2026-11-02)
+
+- Status: accepted
+- Decision: amends D-033. `UNC_FILL_EXCEL` may again be an HTTP/HTTPS URL.
+  Downloading happens only inside an explicit refresh (U1SET "刷新" button or
+  `U1DATA`); drawing commands keep reading only the SQLite snapshot and never
+  touch the network. Old D-023 startup auto-refresh stays removed — a dead URL
+  must not produce error spam on every AutoCAD start.
+- Guardrails (carried from D-033): nothing is uploaded — GET only, 100 MB cap,
+  20 s timeouts; `ClientSubmissionUploader`, `BackgroundUploadQueue` and
+  `MachineLedgerReporter` stay deleted. A failed download with no prior
+  snapshot is a Chinese error; with a prior snapshot the old snapshot is kept
+  (`UsedCachedFallback`) and the warning surfaces in U1SET.
+- Rationale: field teams serve the machine workbook over HTTP from internal
+  servers; 2.10.0's blanket removal broke them. The 2.10.0 pain (multi-hour
+  stalls, ~5 GB peaks, error spam) came from the upload mirror and the startup
+  queue, not from the on-demand download.
+
+## D-039: Version Channels — Development Builds vs Stable Releases (2026-11-02)
+
+- Status: accepted
+- Decision: 3.0-era work accumulates on a **development channel** labelled
+  `X.Y.Z-dev` in `ProductMetadata.VersionLabel` (currently `3.0.0-dev`).
+  Dev builds ship only as acceptance installers via `release.ps1 -Dev`; they
+  skip the stable-only gates (RELEASE page, git tag) while keeping all test,
+  performance, and migration gates. A **stable release** requires stripping
+  `-dev`, a `docs/RELEASE-X.Y.Z.md` page, and an annotated tag —
+  `release.ps1` refuses `-Dev` for stable labels and refuses dev labels
+  without `-Dev`. D-032's X.Y.Z/fourth-part rules apply to stable releases
+  only; dev build numbers increment the assembly fourth part freely.
+- Consequence: adding features no longer mints a customer release (2.11.0 was
+  retracted before tagging and re-labelled `3.0.0-dev`). Customers see only
+  deliberate stable versions; the current stable line remains 2.10.0.x until
+  3.0.0 passes real-machine acceptance plus the rename/rollout checks.
+
+## D-038: 3.0 UI Scope — Every Dialog Moves To WPF (2026-11-02)
+
+- Status: accepted
+- Decision: amends D-037 — during 3.0 **all** user-facing dialogs migrate to WPF
+  with the WPF-UI Fluent library, not only the major screens. The design
+  language and per-screen layout patterns are codified in
+  `docs/UI-3.0-DESIGN.md`; each form migrates one form per commit with its
+  tests, and the replaced WinForms file is deleted in the same change. The
+  QuickLine 3D preview stays WebView2 content per D-025. Inside the AutoCAD
+  process, WPF-UI theme/control dictionaries are merged **per window** —
+  never into `Application.Current.Resources`, because AutoCAD owns the
+  process-wide WPF Application and its Ribbon resources must not be touched.
+- Consequence: `UiShell` (UI layer) is the single owner of Fluent theme
+  application for plugin windows; Features keep invoking dialogs through
+  AutoCAD's modal APIs (`ShowModalWindow` for WPF, `ShowModalDialog` only
+  during the transition). Layer rules are unchanged — UI still edits
+  passed-in models only. 3.0 stays multi-track: the UI migration runs in
+  parallel with the release-gate performance budget, the security hardening
+  (shipped as 2.10.0.6), the FillFeature decomposition, and the frame
+  migration self-check suite. UI is one track of 3.0, not the release.
+
+## D-037: UNCAD 3.0 Direction — WPF-UI Front-End, 2022-Only, Phased Delivery (2026-11-02)
+
+- Status: accepted
+- Decision: UNCAD 3.0 adopts WPF as the front-end stack, using the WPF-UI
+  (lepoco) 4.x Fluent library — verified end-to-end on net48 by the standalone
+  demo under `demo/UiDemo` (restore, build, runtime, light/dark themes, real
+  screenshots). WinUI 3 is excluded: Windows App SDK requires .NET 6+ while
+  AutoCAD 2022 hosts only .NET Framework 4.8. WebView2 remains limited to
+  low-risk read-only content per D-025 (3D preview, later help/changelog);
+  core dialogs stay native. AutoCAD support stays 2022-only throughout 3.0.
+  Delivery is phased: guard tests and groundwork gates first, then screen-by-
+  screen WPF migration, and the rename to "UNCAD 3.0" (dropping "Pro") last.
+  Existing customers upgrade for free; the installer UpgradeCode and the
+  `%APPDATA%\UNCAD` paths must not change.
+- Consequence: no big-bang UI rewrite — every migrated screen ships with its
+  own tests and the migration can stop midway. `LayerGuardTests` freezes the
+  module boundaries as tests: Core stays free of AutoCAD/WinForms/WPF, NPOI
+  stays confined to Core, UI stays free of AutoCAD except `RibbonBuilder.cs`
+  (the AutoCAD-side ribbon constructor, known debt until the UI migration
+  decides its home), Cad stays free of Excel namespaces, and the four
+  historical frame block names stay readable. Phase 1 (2.11) = perf budget in
+  the release gate, the three security fixes, and the FillFeature stage
+  split; none of these wait for the UI work.
+
 ## D-036: U1L Esc Keeps The Drawn Segments (2026-11-01)
 
 - Status: accepted
@@ -56,7 +265,9 @@ rewrite an existing entry.
 
 ## D-033: 2.10.0 — No Cloud Sync, Whole-Machine Circuit Gate, Layered Output, Local History (2026-11-01)
 
-- Status: accepted
+- Status: accepted (the workbook-source clause is amended by D-041:
+  download-only HTTP/HTTPS sources are back; the output-layout clause is
+  amended by D-042: one folder per machine; zero upload is unchanged)
 - Decision: the Pro package uploads nothing and downloads no machine data over
   HTTP/HTTPS. Account/licence validation (login, online state, single-device
   binding) is the only network feature. `U1F/U1U/U1S/U1DWG` refuse to generate
@@ -375,6 +586,8 @@ rewrite an existing entry.
 
 - Status: superseded by D-033 (2026-11-01) — remote refresh and HTTP/HTTPS
   workbook sources were removed; U1DATA/U1SET only refresh local/UNC files.
+  Download-only sources (without startup auto-refresh) are reinstated by
+  D-041 (2026-11-02).
 - Historical decision:
 
 - Status: accepted

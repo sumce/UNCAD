@@ -5,7 +5,7 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current release: `2.10.0`.
+- Current stable release: `2.10.0`; active development channel: `3.0.0-dev` (D-039).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -85,11 +85,12 @@ XLAYOUT/XSTS
   circuit row with strikethrough on `回路名称` is excluded.
 - Optional `U_批次` and `U_序号` values are retained in the workbook snapshot;
   XSTS presents one batch and one sequence field per machine.
-- Local/UNC workbook refresh is explicit in `U1SET` or `U1DATA`. HTTP/HTTPS
-  sources are rejected (2.10.0 removed cloud sync); drawing commands never touch
-  the network and nothing is uploaded — account/licence validation is the only
-  network feature.
-- Outputs: BOQ/DWG/PDF go to `<root>\<drawing>\<BOQ|DWG|PDF>\<machine>\...`
+- Workbook refresh is explicit in `U1SET` or `U1DATA`; the source may be a
+  local/UNC file or an HTTP/HTTPS URL (download-only, D-041). Drawing commands
+  never touch the network and nothing is uploaded — account/licence validation
+  is the only other network feature.
+- Outputs: one folder per machine — `<root>\<machine>\` holds that
+  machine's BOQ, DWG and PDF together (D-042; no drawing-name or kind layer).
   (default root `Documents\UNCAD输出`; U1SET toggles the drawing/kind levels).
   Occupied files are detected before the CAD transaction, never after.
 - Every command writes one local operation record (JSONL, `%APPDATA%\UNCAD\history`),

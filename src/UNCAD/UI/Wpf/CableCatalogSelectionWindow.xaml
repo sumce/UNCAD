@@ -1,0 +1,75 @@
+<ui:FluentWindow x:Class="UNCAD.UI.CableCatalogSelectionWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="选择替代电缆型号"
+                 Width="820" Height="560" MinWidth="680" MinHeight="460"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar x:Name="HeaderBar" Grid.Row="0" Title="选择替代电缆型号" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="选择替代电缆型号"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock x:Name="CurrentModelText" Margin="0,6,0,0" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" Margin="24,12,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="搜索:" VerticalAlignment="Center" FontSize="13"
+                       Margin="0,0,10,0" />
+            <ui:TextBox x:Name="SearchBox" Grid.Column="1" TextChanged="OnSearchTextChanged" />
+            <TextBlock Grid.Column="2" x:Name="ResultCountText" VerticalAlignment="Center"
+                       FontSize="12" Margin="14,0,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <DataGrid x:Name="CableGrid" Grid.Row="3" Margin="24,10,24,8"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  BorderThickness="0" RowHeight="34" FontSize="13"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  SelectionChanged="OnGridSelectionChanged"
+                  MouseDoubleClick="OnGridDoubleClick"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="项目编码" Binding="{Binding Code}" Width="90" />
+                <DataGridTextColumn Header="规格" Binding="{Binding Spec}" Width="180" />
+                <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="180" />
+                <DataGridTextColumn Header="特征" Binding="{Binding Feature}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="4" Margin="24,4,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="替代型号只用于本次清单；图框和块属性中的设备原型号保持不变。" />
+            <ui:Button x:Name="CancelButton" Grid.Column="1" Content="保持原型号" MinWidth="100"
+                       Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+            <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="使用所选型号" MinWidth="110"
+                       IsDefault="True" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

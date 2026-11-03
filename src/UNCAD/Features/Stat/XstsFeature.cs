@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
@@ -105,7 +104,16 @@ namespace UNCAD.Features.Stat
                     try
                     {
                         ExistingFillIdentity identity = FrameIdentityReader.ReadIdentity(
-                            transaction, region, definitions);
+                            transaction, region, definitions, out string foreignJsonNote);
+                        // 归属不符/身份分歧的遗留 JSON 已被仲裁处理并在此提示，
+                        // 用户可自行删块清理或重跑 U1F/U1U 刷新。
+                        if (foreignJsonNote.Length > 0)
+                        {
+                            ctx.Write("\n[XSTS] " + foreignJsonNote);
+                            Log.Info("[XSTS] 图框 " + region.Handle + " " + foreignJsonNote);
+                        }
+                        Log.Info("[XSTS] 图框 " + region.Handle + " → 机台 "
+                            + identity.MachineId + "（" + identity.DeviceName + "）");
                         selectedRows.Add(new XstsCircuitRecord(identity.MachineId,
                             identity.DeviceName));
                     }
@@ -226,11 +234,13 @@ namespace UNCAD.Features.Stat
                     ? "部分机台缺少/多出回路无法判断（" + report.ExpectedDataDetail + "）"
                     : "缺少回路无法判断（" + report.ExpectedDataDetail + "）";
             ctx.Write("\n[XSTS] 统计完成: " + report.Machines.Count + " 个机台、"
-                + report.FrameCount + " 张图纸，"
+                + report.FrameCount + " 个图框（"
+                + report.MachineStatusText + "），"
                 + report.SelectedCircuitCount + " 个有效已选回路，" + coverage
                 + "，异常 " + report.Issues.Count + " 项。Excel: " + path);
-            using (var form = new XstsForm(report, path))
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+            // 3.0 WPF 窗体（D-038）：只读汇报窗，关闭即继续。
+            var window = new XstsWindow(report, path);
+            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
         }
     }
 }

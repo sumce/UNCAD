@@ -26,7 +26,8 @@ namespace UNCAD
             doc?.Editor.WriteMessage(
                 "\n[UNCAD] " + Branding.Nameplate + " | 已加载：" + FeatureRegistry.Summary);
             RibbonBuilder.Build();
-            // 2.10.0：云端上传与远程机台数据刷新已移除；U1DATA 只刷新本地/UNC 数据源。
+            // D-033：云端上传/台账上报保持移除。D-041：网络机台数据下载恢复，
+            // 但只在 U1SET"刷新"或 U1DATA 时显式触发，启动时不自动刷新。
             if (SupportsStartupUi())
             {
                 Autodesk.AutoCAD.ApplicationServices.Application.Idle += OnStartupSplashIdle;
@@ -84,8 +85,11 @@ namespace UNCAD
                     ?? IntPtr.Zero;
                 Rectangle bounds = handle == IntPtr.Zero
                     ? Screen.PrimaryScreen.Bounds : Screen.FromHandle(handle).Bounds;
-                using (var splash = new StartupSplashForm(bounds))
-                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(splash);
+                var splash = new StartupSplashWindow(bounds);
+                // 3.0 WPF 版（D-038）：原 ShowModalDialog 是模态展示（动画期间
+                // CAD 输入被挡住，更新日志在动画结束后才弹），ShowModalWindow 是
+                // 它的 WPF 等价物 —— 只换皮，不改任何时序。
+                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(splash);
             }
             catch (System.Exception ex)
             {
@@ -144,8 +148,9 @@ namespace UNCAD
                 _updateNotesDialogOpen = true;
                 try
                 {
-                    using (var form = new UpdateNotesForm(entries))
-                        Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+                    // 3.0 WPF 版（D-038，P5 内容阅读）；无返回结果，看完即关。
+                    var window = new UpdateNotesWindow(entries);
+                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
                 }
                 finally { _updateNotesDialogOpen = false; }
                 Settings.Set(ConfigKeys.UpdateNotesSeenVersion, ProductMetadata.VersionText);
@@ -195,7 +200,7 @@ namespace UNCAD
         private static int _warmedUp;
 
         private static bool SupportsStartupUi()
-            => StartupSplashForm.SupportsHost(
+            => StartupSplashWindow.SupportsHost(
                 System.Diagnostics.Process.GetCurrentProcess().ProcessName,
                 Environment.UserInteractive);
 
@@ -242,16 +247,16 @@ namespace UNCAD
                 try
                 {
                     _licenseDialogOpen = true;
-                    // v2：激活/被顶掉必须走 ClientLoginForm（WebView2 登录 → 设备绑定 → 令牌写回），
-                    // 不能再用 OnlineLicenseForm（只输入账号 + 验证并保存，既没有设备标识也没有令牌，
+                    // v2：激活/被顶掉必须走 ClientLoginWindow（WebView2 登录 → 设备绑定 → 令牌写回），
+                    // 不能再用 OnlineLicenseWindow（只输入账号 + 验证并保存，既没有设备标识也没有令牌，
                     // 被其它设备顶掉的用户在这个入口永远无法重新上线）。
                     //
                     // 只有**用户主动操作**（执行被停用的 UNCAD 命令，或运行 UNC_LOGIN）才会走到这里，
                     // 因此这个模态窗口不会打断用户正在做的绘图工作；
                     // 周期性心跳不再触发它（见 OnlineLicenseMonitor.Publish 的说明）。
                     _ = reason;
-                    using (var form = new ClientLoginForm())
-                        Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+                    var window = new ClientLoginWindow();
+                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
                 }
                 finally { _licenseDialogOpen = false; }
                 return;

@@ -64,13 +64,13 @@ namespace UNCAD.Features.Submit
             // 2.10.0 整机回路校验：一个机台的所有回路都必须选中，否则不生成 BOQ。
             if (!CircuitCoverageGuard.Ensure(ctx, CommandIds.Submit, identities)) return;
             // 输出目录按当前图纸名分目录；路径/占用预检必须在写盘之前完成。
-            string drawingName = AutomaticSubmissionService.CurrentDrawingName(ctx);
+
             AutomaticSubmissionWriteResult result;
             string outputRoot;
             try
             {
                 outputRoot = AutomaticSubmissionService.PrepareTargetPath(
-                    records.Select(record => record.MachineId), drawingName);
+                    records.Select(record => record.MachineId));
                 result = AutomaticSubmissionService.Write(ctx, outputRoot,
                     regions.Groups.Select(region => region.EntityIds.ToArray()));
             }

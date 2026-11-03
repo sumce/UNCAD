@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>UNCAD.UiDemo</RootNamespace>
+    <AssemblyName>UNCAD.UiDemo</AssemblyName>
+    <Nullable>disable</Nullable>
+    <AssemblyTitle>UNCAD 3.0 UI Demo</AssemblyTitle>
+    <AssemblyProduct>UNCAD 3.0 UI Demo</AssemblyProduct>
+    <!-- 独立演示程序：不引用 UNCAD 主工程，不进主解决方案。
+         用途：验证 WPF-UI 库在 net48 上的真实观感，作为 3.0 UI 选型评估物。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+</Project>

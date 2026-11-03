@@ -28,8 +28,13 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-11-01";
-        public const string VersionLabel = "2.10.0";
+        public const string ReleaseDateUtc = "2026-11-02";
+        /// <summary>
+        /// 版本通道（D-039）：`X.Y.Z-dev` = 开发版（3.0 迭代工作攒在里面，只出
+        /// 验收装机包，不打 tag 不发客户）；真机验收 + 收口后去掉 `-dev` 后缀
+        /// 才成为正式版。D-032 的 X.Y.Z/第四位规则只约束正式版。
+        /// </summary>
+        public const string VersionLabel = "3.0.0-dev";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
         public const string VersionSuffix = "";
 

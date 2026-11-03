@@ -1,0 +1,79 @@
+<ui:FluentWindow x:Class="UNCAD.UI.XmergeWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Xmerge · 合并 DWG"
+                 Width="760" Height="520" MinWidth="600" MinHeight="380"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="Xmerge · 合并 DWG" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="批量合并 DWG"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="可拖入 DWG 文件或文件夹；文件夹会递归扫描子目录。确认后将按 XLAYOUT 的横向排版规则合并到当前图纸。" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" Margin="24,12,24,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ui:Button x:Name="AddFileButton" Grid.Column="0" Content="添加文件"
+                       Icon="{ui:SymbolIcon FolderAdd24}" Click="OnAddFiles" />
+            <ui:Button x:Name="AddFolderButton" Grid.Column="1" Content="添加文件夹"
+                       Margin="10,0,0,0" Icon="{ui:SymbolIcon FolderOpen24}" Click="OnAddFolder" />
+            <ui:Button x:Name="RemoveButton" Grid.Column="2" Content="移除选中"
+                       Margin="10,0,0,0" Icon="{ui:SymbolIcon Delete24}" Click="OnRemoveSelected" />
+            <TextBlock x:Name="HintText" Grid.Column="4" VerticalAlignment="Center"
+                       Margin="14,0,0,0" FontSize="12" TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <ListBox x:Name="FileList" Grid.Row="3" Margin="24,12,24,8"
+                 SelectionMode="Extended"
+                 Background="{DynamicResource ControlFillColorDefaultBrush}"
+                 BorderThickness="1"
+                 BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                 FontSize="13" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+
+        <Grid Grid.Row="4" Margin="24,8,24,20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <ui:InfoBar x:Name="WarningBar" Grid.Row="0" Margin="0,0,0,10"
+                        IsOpen="False" IsClosable="True" Severity="Warning" />
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="开始合并前会在同一事务里克隆全部选中图纸；列表为空时无法开始。" />
+                <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                           Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+                <ui:Button x:Name="MergeButton" Grid.Column="2" Content="开始合并" MinWidth="110"
+                           IsDefault="True" Appearance="Primary" Click="OnConfirm" />
+            </Grid>
+        </Grid>
+    </Grid>
+</ui:FluentWindow>
