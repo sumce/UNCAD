@@ -2,7 +2,7 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The stable 2.10.0 build has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. The 3.0.0-dev development channel migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured local/UNC machine workbook; 2.10.0 removed all cloud uploads and remote workbook sources (account validation stays). Older command references below are historical release notes.
+The stable 3.0.0 build (shipped 2026-11-03, closing the D-039 dev channel) has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. 3.0 migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding and lives inside the frame block, D-040), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. Machine workbooks accept local/UNC paths and HTTP/HTTPS URLs (download-only, D-041); output lands one folder per machine (D-042); device-reserve markers are auto-absorbed (D-043); U1F fills frames on partial coverage (D-044); XLAYOUT offers three arrange modes (D-045) on the shared WPF design tokens with window adaptation (D-046). `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook; all cloud uploads stay removed (account validation stays). Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -11,10 +11,14 @@ The stable 2.10.0 build has 35 commands (including `U1PDF` and the online-login 
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
 
-## v3.0.0-dev（开发版，未正式发布）
+## v3.0.0（2026-11-03 正式发布）
 
-- UI：**全部 21 个窗体迁移 WPF**（WPF-UI / Fluent，深浅色主题、卡片布局、Enter 确认/Esc 取消），WinForms 旧版同批删除；新增设计语言规范 `docs/UI-3.0-DESIGN.md`（D-038）。
-- 修复：**XSTS/身份读取幽灵机台**——图框移动后遗留的 frameinfo_json 块被几何错误归属（JSON 身份优先级最高，统计多出机台、甚至可能让 U1U 认错机台）；现 JSON 写入 `meta.frameHandle`，句柄不符即忽略外块并提示清理，老 JSON 无句柄保持兼容。
+- UI：**全部 21 个窗体迁移 WPF**（WPF-UI / Fluent，深浅色主题、卡片布局、Enter 确认/Esc 取消），WinForms 旧版同批删除；新增统一设计令牌 FluentKit 与窗口自适应（D-046），设计语言规范 `docs/UI-3.0-DESIGN.md`（D-038）。
+- 存储：**图框 JSON 随块存储**（D-040，FRAME_20261102 模板）——frameinfo_json 移入图框块内 FRAMEINFO 属性，复制/移动零丢失，四代旧图框自动迁移；修复 XSTS/身份读取幽灵机台（`meta.frameHandle` 句柄绑定）。
+- 数据：**机台数据源支持本地/UNC 与 HTTP/HTTPS**（D-041，仅下载零上传，刷新显式触发，绘图命令只读本机 SQLite 快照）。
+- 输出：**一个机台一个文件夹**（D-042，BOQ/DWG/PDF 同夹交付）；批量 U1U / U1DWG / U1PDF 结束弹结果窗，命令行只留一行摘要。
+- 预留：**设备内预留自动识别**（D-043，横排毫米标吸收并删除）；U1F **缺回路照常填写图框**、只跳过 BOQ（D-044，边画边填；U1S/U1DWG 保持硬门禁）。
+- XLAYOUT：**三种排列方案**（D-045）——按机台完整性 / 按机台 ID 顺序 / 按上游编号同行，行内按 Excel 行序。
 - 重构：FillFeature 1425 行拆为 8 个阶段服务（余 695 行），电缆预留纯逻辑下沉 Core，行数守卫测试防回潮。
 - 发布门禁：`UNCAD_PERF_SMOKE`（合成大图时间预算）与 `UNCAD_MIGRATION_SELFTEST`（四代图框迁移不改表格尺寸）默认随 release.ps1 执行（`-SkipPerf`/`-SkipMigration` 可跳过）。
 - 加固：登录凭证 DPAPI 加密（旧明文自动升级）、日志账户脱敏、登录页拦弹窗；分层守卫测试冻结模块边界。

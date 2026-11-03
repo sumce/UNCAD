@@ -154,8 +154,10 @@ rewrite an existing entry.
 ## D-039: Version Channels — Development Builds vs Stable Releases (2026-11-02)
 
 - Status: accepted
-- Decision: 3.0-era work accumulates on a **development channel** labelled
-  `X.Y.Z-dev` in `ProductMetadata.VersionLabel` (currently `3.0.0-dev`).
+- Decision: 3.0-era work accumulated on a **development channel** labelled
+  `X.Y.Z-dev` in `ProductMetadata.VersionLabel` (the 3.0.0 series used
+  `3.0.0-dev`, closed when it shipped as `3.0.0` on 2026-11-03; a future dev
+  channel needs a new dated decision).
   Dev builds ship only as acceptance installers via `release.ps1 -Dev`; they
   skip the stable-only gates (RELEASE page, git tag) while keeping all test,
   performance, and migration gates. A **stable release** requires stripping
@@ -165,8 +167,8 @@ rewrite an existing entry.
   only; dev build numbers increment the assembly fourth part freely.
 - Consequence: adding features no longer mints a customer release (2.11.0 was
   retracted before tagging and re-labelled `3.0.0-dev`). Customers see only
-  deliberate stable versions; the current stable line remains 2.10.0.x until
-  3.0.0 passes real-machine acceptance plus the rename/rollout checks.
+  deliberate stable versions; the stable line moved to `3.0.0` on 2026-11-03
+  after real-machine acceptance.
 
 ## D-038: 3.0 UI Scope — Every Dialog Moves To WPF (2026-11-02)
 
