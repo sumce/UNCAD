@@ -17,7 +17,12 @@
 
         <ui:TitleBar Grid.Row="0" Title="U1SET · 配置中心" />
 
-        <!-- P1 导航枢纽：左 NavigationView + 右内容页，一页一个导航项 -->
+        <!-- P1 导航枢纽：左 NavigationView + 右内容页，一页一个导航项。
+             2026-11-04：不再订阅 ItemInvoked——4.0.2 在 OnItemInvoked 里
+             RaiseEvent(new RoutedEventArgs(ItemInvokedEvent, this))，OriginalSource
+             是 NavigationView 自己、永远不是被点项，按项断言的处理器侧边栏永远
+             不切页。改为在 code-behind 订阅每个 NavigationViewItem 自己的
+             Click（项是 ButtonBase，走库 OnClick() 的真实点击路径）。 -->
         <ui:NavigationView x:Name="Navi" x:FieldModifier="internal"
                            Grid.Row="1"
                            IsBackButtonVisible="Collapsed"
@@ -26,8 +31,7 @@
                            PaneDisplayMode="Left"
                            PaneTitle="U1SET"
                            OpenPaneLength="216"
-                           Background="{DynamicResource ApplicationBackgroundBrush}"
-                           ItemInvoked="OnNavItemInvoked">
+                           Background="{DynamicResource ApplicationBackgroundBrush}">
             <ui:NavigationView.MenuItems>
                 <ui:NavigationViewItem x:Name="NavOverview" x:FieldModifier="internal" Content="概览"
                                        Icon="{ui:SymbolIcon Home24}" />

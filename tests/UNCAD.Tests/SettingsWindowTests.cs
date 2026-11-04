@@ -72,6 +72,44 @@ namespace UNCAD.Tests
             });
         }
 
+        // ---------- 3.0.0.4 回归：侧边栏真实点击必须切换页面 ----------
+
+        [Fact]
+        public void Sidebar_RealClick_SwitchesPage()
+        {
+            RunSta(() =>
+            {
+                var window = new SettingsWindow(0);
+                window.Show();
+                Pump(3);
+                Assert.Equal(0, window.SelectedPageIndex);
+
+                NavigationViewItem item = window.Navigation.MenuItems
+                    .OfType<NavigationViewItem>()
+                    .First(candidate => Convert.ToString(candidate.Content) == "统计汇总");
+                Assert.True(item.IsVisible, "侧边栏项必须可见");
+
+                // 模拟真实点击：鼠标点击最终触发 ButtonBase.OnClick()（库在
+                // NavigationViewItem.OnClick 里通知 NavigationView 并 base.OnClick
+                // 抬 Click 事件）。库的 AutomationPeer 不支持 Invoke 模式
+                // （4.0.2 只支持 ItemContainer），所以用反射调 OnClick——与
+                // 鼠标点击同一条完整路径。旧实现订阅 ItemInvoked 并按项断言
+                // OriginalSource，但 4.0.2 raise 时 OriginalSource 是
+                // NavigationView 自己，永远拿不到被点项（2026-11-04 用户报告
+                // "侧边栏点不动"）。
+                System.Reflection.MethodInfo onClick = item.GetType().GetMethod(
+                    "OnClick",
+                    System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance);
+                Assert.NotNull(onClick);
+                onClick.Invoke(item, Array.Empty<object>());
+                Pump(3);
+
+                Assert.Equal(2, window.SelectedPageIndex);
+                window.Close();
+            });
+        }
+
         // ---------- 各页字段与范围 ----------
 
         [Fact]

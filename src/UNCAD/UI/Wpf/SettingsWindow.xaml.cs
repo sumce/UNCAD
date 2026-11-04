@@ -110,6 +110,7 @@ namespace UNCAD.UI
             _initialPage = Math.Max(0, Math.Min(pageIndex, _pageTypes.Count - 1));
 
             WireActions();
+            WireNavItems();
             OutputPage.DirectoryHintText.Text = "默认：<根目录>\\<机台ID>\\（BOQ / DWG / PDF 都在各自的机台文件夹里）；根目录留空使用 "
                 + DefaultOutputRoot();
             LoadValues();
@@ -147,13 +148,19 @@ namespace UNCAD.UI
                 _contentFrame.Content = _pages[clamped];
         }
 
-        private void OnNavItemInvoked(NavigationView sender, RoutedEventArgs args)
+        private void WireNavItems()
         {
-            // v4 的 ItemInvoked 只给 RoutedEventArgs：被点项从 OriginalSource 取。
-            if (args.OriginalSource is NavigationViewItem item)
+            // 3.0.0.4 修复"侧边栏点不动"（用户报告，与 3.0.0.2 的"整窗点不动"
+            // 不同根因）：WPF-UI 4.0.2 的 ItemInvoked 在 OnItemInvoked 里
+            // RaiseEvent(new RoutedEventArgs(ItemInvokedEvent, this))，OriginalSource
+            // 是 NavigationView 自己——按项断言的旧处理器永远拿不到被点项。
+            // NavigationViewItem 本身是 ButtonBase：直接订阅每项自己的 Click，
+            // 与真实鼠标点击走同一条库 OnClick() 路径。
+            for (int index = 0; index < _menuItems.Count; index++)
             {
-                int index = _menuItems.IndexOf(item);
-                if (index >= 0) ShowPage(index);
+                NavigationViewItem item = _menuItems[index];
+                int capturedIndex = index;
+                item.Click += (sender, args) => ShowPage(capturedIndex);
             }
         }
 
