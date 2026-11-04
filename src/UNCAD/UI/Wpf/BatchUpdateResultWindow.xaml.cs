@@ -45,12 +45,12 @@ namespace UNCAD.UI
     {
         private readonly string _outputRoot;
 
-        internal string Heading => "批量完成 · " + _frameCount + " 个图框 / "
+        public string Heading => "批量完成 · " + _frameCount + " 个图框 / "
             + _machineCount + " 个机台";
-        internal string SummaryText => "表格写入 " + _tableRows + " 行 · 块 " + _blocks
+        public string SummaryText => "表格写入 " + _tableRows + " 行 · 块 " + _blocks
             + " 个共更新 " + _attributeValues + " 项属性 · BOQ 新建 " + _boqAdded
             + " / 覆盖 " + _boqReplaced;
-        internal string Footer => "BOQ / DWG / PDF 都在输出目录的机台文件夹里；"
+        public string Footer => "BOQ / DWG / PDF 都在输出目录的机台文件夹里；"
             + "跳过 BOQ 的机台把回路画全后重跑 U1U 即可补齐。";
 
         private readonly int _frameCount;

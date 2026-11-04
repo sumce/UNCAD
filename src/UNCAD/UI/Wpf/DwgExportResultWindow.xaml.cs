@@ -37,9 +37,9 @@ namespace UNCAD.UI
     {
         private readonly string _outputRoot;
 
-        internal string Heading => "导出完成 · " + _frameCount + " 个图框 / "
+        public string Heading => "导出完成 · " + _frameCount + " 个图框 / "
             + _machineCount + " 个机台文件";
-        internal string Footer => "同机台图框已横向排列在各自 DWG 中；打开机台文件夹即可取图。";
+        public string Footer => "同机台图框已横向排列在各自 DWG 中；打开机台文件夹即可取图。";
 
         private readonly int _frameCount;
         private readonly int _machineCount;

@@ -148,8 +148,12 @@ namespace UNCAD.Features.Fill
         {
             using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                // 2026-11-04：身份读取同样带句柄校验——复制图框的源框 JSON
+                // 在这里被拒，身份回退到物理标注，防止幽灵机台。
+                string ownHandle = FrameInfoJsonBlockWriter.OwnFrameHandle(
+                    transaction, selection?.FrameBlockIds);
                 bool result = TryReadExistingIdentity(transaction, selection,
-                    out identity, out error);
+                    ownHandle, out identity, out error, out _);
                 transaction.Commit();
                 return result;
             }
@@ -157,7 +161,9 @@ namespace UNCAD.Features.Fill
 
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, out ExistingFillIdentity identity, out string error)
-            => TryReadExistingIdentity(transaction, selection, null,
+            => TryReadExistingIdentity(transaction, selection,
+                FrameInfoJsonBlockWriter.OwnFrameHandle(transaction,
+                    selection?.FrameBlockIds),
                 out identity, out error, out _);
 
         /// <summary>
@@ -171,8 +177,11 @@ namespace UNCAD.Features.Fill
             FillSelection selection, string expectedFrameHandle,
             out ExistingFillIdentity identity, out string error, out string foreignJsonNote)
         {
+            // D-040 后 JSON 主存储 = 图框块 FRAMEINFO 属性，独立块仅遗留读源：
+            // 读身份必须用 ReadSources（含图框块），只传独立块会漏读新模板。
             FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(transaction,
-                selection?.FrameInfoJsonBlockIds, expectedFrameHandle, out foreignJsonNote);
+                FrameInfoJsonBlockWriter.ReadSources(selection), expectedFrameHandle,
+                out foreignJsonNote);
             ExistingFillIdentity jsonIdentity = null;
             if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
                 && !string.IsNullOrWhiteSpace(json.DeviceName))

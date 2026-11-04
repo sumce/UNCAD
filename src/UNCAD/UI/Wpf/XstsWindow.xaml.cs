@@ -12,18 +12,18 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class XstsWindow : FluentWindow
     {
-        internal string Heading => "机台回路统计 · " + _report.Machines.Count + " 个机台 / "
+        public string Heading => "机台回路统计 · " + _report.Machines.Count + " 个机台 / "
             + _report.FrameCount + " 个图框";
 
         /// <summary>下一步指引：统计是工序核对，缺什么、下一步干什么要说清。</summary>
-        internal string NextStep => _report.ExpectedDataAvailable
+        public string NextStep => _report.ExpectedDataAvailable
             ? (_report.MissingCircuitCount > 0
                 ? "下一步：把缺少的回路补画进图纸后重跑 XSTS 核对；全部机台齐全后执行 U1U 生成清单。"
                 : "下一步：回路齐全，执行 U1U 生成清单。")
             : "下一步：先在 U1SET 刷新机台数据（" + _report.ExpectedDataDetail + "），再重跑 XSTS。";
 
         /// <summary>覆盖率摘要：数据可用时给出 缺少/多出/异常 的确切数字。</summary>
-        internal string Coverage => _report.ExpectedDataAvailable && !_report.HasUnknownMachineBaseline
+        public string Coverage => _report.ExpectedDataAvailable && !_report.HasUnknownMachineBaseline
             ? "有效回路 " + _report.SelectedCircuitCount + " / 应有 "
                 + _report.ExpectedCircuitCount + " · 缺少 " + _report.MissingCircuitCount
                 + " · 多出 " + _report.UnexpectedCircuitCount
@@ -34,7 +34,7 @@ namespace UNCAD.UI
                 + " · " + _report.ExpectedDataDetail
                 + " · 异常 " + _report.Issues.Count;
 
-        internal string Footer => string.IsNullOrWhiteSpace(_outputPath)
+        public string Footer => string.IsNullOrWhiteSpace(_outputPath)
             ? "未导出 Excel" : "Excel: " + _outputPath;
 
         private readonly XstsReport _report;

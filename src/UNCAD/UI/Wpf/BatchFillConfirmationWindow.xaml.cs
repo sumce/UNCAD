@@ -33,8 +33,8 @@ namespace UNCAD.UI
         /// <summary>用户点了“确认更新”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
 
-        internal string Heading => "将按图框边界批量更新 " + _rowCount + " 个已填图框";
-        internal string Footer => _rowCount + " 个图框 · 一个事务提交 · 任一失败整批回滚";
+        public string Heading => "将按图框边界批量更新 " + _rowCount + " 个已填图框";
+        public string Footer => _rowCount + " 个图框 · 一个事务提交 · 任一失败整批回滚";
 
         private readonly int _rowCount;
 

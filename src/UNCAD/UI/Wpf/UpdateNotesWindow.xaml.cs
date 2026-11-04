@@ -10,7 +10,7 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class UpdateNotesWindow : FluentWindow
     {
-        internal string Heading => "已更新到 " + ProductMetadata.VersionText;
+        public string Heading => "已更新到 " + ProductMetadata.VersionText;
 
         public UpdateNotesWindow(IReadOnlyList<VersionChangeLogEntry> entries)
         {

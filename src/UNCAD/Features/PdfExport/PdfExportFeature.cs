@@ -19,7 +19,7 @@ namespace UNCAD.Features.PdfExport
 {
     /// <summary>
     /// U1PDF：框选图框 → **每个图框（= 一个回路）出一份彩色 PDF**，
-    /// 按输出布局落到 `<输出根>\<图纸>\PDF\<机台>_<回路>.pdf`（同批同名冲突加 -2/-3），
+    /// 按输出布局落到 `<root>\<机台>\<机台>_<回路>.pdf`（同批同名冲突加 -2/-3），
     /// 写盘前做占用预检。
     ///
     /// 与 U1DWG 的粒度差异：**DWG 按机台**（一份 DWG 覆盖多个回路），
@@ -83,7 +83,7 @@ namespace UNCAD.Features.PdfExport
             foreach (string problem in resolveProblems)
                 ctx.Write("\n[U1PDF] 已跳过：" + problem);
 
-            // 输出目录：统一走 OutputLayout（<root>\<图纸>\PDF），不再使用 %TEMP%。
+            // 输出目录：统一走 OutputLayout（<root>\<机台>\），不再使用 %TEMP%。
             if (!TryPrepareOutputDirectory(ctx, out string root, out string outputDirectory,
                 out string directoryError))
             {

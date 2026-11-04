@@ -393,7 +393,9 @@ rewrite an existing entry.
 
 ## D-005: `frameinfo_json` Is the Identity Record
 
-- Status: accepted
+- Status: accepted; storage amended by D-040 (2026-11-02): the record lives in
+  the frame block's own `FRAMEINFO` attribute; the standalone block and legacy
+  inline attributes remain read-only legacy sources.
 - Decision: frame identity, last update, cable reserve breakdown, and
   replacement history are persisted in the standalone `frameinfo_json` block
   (schema v2). Legacy embedded `FRAMEINFO_JSON` attributes are read for

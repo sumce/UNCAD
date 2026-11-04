@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows.Threading;
+using UNCAD.Core.Dwg;
 using UNCAD.UI;
 using Xunit;
 

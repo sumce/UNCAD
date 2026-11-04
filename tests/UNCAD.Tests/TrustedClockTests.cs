@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UNCAD.Infra;
 using Xunit;
 
@@ -62,29 +63,8 @@ namespace UNCAD.Tests
             Assert.Equal(future, effective);
         }
 
-        [Fact]
-        public void Evaluate_NetworkTime_ClampsLocalRollback()
-        {
-            // 断网改时间再上线:网络时间远大于被回拨的本地时间。
-            var network = Build.AddDays(4);
-            var rolledBack = Build.AddDays(-1);
-            DateTime effective = TrustedClock.Evaluate(rolledBack, Build,
-                new List<DateTime>(), out bool tampered, network);
-            Assert.True(tampered);
-            Assert.Equal(network, effective);
-        }
-
-        [Fact]
-        public void Evaluate_NetworkTime_AuthoritativeEvenWithoutMarkers()
-        {
-            // 用户清空了所有水位线:只要在线,真实时间仍然是权威。
-            var network = Build.AddDays(9);
-            var faked = Build.AddDays(2);
-            DateTime effective = TrustedClock.Evaluate(faked, Build,
-                new List<DateTime>(), out bool tampered, network);
-            Assert.True(tampered); // 本地落后网络 7 天 → 判回拨
-            Assert.Equal(network, effective);
-        }
+        // 2026-11-04:NTP 联网已按"绘图命令永不联网"硬约束移除,
+        // 依赖 networkTimeUtc 重载的两个用例(Evaluate_NetworkTime_*)随之删除。
 
         [Fact]
         public void Evaluate_OfflineWithClearedMarkers_FallsBackToBuildFloor()
@@ -92,7 +72,7 @@ namespace UNCAD.Tests
             // 全部水位线被删且离线:构建时间下限仍兜底。
             var faked = Build.AddHours(-48);
             DateTime effective = TrustedClock.Evaluate(faked, Build,
-                new List<DateTime>(), out bool tampered, null);
+                new List<DateTime>(), out bool tampered);
             Assert.True(tampered);
             Assert.Equal(Build, effective);
         }
@@ -105,6 +85,28 @@ namespace UNCAD.Tests
                 markers: new List<DateTime> { Build });
             Assert.False(tampered);
             Assert.Equal(Build.AddDays(5), effective);
+        }
+
+        [Fact]
+        public void TrustedClock_StaysOffline_NetworkMembersMustNotReturn()
+        {
+            // 硬约束（AGENTS.md）：绘图命令永不联网，账号/许可校验是唯一网络功能。
+            // TrustedClock 在命令路径上被调用，绝不允许重新长出 NTP/HTTP 等
+            // 联网成员（2026-11-04 已摘除 SNTP 校时；到期判定只信许可服务器
+            // 响应的 Date 头，不依赖本地联网）。
+            string path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+                "..", "..", "..", "..", "..",
+                "src", "UNCAD", "Infra", "TrustedClock.cs"));
+            string source = File.ReadAllText(path);
+            Assert.DoesNotContain("Socket", source);
+            Assert.DoesNotContain("Dns", source);
+            Assert.DoesNotContain("UdpClient", source);
+            Assert.DoesNotContain("TcpClient", source);
+            Assert.DoesNotContain("HttpWebRequest", source);
+            Assert.DoesNotContain("WebClient", source);
+            Assert.DoesNotContain("HttpClient", source);
+            Assert.DoesNotContain("ThreadPool", source);
+            Assert.DoesNotContain("NetworkStream", source);
         }
 
         private static DateTime Evaluate(DateTime now, out bool tampered,

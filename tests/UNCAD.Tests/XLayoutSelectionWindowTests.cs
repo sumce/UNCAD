@@ -147,6 +147,68 @@ namespace UNCAD.Tests
             });
         }
 
+        [Fact]
+        public void DuplicateFrames_UncheckOneLeaf_LeavesTheOtherSelected()
+        {
+            RunSta(() =>
+            {
+                // 同机台同回路的重复图框（XLAYOUT 明确支持）必须各自映射各自的
+                // 图框：旧实现按 MachineId+DeviceName 反查，两个叶子共享第一个
+                // item，取消勾选永远清不掉第二个（2026-11-04 回归）。
+                var window = new XLayoutSelectionWindow(new[]
+                {
+                    Item("MQBAN01", "电脑插座1", 0),
+                    Item("MQBAN01", "电脑插座1", 1)
+                });
+                window.Show();
+                Pump(2);
+
+                Assert.Equal(2, window.ComputeSelectedItems().Count);
+                var circuits = window.Roots[0].Children;
+                Assert.Equal(2, circuits.Count);
+
+                circuits[0].IsChecked = false;
+                var remaining = window.ComputeSelectedItems();
+                Assert.Single(remaining);
+                Assert.Equal("h1", remaining[0].Handle);
+
+                circuits[1].IsChecked = false;
+                Assert.Empty(window.ComputeSelectedItems());
+
+                // “全不选/全选”按钮走可见项集合路径，重复图框同样必须清干净。
+                window.SetVisibleChecked(true);
+                Assert.Equal(2, window.ComputeSelectedItems().Count);
+                window.SetVisibleChecked(false);
+                Assert.Empty(window.ComputeSelectedItems());
+
+                Click(window.ConfirmButton);
+                Pump(2);
+                Assert.False(window.Confirmed, "空选择不得确认");
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void UncheckingOneCircuit_KeepsItsSiblingsSelected()
+        {
+            RunSta(() =>
+            {
+                // 取消一个回路不许机台级联连带取消兄弟回路（机台分支只应响应
+                // 用户直接点机台复选框；自动回同步必须抑制级联，2026-11-04）。
+                var window = new XLayoutSelectionWindow(Items());
+                window.Show();
+                Pump(2);
+
+                window.Roots[0].Children[0].IsChecked = false;
+                var remaining = window.ComputeSelectedItems();
+                Assert.Equal(4, remaining.Count);
+                Assert.Contains(remaining, item => item.DeviceName == "回路B");
+                Assert.False(window.Roots[0].IsChecked,
+                    "机台节点应如实反映部分选择");
+                window.Close();
+            });
+        }
+
         private static IEnumerable<XLayoutSelectionNode> MachineAndCircuits(
             XLayoutSelectionNode machine)
         {

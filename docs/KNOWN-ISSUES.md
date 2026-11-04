@@ -14,13 +14,13 @@ deferred, or important for support diagnosis.
 - U1F/U1U do not draw automatic upstream connection geometry.
 - A missing online license response fails closed (no offline grace path); the
   customer can enter a new authorization code in the login dialog.
-- HTTP/HTTPS machine-workbook sources are intentionally rejected in 2.10.0;
-  use a local or UNC path and refresh via U1DATA/U1SET.
-- The whole-machine circuit gate can block BOQ/DWG for a machine whose circuits
-  are not all drawn yet (U1F/U1S/U1DWG abort; D-033). U1U is exempt since the
-  D-034 amendment: it updates the selected frames and only skips that machine's
-  BOQ. Disable `UNC_FILL_REQUIRE_ALL_CIRCUITS` in U1SET if a project really
-  needs partial output everywhere.
+- HTTP/HTTPS machine-workbook sources are download-only (D-041): they refresh
+  only via explicit U1DATA/U1SET; drawing commands never touch the network.
+- The whole-machine circuit gate: U1S/U1DWG abort with the missing circuit list
+  when a machine's circuits are not all drawn (D-033). Since D-044, U1F/U1U
+  keep updating the selected frames and only skip that machine's BOQ. Disable
+  `UNC_FILL_REQUIRE_ALL_CIRCUITS` in U1SET if a project really needs partial
+  output everywhere.
 - A Base64 config share code never contains licence/account values, so a shared
   profile does not transfer authorization.
 

@@ -105,8 +105,11 @@ namespace UNCAD.Features.Fill
             }
             catalog = catalog ?? new BoqCatalogIndex(null);
             string originalModel = (picked.Cable ?? "").Trim();
+            // 句柄校验（2026-11-04）：复制图框的源框 JSON 不得恢复替代型号。
             FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(transaction,
-                selection?.FrameInfoJsonBlockIds);
+                FrameInfoJsonBlockWriter.ReadSources(selection),
+                FrameInfoJsonBlockWriter.OwnFrameHandle(transaction,
+                    selection?.FrameBlockIds));
             var sourceIds = new List<ObjectId>();
             sourceIds.AddRange(selection?.FrameBlockIds ?? Array.Empty<ObjectId>());
             sourceIds.AddRange(selection?.TableIds ?? Array.Empty<ObjectId>());

@@ -667,8 +667,16 @@ namespace UNCAD.Features.Fill
 
             // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
             // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
+            // 2026-11-04：带句柄校验——复制图框的源框 JSON（预留/替代型号/历史）
+            // 不继承，备注进结果窗告知用户。
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                FrameInfoJsonBlockWriter.ReadSources(selection));
+                FrameInfoJsonBlockWriter.ReadSources(selection),
+                FrameInfoJsonBlockWriter.OwnFrameHandle(readTransaction,
+                    selection.FrameBlockIds),
+                out string foreignJsonNote);
+            if (foreignJsonNote.Length > 0)
+                notes.Add("检测到复制图框遗留的其他图框 JSON，已忽略："
+                    + "不继承其设备内预留/电缆替代型号/更新历史。");
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
             // 写回记录，后续不重复恢复并随 JSON 持久化。

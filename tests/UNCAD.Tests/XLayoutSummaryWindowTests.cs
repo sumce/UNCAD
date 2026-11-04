@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Windows.Threading;
+using UNCAD.Core.Dwg;
 using UNCAD.UI;
 using Xunit;
 

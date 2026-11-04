@@ -37,15 +37,15 @@ namespace UNCAD.UI
     {
         private readonly string _outputRoot;
 
-        internal string Heading => "出图完成 · 成功 " + _rendered + " / 失败 "
+        public string Heading => "出图完成 · 成功 " + _rendered + " / 失败 "
             + _failed + "（共 " + _total + " 份）";
 
         /// <summary>下一步指引：失败的说先看原因，成功的说交付方式。</summary>
-        internal string NextStep => _failed > 0
+        public string NextStep => _failed > 0
             ? "下一步：先看失败行的原因（通常是打印设备/图框异常），修复后重跑 U1PDF 即可补出。"
             : "下一步：PDF 已在各机台文件夹里，与 BOQ / DWG 同夹，可直接交付。";
 
-        internal string Footer => "一个图框 = 一个回路 = 一份 PDF；同名回路文件名自动去重。";
+        public string Footer => "一个图框 = 一个回路 = 一份 PDF；同名回路文件名自动去重。";
 
         private readonly int _rendered;
         private readonly int _failed;

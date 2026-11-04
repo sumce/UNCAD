@@ -57,7 +57,7 @@ namespace UNCAD.UI
         /// <summary>用户点了“确定”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
 
-        internal string Heading => "有 " + _rows.Count + " 个图框还没有设备内预留记录。"
+        public string Heading => "有 " + _rows.Count + " 个图框还没有设备内预留记录。"
             + "逐行填写，或先统一填入再单独调整；确认后写入 frameinfo_json，后续 U1U 不再询问。";
 
         private readonly List<DeviceReserveRow> _rows;

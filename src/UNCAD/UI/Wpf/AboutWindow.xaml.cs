@@ -17,7 +17,7 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class AboutWindow : FluentWindow
     {
-        internal string Footer => "客户与到期数据来自 pro.key / 在线授权响应，窗体只读展示。";
+        public string Footer => "客户与到期数据来自 pro.key / 在线授权响应，窗体只读展示。";
 
         private readonly AboutInfo _info;
 

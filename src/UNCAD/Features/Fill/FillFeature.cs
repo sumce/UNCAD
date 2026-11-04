@@ -162,8 +162,23 @@ namespace UNCAD.Features.Fill
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
             // 迁移会从旧图框块参照上移除内嵌 FRAMEINFO_JSON，因此必须在迁移前读出
             // 独立 JSON 块 + 图框块上的记录；U1F 也要读，否则旧图框首次 U1F 会丢身份/历史。
-            FrameInfoJsonRecord frameInfoPrevious = FrameInfoJsonBlockWriter.Read(ctx,
-                FrameInfoJsonBlockWriter.ReadSources(selection));
+            // 2026-11-04：读取带本图框句柄校验——复制图框带来的源框 JSON（替代型号/
+            // 设备内预留/更新历史）一律不继承；本次保存后将盖成本图框自己的句柄。
+            FrameInfoJsonRecord frameInfoPrevious;
+            string foreignJsonNote;
+            using (Transaction previousTransaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                frameInfoPrevious = FrameInfoJsonBlockWriter.Read(previousTransaction,
+                    FrameInfoJsonBlockWriter.ReadSources(selection),
+                    FrameInfoJsonBlockWriter.OwnFrameHandle(previousTransaction,
+                        selection.FrameBlockIds),
+                    out foreignJsonNote);
+                previousTransaction.Commit();
+            }
+            if (foreignJsonNote.Length > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 检测到复制图框遗留的其他图框 JSON 记录，已忽略：不继承其"
+                    + "设备内预留/电缆替代型号/更新历史；本次保存后将写入本图框自己的记录。");
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——清单确认窗直接预填，
             // 用户仍可改；恢复值写回记录并随 JSON 持久化。
@@ -539,8 +554,10 @@ namespace UNCAD.Features.Fill
         {
             try
             {
-                FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.Read(ctx,
-                    selection?.FrameInfoJsonBlockIds);
+                // D-040：对比窗用 ReadSources 读全（含图框块 FRAMEINFO）；
+                // ReadOwn 带句柄校验——复制图框的源框历史不显示、不误报"上次更新"。
+                FrameInfoJsonRecord previous = FrameInfoJsonBlockWriter.ReadOwn(ctx,
+                    selection);
                 List<TableFillRow> existing = FillRowDiffBuilder.ReadRows(
                     CadSubmissionReader.Read(ctx, selection?.TableIds));
                 FillUpdateCompareItem item = FillReviewStage.BuildCompareItem(picked,

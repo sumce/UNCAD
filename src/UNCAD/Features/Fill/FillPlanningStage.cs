@@ -106,8 +106,7 @@ namespace UNCAD.Features.Fill
                 updateMode ? originalCableModel : null);
             if (updateMode)
                 review.RestoreBusPlugBoxChoice(frameInfoPrevious
-                    ?? FrameInfoJsonBlockWriter.Read(ctx,
-                        selection.FrameInfoJsonBlockIds), catalog);
+                    ?? FrameInfoJsonBlockWriter.ReadOwn(ctx, selection), catalog);
             if (cableReserve != null)
                 CableReserveReview.InitializeReserveReview(review, cableReserve);
             ResolveMissingCableCatalog(review, catalog);

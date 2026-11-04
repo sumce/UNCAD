@@ -73,7 +73,7 @@ U13D
 U1PDF
   select frames -> resolve machine/circuit identity (same resolver as U1F/U1U)
   -> per frame: plot the frame window with the built-in engine (DWG To PDF.pc3,
-  A3, colours preserved) -> verify %PDF- + %%EOF -> write one PDF per circuit under <root>\<drawing>\PDF
+  A3, colours preserved) -> verify %PDF- + %%EOF -> write one PDF per circuit under <root>\<machine>\
   (the plot engine writes to the layout's own plot settings, then the user's
   settings are restored field by field; no third-party batch-plot plugin)
 
@@ -93,7 +93,7 @@ XLAYOUT/XSTS
   is the only other network feature.
 - Outputs: one folder per machine — `<root>\<machine>\` holds that
   machine's BOQ, DWG and PDF together (D-042; no drawing-name or kind layer).
-  (default root `Documents\UNCAD输出`; U1SET toggles the drawing/kind levels).
+  (default root `Documents\UNCAD输出`).
   Occupied files are detected before the CAD transaction, never after.
 - Every command writes one local operation record (JSONL, `%APPDATA%\UNCAD\history`),
   and file logs rotate per day; U1SET → 日志与记录 shows them.
@@ -103,7 +103,9 @@ XLAYOUT/XSTS
   the last successful snapshot remains live until a later refresh succeeds.
 - `frameinfo_json` stores machine ID, device/upstream identity, last update,
   cable reserve breakdown and replacement/change history. It is written to the
-  standalone `frameinfo_json` block, not to frame attributes. Schema v2 is the
+  frame block's own `FRAMEINFO` attribute (D-040); the standalone
+  `frameinfo_json` block and legacy inline attributes stay as read-only legacy
+  sources. Schema v2 is the
   nested `identity/upstream/downstream/cable/drawing/meta/changes` document;
   history is capped and the payload has a hard length limit, so a write never
   persists truncated/invalid JSON. Legacy v1 payloads remain readable for

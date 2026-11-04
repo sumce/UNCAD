@@ -47,9 +47,56 @@ namespace UNCAD.Features.Fill
                 .ToArray();
         }
 
+        /// <summary>
+        /// 单框语义的“本图框句柄”（与写入盖戳 frame.Handle.ToString() 同源）：
+        /// 恰好一个非空图框块时返回其句柄；0 个或多个返回空串——IsForeignTo
+        /// 对空期望句柄放行（老 JSON 兼容路径），因此多框场景不会误拒。
+        /// 2026-11-04 用户报告：复制图框会把源框的 JSON 一起带过来，所有
+        /// 决策读取（身份、设备内预留、替代型号、母线箱选择、更新历史）
+        /// 必须带句柄校验，否则复制框会静默继承源框的用户选择。
+        /// </summary>
+        internal static string OwnFrameHandle(Transaction transaction,
+            ObjectId[] frameBlockIds)
+        {
+            ObjectId only = ObjectId.Null;
+            int count = 0;
+            foreach (ObjectId id in frameBlockIds ?? Array.Empty<ObjectId>())
+            {
+                if (id.IsNull) continue;
+                count++;
+                if (count == 1) only = id;
+            }
+            if (count != 1) return "";
+            BlockReference frame = transaction.GetObject(only,
+                OpenMode.ForRead, true) as BlockReference;
+            return frame?.Handle.ToString() ?? "";
+        }
+
+        /// <summary>
+        /// ctx 版“只读本图框自己的记录”（自动开短读事务 + 句柄校验）：
+        /// 复制图框带来的源框 JSON 被拒绝后返回 null，调用方走各自的
+        /// 物理兜底（现有表格/标签），绝不用别的图框的用户选择。
+        /// </summary>
+        internal static FrameInfoJsonRecord ReadOwn(CadContext ctx, FillSelection selection)
+        {
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FrameInfoJsonRecord record = Read(transaction,
+                    ReadSources(selection),
+                    OwnFrameHandle(transaction, selection?.FrameBlockIds));
+                transaction.Commit();
+                return record;
+            }
+        }
+
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds)
             => Read(transaction, blockIds, null, out _);
+
+        /// <summary>带句柄校验、不需要外来说明的读取（决策读取点用）。</summary>
+        internal static FrameInfoJsonRecord Read(Transaction transaction,
+            ObjectId[] blockIds, string expectedFrameHandle)
+            => Read(transaction, blockIds, expectedFrameHandle, out _);
 
         /// <summary>
         /// 带图框句柄校验的读取：JSON 记录里带 frameHandle 且与当前图框不符时

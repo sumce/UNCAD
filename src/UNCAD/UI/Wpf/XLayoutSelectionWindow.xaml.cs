@@ -21,12 +21,13 @@ namespace UNCAD.UI
         private bool _isExpanded;
 
         internal XLayoutSelectionNode(string header, string machineId, string deviceName,
-            bool isPlaceholder)
+            bool isPlaceholder, XLayoutFrameItem item = null)
         {
             Header = header;
             MachineId = machineId ?? "";
             DeviceName = deviceName ?? "";
             IsPlaceholder = isPlaceholder;
+            Item = item;
             Children = new ObservableCollection<XLayoutSelectionNode>();
         }
 
@@ -43,6 +44,11 @@ namespace UNCAD.UI
 
         public string MachineId { get; }
         public string DeviceName { get; }
+
+        /// <summary>该叶子对应的图框。2026-11-04 修复：重复图框（同机台同回路）
+        /// 各自持有自己的 item——旧实现按机台+回路名反查，重复图框永远映射到
+        /// 第一个 item，取消勾选任一叶子都清不掉另一个。机台/占位节点为 null。</summary>
+        public XLayoutFrameItem Item { get; }
 
         /// <summary>占位节点（如"没有匹配"提示）不承载回路、不可勾选。</summary>
         public bool IsPlaceholder { get; }
@@ -178,8 +184,8 @@ namespace UNCAD.UI
                     {
                         if (!IsCircuitVisible(circuit)) continue;
                         circuit.IsChecked = value;
-                        if (value) _checked.Add(FindItem(circuit));
-                        else _checked.Remove(FindItem(circuit));
+                        if (value) _checked.Add(circuit.Item);
+                        else _checked.Remove(circuit.Item);
                     }
                     SyncMachineCheckState(machine);
                 }
@@ -222,7 +228,7 @@ namespace UNCAD.UI
                     var circuitNode = new XLayoutSelectionNode(
                         (item.DeviceName ?? "").Length == 0
                             ? "(未识别回路)" : item.DeviceName,
-                        item.MachineId, item.DeviceName, false)
+                        item.MachineId, item.DeviceName, false, item)
                     {
                         IsChecked = _checked.Contains(item),
                         IsExpanded = true
@@ -268,7 +274,7 @@ namespace UNCAD.UI
                     foreach (XLayoutSelectionNode child in node.Children)
                     {
                         child.IsChecked = node.IsChecked;
-                        XLayoutFrameItem item = FindItem(child);
+                        XLayoutFrameItem item = child.Item;
                         if (node.IsChecked) _checked.Add(item);
                         else _checked.Remove(item);
                     }
@@ -279,7 +285,7 @@ namespace UNCAD.UI
             {
                 // 回路节点：同步勾选集合并向上推导机台状态。
                 XLayoutSelectionNode machine = FindParentNode(node);
-                XLayoutFrameItem item = FindItem(node);
+                XLayoutFrameItem item = node.Item;
                 if (node.IsChecked) _checked.Add(item);
                 else _checked.Remove(item);
                 if (machine != null) SyncMachineCheckState(machine);
@@ -290,23 +296,20 @@ namespace UNCAD.UI
         private void SyncMachineCheckState(XLayoutSelectionNode machine)
         {
             bool all = machine.Children.All(child => child.IsChecked);
-            if (machine.IsChecked != all) machine.IsChecked = all;
+            if (machine.IsChecked != all)
+            {
+                // 自动回同步不是用户操作：必须抑制级联。否则机台翻为未选会再次
+                // 进入机台分支，把全部子回路（含用户未动的兄弟回路）一并取消。
+                // 级联只应发生在用户直接点机台复选框时（OnNodeCheckChanged）。
+                _suppressCascade = true;
+                try { machine.IsChecked = all; }
+                finally { _suppressCascade = false; }
+            }
         }
 
         private XLayoutSelectionNode FindParentNode(XLayoutSelectionNode circuit)
         {
             return _roots.FirstOrDefault(machine => machine.Children.Contains(circuit));
-        }
-
-        private XLayoutFrameItem FindItem(XLayoutSelectionNode circuit)
-        {
-            return _items.First(item =>
-                string.Equals((item.MachineId ?? "").Trim(),
-                    (circuit.MachineId ?? "").Trim(),
-                    StringComparison.OrdinalIgnoreCase)
-                && string.Equals((item.DeviceName ?? "").Trim(),
-                    (circuit.DeviceName ?? "").Trim(),
-                    StringComparison.OrdinalIgnoreCase));
         }
 
         // ---------- 可见性 ----------
@@ -358,8 +361,8 @@ namespace UNCAD.UI
                     {
                         if (!IsCircuitVisible(circuit)) continue;
                         circuit.IsChecked = !circuit.IsChecked;
-                        if (circuit.IsChecked) _checked.Add(FindItem(circuit));
-                        else _checked.Remove(FindItem(circuit));
+                        if (circuit.IsChecked) _checked.Add(circuit.Item);
+                        else _checked.Remove(circuit.Item);
                     }
                     SyncMachineCheckState(machine);
                 }
