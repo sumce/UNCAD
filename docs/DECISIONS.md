@@ -674,3 +674,20 @@ rewrite an existing entry.
   actually drawn; BOQ behaviour is unchanged (U1U already skips only the
   incomplete machine's BOQ per D-034/D-044). The window is the only place a
   partial machine can be exported; there is no silent fallback.
+
+## D-048: U1U Force-BOQ Confirmation For Incomplete Machines (2026-11-04)
+
+- Status: accepted (user request; extends D-034/D-044, mirrors D-047 for BOQ)
+- Decision: when a U1U selection contains machines whose circuits are not all
+  drawn, a confirmation window lists those machines with drawn/expected
+  circuit counts and the missing circuit names. Machines are ticked by default
+  NOT to generate their BOQ; the user can tick individual machines to force
+  BOQ generation from the circuits actually drawn. Confirm with an empty
+  selection means "skip all" (previous behaviour). Forced machines are marked
+  in the batch result window remarks and the command line. Single-frame U1U
+  shows the same window with one row; U1F (fill while drawing) does not offer
+  forcing. Cancel equals no force.
+- Consequence: a forced BOQ intentionally misses rows for undrawn circuits;
+  the operator has been told so in the window, the result remarks, and the
+  command line, and can rerun U1S after completing the circuits to get the
+  full BOQ. Drawing updates are never blocked by this window.

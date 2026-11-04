@@ -253,23 +253,38 @@ namespace UNCAD.Features.Fill
             // 2.10.0 整机回路校验（U1SET 可关闭）：缺回路的机台只更新图纸、
             // 跳过该机 BOQ（部分回路的 BOQ 会丢掉未选回路的工程量），不再拦
             // 整批更新；补全回路后由用户执行 U1S 补清单。
-            List<string> coverageIncomplete = FillFeature.CoverageIncompleteMachines(
-                ctx, workbook, CommandIds.FillUpdate,
-                plans.Select(plan => new KeyValuePair<string, string>(
-                    plan.Machine.MachineId, plan.Machine.CircuitName)));
-            List<Plan> boqPlans = plans;
-            if (coverageIncomplete.Count > 0)
+            // D-048（2026-11-04）：缺回路机台先弹强制生成选择窗——默认全部不勾
+            // 选 = 照旧跳过；用户勾选并确认的机台按已画回路强制生成 BOQ，
+            // 结果窗备注列标注。勾选与否都不拦图纸更新。
+            List<CircuitCoverageResult> coverageFailed = FillCoverageGate
+                .EvaluateCircuitCoverage(ctx, workbook, CommandIds.FillUpdate,
+                    plans.Select(plan => new KeyValuePair<string, string>(
+                        plan.Machine.MachineId, plan.Machine.CircuitName)));
+            var coverageSet = new HashSet<string>(
+                coverageFailed.Select(result => result.MachineId),
+                UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
+            HashSet<string> forcedSet = FillCoverageGate.OfferForceBoq(
+                ctx, CommandIds.FillUpdate, coverageFailed);
+            List<Plan> boqPlans = plans.Where(plan => !coverageSet.Contains(
+                plan.Machine.MachineId)
+                || forcedSet.Contains(plan.Machine.MachineId)).ToList();
+            foreach (Plan plan in plans)
             {
-                var incompleteSet = new HashSet<string>(coverageIncomplete,
-                    UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
-                boqPlans = plans.Where(plan => !incompleteSet.Contains(
-                    plan.Machine.MachineId)).ToList();
-                foreach (string machineId in coverageIncomplete)
-                    Log.Info("[U1U] 机台 " + machineId
-                        + " 回路不全：本次只更新图纸、不生成该机 BOQ。");
-                ctx.Write("\n[U1U] 有 " + coverageIncomplete.Count
-                    + " 台机台回路不全：本次只更新图纸、不生成其 BOQ；"
-                    + "全部回路画完后执行 " + CommandIds.Submit + " 生成清单（明细见结果窗）。");
+                if (coverageSet.Contains(plan.Machine.MachineId)
+                    && forcedSet.Contains(plan.Machine.MachineId))
+                    plan.Notes.Add("BOQ 已强制生成（回路不全，仅含已画回路）；"
+                        + "补画后可执行 " + CommandIds.Submit + " 重出完整清单。");
+            }
+            if (coverageFailed.Count > 0)
+            {
+                int skippedCount = coverageFailed.Count - forcedSet.Count;
+                ctx.Write("\n[U1U] 有 " + coverageFailed.Count
+                    + " 台机台回路不全：跳过 " + skippedCount + " 台 BOQ"
+                    + (forcedSet.Count > 0
+                        ? "，强制生成 " + forcedSet.Count + " 台（仅含已画回路，"
+                            + "见结果窗备注）" : "")
+                    + "；全部回路画完后执行 " + CommandIds.Submit
+                    + " 生成清单（明细见结果窗）。");
             }
 
             string automaticExcelPath;
@@ -566,12 +581,19 @@ namespace UNCAD.Features.Fill
                     + " 个块，上游端 " + upstreamColorBlocks + " 个块。");
             // D-042 交互（2026-11-03）：批量“做了什么/结果如何/文件在哪”在结果窗里看，
             // 命令行只留一行摘要——不再把逐个 BOQ 路径刷进终端。
-            var coverageSet = new HashSet<string>(coverageIncomplete,
-                UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
             List<BatchUpdateMachineRow> resultRows = machineStats.Values
                 .OrderBy(row => row.MachineId, StringComparer.OrdinalIgnoreCase).ToList();
             foreach (BatchUpdateMachineRow row in resultRows)
             {
+                if (coverageSet.Contains(row.MachineId)
+                    && forcedSet.Contains(row.MachineId))
+                {
+                    // D-048：用户确认强制生成的机台照常出了 BOQ，标注来源。
+                    row.BoqStatus = "已强制生成（缺回路）";
+                    row.BoqPath = UNCAD.Core.Submission.BoqWorkbookWriter.ComposeTargetPath(
+                        automaticExcelPath, row.MachineId);
+                    continue;
+                }
                 if (coverageSet.Contains(row.MachineId))
                 {
                     row.BoqStatus = "跳过（回路不全）";
@@ -589,8 +611,9 @@ namespace UNCAD.Features.Fill
                 + (migratedBridgeLabels > 0 ? "；旧桥架标注升级/角度修复 "
                     + migratedBridgeLabels + " 个" : "")
                 + "；明细见结果窗。"
-                + (coverageIncomplete.Count > 0
-                    ? " 有 " + coverageIncomplete.Count + " 台回路不全未生成 BOQ。" : ""));
+                + (coverageFailed.Count > 0
+                    ? " 有 " + coverageFailed.Count + " 台回路不全（其中 "
+                        + forcedSet.Count + " 台按确认强制生成了 BOQ）。" : ""));
             var resultWindow = new BatchUpdateResultWindow(resultRows, plans.Count,
                 tableRows, frameBlocks, attributeValues,
                 automaticExcel?.AddedCount ?? 0, automaticExcel?.ReplacedCount ?? 0,

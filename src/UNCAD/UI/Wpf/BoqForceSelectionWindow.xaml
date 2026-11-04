@@ -1,0 +1,68 @@
+<ui:FluentWindow x:Class="UNCAD.UI.BoqForceSelectionWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1U · 缺回路机台的 BOQ 处理"
+                 Width="860" Height="480" MinWidth="760" MinHeight="380"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1U · 缺回路机台的 BOQ 处理" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock x:Name="HeaderText" FontSize="20" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="默认不为缺回路的机台生成 BOQ（清单会缺未画回路的工程量）。勾选「强制生成」表示接受按图面已画回路出清单，缺的行不在里面；补画后可执行 U1S 重新生成完整清单。不勾选则本次照常更新图纸、只跳过这些机台的 BOQ。" />
+        </StackPanel>
+
+        <DataGrid x:Name="MachineGrid" Grid.Row="2" Margin="24,12,24,8"
+                  AutoGenerateColumns="False" IsReadOnly="False"
+                  CanUserAddRows="False" HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal" BorderThickness="0"
+                  RowHeight="34" FontSize="12"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="强制生成" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="{Binding Force, Mode=TwoWay,
+                                          UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="机台ID" Binding="{Binding MachineId}" Width="150" />
+                <DataGridTextColumn Header="已画 / 应有回路" Binding="{Binding CoverageText}" Width="130" />
+                <DataGridTextColumn Header="缺失回路" Binding="{Binding MissingText}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="图纸更新不受本窗影响；这里只决定缺回路机台的 BOQ 是否生成。" />
+            <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                       Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+            <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确定" MinWidth="110"
+                       IsDefault="True" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Checkmark24}" Click="OnConfirm" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

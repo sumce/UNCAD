@@ -170,11 +170,51 @@ namespace UNCAD.Tests
 
             string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs"));
-            Assert.Contains("CoverageIncompleteMachines", batch);
+            // D-048：批量改用带明细的评估版（缺回路明细进强制选择窗）。
+            Assert.Contains("EvaluateCircuitCoverage(ctx, workbook, CommandIds.FillUpdate",
+                batch);
             Assert.Contains("boqPlans", batch);
             Assert.Contains("不生成该机 BOQ", batch);
             // 旧的"整批取消"路径不得回流。
             Assert.DoesNotContain("本次批量更新已取消", batch);
+        }
+
+        [Fact]
+        public void U1U_ForceBoq_RequiresExplicitUserConfirmation()
+        {
+            // D-048（2026-11-04）：U1U 缺回路机台默认跳过 BOQ（D-034/D-044 不变），
+            // 但经 FillCoverageGate.OfferForceBoq 弹窗让用户逐台确认强制生成
+            // （仅含已画回路）。单框与批量共用同一实现，且都发生在 BOQ 准备之前。
+            string gate = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillCoverageGate.cs"));
+            Assert.Contains("new UNCAD.UI.BoqForceSelectionWindow(", gate);
+            Assert.Contains("仅含已画回路", gate);
+
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            int coverage = fill.IndexOf("boqBlockedByCoverage = coverageFailures.Count > 0",
+                StringComparison.Ordinal);
+            int offer = fill.IndexOf("FillCoverageGate.OfferForceBoq(",
+                StringComparison.Ordinal);
+            int prepare = fill.IndexOf("PrepareTargetPath(", StringComparison.Ordinal);
+            Assert.True(coverage >= 0 && offer > coverage,
+                "单框 U1U 必须在覆盖评估之后询问强制 BOQ");
+            Assert.True(prepare > offer, "BOQ 路径准备必须在强制确认之后");
+            Assert.Contains("boqForcedByUser", fill);
+            // 只对 U1U（updateMode）提供强制，U1F 边画边填不提供。
+            Assert.Contains("if (boqBlockedByCoverage && updateMode", fill);
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int batchOffer = batch.IndexOf("FillCoverageGate.OfferForceBoq(",
+                StringComparison.Ordinal);
+            int batchPrepare = batch.IndexOf("PrepareTargetPath(", StringComparison.Ordinal);
+            Assert.True(batchOffer >= 0, "批量 U1U 必须询问强制 BOQ");
+            Assert.True(batchPrepare > batchOffer,
+                "批量 BOQ 计划必须在强制确认之后确定");
+            Assert.Contains("已强制生成（回路不全，仅含已画回路）", batch);
+            // 结果窗必须区分"已强制生成"与"跳过"。
+            Assert.Contains("已强制生成（缺回路）", batch);
         }
 
         private static string Repo(params string[] parts)

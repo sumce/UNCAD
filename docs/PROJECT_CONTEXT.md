@@ -56,7 +56,9 @@ U1F/U1U/U1S/U1DWG output gate
   the selection (UNC_FILL_REQUIRE_ALL_CIRCUITS) -> U1S aborts with the missing
   circuit list; U1DWG (D-047) filters per machine — incomplete machines are
   skipped by default with a selection GUI to force-export them; U1U/U1F (D-034,
-  D-044) keep updating the selected frames and only skip that machine's BOQ
+  D-044) keep updating the selected frames and only skip that machine's BOQ,
+  and U1U adds a confirmation GUI (D-048) to force BOQ generation for
+  incomplete machines from the circuits actually drawn
   -> the drawing is refreshed either way
 
 U1L/U1LX

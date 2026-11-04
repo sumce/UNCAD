@@ -109,5 +109,43 @@ namespace UNCAD.Features.Fill
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
             => EvaluateCircuitCoverage(ctx, workbook, command, machineCircuits)
                 .Select(result => result.MachineId).ToList();
+
+        /// <summary>
+        /// D-048（2026-11-04）：为缺回路的机台弹“强制生成 BOQ”选择窗。默认全部
+        /// 不勾选 = 照旧跳过（只更新图纸）；用户勾选并确认的机台按已画回路强制
+        /// 生成 BOQ（缺的行不在清单里，补画后用 U1S 重出完整清单）。窗口取消
+        /// 等价于全部跳过。单框 U1U 与批量 U1U 共用这一个实现。
+        /// 返回用户确认强制生成的机台 ID 集合（规范化键；空 = 全部跳过）。
+        /// </summary>
+        internal static HashSet<string> OfferForceBoq(CadContext ctx, string command,
+            IReadOnlyList<CircuitCoverageResult> coverageFailed)
+        {
+            var forced = new HashSet<string>(IdentityTextNormalizer.Comparer);
+            if (coverageFailed == null || coverageFailed.Count == 0) return forced;
+            var forceWindow = new UNCAD.UI.BoqForceSelectionWindow(
+                coverageFailed.Select(result => new UNCAD.UI.BoqForceMachineChoice
+                {
+                    MachineId = result.MachineId,
+                    SelectedCircuitCount = result.Selected.Count,
+                    ExpectedCircuitCount = result.Expected.Count,
+                    MissingNames = result.Missing.ToList()
+                }).OrderBy(choice => choice.MachineId,
+                    StringComparer.OrdinalIgnoreCase).ToList());
+            Autodesk.AutoCAD.ApplicationServices.Application
+                .ShowModalWindow(forceWindow);
+            if (!forceWindow.Confirmed) return forced;
+            forced = new HashSet<string>(forceWindow.ForcedMachineIds,
+                IdentityTextNormalizer.Comparer);
+            foreach (CircuitCoverageResult result in coverageFailed)
+            {
+                if (forced.Contains(result.MachineId))
+                    Log.Info("[" + command + "] 机台 " + result.MachineId
+                        + " 回路不全：已按用户确认强制生成 BOQ（仅含已画回路）。");
+                else
+                    Log.Info("[" + command + "] 机台 " + result.MachineId
+                        + " 回路不全：本次只更新图纸、不生成该机 BOQ。");
+            }
+            return forced;
+        }
     }
 }

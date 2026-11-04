@@ -151,6 +151,19 @@ namespace UNCAD.Features.Fill
                         picked.MachineId, picked.CircuitName)
                 });
             bool boqBlockedByCoverage = coverageFailures.Count > 0;
+            bool boqForcedByUser = false;
+            if (boqBlockedByCoverage && updateMode
+                && FillCoverageGate.OfferForceBoq(ctx, CommandIds.FillUpdate,
+                    coverageFailures).Contains(picked.MachineId.Trim()))
+            {
+                // D-048：用户确认后为缺回路机台强制生成 BOQ（仅含已画回路）。
+                boqForcedByUser = true;
+                boqBlockedByCoverage = false;
+                ctx.Write("\n[" + CommandIds.FillUpdate + "] 机台 "
+                    + picked.MachineId + " 回路不全，BOQ 已按你的确认强制生成"
+                    + "（仅含已画回路）；补画后执行 " + CommandIds.Submit
+                    + " 重新生成完整清单。");
+            }
             if (boqBlockedByCoverage)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 机台 " + picked.MachineId + " 回路不全：本次照常填写图框数据、"
@@ -520,11 +533,17 @@ namespace UNCAD.Features.Fill
                     + "] 机台 " + picked.MachineId + " 回路不全，本次未生成 BOQ；"
                     + "全部回路画完后执行 " + CommandIds.Submit + " 生成清单。");
             else
+            {
+                if (boqForcedByUser)
+                    ctx.Write("\n[" + CommandIds.FillUpdate + "] 本 BOQ 为强制生成"
+                        + "（回路不全，仅含已画回路）；补画后执行 " + CommandIds.Submit
+                        + " 重新生成完整清单。");
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] BOQ 已自动输出：处理记录 " + automaticExcel.AddedCount
                     + " 条，覆盖文件 " + automaticExcel.ReplacedCount
                     + " 个，材料明细 " + automaticExcel.MaterialCount + " 项；文件 "
                     + automaticExcel.FilePath);
+            }
             if (cableReserve != null
                 && (cableReserve.PanelReserveMillimeters > 0d
                     || cableReserve.DeviceReserveMillimeters > 0d))

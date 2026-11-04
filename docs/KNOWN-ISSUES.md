@@ -20,7 +20,9 @@ deferred, or important for support diagnosis.
   when a machine's circuits are not all drawn (D-033). U1DWG (D-047) is
   per machine: incomplete machines are skipped by default and a selection
   window lets the user force-export them. Since D-044, U1F/U1U
-  keep updating the selected frames and only skip that machine's BOQ. Disable
+  keep updating the selected frames and only skip that machine's BOQ, and
+  since D-048 U1U shows a confirmation window where incomplete machines can be
+  force-given a partial BOQ (drawn circuits only). Disable
   `UNC_FILL_REQUIRE_ALL_CIRCUITS` in U1SET if a project really needs partial
   output everywhere.
 - A Base64 config share code never contains licence/account values, so a shared

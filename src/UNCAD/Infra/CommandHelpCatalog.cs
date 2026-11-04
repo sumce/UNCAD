@@ -46,7 +46,7 @@ namespace UNCAD.Infra
                 E(CommandIds.Tray400, "桥架 400", "U1Q4", "为选中曲线生成 400 mm 桥架平行标注", "正式命令；标识统一为桥架型号+总长度mm。"),
                 E(CommandIds.LegacyTray400, "桥架 400", "UNQ4", "调用 U1Q4 的桥架标注功能", "兼容旧命令名。"),
                 E(CommandIds.Fill, "清单生成", "U1F", "读取机台数据和图纸统计，生成 CAD 清单并同步 BOQ", "写入前执行字段、容量和清单预检。"),
-                E(CommandIds.FillUpdate, "清单更新", "U1U", "按当前图框和图纸统计更新已有清单", "多图框统一预检后使用一个 CAD 事务。"),
+                E(CommandIds.FillUpdate, "清单更新", "U1U", "按当前图框和图纸统计更新已有清单", "多图框统一预检后使用一个 CAD 事务。回路不全的机台默认不生成其 BOQ，可按提示逐台确认强制生成（仅含已画回路）。"),
                 E(CommandIds.Submit, "当前图框提交", "U1S", "只读当前图框清单并提交项目数量到 BOQ", "不修改 CAD；支持多个 frame_20260812/frame/xframe/xframe_v2 图框；BOQ 只写本地输出目录，不上传、不联网。"),
                 E(CommandIds.Conduit, "线管标注", "U1C", "为选中曲线生成线管平行标注", "使用 U1SET 中保存的默认管径；预选 Ruanguan/图框时同步写入软管型号和长度。"),
                 E(CommandIds.Conduit20, "20 mm 线管标注", "U1C20", "按固定清单 20 mm 型号生成线管平行标注", "固定生成 2000mm 占位长度；不改变 U1SET 默认管径。"),

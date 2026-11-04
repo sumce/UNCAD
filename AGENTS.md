@@ -52,7 +52,9 @@ when their version numbers or counts are stale.
   (D-047) is evaluated per machine: incomplete machines are skipped by
   default, complete machines always export, and a selection GUI lets the user
   force-export incomplete ones. U1F/U1U keep updating frames
-  on partial selections but skip that machine's BOQ (D-034, D-044). U1F/U1U
+  on partial selections but skip that machine's BOQ (D-034, D-044); U1U adds a
+  confirmation GUI (D-048) where the user can force BOQ generation for
+  incomplete machines from the circuits actually drawn. U1F/U1U
   also auto-absorb the legacy horizontal millimeter reserve marker when it is
   the sole candidate in the selection and delete the text (D-043,
   `UNC_FILL_DEVICE_RESERVE_AUTO`, default on; multiple candidates are never
