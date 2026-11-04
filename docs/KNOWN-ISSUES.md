@@ -16,8 +16,10 @@ deferred, or important for support diagnosis.
   customer can enter a new authorization code in the login dialog.
 - HTTP/HTTPS machine-workbook sources are download-only (D-041): they refresh
   only via explicit U1DATA/U1SET; drawing commands never touch the network.
-- The whole-machine circuit gate: U1S/U1DWG abort with the missing circuit list
-  when a machine's circuits are not all drawn (D-033). Since D-044, U1F/U1U
+- The whole-machine circuit gate: U1S aborts with the missing circuit list
+  when a machine's circuits are not all drawn (D-033). U1DWG (D-047) is
+  per machine: incomplete machines are skipped by default and a selection
+  window lets the user force-export them. Since D-044, U1F/U1U
   keep updating the selected frames and only skip that machine's BOQ. Disable
   `UNC_FILL_REQUIRE_ALL_CIRCUITS` in U1SET if a project really needs partial
   output everywhere.

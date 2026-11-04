@@ -57,7 +57,7 @@ namespace UNCAD.Infra
                 E(CommandIds.Settings, "配置中心", "U1SET", "集中设置绘图、统计、清单、输出、日志与操作记录参数", "保存前验证路径和数值范围；支持导出/导入 Base64 配置分享码（包含变更预览，只含可分享配置项）。"),
                 E(CommandIds.DataRefresh, "刷新机台数据", "U1DATA", "在后台刷新 U1SET 配置的机台工作簿（本地/UNC 文件或网络地址）", "支持本地/UNC 与 HTTP/HTTPS 地址；网络下载只在刷新时进行，其余命令不联网。刷新完成前各命令继续读取上一次成功的 SQLite 快照，失败不会替换旧数据。"),
                 E(CommandIds.DwgExportShort, "DWG 自动导出快捷命令", "U1D", "调用 U1DWG 导出选中的图框", "与 U1DWG 功能完全相同。"),
-                E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe/xframe_v2 图框", "同机台图框在独立 DWG 中横向排列；文件写到输出目录的机台文件夹（与 BOQ/PDF 同夹），不上传、不联网。"),
+                E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe/xframe_v2 图框", "同机台图框在独立 DWG 中横向排列；文件写到输出目录的机台文件夹（与 BOQ/PDF 同夹）。回路不全的机台默认跳过，可在选择窗勾选强制导出；不上传、不联网。"),
                 E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "选择窗里可选排列方案：按机台完整性（完整在前，默认）/按机台ID顺序/按上游编号（同上游一行），行内回路按机台 Excel 行序；直接回车使用原点；每行首框左侧生成行标签文字（机台 ID 或上游编号）；重复执行会再追加标签文字（设计行为）。"),
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路读取 U1DATA/U1SET 刷新后的 SQLite 机台快照，命令执行时不读取 Excel、不联网。"),
                 E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),

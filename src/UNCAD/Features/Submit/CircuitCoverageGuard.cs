@@ -32,6 +32,19 @@ namespace UNCAD.Features.Submit
             return FillFeature.EnsureCircuitCoverage(ctx, workbook, command, machineCircuits);
         }
 
+        /// <summary>
+        /// 评估版（D-047，U1DWG 用）：只返回回路不全的机台结果，不打印"中止"
+        /// 文案、不拦命令——调用方按机台取舍（缺回路默认跳过、选择窗可强制）。
+        /// U1S 继续走 Ensure 硬拦截。
+        /// </summary>
+        internal static List<CircuitCoverageResult> Evaluate(CadContext ctx, string command,
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+        {
+            FillWorkbookSnapshot workbook = TryLoadSnapshot(ctx, command);
+            return FillCoverageGate.EvaluateCircuitCoverage(ctx, workbook, command,
+                machineCircuits);
+        }
+
         /// <summary>只读上次成功刷新的 SQLite 快照；不可用时返回 null（跳过校验）。</summary>
         internal static FillWorkbookSnapshot TryLoadSnapshot(CadContext ctx, string command)
         {

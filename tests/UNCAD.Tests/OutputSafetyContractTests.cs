@@ -88,15 +88,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void U1Dwg_RequiresCompleteMachineCoverageBeforeWritingFiles()
+        public void U1Dwg_RespectsPerMachineCoverageWithForceGui()
         {
+            // D-047（2026-11-04）：U1DWG 不再"一台缺回路整条命令中止"（旧实现把
+            // 完整机台也扣住不出图）。改为按机台评估：缺回路默认跳过、完整机台
+            // 照常导出，选择窗可勾选强制导出；取消不出任何文件。U1S 仍是硬拦截。
             string dwg = File.ReadAllText(Repo("src", "UNCAD", "Features", "DwgExport",
                 "DwgExportFeature.cs"));
-            int coverage = dwg.IndexOf("CircuitCoverageGuard.Ensure(", StringComparison.Ordinal);
-            int export = dwg.IndexOf("DwgFrameExportService.Export(", StringComparison.Ordinal);
-            Assert.True(coverage >= 0, "U1DWG 必须做整机回路校验");
-            Assert.True(export > coverage, "整机回路校验必须在 DWG 写盘之前");
-            Assert.Contains("导出已中止", dwg);
+            int coverage = dwg.IndexOf("CircuitCoverageGuard.Evaluate(",
+                StringComparison.Ordinal);
+            int export = dwg.IndexOf("DwgFrameExportService.Export(",
+                StringComparison.Ordinal);
+            Assert.True(coverage >= 0, "U1DWG 必须做整机回路评估");
+            Assert.True(export > coverage, "按机台过滤必须发生在 DWG 写盘之前");
+            Assert.Contains("new UNCAD.UI.DwgExportSelectionWindow(", dwg);
+            Assert.Contains("frames.Where(frame => chosen.Contains(", dwg);
+            Assert.Contains("已取消，未生成文件", dwg);
+            // 旧的"整条命令硬中止"入口不得回流（Ensure 只属于 U1S）。
+            Assert.DoesNotContain("CircuitCoverageGuard.Ensure(", dwg);
         }
 
         [Fact]

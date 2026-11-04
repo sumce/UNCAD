@@ -12,14 +12,16 @@ namespace UNCAD.Features.Fill
 {
     /// <summary>
     /// 阶段3「整机回路校验」门禁（D-033/D-034，2.10.0）：一个机台必须把机台数据
-    /// 里的所有回路都框选进来才允许生成 BOQ/DWG。U1F/U1S/U1DWG 缺回路硬拦截；
-    /// U1U 缺回路不拦整条命令，只跳过该机的 BOQ。校验只读快照、不修改图纸。
+    /// 里的所有回路都框选进来才允许生成 BOQ/DWG。U1F/U1S 缺回路硬拦截；
+    /// U1U 缺回路不拦整条命令，只跳过该机的 BOQ（D-034/D-044）；U1DWG 用评估
+    /// 版按机台取舍，缺回路的默认跳过、选择窗可强制导出（D-047）。
+    /// 校验只读快照、不修改图纸。
     /// 从 FillFeature 拆出：单框 U1F/U1U、批量 U1U（CoverageIncompleteMachines）
     /// 与 CircuitCoverageGuard（U1S/U1DWG）必须共用同一套判定口径。
     /// </summary>
     internal static class FillCoverageGate
     {
-        /// <summary>硬拦截版（U1F/U1S/U1DWG 用）：缺回路时列出明细并返回 false。</summary>
+        /// <summary>硬拦截版（U1F/U1S 用）：缺回路时列出明细并返回 false。</summary>
         internal static bool EnsureCircuitCoverage(CadContext ctx,
             FillWorkbookSnapshot workbook, string command, string machineId,
             string circuitName)
@@ -29,7 +31,7 @@ namespace UNCAD.Features.Fill
                     new KeyValuePair<string, string>(machineId, circuitName)
                 });
 
-        /// <summary>硬拦截版（U1F/U1S/U1DWG 用）：缺回路时列出明细并返回 false。</summary>
+        /// <summary>硬拦截版（U1F/U1S 用）：缺回路时列出明细并返回 false。</summary>
         internal static bool EnsureCircuitCoverage(CadContext ctx,
             FillWorkbookSnapshot workbook, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)

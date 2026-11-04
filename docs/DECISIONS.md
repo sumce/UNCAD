@@ -656,3 +656,21 @@ rewrite an existing entry.
   The description column uses a 0.85 line-spacing factor for multi-line
   content. This applies to the generated BOQ data range, not frame migration
   or the read-only 3D preview sidebar.
+
+## D-047: U1DWG Per-Machine Coverage With Force-Export GUI (2026-11-04)
+
+- Status: accepted (user request; narrows D-033 for U1DWG)
+- Decision: U1DWG evaluates the whole-machine circuit gate per machine instead
+  of aborting the whole command. Machines whose circuits are all selected
+  always export; incomplete machines are skipped by default. When any
+  incomplete machine exists, a selection window lists every machine with its
+  coverage status and missing circuits, and lets the user tick incomplete
+  machines to force-export them as drawn. Cancel exports nothing. The filter
+  runs before any file write. U1S keeps the hard abort (D-033); the
+  `UNC_FILL_REQUIRE_ALL_CIRCUITS` off switch still disables the gate
+  everywhere.
+- Consequence: one incomplete machine no longer withholds a complete
+  machine's DWG. Force-exported machines produce drawings from the circuits
+  actually drawn; BOQ behaviour is unchanged (U1U already skips only the
+  incomplete machine's BOQ per D-034/D-044). The window is the only place a
+  partial machine can be exported; there is no silent fallback.

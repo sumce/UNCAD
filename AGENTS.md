@@ -47,9 +47,11 @@ when their version numbers or counts are stale.
   commands never touch the network, and startup auto-refresh stays removed.
 - Nothing is uploaded. Account/licence validation is the only network feature;
   do not reintroduce upload code without a new decision in `docs/DECISIONS.md`.
-- U1S/U1DWG generate BOQ/DWG only when every circuit of the selected
-  machine is in the selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on;
-  missing circuits are listed before any write). U1F/U1U keep updating frames
+- U1S aborts with the missing-circuit list when a machine's circuits are not
+  all in the selection (`UNC_FILL_REQUIRE_ALL_CIRCUITS`, default on). U1DWG
+  (D-047) is evaluated per machine: incomplete machines are skipped by
+  default, complete machines always export, and a selection GUI lets the user
+  force-export incomplete ones. U1F/U1U keep updating frames
   on partial selections but skip that machine's BOQ (D-034, D-044). U1F/U1U
   also auto-absorb the legacy horizontal millimeter reserve marker when it is
   the sole candidate in the selection and delete the text (D-043,

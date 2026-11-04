@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Core.Contracts;
+using UNCAD.Core.Fill;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 
@@ -55,16 +56,64 @@ namespace UNCAD.Features.DwgExport
                 frames = DwgFrameExportService.ReadFrames(ctx, transaction, regions.Groups);
                 transaction.Commit();
             }
-            // 2.10.0 整机回路校验：一个机台的所有回路都必须选中，否则不生成 DWG（写盘之前）。
-            if (!CircuitCoverageGuard.Ensure(ctx, CommandIds.DwgExport,
+            // D-047（2026-11-04）：U1DWG 按机台评估整机回路。旧实现（2.10.0 D-033）
+            // 是"任一机台缺回路 → 整条命令中止"，完整机台也被扣住不出图；现在
+            // 缺回路的机台默认跳过、完整机台照常导出，弹选择窗供用户勾选强制
+            // 导出。U1S 保持硬拦截不变；校验开关 UNC_FILL_REQUIRE_ALL_CIRCUITS
+            // 关闭时全部直接导出。过滤必须发生在写盘之前。
+            List<CircuitCoverageResult> coverageFailed = CircuitCoverageGuard.Evaluate(
+                ctx, CommandIds.DwgExport,
                 frames.Select(frame => new KeyValuePair<string, string>(
-                    frame.MachineId, frame.DeviceName))))
-                return;
+                    frame.MachineId, frame.DeviceName)));
+            if (coverageFailed.Count > 0)
+            {
+                HashSet<string> failedIds = new HashSet<string>(
+                    coverageFailed.Select(result => result.MachineId),
+                    StringComparer.OrdinalIgnoreCase);
+                var choices = frames
+                    .GroupBy(frame => (frame.MachineId ?? "").Trim(),
+                        StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new UNCAD.UI.DwgExportMachineChoice
+                    {
+                        MachineId = group.Key,
+                        Complete = !failedIds.Contains(group.Key),
+                        CircuitCount = group
+                            .Select(frame => (frame.DeviceName ?? "").Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                        MissingNames = coverageFailed
+                            .FirstOrDefault(result => string.Equals(result.MachineId,
+                                group.Key, StringComparison.OrdinalIgnoreCase))
+                            ?.Missing.ToList() ?? new List<string>(),
+                        Export = !failedIds.Contains(group.Key)
+                    })
+                    .OrderBy(choice => choice.MachineId,
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                var selectionWindow = new UNCAD.UI.DwgExportSelectionWindow(choices);
+                Autodesk.AutoCAD.ApplicationServices.Application
+                    .ShowModalWindow(selectionWindow);
+                if (!selectionWindow.Confirmed)
+                {
+                    ctx.Write("\n[U1DWG] 已取消，未生成文件。");
+                    return;
+                }
+                HashSet<string> chosen = new HashSet<string>(
+                    selectionWindow.ComputeSelectedMachineIds(),
+                    StringComparer.OrdinalIgnoreCase);
+                int beforeFrames = frames.Count;
+                frames = frames.Where(frame => chosen.Contains(
+                    (frame.MachineId ?? "").Trim())).ToList();
+                ctx.Write("\n[U1DWG] 跳过 " + choices.Count(choice => !choice.Export)
+                    + " 台缺回路机台"
+                    + (beforeFrames != frames.Count
+                        ? "（少导出 " + (beforeFrames - frames.Count) + " 个图框）" : "")
+                    + "；强制导出的机台按图面现有回路出图。");
+            }
 
             DwgExportResult result;
             try
             {
-                // 图纸名 → <root>\<图纸>\DWG\<机台>\<机台>.dwg；占用预检在写盘之前。
+                // 机台 → <root>\<机台>\<机台>.dwg（D-042）；占用预检在写盘之前。
                 result = DwgFrameExportService.Export(ctx, frames);
             }
             catch (System.Exception ex)

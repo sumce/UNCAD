@@ -1,0 +1,71 @@
+<ui:FluentWindow x:Class="UNCAD.UI.DwgExportSelectionWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="U1DWG · 导出机台选择"
+                 Width="860" Height="520" MinWidth="760" MinHeight="420"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="U1DWG · 导出机台选择" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+            <TextBlock x:Name="HeaderText" FontSize="20" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="默认只导出回路齐全的机台；勾选回路不全的机台表示强制导出（按图面现有回路出图，不强求补画）。取消则本次不生成任何文件。" />
+            <ui:InfoBar x:Name="WarningBar" Margin="0,8,0,0" IsOpen="False" IsClosable="False"
+                        Severity="Warning" />
+        </StackPanel>
+
+        <DataGrid x:Name="MachineGrid" Grid.Row="2" Margin="24,12,24,8"
+                  AutoGenerateColumns="False" IsReadOnly="False"
+                  CanUserAddRows="False" HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal" BorderThickness="0"
+                  RowHeight="34" FontSize="12"
+                  SelectionMode="Single" SelectionUnit="FullRow"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Header="导出" Width="52">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      IsChecked="{Binding Export, Mode=TwoWay,
+                                          UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="机台ID" Binding="{Binding MachineId}" Width="150" />
+                <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="90" />
+                <DataGridTextColumn Header="本次选中回路" Binding="{Binding CircuitCountText}" Width="110" />
+                <DataGridTextColumn Header="缺失回路" Binding="{Binding MissingText}" Width="*" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <Grid Grid.Row="3" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="“开始导出”按勾选写盘；跳过的机台不出文件，可补画回路后重跑。" />
+            <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="100"
+                       Margin="0,0,10,0" IsCancel="True" Click="OnCancel" />
+            <ui:Button x:Name="ExportButton" Grid.Column="2" Content="开始导出" MinWidth="110"
+                       IsDefault="True" Appearance="Primary"
+                       Icon="{ui:SymbolIcon Checkmark24}" Click="OnExport" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>
