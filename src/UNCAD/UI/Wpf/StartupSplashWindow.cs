@@ -25,6 +25,12 @@ namespace UNCAD.UI
     {
         internal const int AutoCloseMilliseconds = 5000;
         private const int WebInitializationTimeoutMilliseconds = 2500;
+        /// <summary>
+        /// 网页动画接管的最后期限（原生 Logo 于 1450ms 开始淡入）。就绪晚于它
+        /// 就保留原生动画播到底——中途换手会让网页动画从 0 帧重播，用户看到的
+        /// 就是"启动画面闪一下"（2026-11-04 用户报告）。
+        /// </summary>
+        internal const int WebTakeoverDeadlineMilliseconds = 1200;
         private const string HtmlResourceName = "UNCAD.Assets.StartupSplash.html";
 
         private readonly DispatcherTimer _timer =
@@ -206,9 +212,24 @@ namespace UNCAD.UI
         private void StartWebAnimation()
         {
             if (_closed || _webStartupAbandoned || _webView == null) return;
+            int elapsed = (int)_clock.ElapsedMilliseconds;
+            if (elapsed >= WebTakeoverDeadlineMilliseconds)
+            {
+                // 换手过晚：原生动画已播到粒子汇聚/Logo 淡入阶段，此刻切成
+                // 网页动画会从 0 帧重播一遍——这就是"启动画面闪一下"。保留
+                // 原生动画到底（与超时回退同语义），不再接管。
+                _webStartupPending = false;
+                _webStartupAbandoned = true;
+                Log.Info("WebView2 启动动画就绪过晚（" + elapsed
+                    + " ms ≥ " + WebTakeoverDeadlineMilliseconds
+                    + " ms），保留原生动画避免切换闪烁");
+                return;
+            }
             _webStartupPending = false;
             _webAnimationRunning = true;
             _webView.Visibility = Visibility.Visible;
+            // 换手完成：停掉底层原生粒子绘制，避免边缘露出与重复重绘。
+            _canvas.Visibility = Visibility.Collapsed;
             _webView.Focus();
         }
 

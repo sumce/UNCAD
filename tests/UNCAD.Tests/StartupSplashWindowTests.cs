@@ -91,6 +91,20 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("window.close", html);
         }
 
+        [Fact]
+        public void WebTakeover_HasDeadlineBeforeNativeLogoFadeIn()
+        {
+            // 2026-11-04 用户报告"启动画面有时候闪一下"：WebView2 冷启动慢时，
+            // 换手发生在原生 Logo 淡入之后，网页动画从 0 帧重播 = 可见切换闪烁。
+            // 修复：接管期限必须早于原生 Logo 淡入起点（1450ms），晚到就保留
+            // 原生动画到底（StartupSplashWindow.StartWebAnimation 的换手守卫）。
+            Assert.True(StartupSplashWindow.WebTakeoverDeadlineMilliseconds > 0);
+            Assert.True(StartupSplashWindow.WebTakeoverDeadlineMilliseconds < 1450,
+                "接管期限必须早于原生 Logo 淡入（1450ms），否则换手就是可见闪烁");
+            Assert.True(StartupSplashWindow.WebTakeoverDeadlineMilliseconds
+                < StartupSplashWindow.AutoCloseMilliseconds);
+        }
+
         private static List<T> FindAll<T>(DependencyObject root) where T : class
         {
             var result = new List<T>();
