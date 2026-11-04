@@ -303,7 +303,10 @@ namespace UNCAD.Features.Fill
             // U1U 强化：写表前展示上次更新时间/用户与字段级变化对比。
             // 必须放在清单确认窗之后、用确认后的最终行构建——用户在确认窗里
             // 改设备内预留或电缆米数之后，先弹的对比就成了假数据。
-            if (updateMode && !ShowUpdateCompare(ctx, selection, picked, tableRows)) return;
+            // 2026-11-04：传入 cableReserve 驱动电缆长度卡片（实测/盘内箱内/
+            // 设备内/业主分解）；内容无变化时不弹窗，直接更新。
+            if (updateMode && !ShowUpdateCompare(ctx, selection, picked, tableRows,
+                cableReserve)) return;
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
@@ -550,7 +553,8 @@ namespace UNCAD.Features.Fill
         /// 时间/用户来自 frameinfo_json,旧图回退到制图信息表日期。
         /// </summary>
         private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
-            MachineRow picked, List<TableFillRow> plannedRows)
+            MachineRow picked, List<TableFillRow> plannedRows,
+            CableReserveInfo cableReserve)
         {
             try
             {
@@ -562,9 +566,15 @@ namespace UNCAD.Features.Fill
                     CadSubmissionReader.Read(ctx, selection?.TableIds));
                 FillUpdateCompareItem item = FillReviewStage.BuildCompareItem(picked,
                     plannedRows, existing, previous, "",
-                    FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection));
-                // 没有任何更新信息的图框不弹对比,直接进入审阅。
-                if (!item.HasHistory) return true;
+                    FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection),
+                    cableReserve);
+                // 2026-11-04 用户要求：内容没有变化就不弹对比窗，不打扰预览。
+                if (!item.HasChanges)
+                {
+                    ctx.Write("\n[" + CommandIds.FillUpdate
+                        + "] 本次更新内容与上次一致（清单无变化），直接更新。");
+                    return true;
+                }
                 // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
                 var window = new FillUpdateCompareWindow(
                     new List<FillUpdateCompareItem> { item });
@@ -695,9 +705,9 @@ namespace UNCAD.Features.Fill
         internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
             List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
             FrameInfoJsonRecord previous, string selectedHandle,
-            string legacyLastUpdated = "")
+            string legacyLastUpdated = "", CableReserveInfo reserve = null)
             => FillReviewStage.BuildCompareItem(machine, plannedRows, existingRows,
-                previous, selectedHandle, legacyLastUpdated);
+                previous, selectedHandle, legacyLastUpdated, reserve);
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
             FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,

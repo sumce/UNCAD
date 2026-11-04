@@ -106,7 +106,7 @@ namespace UNCAD.Features.Fill
         internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
             List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
             FrameInfoJsonRecord previous, string selectedHandle,
-            string legacyLastUpdated = "")
+            string legacyLastUpdated = "", CableReserveInfo reserve = null)
         {
             bool hasHistory = previous != null
                 && (!string.IsNullOrWhiteSpace(previous.LastModifiedUtc)
@@ -138,8 +138,56 @@ namespace UNCAD.Features.Fill
                 QuantityChangedCount = rowDiffs.Count(diff =>
                     diff.Status == FillRowDiff.StatusQuantity),
                 PreviousRows = sides.Item1,
-                PlannedRows = sides.Item2
+                PlannedRows = sides.Item2,
+                CableCard = BuildCableCard(previous, reserve)
             };
+        }
+
+        /// <summary>
+        /// 电缆长度卡片（2026-11-04 用户要求）：本次构成 = 实测 + 盘内（箱内）
+        /// 预留 + 设备内预留 + 业主预留 = 总长，附上次总长与差值。reserve 为
+        /// null（无实测长度等）时返回 null，卡片隐藏。上次总长来自
+        /// frameinfo_json 的 TotalCableM；复制框记录已被句柄校验拒掉，不会
+        /// 显示别的图框的旧总长。
+        /// </summary>
+        internal static CableLengthCard BuildCableCard(FrameInfoJsonRecord previous,
+            CableReserveInfo reserve)
+        {
+            if (reserve == null) return null;
+            var card = new CableLengthCard
+            {
+                NewTotal = TextFormatter.FormatNum(reserve.TotalMeters) + " m"
+            };
+            string previousTotal = ((previous?.TotalCableM) ?? "").Trim()
+                .TrimEnd('m', 'M').Trim();
+            if (previousTotal.Length > 0 && double.TryParse(previousTotal,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double previousMeters))
+            {
+                card.PreviousTotal = TextFormatter.FormatNum(previousMeters) + " m";
+                double delta = reserve.TotalMeters - previousMeters;
+                card.DeltaChanged = Math.Abs(delta) >= 0.05;
+                card.Delta = card.DeltaChanged
+                    ? (delta > 0 ? "+" : "−")
+                        + TextFormatter.FormatNum(Math.Abs(delta)) + " m"
+                    : "无变化";
+            }
+            string panelLabel = string.IsNullOrWhiteSpace(reserve.PanelReserveLabel)
+                ? "盘内/箱内" : reserve.PanelReserveLabel;
+            card.Components.Add(new CableComponentRow("实测",
+                TextFormatter.FormatNum(reserve.MeasuredMeters) + " m", false));
+            card.Components.Add(new CableComponentRow(panelLabel + "预留",
+                "+" + TextFormatter.FormatNum(reserve.PanelReserveMillimeters / 1000d)
+                    + " m", false));
+            card.Components.Add(new CableComponentRow("设备内预留",
+                "+" + TextFormatter.FormatNum(reserve.DeviceReserveMillimeters / 1000d)
+                    + " m", false));
+            card.Components.Add(new CableComponentRow("业主预留",
+                "+" + TextFormatter.FormatNum(reserve.OwnerReserveMillimeters / 1000d)
+                    + " m", false));
+            card.Components.Add(new CableComponentRow("总长", card.NewTotal, true));
+            return card;
         }
     }
 }

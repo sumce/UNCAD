@@ -292,15 +292,16 @@ namespace UNCAD.Features.Fill
             }
 
             // U1U 强化:批量确认前展示每框的上次更新时间/用户与清单并排对比。
-            // 没有任何更新信息的图框不进入对比窗;全部无记录时直接跳过弹窗。
+            // 2026-11-04:门控改 HasChanges——内容没有变化的图框不进对比窗
+            // (不再按 HasHistory 打扰);电缆长度卡片数据取 plan.Reserve。
             var compareItems = plans
                 .Select(plan => FillFeature.BuildCompareItem(
                     plan.Machine, plan.Rows, plan.ExistingRows, plan.PreviousRecord,
-                    plan.Region.Handle, plan.LegacyLastUpdated))
-                .Where(item => item.HasHistory)
+                    plan.Region.Handle, plan.LegacyLastUpdated, plan.Reserve))
+                .Where(item => item.HasChanges)
                 .ToList();
             if (compareItems.Count == 0)
-                ctx.Write("\n[U1U] 所选图框均无上次更新记录，跳过对比。");
+                ctx.Write("\n[U1U] 所选图框内容均无变化，跳过对比，直接更新。");
             else
             {
                 // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。

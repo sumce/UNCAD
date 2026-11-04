@@ -68,9 +68,10 @@
                          BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" />
             </Grid>
 
-            <!-- 右侧：标题 + 更新信息 + 并排清单 -->
+            <!-- 右侧：标题 + 更新信息 + 电缆卡片 + 并排清单 -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -82,7 +83,28 @@
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <TextBlock x:Name="SummaryText" Grid.Row="2" Margin="0,4,0,8" FontSize="12"
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                <Grid Grid.Row="3">
+                <!-- 电缆长度卡片（2026-11-04）：本次构成 = 实测 + 盘内（箱内）
+                     预留 + 设备内预留 + 业主预留 = 总长，附上次总长与差值。 -->
+                <Border x:Name="CableCardPanel" Grid.Row="3" Margin="0,0,0,8"
+                        Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1" Visibility="Collapsed">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="电缆长度" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="CableDeltaText" Margin="10,0,0,0" FontSize="12"
+                                       FontWeight="SemiBold" />
+                        </StackPanel>
+                        <TextBlock x:Name="CableTotalText" Margin="0,3,0,0" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock x:Name="CableComponentsText" Margin="0,3,0,0" FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Border>
+                <Grid Grid.Row="4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />

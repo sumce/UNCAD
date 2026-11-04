@@ -64,7 +64,7 @@ namespace UNCAD.Tests
                 "对比窗必须在米数覆盖之后构建");
             Assert.True(compareCall >= 0 && compareCall < write,
                 "对比窗必须在写表之前");
-            Assert.Contains("ShowUpdateCompare(ctx, selection, picked, tableRows)",
+            Assert.Contains("ShowUpdateCompare(ctx, selection, picked, tableRows,",
                 source);
         }
 
