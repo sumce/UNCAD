@@ -30,13 +30,16 @@ namespace UNCAD.Tests
             Assert.Contains("PreviousRecord = previousRecord", batch);
             Assert.Contains("XFrameMigrationService.Migrate(", batch);
 
-            // 单框：U1F/U1U 共用同一处读取，也必须早于迁移。
-            int fillRead = fill.IndexOf("FrameInfoJsonBlockWriter.ReadSources(selection)",
+            // 单框：读取在 FillReserveStage（2026-11-05 前置到统计之前，自然早于
+            // 写事务里的迁移），编排类先跑预留阶段再进写事务。
+            int fillRead = fill.IndexOf("FillReserveStage.Resolve(ctx",
                 System.StringComparison.Ordinal);
             int fillMigrate = fill.IndexOf("XFrameMigrationService.Migrate(",
                 System.StringComparison.Ordinal);
             Assert.True(fillRead >= 0 && fillMigrate > fillRead,
                 "单框 U1F/U1U 必须在迁移前读取旧内嵌 frameinfo_json");
+            Assert.Contains("FrameInfoJsonBlockWriter.ReadSources(selection)",
+                Source("src", "UNCAD", "Features", "Fill", "FillReserveStage.cs"));
         }
 
         [Fact]

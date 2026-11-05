@@ -42,10 +42,12 @@ namespace UNCAD.Tests
         {
             // 源码契约：批量与单框两条 U1U 路径都必须先尝试 CABLE_INFO 恢复，
             // 再决定是否询问/预填设备内预留。
+            // 2026-11-05：单框的恢复接线在 FillReserveStage（预留恢复阶段，
+            // 先于统计执行）。
             string batch = System.IO.File.ReadAllText(RepoFile(
                 "src", "UNCAD", "Features", "Fill", "BatchFillUpdateCoordinator.cs"));
             string single = System.IO.File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Fill", "FillFeature.cs"));
+                "src", "UNCAD", "Features", "Fill", "FillReserveStage.cs"));
 
             Assert.Contains("TryParseDeviceReserveMillimeters", batch);
             Assert.Contains("TryParseDeviceReserveMillimeters", single);
@@ -58,11 +60,15 @@ namespace UNCAD.Tests
         public void BothFillPaths_AbsorbLegacyHorizontalMarkers()
         {
             // D-043（2026-11-03）：单框与批量 U1U 都接横排毫米标自动识别。
+            // 2026-11-05：单框的识别/决策在 FillReserveStage（先于统计，
+            // 吸收文本不计入米数），删除仍在 FillFeature 写事务。
             string single = File.ReadAllText(RepoFile("src", "UNCAD", "Features", "Fill",
-                "FillFeature.cs"));
+                "FillReserveStage.cs"));
             Assert.Contains("DeviceReserveMarkerReader.CollectInSelection(", single);
             Assert.Contains("DeviceReserveMarker.Decide(", single);
-            Assert.Contains("DeviceReserveMarkerReader.EraseAbsorbed(", single);
+            string fillFeature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "FillFeature.cs"));
+            Assert.Contains("DeviceReserveMarkerReader.EraseAbsorbed(", fillFeature);
 
             string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs"));

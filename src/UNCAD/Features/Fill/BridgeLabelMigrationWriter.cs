@@ -64,6 +64,11 @@ namespace UNCAD.Features.Fill
                 || !ParallelAnnotationMetadata.TryReadCurveRotation(transaction, text,
                     "U1Q", text.Location, out double rotation)
                 || AngleDifference(text.Rotation, rotation) <= 1e-6) return false;
+            // 2026-11-05：拐角防误掰——标注角度只要与绑定曲线任意一段的阅读角
+            // 一致，说明它本来就按某一段写的；最近点落在另一段导致读出的
+            // "修复角"不同时，绝不能动（用户报告 U1F 改变桥架标注角度）。
+            if (ParallelAnnotationMetadata.MatchesAnySegmentTangent(transaction,
+                    text, "U1Q", text.Rotation)) return false;
             text.UpgradeOpen();
             text.Rotation = rotation;
             return true;

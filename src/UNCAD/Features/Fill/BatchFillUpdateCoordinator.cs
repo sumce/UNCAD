@@ -676,23 +676,13 @@ namespace UNCAD.Features.Fill
             string markerNote = null;
             List<ObjectId> plan_DeviceReserveEraseIds = new List<ObjectId>();
 
-            SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
-                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
-                statisticsSettings);
-            CableStatResult statistics = summation.Statistics;
-            if (statistics.CableState == MeasurementState.Unknown
-                || statistics.BridgeState == MeasurementState.Unknown
-                || statistics.ConduitState == MeasurementState.Unknown)
-            {
-                // 批量结果窗按机台展示；命令行只在日志里保留逐帧明细。
-                notes.Add("存在未启用或不完整的统计类别，仅这些类别保留旧值。");
-                Log.Info("[U1U] " + prefix + "统计类别不完整，保留旧值。");
-            }
-
             // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
             // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
             // 2026-11-04：带句柄校验——复制图框的源框 JSON（预留/替代型号/历史）
             // 不继承，备注进结果窗告知用户。
+            // 2026-11-05：json 读取与 D-043 标记决策提前到统计之前——吸收的横排
+            // 毫米标（如 "3000mm"）同时命中电缆长度判据（^数字0mm$），不排除会被
+            // 米数统计双算（统计一次、设备内预留又一次）。吸收的文本从统计排除。
             FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
                 FrameInfoJsonBlockWriter.ReadSources(selection),
                 FrameInfoJsonBlockWriter.OwnFrameHandle(readTransaction,
@@ -704,32 +694,6 @@ namespace UNCAD.Features.Fill
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
             // 写回记录，后续不重复恢复并随 JSON 持久化。
-            // D-043：老版横排毫米标自动识别（U1SET 可关）。恰好一处→吸收并删除
-            // 标注；多处→不乱取，备注进结果窗交人工确认。
-            DeviceReserveMarkerReader.Result reserveMarkers =
-                DeviceReserveMarkerReader.Collect(readTransaction,
-                    selection.TextIds);
-            if (reserveMarkers.Hits.Count == 1)
-            {
-                double? decided = DeviceReserveMarker.Decide(
-                    options.DeviceReserveAutoDetect, reserveMarkers.Hits,
-                    FillFeature.ParseJsonReserve(previousRecord), out List<int> absorbed);
-                if (absorbed.Count > 0)
-                {
-                    previousRecord = previousRecord ?? new FrameInfoJsonRecord();
-                    previousRecord.DeviceReserveMm =
-                        UNCAD.Core.Text.TextFormatter.FormatNum(decided.Value);
-                    plan_DeviceReserveEraseIds = reserveMarkers.EntityIds;
-                    markerNote = "设备内预留自动识别 " + reserveMarkers.Hits[0].Text
-                        + " mm（已删除图上标注）";
-                }
-            }
-            else if (reserveMarkers.Hits.Count > 1)
-            {
-                markerNote = "发现 " + reserveMarkers.Hits.Count + " 处横排毫米标（"
-                    + string.Join("、", reserveMarkers.Hits.ConvertAll(hit => hit.Text))
-                    + "），未自动吸收；请人工确认";
-            }
             if (previousRecord == null
                 || string.IsNullOrWhiteSpace(previousRecord.DeviceReserveMm))
             {
@@ -742,6 +706,47 @@ namespace UNCAD.Features.Fill
                     previousRecord.DeviceReserveMm =
                         UNCAD.Core.Text.TextFormatter.FormatNum(recovered);
                 }
+            }
+            // D-043：老版横排毫米标自动识别（U1SET 可关）。恰好一处→吸收并删除
+            // 标注；多处→不乱取，备注进结果窗交人工确认。
+            DeviceReserveMarkerReader.Result reserveMarkers =
+                DeviceReserveMarkerReader.Collect(readTransaction,
+                    selection.TextIds);
+            var markerExcludedIds = new List<ObjectId>();
+            if (reserveMarkers.Hits.Count == 1)
+            {
+                double? decided = DeviceReserveMarker.Decide(
+                    options.DeviceReserveAutoDetect, reserveMarkers.Hits,
+                    FillFeature.ParseJsonReserve(previousRecord), out List<int> absorbed);
+                if (absorbed.Count > 0)
+                {
+                    previousRecord = previousRecord ?? new FrameInfoJsonRecord();
+                    previousRecord.DeviceReserveMm =
+                        UNCAD.Core.Text.TextFormatter.FormatNum(decided.Value);
+                    plan_DeviceReserveEraseIds = reserveMarkers.EntityIds;
+                    markerExcludedIds.AddRange(reserveMarkers.EntityIds);
+                    markerNote = "设备内预留自动识别 " + reserveMarkers.Hits[0].Text
+                        + " mm（已删除图上标注，不计入米数统计）";
+                }
+            }
+            else if (reserveMarkers.Hits.Count > 1)
+            {
+                markerNote = "发现 " + reserveMarkers.Hits.Count + " 处横排毫米标（"
+                    + string.Join("、", reserveMarkers.Hits.ConvertAll(hit => hit.Text))
+                    + "），未自动吸收；请人工确认";
+            }
+
+            SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
+                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
+                statisticsSettings, markerExcludedIds);
+            CableStatResult statistics = summation.Statistics;
+            if (statistics.CableState == MeasurementState.Unknown
+                || statistics.BridgeState == MeasurementState.Unknown
+                || statistics.ConduitState == MeasurementState.Unknown)
+            {
+                // 批量结果窗按机台展示；命令行只在日志里保留逐帧明细。
+                notes.Add("存在未启用或不完整的统计类别，仅这些类别保留旧值。");
+                Log.Info("[U1U] " + prefix + "统计类别不完整，保留旧值。");
             }
             CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
                 machine, statistics, options.CableOwnerReserveMillimeters,

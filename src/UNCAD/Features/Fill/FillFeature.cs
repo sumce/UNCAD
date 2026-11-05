@@ -89,9 +89,16 @@ namespace UNCAD.Features.Fill
             }
 
             // 阶段2：冻结配置并按实际标注求和，后续预览和写入复用同一结果。
+            // 2026-11-05：上一轮预留恢复与 D-043 标记决策先于统计执行——吸收的
+            // 横排毫米标（如 "3000mm"）同时命中电缆长度判据（^数字0mm$），不从
+            // 统计排除就会双算（统计一次、设备内预留又一次，总长虚高一份）。
             FillRuntimeOptions options = FillSettings.Current();
+            FrameInfoJsonRecord frameInfoPrevious = FillReserveStage.Resolve(ctx,
+                selection, options, updateMode,
+                out List<ObjectId> deviceReserveEraseIds,
+                out List<ObjectId> markerExcludedIds);
             SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
-                options, updateMode);
+                options, updateMode, markerExcludedIds);
             CableStatResult statistics = summation.Statistics;
 
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
@@ -173,70 +180,6 @@ namespace UNCAD.Features.Fill
 
             string automaticExcelPath = null;
             IReadOnlyList<BoqWorkbookRevision> automaticExcelRevisions = null;
-            // 迁移会从旧图框块参照上移除内嵌 FRAMEINFO_JSON，因此必须在迁移前读出
-            // 独立 JSON 块 + 图框块上的记录；U1F 也要读，否则旧图框首次 U1F 会丢身份/历史。
-            // 2026-11-04：读取带本图框句柄校验——复制图框带来的源框 JSON（替代型号/
-            // 设备内预留/更新历史）一律不继承；本次保存后将盖成本图框自己的句柄。
-            FrameInfoJsonRecord frameInfoPrevious;
-            string foreignJsonNote;
-            using (Transaction previousTransaction = ctx.Db.TransactionManager.StartTransaction())
-            {
-                frameInfoPrevious = FrameInfoJsonBlockWriter.Read(previousTransaction,
-                    FrameInfoJsonBlockWriter.ReadSources(selection),
-                    FrameInfoJsonBlockWriter.OwnFrameHandle(previousTransaction,
-                        selection.FrameBlockIds),
-                    out foreignJsonNote);
-                previousTransaction.Commit();
-            }
-            if (foreignJsonNote.Length > 0)
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 检测到复制图框遗留的其他图框 JSON 记录，已忽略：不继承其"
-                    + "设备内预留/电缆替代型号/更新历史；本次保存后将写入本图框自己的记录。");
-            // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
-            // CABLE_INFO 文本里已有的「数值（设备内）」——清单确认窗直接预填，
-            // 用户仍可改；恢复值写回记录并随 JSON 持久化。
-            if (frameInfoPrevious == null
-                || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm))
-            {
-                string existingCableInfo = CadBlockAttributeWriter.ReadTagged(ctx,
-                    selection.FrameBlockIds, UNCAD.Core.Fill.FrameBlockFiller.TagCable);
-                if (UNCAD.Core.Fill.CableReserveReview.TryParseDeviceReserveMillimeters(
-                        existingCableInfo, out double recoveredDeviceReserve))
-                {
-                    frameInfoPrevious = frameInfoPrevious ?? new FrameInfoJsonRecord();
-                    frameInfoPrevious.DeviceReserveMm =
-                        UNCAD.Core.Text.TextFormatter.FormatNum(recoveredDeviceReserve);
-                }
-            }
-            // D-043：识别老版设备内预留标记——现场在设备旁横排手写的毫米数文字
-            // （本次框选范围内，水平、纯数字±mm）。恰好一处→吸收为设备内预留并
-            // 在写事务里删除该标注；多处→不乱取，提示人工确认。
-            List<ObjectId> deviceReserveEraseIds = new List<ObjectId>();
-            DeviceReserveMarkerReader.Result reserveMarkers =
-                DeviceReserveMarkerReader.CollectInSelection(ctx, selection.TextIds);
-            if (reserveMarkers.Hits.Count == 1)
-            {
-                DeviceReserveMarkerHit marker = reserveMarkers.Hits[0];
-                double? decided = DeviceReserveMarker.Decide(
-                    options.DeviceReserveAutoDetect, reserveMarkers.Hits,
-                    ParseJsonReserve(frameInfoPrevious), out List<int> absorbed);
-                if (absorbed.Count > 0)
-                {
-                    frameInfoPrevious = frameInfoPrevious ?? new FrameInfoJsonRecord();
-                    frameInfoPrevious.DeviceReserveMm =
-                        UNCAD.Core.Text.TextFormatter.FormatNum(decided.Value);
-                    deviceReserveEraseIds = reserveMarkers.EntityIds;
-                    ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                        + "] 已识别设备内预留标记 " + marker.Text + " mm，将删除图上标注并计入预留。");
-                }
-            }
-            else if (reserveMarkers.Hits.Count > 1)
-            {
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 发现 " + reserveMarkers.Hits.Count + " 处横排毫米标（"
-                    + string.Join("、", reserveMarkers.Hits.ConvertAll(hit => hit.Text))
-                    + "），无法确认哪处是设备内预留，未自动吸收；请人工确认或删掉多余标注。");
-            }
             // U1F（新建）与 U1U（更新）共用同一套电缆预留：盘内预留按上游类型，
             // 设备内预留从 frameinfo_json 复用；没有记录时在清单确认窗里填写。
             CableReserveInfo cableReserve = CableReserveReview.ResolveCableReserve(

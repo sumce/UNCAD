@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
@@ -12,12 +14,16 @@ namespace UNCAD.Features.Fill
     /// </summary>
     internal static class FillStatisticsStage
     {
-        /// <summary>按选集统计文字求和；updateMode 时同步打印测量三态。</summary>
+        /// <summary>按选集统计文字求和；updateMode 时同步打印测量三态。
+        /// excludeTextIds：不参与求和的文字（2026-11-05：被 D-043 吸收的设备
+        /// 内预留标记——同一笔毫米数不能既算实测长度又算预留）。</summary>
         internal static SummationOutput Execute(CadContext ctx, FillSelection selection,
-            FillRuntimeOptions options, bool updateMode)
+            FillRuntimeOptions options, bool updateMode,
+            IReadOnlyCollection<ObjectId> excludeTextIds = null)
         {
             SummationOutput summation = FillStatisticsModule.Execute(ctx,
-                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete);
+                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
+                excludeTextIds);
             if (updateMode) WriteMeasurementState(ctx, summation.Statistics);
             return summation;
         }

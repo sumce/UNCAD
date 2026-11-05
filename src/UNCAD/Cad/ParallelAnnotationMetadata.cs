@@ -178,6 +178,83 @@ namespace UNCAD.Cad
             return best != null && TryCurveRotation(best, anchor, out rotation);
         }
 
+        /// <summary>
+        /// 标注当前角度是否与绑定曲线上任意一段的阅读角一致（2026-11-05）：
+        /// 多段桥架的拐角附近，最近点可能落在另一段上——TryReadCurveRotation
+        /// 因此读出另一段的角度，把本来写对了的标注掰歪（用户报告 U1F 改变
+        /// 桥架标注多行文本角度）。标注角度只要匹配任意一段，就说明它本来就是
+        /// 按某一段写的，不需要修复。
+        /// </summary>
+        public static bool MatchesAnySegmentTangent(Transaction transaction,
+            Entity annotation, string expectedKind, double currentRotation)
+        {
+            if (transaction == null || annotation == null
+                || !TryRead(annotation, out string kind, out string sourceHandle)
+                || !string.Equals(kind, expectedKind,
+                    StringComparison.OrdinalIgnoreCase)) return false;
+
+            Curve source = null;
+            if (long.TryParse(sourceHandle, NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out long raw))
+            {
+                try
+                {
+                    ObjectId sourceId = annotation.Database.GetObjectId(false,
+                        new Handle(raw), 0);
+                    source = transaction.GetObject(sourceId, OpenMode.ForRead, true)
+                        as Curve;
+                }
+                catch { }
+            }
+            if (source == null) return false;
+
+            const double tolerance = 1e-4;
+            if (source is Polyline polyline)
+            {
+                for (int index = 0; index < polyline.NumberOfVertices; index++)
+                {
+                    if (polyline.GetSegmentType(index) != SegmentType.Line)
+                        continue;
+                    LineSegment3d segment = polyline.GetLineSegmentAt(index);
+                    if (segment == null) continue;
+                    double angle = GeoMath.ReadableAngle(segment.StartPoint,
+                        segment.EndPoint);
+                    if (Math.Abs(NormalizeAngleDifference(angle - currentRotation))
+                        <= tolerance) return true;
+                }
+                return false;
+            }
+
+            // 通用曲线按参数采样（弧段方向连续变化，取离散样本比对）。
+            try
+            {
+                double start = source.StartParam;
+                double end = source.EndParam;
+                if (end <= start) return false;
+                const int samples = 32;
+                for (int index = 0; index <= samples; index++)
+                {
+                    double parameter = start + (end - start) * index / samples;
+                    Point3d point = source.GetPointAtParameter(parameter);
+                    Vector3d tangent = source.GetFirstDerivative(parameter);
+                    double angle = GeoMath.ReadableAngle(point, point + tangent);
+                    if (Math.Abs(NormalizeAngleDifference(angle - currentRotation))
+                        <= tolerance) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>差值归一到 (-π, π]。</summary>
+        private static double NormalizeAngleDifference(double difference)
+        {
+            difference %= Math.PI * 2.0;
+            if (difference > Math.PI) difference -= Math.PI * 2.0;
+            if (difference < -Math.PI) difference += Math.PI * 2.0;
+            return difference;
+        }
+
         private static bool TryCurveRotation(Curve curve, Point3d anchor,
             out double rotation)
         {
