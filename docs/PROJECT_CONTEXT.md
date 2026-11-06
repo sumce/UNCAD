@@ -120,7 +120,10 @@ XLAYOUT/XSTS
 - U1F/U1U cable total = measured + panel/box reserve (I-Line 3400 盘内 /
   socket panel 1000 盘内 / busbar box 500 箱内) + device reserve + owner reserve
   (3000 default, U1SET editable). Device reserve is entered in the review GUI,
-  written to `frameinfo_json`, and prefilled later. CABLE_INFO uses
+  written to `frameinfo_json`, and prefilled later. Copied frames do not
+  inherit the source machine's device reserve: the copied FRAMEINFO record is
+  rejected by frame handle, and the copied CABLE_INFO text is then also
+  excluded from reserve recovery (2026-11-06). CABLE_INFO uses
   millimetres only and writes every detail as value（label）, ending with =totalmm.
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is

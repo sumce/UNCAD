@@ -120,6 +120,30 @@ namespace UNCAD.Tests
             Assert.Contains("ReadableAngle(segment.StartPoint,", metadata);
         }
 
+        [Fact]
+        public void CopiedFrame_CableInfoRecovery_IsGuardedByForeignJsonCheck()
+        {
+            // 2026-11-06 用户报告：复制图框 U1F 自动带出 3000 设备预留。JSON 被
+            // 句柄校验拒绝后，CABLE_INFO 恢复兜底又从源框残留文本里把「数值
+            // （设备内）」救活——换条路继承。两个恢复点都必须以外来 JSON 检测
+            // 为守卫：本框元数据是复制来的 → CABLE_INFO 同源不可信，一并跳过。
+            string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillReserveStage.cs"));
+            int guard = stage.IndexOf("foreignJsonNote.Length == 0", StringComparison.Ordinal);
+            int recovery = stage.IndexOf("TryParseDeviceReserveMillimeters(", StringComparison.Ordinal);
+            Assert.True(guard >= 0 && recovery > guard,
+                "单框恢复必须在句柄守卫之内（外来 JSON 拒绝时不得恢复 CABLE_INFO 预留）");
+            Assert.Contains("为避免继承源机台的设备内预留", stage);
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int batchGuard = batch.IndexOf("foreignJsonNote.Length == 0", StringComparison.Ordinal);
+            int batchRecovery = batch.IndexOf("TryParseDeviceReserveMillimeters(", StringComparison.Ordinal);
+            Assert.True(batchGuard >= 0 && batchRecovery > batchGuard,
+                "批量恢复同样必须带句柄守卫");
+            Assert.Contains("CABLE_INFO 同源同样不可信", batch);
+        }
+
         private static string Repo(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

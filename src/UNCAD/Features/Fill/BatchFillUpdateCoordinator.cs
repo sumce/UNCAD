@@ -694,8 +694,13 @@ namespace UNCAD.Features.Fill
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
             // 写回记录，后续不重复恢复并随 JSON 持久化。
-            if (previousRecord == null
-                || string.IsNullOrWhiteSpace(previousRecord.DeviceReserveMm))
+            // 2026-11-06 修复：整框复制会把源框 CABLE_INFO 一起带过来——检测到
+            // 外来 JSON（= 本框元数据是复制来的）时，CABLE_INFO 同源同样不可信，
+            // 一并跳过恢复，设备内预留交用户重新确认（否则复制框 U1U 会静默
+            // 继承源机台的设备预留）。
+            if (foreignJsonNote.Length == 0
+                && (previousRecord == null
+                    || string.IsNullOrWhiteSpace(previousRecord.DeviceReserveMm)))
             {
                 string cableInfo = CadBlockAttributeWriter.ReadFirstTagged(readTransaction,
                     selection.FrameBlockIds, UNCAD.Core.Fill.FrameBlockFiller.TagCable);

@@ -49,8 +49,15 @@ namespace UNCAD.Features.Fill
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——清单确认窗直接预填，
             // 用户仍可改；恢复值写回记录并随 JSON 持久化。
-            if (frameInfoPrevious == null
-                || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm))
+            // 2026-11-06 修复（用户报告：复制图框 U1F 自动带出 3000 设备预留）：
+            // 整框复制会把源框的 CABLE_INFO 属性一起带过来，JSON 被句柄校验
+            // 拒绝后，恢复兜底又从这份源框残留文本里把「数值（设备内）」救活
+            // ——等于换条路继承。凡检测到外来 JSON（= 本框元数据是复制来的），
+            // CABLE_INFO 同源同样不可信，一并跳过恢复；设备内预留由用户重新
+            // 填写。老图框（从未写过 JSON、也非复制）不受影响。
+            if (foreignJsonNote.Length == 0
+                && (frameInfoPrevious == null
+                    || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
             {
                 string existingCableInfo = CadBlockAttributeWriter.ReadTagged(ctx,
                     selection.FrameBlockIds, FrameBlockFiller.TagCable);
@@ -61,6 +68,13 @@ namespace UNCAD.Features.Fill
                     frameInfoPrevious.DeviceReserveMm =
                         TextFormatter.FormatNum(recoveredDeviceReserve);
                 }
+            }
+            else if (foreignJsonNote.Length > 0
+                && (frameInfoPrevious == null
+                    || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
+            {
+                ctx.Write("\n[" + command + "] 本框携带源框的 CABLE_INFO 文本，"
+                    + "为避免继承源机台的设备内预留，未做恢复；请在清单确认窗重新填写。");
             }
 
             // D-043：识别老版设备内预留标记——现场在设备旁横排手写的毫米数文字
