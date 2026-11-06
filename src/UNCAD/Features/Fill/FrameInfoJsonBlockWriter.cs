@@ -679,6 +679,12 @@ namespace UNCAD.Features.Fill
                 return mtext?.Contents ?? attribute.TextString ?? "";
         }
 
+        /// <summary>标签是否承载 frameinfo_json 载荷（FRAMEINFO/含 JSON）。
+        /// 2026-11-06 复制框清理用：CadBlockAttributeWriter.ClearStaleInfo
+        /// 判断要清空的属性时调用。</summary>
+        internal static bool IsJsonTagName(string tag)
+            => IsJsonTag(tag);
+
         private static bool IsJsonTag(string tag)
         {
             string value = tag ?? "";

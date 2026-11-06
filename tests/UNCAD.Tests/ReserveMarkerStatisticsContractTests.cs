@@ -144,6 +144,45 @@ namespace UNCAD.Tests
             Assert.Contains("CABLE_INFO 同源同样不可信", batch);
         }
 
+        [Fact]
+        public void CopiedFrames_AreClearedBeforeRedefinitionWrite()
+        {
+            // 2026-11-06 用户要求：U1F/U1U 定义复制来的图框时要把源框信息
+            // 清理干净——不只是"不继承"，写事务里要显式清空 CABLE_INFO/
+            // CONDUIT_INFO/FRAMEINFO 旧属性再写新机台数据（同一事务，
+            // 整体提交或回滚，不存在半清空状态）。
+            string writer = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "CadBlockAttributeWriter.cs"));
+            Assert.Contains("internal static int ClearStaleInfo(", writer);
+            Assert.Contains("FrameBlockFiller.TagCable", writer);
+            Assert.Contains("FrameBlockFiller.TagConduit", writer);
+            Assert.Contains("FrameInfoJsonBlockWriter.IsJsonTagName(tag)", writer);
+
+            string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillReserveStage.cs"));
+            Assert.Contains("copiedFrameDetected", stage);
+
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            int clear = fill.IndexOf("CadBlockAttributeWriter.ClearStaleInfo(",
+                StringComparison.Ordinal);
+            int migrate = fill.IndexOf("FrameInfoJsonBlockWriter.FillOrMigrate(",
+                StringComparison.Ordinal);
+            Assert.True(clear >= 0 && migrate > clear,
+                "单框写事务必须先清空旧信息再写新 JSON");
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int batchClear = batch.IndexOf("CadBlockAttributeWriter.ClearStaleInfo(",
+                StringComparison.Ordinal);
+            int batchMigrate = batch.IndexOf("FrameInfoJsonBlockWriter.FillOrMigrate(",
+                StringComparison.Ordinal);
+            Assert.True(batchClear >= 0 && batchMigrate > batchClear,
+                "批量写事务必须先清空旧信息再写新 JSON");
+            Assert.Contains("plan_CopiedFrame = true", batch);
+            Assert.Contains("CopiedFrame = plan_CopiedFrame", batch);
+        }
+
         private static string Repo(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

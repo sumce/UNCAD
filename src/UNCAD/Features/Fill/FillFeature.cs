@@ -96,7 +96,8 @@ namespace UNCAD.Features.Fill
             FrameInfoJsonRecord frameInfoPrevious = FillReserveStage.Resolve(ctx,
                 selection, options, updateMode,
                 out List<ObjectId> deviceReserveEraseIds,
-                out List<ObjectId> markerExcludedIds);
+                out List<ObjectId> markerExcludedIds,
+                out bool copiedFrameDetected);
             SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
                 options, updateMode, markerExcludedIds);
             CableStatResult statistics = summation.Statistics;
@@ -344,6 +345,12 @@ namespace UNCAD.Features.Fill
                         selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
                     ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
                         selection.RuanguanBlockIds, picked.Dia);
+                    // 2026-11-06（用户要求 U1F 定义要清干净）：复制来的图框先把
+                    // 源框遗留的 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 显式清空，再写
+                    // 新机台数据——同一事务，整体提交或整体回滚。
+                    if (copiedFrameDetected)
+                        CadBlockAttributeWriter.ClearStaleInfo(transaction,
+                            selection.FrameBlockIds);
                     frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
                         selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
                         updateMode ? CommandIds.FillUpdate : CommandIds.Fill, null,

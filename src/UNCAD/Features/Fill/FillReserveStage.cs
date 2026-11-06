@@ -19,11 +19,15 @@ namespace UNCAD.Features.Fill
     /// </summary>
     internal static class FillReserveStage
     {
-        /// <summary>恢复上一轮预留并决策预留标记；返回上一轮记录。</summary>
+        /// <summary>恢复上一轮预留并决策预留标记；返回上一轮记录。
+        /// copiedFrameDetected：检测到本框携带源框元数据（外来 JSON 被拒）——
+        /// 写事务里据此显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息后
+        /// 再写新机台数据（2026-11-06 用户要求 U1F 定义要清干净）。</summary>
         internal static FrameInfoJsonRecord Resolve(CadContext ctx, FillSelection selection,
             FillRuntimeOptions options, bool updateMode,
             out List<ObjectId> deviceReserveEraseIds,
-            out List<ObjectId> markerExcludedIds)
+            out List<ObjectId> markerExcludedIds,
+            out bool copiedFrameDetected)
         {
             FrameInfoJsonRecord frameInfoPrevious;
             string foreignJsonNote;
@@ -82,6 +86,7 @@ namespace UNCAD.Features.Fill
             // 在写事务里删除该标注；多处→不乱取，提示人工确认。
             deviceReserveEraseIds = new List<ObjectId>();
             markerExcludedIds = new List<ObjectId>();
+            copiedFrameDetected = foreignJsonNote.Length > 0;
             DeviceReserveMarkerReader.Result reserveMarkers =
                 DeviceReserveMarkerReader.CollectInSelection(ctx, selection.TextIds);
             if (reserveMarkers.Hits.Count == 1)

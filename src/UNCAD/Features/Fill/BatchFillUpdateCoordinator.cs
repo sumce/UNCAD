@@ -46,6 +46,10 @@ namespace UNCAD.Features.Fill
             public List<string> Notes { get; set; } = new List<string>();
             /// <summary>D-043：已吸收的老版设备预留标注实体（写事务里删除）。</summary>
             public List<ObjectId> DeviceReserveEraseIds { get; set; } = new List<ObjectId>();
+            /// <summary>检测到本框携带源框元数据（外来 JSON 被拒）——写事务里
+            /// 先显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息再写新数据
+            /// （2026-11-06，用户要求 U1F/U1U 定义要清干净）。</summary>
+            public bool CopiedFrame { get; set; }
         }
 
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
@@ -434,6 +438,10 @@ namespace UNCAD.Features.Fill
                             ?? plan.Machine.Dia;
                         FillWriteResult ruanguan = RuanguanBlockWriter.FillModelAndLength(ctx,
                             transaction, plan.Selection.RuanguanBlockIds, hoseDiameter);
+                        // 2026-11-06：复制框先清空源框遗留旧信息再写新数据。
+                        if (plan.CopiedFrame)
+                            CadBlockAttributeWriter.ClearStaleInfo(transaction,
+                                plan.Selection.FrameBlockIds);
                         FillWriteResult frameInfo = FrameInfoJsonBlockWriter.FillOrMigrate(ctx,
                             transaction, plan.Selection.FrameBlockIds,
                             plan.Selection.FrameInfoJsonBlockIds, plan.Machine,
@@ -675,6 +683,9 @@ namespace UNCAD.Features.Fill
             // D-043：设备预留标记吸收结果（备注文本 + 待删除实体）。
             string markerNote = null;
             List<ObjectId> plan_DeviceReserveEraseIds = new List<ObjectId>();
+            // 本框是否携带源框元数据（外来 JSON 被拒）——构造 Plan 时挂
+            // CopiedFrame，写事务里据此清空源框遗留旧信息属性。
+            bool plan_CopiedFrame = false;
 
             // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
             // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
@@ -689,8 +700,12 @@ namespace UNCAD.Features.Fill
                     selection.FrameBlockIds),
                 out string foreignJsonNote);
             if (foreignJsonNote.Length > 0)
+            {
+                plan_CopiedFrame = true;
                 notes.Add("检测到复制图框遗留的其他图框 JSON，已忽略："
-                    + "不继承其设备内预留/电缆替代型号/更新历史。");
+                    + "不继承其设备内预留/电缆替代型号/更新历史；"
+                    + "写入时会清空源框遗留的旧信息属性。");
+            }
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
             // 写回记录，后续不重复恢复并随 JSON 持久化。
@@ -896,6 +911,7 @@ namespace UNCAD.Features.Fill
                 DeviceOutletStateKnown = deviceOutletStateKnown,
                 Notes = notes,
                 DeviceReserveEraseIds = plan_DeviceReserveEraseIds,
+                CopiedFrame = plan_CopiedFrame,
                 PreviousRecord = previousRecord,
                 ExistingRows = FillRowDiffBuilder.ReadRows(
                     CadSubmissionReader.Read(readTransaction, selection.TableIds)),

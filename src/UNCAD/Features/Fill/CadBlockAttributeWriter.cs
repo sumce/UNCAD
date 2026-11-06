@@ -204,6 +204,46 @@ namespace UNCAD.Features.Fill
             return new FillWriteResult(blocks, attributes);
         }
 
+        /// <summary>
+        /// U1F/U1U 定义复制来的图框时，先把源框带来的旧信息显式清空
+        /// （2026-11-06 用户要求“U1F 定义要把信息都清理掉”）：FRAMEINFO JSON
+        /// 载荷、CABLE_INFO、CONDUIT_INFO——随后正常写入新机台数据。清空与
+        /// 写入同一事务：整体提交或整体回滚，不会出现半清空状态。
+        /// 返回清空的属性数（日志用）。
+        /// </summary>
+        internal static int ClearStaleInfo(Transaction transaction, ObjectId[] frameBlockIds)
+        {
+            if (frameBlockIds == null || frameBlockIds.Length == 0) return 0;
+            int cleared = 0;
+            foreach (ObjectId id in frameBlockIds)
+            {
+                if (id.IsNull) continue;
+                var block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+                if (block == null) continue;
+                foreach (ObjectId attributeId in block.AttributeCollection)
+                {
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead)
+                        as AttributeReference;
+                    if (attribute == null) continue;
+                    string tag = attribute.Tag ?? "";
+                    bool stale = string.Equals(tag, FrameBlockFiller.TagCable,
+                        StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(tag, FrameBlockFiller.TagConduit,
+                            StringComparison.OrdinalIgnoreCase)
+                        || FrameInfoJsonBlockWriter.IsJsonTagName(tag);
+                    if (!stale) continue;
+                    attribute.UpgradeOpen();
+                    attribute.TextString = "";
+                    cleared++;
+                }
+            }
+            if (cleared > 0)
+                UNCAD.Infra.Log.Info("复制图框清理：已清空 " + cleared + " 个旧信息属性"
+                    + "（CABLE_INFO/CONDUIT_INFO/FRAMEINFO），随后写入新机台数据。");
+            return cleared;
+        }
+
         private static void SetAttributeValue(CadContext ctx, AttributeReference attribute,
             string value, bool multiline, double mtextWidth = 0d)
         {
