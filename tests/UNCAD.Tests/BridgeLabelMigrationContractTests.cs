@@ -49,7 +49,7 @@ namespace UNCAD.Tests
             int transaction = source.IndexOf(
                 "using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())",
                 StringComparison.Ordinal);
-            int loop = source.IndexOf("foreach (Plan plan in plans)", transaction,
+            int loop = source.IndexOf("foreach (BatchFillUpdatePlan plan in plans)", transaction,
                 StringComparison.Ordinal);
             int migration = source.IndexOf(
                 "BridgeLabelMigrationWriter.Migrate(", loop,

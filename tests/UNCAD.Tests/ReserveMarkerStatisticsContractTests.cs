@@ -78,8 +78,10 @@ namespace UNCAD.Tests
             Assert.Contains("markerExcludedIds.AddRange(reserveMarkers.EntityIds)", stage);
             Assert.Contains("不再计入米数统计", stage);
 
+            // 2026-11-09：批量预检（含标记决策与统计调用）拆到
+            // BatchFillUpdatePreflight.Build；写事务侧仍在协调器。
             string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
-                "BatchFillUpdateCoordinator.cs"));
+                "BatchFillUpdatePreflight.cs"));
             int batchDecide = batch.IndexOf("DeviceReserveMarker.Decide(",
                 StringComparison.Ordinal);
             int batchStatistics = batch.IndexOf("FillStatisticsModule.Execute(ctx, readTransaction",
@@ -135,8 +137,9 @@ namespace UNCAD.Tests
                 "单框恢复必须在句柄守卫之内（外来 JSON 拒绝时不得恢复 CABLE_INFO 预留）");
             Assert.Contains("为避免继承源机台的设备内预留", stage);
 
+            // 2026-11-09：批量恢复守卫随 Preflight 拆到 BatchFillUpdatePreflight。
             string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
-                "BatchFillUpdateCoordinator.cs"));
+                "BatchFillUpdatePreflight.cs"));
             int batchGuard = batch.IndexOf("foreignJsonNote.Length == 0", StringComparison.Ordinal);
             int batchRecovery = batch.IndexOf("TryParseDeviceReserveMillimeters(", StringComparison.Ordinal);
             Assert.True(batchGuard >= 0 && batchRecovery > batchGuard,
@@ -179,8 +182,11 @@ namespace UNCAD.Tests
                 StringComparison.Ordinal);
             Assert.True(batchClear >= 0 && batchMigrate > batchClear,
                 "批量写事务必须先清空旧信息再写新 JSON");
-            Assert.Contains("plan_CopiedFrame = true", batch);
-            Assert.Contains("CopiedFrame = plan_CopiedFrame", batch);
+            // 复制框检测在预检阶段（BatchFillUpdatePreflight）置位并随 Plan 传递。
+            string batchPreflight = File.ReadAllText(Repo("src", "UNCAD", "Features",
+                "Fill", "BatchFillUpdatePreflight.cs"));
+            Assert.Contains("plan_CopiedFrame = true", batchPreflight);
+            Assert.Contains("CopiedFrame = plan_CopiedFrame", batchPreflight);
         }
 
         private static string Repo(params string[] parts)

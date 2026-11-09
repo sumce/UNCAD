@@ -19,39 +19,11 @@ namespace UNCAD.Features.Fill
     /// <summary>
     /// Preflights and writes several already-filled frame regions without reopening the machine
     /// picker or one review dialog per frame. New generation remains in FillFeature's single path.
+    /// 2026-11-09 拆出 BatchFillUpdatePreflight（单框预检 + BatchFillUpdatePlan DTO），
+    /// 本类只留编排：GUI 询问链 → 覆盖门禁 → 写事务 → BOQ → 结果窗。
     /// </summary>
     internal static class BatchFillUpdateCoordinator
     {
-        private sealed class Plan
-        {
-            public FrameRegionGroup Region { get; set; }
-            public FillSelection Selection { get; set; }
-            public MachineRow Machine { get; set; }
-            public SummationOutput Summation { get; set; }
-            public CableStatResult Statistics { get; set; }
-            public List<TableFillRow> Rows { get; set; }
-            public FillReviewData Review { get; set; }
-            public CableReserveInfo Reserve { get; set; }
-            public Core.Fill.FrameInfoJsonRecord PreviousRecord { get; set; }
-            public List<TableFillRow> ExistingRows { get; set; }
-            public string LegacyLastUpdated { get; set; } = "";
-            public string DeviceState { get; set; }
-            public bool DeviceOutletStateKnown { get; set; }
-            public string CableRequestKey { get; set; }
-            public string BusPlugBoxRequestKey { get; set; }
-            public bool HoseWasMissingBeforeCableChoice { get; set; }
-            /// <summary>预检阶段（在预检读事务里）算好的表格可写行数；-1 表示未计算。</summary>
-            public int Capacity { get; set; } = -1;
-            /// <summary>该图框的提示（统计类别不完整/Downstream 状态等），进批量结果窗。</summary>
-            public List<string> Notes { get; set; } = new List<string>();
-            /// <summary>D-043：已吸收的老版设备预留标注实体（写事务里删除）。</summary>
-            public List<ObjectId> DeviceReserveEraseIds { get; set; } = new List<ObjectId>();
-            /// <summary>检测到本框携带源框元数据（外来 JSON 被拒）——写事务里
-            /// 先显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息再写新数据
-            /// （2026-11-06，用户要求 U1F/U1U 定义要清干净）。</summary>
-            public bool CopiedFrame { get; set; }
-        }
-
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
         {
             if (regions == null || regions.Count < 2) return;
@@ -77,7 +49,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            var plans = new List<Plan>();
+            var plans = new List<BatchFillUpdatePlan>();
             var errors = new List<string>();
             var catalogRequests = new List<BatchCatalogRequest>();
             // 分阶段 PERF：大批量“无响应”排查靠这行数据（对齐 XLAYOUT/XSTS 的口径）。
@@ -98,8 +70,9 @@ namespace UNCAD.Features.Fill
                 foreach (FrameRegionGroup region in regions)
                 {
                     var clock = System.Diagnostics.Stopwatch.StartNew();
-                    Preflight(ctx, readTransaction, region, options, workbook, plans,
-                        errors, catalogRequests, definitions, statisticsSettings);
+                    BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
+                        options, workbook, plans, errors, catalogRequests,
+                        definitions, statisticsSettings);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
@@ -122,7 +95,7 @@ namespace UNCAD.Features.Fill
             // 首次使用的图框：在 GUI 里逐框填写设备内预留（不同设备预留通常
             // 不同，不能整批共用一个值）；已有 frameinfo_json 记录的图框保持
             // 原值，不再询问。命令行不出现任何输入提示。
-            List<Plan> reserveMissing = plans.Where(plan => plan.Reserve != null
+            List<BatchFillUpdatePlan> reserveMissing = plans.Where(plan => plan.Reserve != null
                 && (plan.PreviousRecord == null
                     || string.IsNullOrWhiteSpace(plan.PreviousRecord.DeviceReserveMm)))
                 .ToList();
@@ -141,7 +114,7 @@ namespace UNCAD.Features.Fill
                 }
                 for (int i = 0; i < reserveMissing.Count; i++)
                 {
-                    Plan plan = reserveMissing[i];
+                    BatchFillUpdatePlan plan = reserveMissing[i];
                     double reserveMillimeters = reserveWindow.ReserveMillimeters(i);
                     FillFeature.ApplyDeviceReserve(plan.Statistics, plan.Reserve,
                         reserveMillimeters);
@@ -168,7 +141,7 @@ namespace UNCAD.Features.Fill
                 var picker = new BatchCatalogSelectionWindow(catalogRequests);
                 AcApplication.ShowModalWindow(picker);
                 if (!picker.Confirmed) return;
-                foreach (Plan plan in plans)
+                foreach (BatchFillUpdatePlan plan in plans)
                 {
                     if (!string.IsNullOrWhiteSpace(plan.CableRequestKey))
                     {
@@ -188,7 +161,7 @@ namespace UNCAD.Features.Fill
 
             // A merged/deleted material row has no fixed-catalog identity. Do not write it:
             // a CAD row without a BOQ code would make the two sources disagree.
-            List<Tuple<Plan, FillReviewItem>> unresolvedDefaults = plans
+            List<Tuple<BatchFillUpdatePlan, FillReviewItem>> unresolvedDefaults = plans
                 .SelectMany(plan => (plan.Review?.Items ?? new List<FillReviewItem>())
                     .Where(item => item.RequiresCatalogConfirmation)
                     .Select(item => Tuple.Create(plan, item)))
@@ -219,7 +192,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            foreach (Plan plan in plans)
+            foreach (BatchFillUpdatePlan plan in plans)
             {
                 List<FillReviewItem> unresolved = plan.Review?.Items.Where(item =>
                     item.RequiresCatalogConfirmation).ToList()
@@ -251,7 +224,7 @@ namespace UNCAD.Features.Fill
                 return;
             }
 
-            foreach (Plan plan in plans)
+            foreach (BatchFillUpdatePlan plan in plans)
                 ctx.Operation?.Machine(plan.Machine.MachineId, plan.Machine.CircuitName);
 
             // 2.10.0 整机回路校验（U1SET 可关闭）：缺回路的机台只更新图纸、
@@ -269,10 +242,10 @@ namespace UNCAD.Features.Fill
                 UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
             HashSet<string> forcedSet = FillCoverageGate.OfferForceBoq(
                 ctx, CommandIds.FillUpdate, coverageFailed);
-            List<Plan> boqPlans = plans.Where(plan => !coverageSet.Contains(
+            List<BatchFillUpdatePlan> boqPlans = plans.Where(plan => !coverageSet.Contains(
                 plan.Machine.MachineId)
                 || forcedSet.Contains(plan.Machine.MachineId)).ToList();
-            foreach (Plan plan in plans)
+            foreach (BatchFillUpdatePlan plan in plans)
             {
                 if (coverageSet.Contains(plan.Machine.MachineId)
                     && forcedSet.Contains(plan.Machine.MachineId))
@@ -379,7 +352,7 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         plans.Select(plan => plan.Selection));
-                    foreach (Plan plan in plans)
+                    foreach (BatchFillUpdatePlan plan in plans)
                     {
                         int migratedCapacity = FillFeature.ResolveTableWriteCapacity(
                             transaction, plan.Selection.TableIds, options.StartRow,
@@ -402,7 +375,7 @@ namespace UNCAD.Features.Fill
                     int writeStep = Math.Max(1, plans.Count / 100);
                     try
                     {
-                    foreach (Plan plan in plans)
+                    foreach (BatchFillUpdatePlan plan in plans)
                     {
                         writeDone++;
                         if (writeDone % writeStep == 0 || writeDone == plans.Count)
@@ -498,7 +471,7 @@ namespace UNCAD.Features.Fill
                     }
                     finally { writeProgress.Close(); }
                     // 提交前只做 CAD：读表会让 AutoCAD 懒重算，提交前先按固定行高回写一次。
-                    foreach (Plan plan in plans)
+                    foreach (BatchFillUpdatePlan plan in plans)
                         CadTableFillWriter.FixGeneratedRowHeights(transaction,
                             plan.Selection.TableIds, options.StartRow, options.ClearRows);
                     transaction.Commit();
@@ -541,7 +514,7 @@ namespace UNCAD.Features.Fill
                 // 读清单表会触发 AutoCAD 懒重算，提交后必须再按固定行高回写一次。
                 using (Transaction fixTransaction = ctx.Db.TransactionManager.StartTransaction())
                 {
-                    foreach (Plan plan in plans)
+                    foreach (BatchFillUpdatePlan plan in plans)
                         CadTableFillWriter.FixGeneratedRowHeights(fixTransaction,
                             plan.Selection.TableIds, options.StartRow, options.ClearRows);
                     fixTransaction.Commit();
@@ -627,300 +600,6 @@ namespace UNCAD.Features.Fill
                 automaticExcel?.AddedCount ?? 0, automaticExcel?.ReplacedCount ?? 0,
                 automaticExcelPath);
             AcApplication.ShowModalWindow(resultWindow);
-        }
-
-        private static void Preflight(CadContext ctx, Transaction readTransaction,
-            FrameRegionGroup region,
-            FillRuntimeOptions options, FillWorkbookSnapshot workbook,
-            List<Plan> plans, List<string> errors,
-            List<BatchCatalogRequest> catalogRequests,
-            CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings)
-        {
-            string prefix = "图框 " + region.Handle + "：";
-            FillSelection selection = FillSelectionCollector.Split(readTransaction,
-                region.EntityIds.ToArray(), true, definitions);
-            // 复用分区结果：拿到已算好的图框区域，避免每个图框再做一次全空间扫描。
-            selection.Region = region;
-            if (selection.FrameBlockIds.Length != 1)
-            {
-                errors.Add(prefix + "没有读取到唯一图框块。");
-                return;
-            }
-
-            // Resolve identity before reporting table shape so each structural error carries the
-            // machine and device when available. Any failed preflight still returns before planning.
-            bool validTableShape = selection.TableIds.Length == 1;
-            bool validIdentity = FillSelectionCollector.TryReadExistingIdentity(readTransaction,
-                selection,
-                out ExistingFillIdentity identity, out string identityError);
-            MachineRow machine = null;
-            string matchError = "";
-            if (!validIdentity)
-            {
-                errors.Add(prefix + identityError);
-            }
-            else
-            {
-                machine = ExistingFillIdentityResolver.MatchMachine(identity,
-                    workbook.FindRows(identity.MachineId), out matchError);
-                if (machine == null) errors.Add(prefix + matchError);
-            }
-            if (machine != null)
-            {
-                prefix = "机台 " + machine.MachineId + "；设备 " + machine.CircuitName
-                    + "；图框 " + region.Handle + "：";
-            }
-            if (!validTableShape)
-            {
-                errors.Add(prefix + "需要且只能包含一个清单表，实际 "
-                    + selection.TableIds.Length + " 个。");
-            }
-            if (!validIdentity || machine == null || !validTableShape)
-                return;
-            string originalCableModel = (machine.Cable ?? "").Trim();
-            // 该图框的提示（进批量结果窗的机台备注列；同一机台多框会自动去重）。
-            var notes = new List<string>();
-            // D-043：设备预留标记吸收结果（备注文本 + 待删除实体）。
-            string markerNote = null;
-            List<ObjectId> plan_DeviceReserveEraseIds = new List<ObjectId>();
-            // 本框是否携带源框元数据（外来 JSON 被拒）——构造 Plan 时挂
-            // CopiedFrame，写事务里据此清空源框遗留旧信息属性。
-            bool plan_CopiedFrame = false;
-
-            // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
-            // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
-            // 2026-11-04：带句柄校验——复制图框的源框 JSON（预留/替代型号/历史）
-            // 不继承，备注进结果窗告知用户。
-            // 2026-11-05：json 读取与 D-043 标记决策提前到统计之前——吸收的横排
-            // 毫米标（如 "3000mm"）同时命中电缆长度判据（^数字0mm$），不排除会被
-            // 米数统计双算（统计一次、设备内预留又一次）。吸收的文本从统计排除。
-            FrameInfoJsonRecord previousRecord = FrameInfoJsonBlockWriter.Read(readTransaction,
-                FrameInfoJsonBlockWriter.ReadSources(selection),
-                FrameInfoJsonBlockWriter.OwnFrameHandle(readTransaction,
-                    selection.FrameBlockIds),
-                out string foreignJsonNote);
-            if (foreignJsonNote.Length > 0)
-            {
-                plan_CopiedFrame = true;
-                notes.Add("检测到复制图框遗留的其他图框 JSON，已忽略："
-                    + "不继承其设备内预留/电缆替代型号/更新历史；"
-                    + "写入时会清空源框遗留的旧信息属性。");
-            }
-            // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
-            // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
-            // 写回记录，后续不重复恢复并随 JSON 持久化。
-            // 2026-11-06 修复：整框复制会把源框 CABLE_INFO 一起带过来——检测到
-            // 外来 JSON（= 本框元数据是复制来的）时，CABLE_INFO 同源同样不可信，
-            // 一并跳过恢复，设备内预留交用户重新确认（否则复制框 U1U 会静默
-            // 继承源机台的设备预留）。
-            if (foreignJsonNote.Length == 0
-                && (previousRecord == null
-                    || string.IsNullOrWhiteSpace(previousRecord.DeviceReserveMm)))
-            {
-                string cableInfo = CadBlockAttributeWriter.ReadFirstTagged(readTransaction,
-                    selection.FrameBlockIds, UNCAD.Core.Fill.FrameBlockFiller.TagCable);
-                if (UNCAD.Core.Fill.CableReserveReview.TryParseDeviceReserveMillimeters(
-                        cableInfo, out double recovered))
-                {
-                    previousRecord = previousRecord ?? new FrameInfoJsonRecord();
-                    previousRecord.DeviceReserveMm =
-                        UNCAD.Core.Text.TextFormatter.FormatNum(recovered);
-                }
-            }
-            // D-043：老版横排毫米标自动识别（U1SET 可关）。恰好一处→吸收并删除
-            // 标注；多处→不乱取，备注进结果窗交人工确认。
-            DeviceReserveMarkerReader.Result reserveMarkers =
-                DeviceReserveMarkerReader.Collect(readTransaction,
-                    selection.TextIds);
-            var markerExcludedIds = new List<ObjectId>();
-            if (reserveMarkers.Hits.Count == 1)
-            {
-                double? decided = DeviceReserveMarker.Decide(
-                    options.DeviceReserveAutoDetect, reserveMarkers.Hits,
-                    FillFeature.ParseJsonReserve(previousRecord), out List<int> absorbed);
-                if (absorbed.Count > 0)
-                {
-                    previousRecord = previousRecord ?? new FrameInfoJsonRecord();
-                    previousRecord.DeviceReserveMm =
-                        UNCAD.Core.Text.TextFormatter.FormatNum(decided.Value);
-                    plan_DeviceReserveEraseIds = reserveMarkers.EntityIds;
-                    markerExcludedIds.AddRange(reserveMarkers.EntityIds);
-                    markerNote = "设备内预留自动识别 " + reserveMarkers.Hits[0].Text
-                        + " mm（已删除图上标注，不计入米数统计）";
-                }
-            }
-            else if (reserveMarkers.Hits.Count > 1)
-            {
-                markerNote = "发现 " + reserveMarkers.Hits.Count + " 处横排毫米标（"
-                    + string.Join("、", reserveMarkers.Hits.ConvertAll(hit => hit.Text))
-                    + "），未自动吸收；请人工确认";
-            }
-
-            SummationOutput summation = FillStatisticsModule.Execute(ctx, readTransaction,
-                selection.TextIds, options.MmPerGrid, selection.StatisticsScopeComplete,
-                statisticsSettings, markerExcludedIds);
-            CableStatResult statistics = summation.Statistics;
-            if (statistics.CableState == MeasurementState.Unknown
-                || statistics.BridgeState == MeasurementState.Unknown
-                || statistics.ConduitState == MeasurementState.Unknown)
-            {
-                // 批量结果窗按机台展示；命令行只在日志里保留逐帧明细。
-                notes.Add("存在未启用或不完整的统计类别，仅这些类别保留旧值。");
-                Log.Info("[U1U] " + prefix + "统计类别不完整，保留旧值。");
-            }
-            CableReserveInfo reserve = FillFeature.ResolveCableReserve(previousRecord,
-                machine, statistics, options.CableOwnerReserveMillimeters,
-                options.CableReserve);
-
-            try
-            {
-                // Batch U1U must use the current CAD table as the cable fallback before planning.
-                FillFeature.ResolveUpdateCableFromExistingTable(ctx, selection, machine,
-                    workbook.Catalog, readTransaction, definitions);
-            }
-            catch (Exception ex)
-            {
-                errors.Add(prefix + ex.Message);
-                return;
-            }
-
-            FlexibleConduitCableMap.ApplyTo(machine);
-            TableGenerationOutput tablePlan = FillTableModule.Plan(machine,
-                workbook.Catalog, statistics, options.Planning, options.AutoFill);
-            FillFeature.WriteCablePlanNote(ctx, machine, tablePlan);
-            List<TableFillRow> plannedRows = FillUpdateRowMerger.Merge(
-                readTransaction, selection, tablePlan.CopyDefaultRows(), statistics);
-            bool deviceHasOutlet;
-            bool deviceOutletStateKnown;
-            string deviceState;
-            DownstreamState downstreamEquipment;
-            string downstreamState;
-            int downstreamBlocks;
-            try
-            {
-                CadDynamicBlockStateService.TryReadDeviceHasOutlet(readTransaction,
-                    selection.DeviceBlockIds, out deviceHasOutlet,
-                    out deviceOutletStateKnown, out deviceState);
-                CadDynamicBlockStateService.TryReadDownstreamState(readTransaction,
-                    selection.DeviceBlockIds, out downstreamEquipment,
-                    out _, out downstreamState, out downstreamBlocks);
-            }
-            catch (Exception ex)
-            {
-                errors.Add(prefix + ex.Message);
-                return;
-            }
-            TableFillRow deviceOutlet = TableFillPlanner.BuildOutletRow(machine.Detail,
-                workbook.Catalog);
-            // Batch U1U follows the same socket contract as the single-frame path:
-            // preserve every existing outlet row (especially its quantity), add one
-            // only when the device is a socket and the table has none, and remove
-            // stale 8.x rows when the device is back to equipment.
-            List<TableFillRow> existingOutlets = CadExistingOutletReader.Read(readTransaction,
-                selection.TableIds, options.StartRow, options.ClearRows);
-            List<TableFillRow> socketRows = deviceOutletStateKnown
-                ? DeviceOutletPolicy.ApplyForUpdate(plannedRows, deviceHasOutlet,
-                    deviceOutlet, existingOutlets)
-                : UpdateOutletPolicy.PreserveExisting(plannedRows, existingOutlets);
-            socketRows = DownstreamStatePolicy.Apply(socketRows, workbook.Catalog,
-                options.DownstreamSocketEnabled, options.DownstreamPanelEnabled,
-                downstreamEquipment, options.DownstreamSocketAmps,
-                options.DownstreamPanelAmps);
-            if (downstreamBlocks > 0)
-            {
-                string downstreamNote = "Downstream 状态: " + downstreamState
-                    + "；附加清单: " + FillFeature.DescribeDownstreamExtra(
-                        downstreamEquipment, options);
-                notes.Add(downstreamNote);
-                Log.Info("[U1U] " + prefix + downstreamNote);
-            }
-            tablePlan = new TableGenerationOutput(socketRows,
-                tablePlan.DefaultCableMeters, tablePlan.AutoFill);
-            FillReviewData review = tablePlan.CreateReview(machine, options.Planning,
-                originalCableModel);
-            if (reserve != null) FillFeature.InitializeReserveReview(review, reserve);
-            FillFeature.SyncCableReserveTotal(reserve, review.CableMeters);
-            review.RestoreBusPlugBoxChoice(previousRecord, workbook.Catalog);
-            try
-            {
-                if (!FillFeature.ApplyRuanguanLength(ctx, selection, review,
-                        workbook.Catalog, options.Planning, true, readTransaction))
-                {
-                    errors.Add(prefix + "Ruanguan 软管长度无法确认。");
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                errors.Add(prefix + ex.Message);
-                return;
-            }
-            bool hoseWasMissingBeforeCableChoice = review.FlexibleConduitItem() == null;
-            List<FillReviewItem> unresolved = review.Items.Where(item =>
-                item.RequiresCatalogConfirmation).ToList();
-            FillReviewItem unresolvedCable = unresolved.FirstOrDefault(item =>
-                item.Category == TableFillCategory.Cable);
-            string cableRequestKey = "";
-            if (unresolvedCable != null)
-            {
-                if (workbook.Catalog.Cables.Count == 0)
-                {
-                    errors.Add(prefix + "固定清单没有可选择的电缆型号。");
-                    return;
-                }
-                cableRequestKey = region.Handle + ":cable";
-                catalogRequests.Add(new BatchCatalogRequest(cableRequestKey,
-                    machine.MachineId, machine.CircuitName, "电缆", review.BoqCableModel,
-                    workbook.Catalog.Cables));
-            }
-
-            string busPlugBoxRequestKey = "";
-            if (unresolved.Any(item => item.Category == TableFillCategory.BusPlugBox))
-            {
-                busPlugBoxRequestKey = region.Handle + ":busPlugBox";
-                var request = new BatchCatalogRequest(busPlugBoxRequestKey,
-                    machine.MachineId, machine.CircuitName, "母线插接箱", machine.Detail,
-                    workbook.Catalog.BusPlugBoxes);
-                if (request.Candidates.Count == 0)
-                {
-                    errors.Add(prefix + "固定清单没有可选择的母线插接箱规格。");
-                    return;
-                }
-                catalogRequests.Add(request);
-            }
-
-            if (!string.IsNullOrEmpty(markerNote))
-            {
-                notes.Add(markerNote);
-                Log.Info("[U1U] " + prefix + markerNote + "。");
-            }
-            plans.Add(new Plan
-            {
-                Region = region,
-                Selection = selection,
-                Machine = review.Machine,
-                Summation = summation,
-                Statistics = statistics,
-                Review = review,
-                Reserve = reserve,
-                Rows = review.SelectedRows(),
-                CableRequestKey = cableRequestKey,
-                BusPlugBoxRequestKey = busPlugBoxRequestKey,
-                HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
-                DeviceState = deviceState,
-                DeviceOutletStateKnown = deviceOutletStateKnown,
-                Notes = notes,
-                DeviceReserveEraseIds = plan_DeviceReserveEraseIds,
-                CopiedFrame = plan_CopiedFrame,
-                PreviousRecord = previousRecord,
-                ExistingRows = FillRowDiffBuilder.ReadRows(
-                    CadSubmissionReader.Read(readTransaction, selection.TableIds)),
-                LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(
-                    readTransaction, selection),
-                // 容量在预检读事务里算一次；以前每个图框在此后还各开一个写事务重算。
-                Capacity = FillFeature.ResolveTableWriteCapacity(readTransaction,
-                    selection.TableIds, options.StartRow, options.ClearRows)
-            });
         }
 
         /// <summary>批量写入时的界面刷新：事务内的改动必须先进图形队列再刷屏，

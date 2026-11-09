@@ -44,8 +44,9 @@ namespace UNCAD.Tests
             // 再决定是否询问/预填设备内预留。
             // 2026-11-05：单框的恢复接线在 FillReserveStage（预留恢复阶段，
             // 先于统计执行）。
+            // 2026-11-09：批量恢复接线随 Preflight 拆到 BatchFillUpdatePreflight。
             string batch = System.IO.File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Fill", "BatchFillUpdateCoordinator.cs"));
+                "src", "UNCAD", "Features", "Fill", "BatchFillUpdatePreflight.cs"));
             string single = System.IO.File.ReadAllText(RepoFile(
                 "src", "UNCAD", "Features", "Fill", "FillReserveStage.cs"));
 
@@ -70,10 +71,14 @@ namespace UNCAD.Tests
                 "Fill", "FillFeature.cs"));
             Assert.Contains("DeviceReserveMarkerReader.EraseAbsorbed(", fillFeature);
 
+            // 2026-11-09：批量 Collect/Decide 在预检（BatchFillUpdatePreflight），
+            // EraseAbsorbed 仍在协调器写事务。
+            string batchPreflight = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "BatchFillUpdatePreflight.cs"));
             string batch = File.ReadAllText(RepoFile("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs"));
-            Assert.Contains("DeviceReserveMarkerReader.Collect(", batch);
-            Assert.Contains("DeviceReserveMarker.Decide(", batch);
+            Assert.Contains("DeviceReserveMarkerReader.Collect(", batchPreflight);
+            Assert.Contains("DeviceReserveMarker.Decide(", batchPreflight);
             Assert.Contains("DeviceReserveMarkerReader.EraseAbsorbed(", batch);
 
             // 默认开关值与 U1SET 开关键名。

@@ -58,8 +58,11 @@ namespace UNCAD.Tests
             Assert.DoesNotContain("Path.GetDirectoryName(Path.GetFullPath(filePath))", service);
             Assert.DoesNotContain("批量图框包含重复的机台/设备", service);
 
-            int identity = batch.IndexOf("TryReadExistingIdentity", StringComparison.Ordinal);
-            int tableCount = batch.IndexOf("if (!validTableShape)",
+            // 2026-11-09：身份识别与表形报错随预检拆到 BatchFillUpdatePreflight。
+            string batchPreflight = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "BatchFillUpdatePreflight.cs"));
+            int identity = batchPreflight.IndexOf("TryReadExistingIdentity", StringComparison.Ordinal);
+            int tableCount = batchPreflight.IndexOf("if (!validTableShape)",
                 StringComparison.Ordinal);
             Assert.True(identity >= 0 && tableCount > identity,
                 "Batch U1U must identify the machine before reporting table-shape errors.");

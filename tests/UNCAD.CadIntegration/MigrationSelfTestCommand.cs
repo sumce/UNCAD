@@ -12,6 +12,7 @@ using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
 using UNCAD.Features.Fill;
+using UNCAD.Infra;
 
 namespace UNCAD.CadIntegration
 {
@@ -59,6 +60,14 @@ namespace UNCAD.CadIntegration
     ///      不得被清空且必须含合法 JSON；
     ///   e) 迁移不新建、不删除任何独立 frameinfo_json 块；frame 框内的遗留独立块
     ///      在写入后被清空（JSON 属性变空串）。
+    ///
+    /// 2026-11-09 增补阶段 5（复制图框三重防线，回应用户 2026-11-06 报告
+    /// “从别的机台复制图框后 U1F 自动带出 3000 设备内预留”）：克隆已迁移的
+    /// FRAME_20261102 图框（FRAMEINFO 带源框 meta.frameHandle、CABLE_INFO 带
+    /// 「+3000（设备内）」残留文本），断言
+    ///   f) ①句柄校验拒绝外来 JSON（不复读，源框自身读取不受影响）
+    ///      ②FillReserveStage 在外来 JSON 时跳过 CABLE_INFO 预留恢复（不继承）
+    ///      ③ClearStaleInfo 显式清空复制框旧属性且不波及源框（显式清理）。
     ///
     /// FAIL 路径验证：环境变量 %UNCAD_MIGRATION_SELFTEST_SABOTAGE% 支持两种人为破坏
     ///   RowHeight   —— 把期望行高改错（断言 c 必须报警）；
@@ -240,6 +249,10 @@ namespace UNCAD.CadIntegration
             // ---------------- 阶段 4：读回断言 a/b/c/d/e ----------------
             _stage = "assert after migration";
             AssertAfterMigration(ctx, fixture, selections, sabotage, before);
+
+            // ---------------- 阶段 5：复制图框三重防线（断言 f） ----------------
+            _stage = "copied frame defense";
+            CopiedFrameDefense(ctx, fixture, selections);
 
             Info("");
             Info("结论: PASS");
@@ -906,6 +919,168 @@ namespace UNCAD.CadIntegration
                     + "）——否则同一图框两份 JSON 会互相覆盖。");
                 Info("  e) 独立 frameinfo_json 块零新建零删除（迁移前后都是 "
                     + afterStandalone.Count + " 个），frame 框内遗留块 JSON 已清空: 通过");
+                tx.Commit();
+            }
+        }
+
+        // ================================================================== phase 5
+
+        /// <summary>
+        /// 复制图框三重防线自检：在真机 AutoCAD 里构造“整框复制”（克隆已迁移的
+        /// 当前代图框，FRAMEINFO 携带源框句柄的 JSON、CABLE_INFO 携带
+        /// 「+3000（设备内）」源框残留），逐层断言 3.0.0.6/3.0.0.8/3.0.0.9 的防线：
+        /// ①不复读（句柄校验拒外来 JSON）②不继承（外来 JSON 时跳过 CABLE_INFO
+        /// 预留恢复）③显式清理（ClearStaleInfo 清空旧属性、不波及源框）。
+        /// </summary>
+        private static void CopiedFrameDefense(CadContext ctx, Fixture fixture,
+            Dictionary<FrameSlot, FillSelection> selections)
+        {
+            Info("");
+            Info("=== 复制图框三重防线 ===");
+            FrameSlot source = fixture.Slots.First(slot => !slot.Legacy);
+            // 用户 bug 报告里的形态：源框 CABLE_INFO 残留文本带 3000 设备内预留。
+            const string foreignCableInfo =
+                "电缆ZB-YJV-4*16mm²: 2600+3400（盘内）+3000（设备内）=9000mm";
+
+            ObjectId copyId;
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                BlockReference sourceFrame = (BlockReference)tx.GetObject(source.FrameId,
+                    OpenMode.ForRead, true);
+                ObjectId definitionId = FrameRegionCollector.DefinitionIds(sourceFrame)
+                    .First();
+                var copy = new BlockReference(new Point3d(sourceFrame.Position.X
+                    + FrameGapX, sourceFrame.Position.Y - LegacyFrameHeight * 2, 0),
+                    definitionId);
+                ctx.AddToCurrentSpace(tx, copy);
+                // 整框复制的等价物：逐属性克隆（FRAMEINFO = 源框 meta.frameHandle
+                // 的 JSON，即外来记录；CABLE_INFO 覆写为带设备内预留的残留文本）。
+                bool cableInfoAttached = false;
+                foreach (KeyValuePair<string, string> pair in Attributes(tx,
+                    source.FrameId))
+                {
+                    string value = pair.Key.Equals(FrameBlockFiller.TagCable,
+                        StringComparison.OrdinalIgnoreCase) ? foreignCableInfo
+                        : pair.Value;
+                    if (pair.Key.Equals(FrameBlockFiller.TagCable,
+                        StringComparison.OrdinalIgnoreCase))
+                        cableInfoAttached = true;
+                    AttachAttribute(ctx, tx, copy, pair.Key, value);
+                }
+                if (!cableInfoAttached)
+                    AttachAttribute(ctx, tx, copy, FrameBlockFiller.TagCable,
+                        foreignCableInfo);
+                copyId = copy.ObjectId;
+                tx.Commit();
+            }
+            Info("  已克隆源框 → " + copyId.Handle + "（FRAMEINFO=源框 JSON，"
+                + "CABLE_INFO=+3000（设备内））");
+
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                    new[] { copyId });
+                Check(regions.Errors.Count == 0 && regions.Groups.Count == 1,
+                    "复制图框应被分区识别（分组 " + regions.Groups.Count
+                    + "，错误: " + string.Join("; ", regions.Errors) + "）。");
+                var definitions = new CadBlockDefinitionReader(tx);
+                FillSelection copySelection = FillSelectionCollector.Split(tx,
+                    regions.Groups[0].EntityIds.ToArray(), true, definitions);
+                Check(copySelection.FrameBlockIds.Length == 1
+                    && copySelection.FrameBlockIds[0] == copyId,
+                    "复制图框选集应识别出唯一图框块（实际 "
+                    + copySelection.FrameBlockIds.Length + " 个）。");
+
+                // ① 不复读：句柄校验必须拒绝复制框携带的源框 JSON。
+                FrameInfoJsonBlockWriter.Read(tx,
+                    FrameInfoJsonBlockWriter.ReadSources(copySelection),
+                    FrameInfoJsonBlockWriter.OwnFrameHandle(tx,
+                        copySelection.FrameBlockIds),
+                    out string foreignJsonNote);
+                Check(foreignJsonNote.Length > 0,
+                    "复制图框携带的源框 JSON 应被句柄校验识别为外来记录"
+                    + "（foreignJsonNote 为空 = ①防线失效，复制框会复读源框数据）。");
+                Info("  ① 不复读: 外来 JSON 已被句柄校验拒绝（note 长度 "
+                    + foreignJsonNote.Length + "）: 通过");
+
+                // 对照组：源框自身读取照常（句柄一致、无外来提示）。
+                FrameInfoJsonRecord own = FrameInfoJsonBlockWriter.Read(tx,
+                    FrameInfoJsonBlockWriter.ReadSources(selections[source]),
+                    FrameInfoJsonBlockWriter.OwnFrameHandle(tx,
+                        selections[source].FrameBlockIds),
+                    out string ownJsonNote);
+                Check(ownJsonNote.Length == 0 && own != null
+                    && own.MachineId == source.Machine.MachineId,
+                    "源框自身 JSON 读取应照常通过（实际 note='" + ownJsonNote
+                    + "'，机台 " + (own == null ? "<null>" : own.MachineId)
+                    + "）——句柄校验不得误伤本框记录。");
+                Info("  ① 对照: 源框自身读取照常（机台 " + own.MachineId + "）: 通过");
+
+                // 前置证明：残留 CABLE_INFO 本身能解析出 3000——守卫是唯一闸门。
+                string copiedCableInfo = CadBlockAttributeWriter.ReadFirstTagged(tx,
+                    copySelection.FrameBlockIds, FrameBlockFiller.TagCable);
+                Check(CableReserveReview.TryParseDeviceReserveMillimeters(
+                        copiedCableInfo, out double parsedReserve)
+                    && Math.Abs(parsedReserve - 3000.0) < 0.001,
+                    "夹具自检：复制框 CABLE_INFO 应解析出 3000 设备内预留"
+                    + "（实际 " + parsedReserve + "），否则②的守卫断言无意义。");
+
+                // ② 不继承：生产链路 FillReserveStage.Resolve 必须跳过该恢复。
+                FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx,
+                    copySelection, FillSettings.Current(), true,
+                    out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
+                    out bool copiedFrameDetected);
+                Check(copiedFrameDetected,
+                    "FillReserveStage 应检测到复制图框（copiedFrameDetected=false）。");
+                Check(resolved == null
+                    || string.IsNullOrWhiteSpace(resolved.DeviceReserveMm),
+                    "外来 JSON 时 CABLE_INFO 恢复必须被守卫跳过——设备内预留不得"
+                    + "继承 3000（实际 DeviceReserveMm='"
+                    + (resolved == null ? "" : resolved.DeviceReserveMm)
+                    + "'，②防线失效）。");
+                Check(eraseIds.Count == 0,
+                    "复制图框区域内没有横排毫米标，不应有待删除标注。");
+                Info("  ② 不继承: FillReserveStage 跳过 CABLE_INFO 恢复，"
+                    + "设备内预留为空（copiedFrameDetected=true）: 通过");
+
+                // ③ 显式清理：ClearStaleInfo 清空复制框旧属性，源框无损，事务回滚。
+                int cleared;
+                {
+                    using (Transaction clearTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        cleared = CadBlockAttributeWriter.ClearStaleInfo(clearTx,
+                            copySelection.FrameBlockIds);
+                        Check(cleared >= 2,
+                            "ClearStaleInfo 应清空 CABLE_INFO 与 FRAMEINFO 至少 2 个"
+                            + "旧属性（实际 " + cleared + " 个）。");
+                        Dictionary<string, string> copyAttributes = Attributes(
+                            clearTx, copyId);
+                        Check(copyAttributes.TryGetValue(FrameBlockFiller.TagCable,
+                                out string clearedCable)
+                            && clearedCable.Trim().Length == 0,
+                            "清理后复制框 CABLE_INFO 应为空（实际 '"
+                            + clearedCable + "'）。");
+                        Check(copyAttributes.TryGetValue(
+                                FrameInfoJsonBlockWriter.FrameInfoTag,
+                                out string clearedJson)
+                            && clearedJson.Trim().Length == 0,
+                            "清理后复制框 FRAMEINFO 应为空（实际长度 "
+                            + (clearedJson == null ? -1 : clearedJson.Length)
+                            + "）——否则源框 JSON 副本残留，保存后会被当成两框记录。");
+                        Dictionary<string, string> sourceAttributes = Attributes(
+                            clearTx, source.FrameId);
+                        Check(sourceAttributes.TryGetValue(
+                                FrameInfoJsonBlockWriter.FrameInfoTag,
+                                out string sourceJson)
+                            && sourceJson.TrimStart().StartsWith("{",
+                                StringComparison.Ordinal),
+                            "ClearStaleInfo 只清复制框，源框 FRAMEINFO 必须完好。");
+                        clearTx.Abort(); // 自检不改图。
+                    }
+                }
+                Info("  ③ 显式清理: ClearStaleInfo 清空 " + cleared
+                    + " 个旧属性（CABLE_INFO/FRAMEINFO），源框无损: 通过");
                 tx.Commit();
             }
         }

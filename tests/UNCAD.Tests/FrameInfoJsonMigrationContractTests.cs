@@ -16,6 +16,8 @@ namespace UNCAD.Tests
         {
             string writer = Source("src", "UNCAD", "Features", "Fill",
                 "FrameInfoJsonBlockWriter.cs");
+            string batchPreflight = Source("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdatePreflight.cs");
             string batch = Source("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");
             string fill = Source("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
@@ -24,10 +26,11 @@ namespace UNCAD.Tests
             Assert.Contains("FrameBlockIds", writer);
             Assert.Contains("ReadSources(", writer);
 
-            // 批量：预检（独立方法，早于写事务执行）读取 previous，写入阶段直接复用
-            // plan.PreviousRecord，因此文件内的先后顺序不适用；改为锁定"读-存-用"三点。
-            Assert.Contains("FrameInfoJsonBlockWriter.ReadSources(selection)", batch);
-            Assert.Contains("PreviousRecord = previousRecord", batch);
+            // 批量：预检（2026-11-09 拆到 BatchFillUpdatePreflight.Build，早于写事务
+            // 执行）读取 previous，写入阶段直接复用 plan.PreviousRecord，因此文件内
+            // 的先后顺序不适用；改为锁定"读-存-用"三点。
+            Assert.Contains("FrameInfoJsonBlockWriter.ReadSources(selection)", batchPreflight);
+            Assert.Contains("PreviousRecord = previousRecord", batchPreflight);
             Assert.Contains("XFrameMigrationService.Migrate(", batch);
 
             // 单框：读取在 FillReserveStage（2026-11-05 前置到统计之前，自然早于
@@ -58,7 +61,7 @@ namespace UNCAD.Tests
                 "src/UNCAD/Features/Fill/FillFeature.cs",
                 "src/UNCAD/Features/Fill/FillMachinePickStage.cs",
                 "src/UNCAD/Features/Fill/FillPlanningStage.cs",
-                "src/UNCAD/Features/Fill/BatchFillUpdateCoordinator.cs"
+                "src/UNCAD/Features/Fill/BatchFillUpdatePreflight.cs"
             };
             foreach (string file in files)
             {

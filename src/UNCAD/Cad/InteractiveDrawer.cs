@@ -9,9 +9,11 @@ using UNCAD.Infra;
 namespace UNCAD.Cad
 {
     /// <summary>
-    /// 交互式连续绘制（与 AutoCAD L 命令交互一致）：
-    /// 点选连续绘制、回车/空格结束、U 撤销上一段、ESC 全部清除。
-    /// 每段独立事务立即提交——点一下立即生成。
+    /// 交互式连续绘制：
+    /// 点选连续绘制、回车/空格结束、U 撤销上一段、Esc 保留已画段（D-036，
+    /// 2026-11-01 裁定——不要为对齐 L 命令语义而恢复“Esc 全部清除”）。
+    /// 每段独立事务立即提交——点一下立即生成；真正的异常路径仍整体清除，
+    /// 不留半成品。
     /// segmentBuilder：在当前事务内绘制本段，把实体 ObjectId 加入 segIds。
     /// </summary>
     public static class InteractiveDrawer
@@ -23,7 +25,7 @@ namespace UNCAD.Cad
             if (p1res.Status != PromptStatus.OK) return;
 
             var drawn = new List<List<ObjectId>>(); // 每段的实体
-            var allIds = new List<ObjectId>();      // 全部实体（ESC 清除）
+            var allIds = new List<ObjectId>();      // 全部实体（U 逐段撤销；Esc 保留）
             Point3d pPrev = p1res.Value;
 
             try

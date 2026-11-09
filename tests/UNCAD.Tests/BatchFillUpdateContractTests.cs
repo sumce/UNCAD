@@ -19,9 +19,9 @@ namespace UNCAD.Tests
         {
             string source = Read("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");
-            int start = source.IndexOf("List<Tuple<Plan, FillReviewItem>> unresolvedDefaults",
+            int start = source.IndexOf("List<Tuple<BatchFillUpdatePlan, FillReviewItem>> unresolvedDefaults",
                 StringComparison.Ordinal);
-            int end = source.IndexOf("foreach (Plan plan in plans)", start,
+            int end = source.IndexOf("foreach (BatchFillUpdatePlan plan in plans)", start,
                 StringComparison.Ordinal);
 
             Assert.True(start >= 0 && end > start);
