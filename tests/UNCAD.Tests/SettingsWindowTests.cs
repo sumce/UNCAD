@@ -502,7 +502,9 @@ namespace UNCAD.Tests
             {
                 "UnlText", "UnlHeight", "UnlPos", "UnlOffset",
                 "UnqHeight", "UnqLineOff", "UnqTextOff", "UnqSide",
-                "ConduitDiameter", "UnrDiameter",
+                // D-050（2026-11-09）：U1C 标注几何拆出独立键（默认下侧外圈 210）。
+                "ConduitDiameter", "ConduitLineOff", "ConduitTextOff", "ConduitSide",
+                "UnrDiameter",
                 "UnaddHeight", "UnaddMmPerGrid", "UnaddTextEnabled",
                 "UnaddMTextEnabled", "UnaddDimensionEnabled", "UnaddCableEnabled",
                 "UnaddBridgeEnabled", "UnaddConduitEnabled",

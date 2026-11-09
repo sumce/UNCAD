@@ -116,19 +116,50 @@
             <!-- 线管规格（U1C） -->
             <ui:Card Style="{DynamicResource UncadCard}">
                 <StackPanel>
-                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="线管规格（U1C）" />
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="线管规格与位置（U1C）" />
                     <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
-                               Text="文字高度、偏移距离和标注侧与桥架标注共用。" />
-                    <StackPanel>
-                        <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="默认管径" />
-                        <ComboBox x:Name="ConduitDiameter" x:FieldModifier="internal"
-                                  Style="{DynamicResource UncadCombo}" IsEditable="True">
-                            <ComboBoxItem Content="20" />
-                            <ComboBoxItem Content="25" />
-                            <ComboBoxItem Content="38" />
-                            <ComboBoxItem Content="51" />
-                        </ComboBox>
-                    </StackPanel>
+                               Text="文字高度与桥架共用；偏移和标注侧独立（默认下侧外圈 210，避开毫米标与桥架文字；连续段会合并为一趟标注）。" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="默认管径" />
+                            <ComboBox x:Name="ConduitDiameter" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadCombo}" IsEditable="True">
+                                <ComboBoxItem Content="20" />
+                                <ComboBoxItem Content="25" />
+                                <ComboBoxItem Content="38" />
+                                <ComboBoxItem Content="51" />
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="紫线距基线（0 = 210）" />
+                            <ui:NumberBox x:Name="ConduitLineOff" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="文字距紫线（0 = 贴线）" />
+                            <ui:NumberBox x:Name="ConduitTextOff" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="标注侧" />
+                            <ComboBox x:Name="ConduitSide" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadCombo}"
+                                      SelectedValuePath="Tag">
+                                <ComboBoxItem Content="上方" Tag="1" />
+                                <ComboBoxItem Content="下方" Tag="0" />
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
             </ui:Card>
 

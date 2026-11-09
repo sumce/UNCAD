@@ -78,9 +78,6 @@ namespace UNCAD.Features.Unq
                     + "”的可标注项目，已取消。请在固定清单中补充对应项目后重试。");
                 return;
             }
-            string label = AnnotationLabelPair.Build(model,
-                BridgeLabelFormatter.FormatLengthText(millimetres));
-
             var ids = SelectionService.PickCurvesWithOffset(ctx,
                 "请选择基准线段或 [设置红线距离(D)]: ",
                 "\n请输入红线距基线距离", ref lineOff, value =>
@@ -101,22 +98,34 @@ namespace UNCAD.Features.Unq
                 ("文字偏移", TextFormatter.FormatNum(textOff)),
                 ("侧", side == "0" ? "下方" : "上方"));
 
-            int count = ParallelCurveAnnotator.Add(ctx, ids, new ParallelAnnotationOptions
-            {
-                CurveOffset = lineOff,
-                TextOffset = textOff,
-                TextHeight = hgt,
-                Above = side != "0",
-                ColorIndex = 1,
-                AnnotationKind = "U1Q",
-                LabelFactory = _ => label,
-                // 旧图纸上的单行“桥架200*100 2500mm”要能被认出来替换掉。
-                LegacyLabelKey = AnnotationLabelPair.CollapseText
-            });
+            // D-050（2026-11-09）：选集先按端点连通分"趟"，每趟一条连续偏移线
+            // + 一个标注；长度初值 = 成员线上 U1L 毫米标合计（无标签段用几何
+            // 长度兜底）取整到 10——统计契约要求长度结尾为 0。桥架通常比电缆
+            // 略长，用户手改无妨；连续段红线与基线交叉的旧缺陷由解析式 miter
+            // 偏移根治。
+            int count = ParallelCurveAnnotator.AddRuns(ctx, ids,
+                new ParallelAnnotationOptions
+                {
+                    CurveOffset = lineOff,
+                    TextOffset = textOff,
+                    TextHeight = hgt,
+                    Above = side != "0",
+                    ColorIndex = 1,
+                    AnnotationKind = "U1Q",
+                    // 旧图纸上的单行“桥架200*100 2500mm”要能被认出来替换掉。
+                    LegacyLabelKey = AnnotationLabelPair.CollapseText
+                },
+                run =>
+                {
+                    double estimated = run.EstimatedLengthMm > 0
+                        ? run.EstimatedLengthMm : millimetres;
+                    return AnnotationLabelPair.Build(model,
+                        BridgeLabelFormatter.FormatLengthText(estimated));
+                });
 
             SelectionService.ClearPickFirst(ctx);
             ctx.Write(count > 0
-                ? "\n[" + commandName + "] 桥架标注生成完成：" + count + " 条线段。"
+                ? "\n[" + commandName + "] 桥架标注生成完成：" + count + " 趟。"
                 : "\n[" + commandName + "] 警告：未处理任何受支持的直线/二维多段线。");
         }
     }

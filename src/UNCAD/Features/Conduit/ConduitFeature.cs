@@ -40,9 +40,11 @@ namespace UNCAD.Features.Conduit
             string diameter = NormalizeDiameter(state as string
                 ?? Settings.Get(ConfigKeys.ConduitDiameter, "20"));
             double hgt = Settings.GetDouble(ConfigKeys.ConduitHeight, 180.0);
-            double lineOff = Settings.GetDouble(ConfigKeys.ConduitLineOff, 15.0);
+            // D-050：U1C 标注几何拆出独立键，默认下侧外圈（210）——与桥架共用
+            // 配置时同一条线上的 U1Q/U1C 输出会完全重叠。
+            double lineOff = Settings.GetDouble(ConfigKeys.ConduitLineOff, 210.0);
             double textOff = Settings.GetDouble(ConfigKeys.ConduitTextOff, 0.0);
-            string side = Settings.Get(ConfigKeys.ConduitSide, "1");
+            string side = Settings.Get(ConfigKeys.ConduitSide, "0");
 
             // 标注第一行写固定清单的「1.名称」，管径必须先在清单里找到；
             // 找不到就没有可写的型号，按 D-016 直接中止。
@@ -96,7 +98,9 @@ namespace UNCAD.Features.Conduit
             {
                 ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
                     ruanguanSelection.RuanguanBlockIds, diameter);
-                count = ParallelCurveAnnotator.Add(ctx, transaction, ids,
+                // D-050：与 U1Q 同一"趟"机制——连续段合并为一条连续偏移线 + 一个
+                // 标注；长度仍为 2000mm 人工占位（业务约定：不带入实测距离）。
+                count = ParallelCurveAnnotator.AddRuns(ctx, transaction, ids,
                     new ParallelAnnotationOptions
                     {
                         CurveOffset = lineOff,
@@ -105,10 +109,10 @@ namespace UNCAD.Features.Conduit
                         Above = side != "0",
                         ColorIndex = 6,
                         AnnotationKind = "U1C",
-                        LabelFactory = _ => label,
                         // 旧图纸上的单行“⌀20线管 2000mm”要能被认出来替换掉。
                         LegacyLabelKey = AnnotationLabelPair.CollapseText
-                    });
+                    },
+                    run => label);
                 transaction.Commit();
             }
             if (ruanguanResult.Blocks > 0)
@@ -116,7 +120,7 @@ namespace UNCAD.Features.Conduit
                     + " 个块，共 " + ruanguanResult.Values + " 项。");
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[U1C] 已生成 " + count + " 条 ⌀" + diameter + " 线管标注。");
+            ctx.Write("\n[U1C] 已生成 " + count + " 趟 ⌀" + diameter + " 线管标注。");
         }
 
         private static string NormalizeDiameter(string value)

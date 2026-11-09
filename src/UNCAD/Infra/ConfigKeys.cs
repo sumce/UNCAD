@@ -15,12 +15,14 @@ namespace UNCAD.Infra
         public const string UnqTextOff = "UNQ_TEXT_OFF";
         public const string UnqSide = "UNQ_SIDE"; // "1"=上方(默认) "0"=下方
 
-        // 软管绘制（U1C）：管径独立，几何标注参数与桥架共用。
+        // 软管绘制（U1C）：管径独立。D-050（2026-11-09）标注几何拆出独立键——
+        // 与桥架共用时同一条线上的 U1Q/U1C 输出会完全重叠；默认下侧外圈
+        // （偏移 210，避开 U1L 毫米标的文字带 ~180）。字高仍与桥架共用。
         public const string ConduitDiameter = "UNC_CONDUIT_DIAMETER";
         public const string ConduitHeight = UnqHeight;
-        public const string ConduitLineOff = UnqLineOff;
-        public const string ConduitTextOff = UnqTextOff;
-        public const string ConduitSide = UnqSide;
+        public const string ConduitLineOff = "UNC_CONDUIT_LINE_OFF";
+        public const string ConduitTextOff = "UNC_CONDUIT_TEXT_OFF";
+        public const string ConduitSide = "UNC_CONDUIT_SIDE"; // "0"=下方(默认) "1"=上方
 
         // 拱桥开洞（U1R；注册表键名保持不变）
         public const string UnrDiameter = "UNR_DIAMETER";

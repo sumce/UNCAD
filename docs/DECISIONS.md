@@ -691,3 +691,32 @@ rewrite an existing entry.
   the operator has been told so in the window, the result remarks, and the
   command line, and can rerun U1S after completing the circuits to get the
   full BOQ. Drawing updates are never blocked by this window.
+
+## D-050: U1Q/U1C Continuous Runs, Analytic Offsets, And Independent Conduit Lane (2026-11-09)
+
+- Status: accepted (user request + user-reported crossing defect; D-049 stays
+  reserved for the pending ghost-frame proposal)
+- Decision: `U1Q1/U1Q2/U1Q4` and `U1C` first group the selected curves into
+  endpoint-connected runs (tolerance 1.0, same as U1LX); each simple chain
+  becomes one run rendered as ONE continuous offset polyline plus ONE two-line
+  label. Branched/self-loop components are not merged — each member keeps its
+  own single-segment annotation (never guess). The offset polyline is built
+  analytically (per-segment normal offset + miter joins, bevel fallback,
+  whole-polyline side validation); `Curve.GetOffsetCurves` output must not be
+  drawn directly anymore, because on cornered paths whose local reach is
+  shorter than the offset it self-intersects and crosses the baseline (the
+  user-reported "red line crosses the baseline" defect). The U1Q label length
+  is initialized from the sum of the U1L millimetre labels bound to the member
+  lines (geometry length for unlabelled members), rounded to the nearest 10 mm
+  because the statistics reader only accepts trailing-zero lengths; the user
+  may still edit it (a bridge run is usually a bit longer than its cable).
+  U1C keeps the fixed `2000mm` placeholder. Outputs carry a `RUN` field with
+  all member handles (`SOURCE` stays the first member for existing readers);
+  re-running on any member rebuilds the whole run. U1C conduit geometry
+  settings split from U1Q into independent keys (default: below, offset 210,
+  clear of the U1L label band); text height stays shared. Bridge label angle
+  repair checks tangents against any run member before rotating.
+- Consequence: do not reintroduce per-segment labels for connected selections,
+  do not bypass `OffsetPolylineBuilder` with raw `GetOffsetCurves`, and do not
+  read `UNQ_*` keys for conduit geometry. Statistics semantics are unchanged
+  (label text only); a merged label anchors to exactly one frame.

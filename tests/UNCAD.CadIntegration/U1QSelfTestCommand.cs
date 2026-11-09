@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.QuickLine;
 using UNCAD.Features.Fill;
 
 namespace UNCAD.CadIntegration
@@ -91,6 +92,7 @@ namespace UNCAD.CadIntegration
                 VerifyLongAnnotationAnchor();
                 VerifyLegacyBridgeRotation(context);
                 VerifyBatchDiagonalLines(context);
+                VerifyRunMerging(context);
 
                 Pass(document);
             }
@@ -113,6 +115,341 @@ namespace UNCAD.CadIntegration
                 LabelFactory = _ => "梯形桥架200Wx100H\\P"
                     + (suffix == "first" ? "2500mm" : "3000mm")
             };
+
+        /// <summary>
+        /// D-050（2026-11-09）连续段合并为一趟 + 偏移不交叉的真机断言：
+        /// L 形三段连通（两段带 U1L 毫米标、一段无标签走几何兜底）→ 1 趟、
+        /// 一条连续偏移折线 + 一个标注（长度=U1L 标签合计 6000mm）；偏移折线与
+        /// 基线**无任何交点**且全程同一侧（用户报告"红线与基线交叉"的直接
+        /// 回归证明）；两个不连通组→2 趟；点中趟内任一成员重跑→整趟替换。
+        /// </summary>
+        private static void VerifyRunMerging(CadContext context)
+        {
+            double bx = 90005000, by = 90000000;
+            var lines = new List<ObjectId>();
+            var labels = new List<ObjectId>();
+            try
+            {
+                using (Transaction transaction = context.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    lines.Add(context.AddToCurrentSpace(transaction, new Line(
+                        new Point3d(bx, by, 0), new Point3d(bx + 1000, by, 0))));
+                    lines.Add(context.AddToCurrentSpace(transaction, new Line(
+                        new Point3d(bx + 1000, by, 0),
+                        new Point3d(bx + 1000, by + 1000, 0))));
+                    lines.Add(context.AddToCurrentSpace(transaction, new Line(
+                        new Point3d(bx + 1000, by + 1000, 0),
+                        new Point3d(bx + 2000, by + 1000, 0))));
+                    // U1L 毫米标：L1=2000、L2=3000；L3 无标签（几何兜底 1000）。
+                    QuickLineMetadataStore.EnsureApplication(context.Db, transaction);
+                    labels.Add(AddU1LLabel(context, transaction,
+                        new Point3d(bx + 500, by + 20, 0), "2000mm", lines[0]));
+                    labels.Add(AddU1LLabel(context, transaction,
+                        new Point3d(bx + 1020, by + 500, 0), "3000mm", lines[1]));
+                    transaction.Commit();
+                }
+
+                // ① 连续三段 → 1 趟 + 一个标注；长度 = 2000+3000+1000 = 6000mm。
+                int runs = ParallelCurveAnnotator.AddRuns(context, lines.ToArray(),
+                    RunOptions("U1Q", 1, true, 15), run =>
+                        "梯形桥架200Wx100H\\P" + (long)run.EstimatedLengthMm + "mm");
+                Require(runs == 1, "continuous chain should merge into one run");
+                List<ObjectId> generated = ReadRunGenerated(context.Db, lines);
+                Require(generated.Count == 2,
+                    "one run = one offset polyline + one label (got "
+                    + generated.Count + ")");
+                Polyline offsetPolyline = FindPolyline(context.Db, generated);
+                MText runLabel = FindMTextEntity(context.Db, generated);
+                Require(offsetPolyline != null && runLabel != null,
+                    "run output must contain a polyline and an MText");
+                Require(offsetPolyline.NumberOfVertices == 4,
+                    "continuous offset should keep all corner vertices (got "
+                    + offsetPolyline.NumberOfVertices + ")");
+                Require(runLabel.Contents.Contains("6000mm"),
+                    "run label length must sum U1L labels + geometry (got "
+                    + runLabel.Contents + ")");
+
+                // ② 不交叉（用户报告的缺陷的直接回归证明）+ 全程同一侧。
+                Require(!IntersectsSource(context.Db, offsetPolyline, lines),
+                    "offset polyline must never cross the baseline chain");
+                Require(StaysOnOneSide(context.Db, offsetPolyline, lines, 15,
+                    out bool aboveSide) && aboveSide,
+                    "offset polyline must stay on one world side (above)");
+
+                // ③ 不连通两组 → 2 趟。
+                var splitLines = new List<ObjectId>();
+                try
+                {
+                    using (Transaction transaction = context.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        splitLines.Add(context.AddToCurrentSpace(transaction, new Line(
+                            new Point3d(bx + 5000, by, 0),
+                            new Point3d(bx + 5800, by, 0))));
+                        splitLines.Add(context.AddToCurrentSpace(transaction, new Line(
+                            new Point3d(bx + 7000, by, 0),
+                            new Point3d(bx + 7800, by, 0))));
+                        transaction.Commit();
+                    }
+                    int splitRuns = ParallelCurveAnnotator.AddRuns(context,
+                        splitLines.ToArray(), RunOptions("U1Q", 1, true, 15),
+                        run => "梯形桥架200Wx100H\\P" + (long)run.EstimatedLengthMm
+                            + "mm");
+                    Require(splitRuns == 2, "two disconnected groups = two runs");
+                    Require(ReadRunGenerated(context.Db, splitLines).Count == 4,
+                        "two runs = 2 polylines + 2 labels");
+                }
+                finally { CleanupIds(context.Db, splitLines.Concat(
+                    ReadRunGenerated(context.Db, splitLines))); }
+
+                // ④ 点中趟内任一成员（L2）重跑 → 整趟替换，无旧输出残留。
+                int rerun = ParallelCurveAnnotator.AddRuns(context,
+                    new[] { lines[1] }, RunOptions("U1Q", 1, true, 15),
+                    run => "梯形桥架200Wx100H\\P" + (long)run.EstimatedLengthMm + "mm");
+                Require(rerun == 1, "re-run from one member rebuilds the whole run");
+                Require(ReadRunGenerated(context.Db, lines).Count == 2,
+                    "whole-run replacement must not leave stale outputs");
+
+                // ⑤ U1C 车道：独立配置（默认几何侧 210）不与基线/U1L 文字带重叠。
+                int conduitRuns = ParallelCurveAnnotator.AddRuns(context,
+                    lines.ToArray(), RunOptions("U1C", 6, false, 210),
+                    run => "镀锌穿线管EMT PIPE 20mm(3/4\")\\P2000mm");
+                Require(conduitRuns == 1, "U1C run generation");
+                List<ObjectId> conduitGenerated = ReadRunGenerated(context.Db,
+                    lines, "U1C");
+                MText conduitLabel = FindMTextEntity(context.Db, conduitGenerated);
+                Require(conduitLabel != null, "U1C run must produce a label");
+                double laneDistance = MinDistanceToLines(context.Db,
+                    conduitLabel.Location, lines);
+                Require(laneDistance >= 150,
+                    "U1C label must sit in its own lane (>=150 from baseline, got "
+                    + laneDistance.ToString("0.#") + ")");
+                double toU1L1 = conduitLabel.Location.DistanceTo(
+                    new Point3d(bx + 500, by + 20, 0));
+                double toU1L2 = conduitLabel.Location.DistanceTo(
+                    new Point3d(bx + 1020, by + 500, 0));
+                Require(toU1L1 >= 100 && toU1L2 >= 100,
+                    "U1C label must not overlap the U1L millimetre band (distances "
+                    + toU1L1.ToString("0.#") + "/" + toU1L2.ToString("0.#") + ")");
+            }
+            finally
+            {
+                var all = new List<ObjectId>(lines);
+                all.AddRange(labels);
+                all.AddRange(ReadRunGenerated(context.Db, lines));
+                all.AddRange(ReadRunGenerated(context.Db, lines, "U1C"));
+                CleanupIds(context.Db, all);
+            }
+        }
+
+        private static ParallelAnnotationOptions RunOptions(string kind, short color,
+            bool above, double curveOffset)
+            => new ParallelAnnotationOptions
+            {
+                CurveOffset = curveOffset,
+                TextOffset = 0,
+                TextHeight = 5,
+                Above = above,
+                ColorIndex = color,
+                AnnotationKind = kind,
+                LegacyLabelKey = UNCAD.Core.Fill.AnnotationLabelPair.CollapseText
+            };
+
+        private static ObjectId AddU1LLabel(CadContext context, Transaction transaction,
+            Point3d position, string text, ObjectId line)
+        {
+            ObjectId id = context.AddToCurrentSpace(transaction, new DBText
+            {
+                Position = position,
+                Height = 5,
+                TextString = text,
+                Rotation = 0
+            });
+            DBObject label = transaction.GetObject(id, OpenMode.ForWrite);
+            label.XData = QuickLineMetadataStore.Build(label,
+                line.Handle.ToString(), true);
+            return id;
+        }
+
+        private static List<ObjectId> ReadRunGenerated(Database database,
+            List<ObjectId> sources, string kind = "U1Q")
+        {
+            var handles = new HashSet<string>(
+                sources.Select(id => id.Handle.ToString()),
+                StringComparer.OrdinalIgnoreCase);
+            var result = new List<ObjectId>();
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                BlockTableRecord space = (BlockTableRecord)transaction.GetObject(
+                    database.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in space)
+                {
+                    if (!(transaction.GetObject(id, OpenMode.ForRead, true) is Entity
+                        entity)) continue;
+                    if (!ParallelAnnotationMetadata.TryRead(entity,
+                        out string entityKind, out string source)) continue;
+                    if (!string.Equals(entityKind, kind,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!handles.Contains(source)
+                        && !ParallelAnnotationMetadata.TryReadRunHandles(entity)
+                            .Any(handles.Contains)) continue;
+                    result.Add(id);
+                }
+                transaction.Commit();
+            }
+            return result;
+        }
+
+        private static Polyline FindPolyline(Database database, List<ObjectId> ids)
+        {
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                foreach (ObjectId id in ids)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is Polyline p)
+                        return p;
+                return null;
+            }
+        }
+
+        /// <summary>已有 FindMText 返回 ObjectId；这里要拿实体本体断言内容/位置。</summary>
+        private static MText FindMTextEntity(Database database, List<ObjectId> ids)
+        {
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                foreach (ObjectId id in ids)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is MText text)
+                        return text;
+                return null;
+            }
+        }
+
+        /// <summary>偏移折线的任意段与基线链任意段的 2D 相交检测（含端点接触）。</summary>
+        private static bool IntersectsSource(Database database, Polyline offset,
+            List<ObjectId> sources)
+        {
+            var offsetSegments = ReadPolylineSegments(offset);
+            var sourceSegments = new List<Tuple<Point2d, Point2d>>();
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                foreach (ObjectId id in sources)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is Line line)
+                        sourceSegments.Add(Tuple.Create(
+                            new Point2d(line.StartPoint.X, line.StartPoint.Y),
+                            new Point2d(line.EndPoint.X, line.EndPoint.Y)));
+                transaction.Commit();
+            }
+            foreach (Tuple<Point2d, Point2d> a in offsetSegments)
+                foreach (Tuple<Point2d, Point2d> b in sourceSegments)
+                    if (SegmentsIntersect(a.Item1, a.Item2, b.Item1, b.Item2))
+                        return true;
+            return false;
+        }
+
+        private static List<Tuple<Point2d, Point2d>> ReadPolylineSegments(Polyline p)
+        {
+            var result = new List<Tuple<Point2d, Point2d>>();
+            for (int i = 0; i < p.NumberOfVertices - 1; i++)
+                result.Add(Tuple.Create(p.GetPoint2dAt(i), p.GetPoint2dAt(i + 1)));
+            return result;
+        }
+
+        /// <summary>偏移折线全程同一世界侧：每段中点到最近基线段的带符号距离。</summary>
+        private static bool StaysOnOneSide(Database database, Polyline offset,
+            List<ObjectId> sources, double offsetDistance, out bool aboveSide)
+        {
+            aboveSide = false;
+            int? side = null;
+            var sourceSegments = new List<Tuple<Point2d, Point2d>>();
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                foreach (ObjectId id in sources)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is Line line)
+                        sourceSegments.Add(Tuple.Create(
+                            new Point2d(line.StartPoint.X, line.StartPoint.Y),
+                            new Point2d(line.EndPoint.X, line.EndPoint.Y)));
+                transaction.Commit();
+            }
+            foreach (Tuple<Point2d, Point2d> segment in ReadPolylineSegments(offset))
+            {
+                var middle = new Point2d((segment.Item1.X + segment.Item2.X) / 2,
+                    (segment.Item2.Y + segment.Item1.Y) / 2);
+                double best = double.MaxValue;
+                int bestIndex = -1;
+                for (int i = 0; i < sourceSegments.Count; i++)
+                {
+                    double d = DistanceToSegment(middle, sourceSegments[i]);
+                    if (d < best)
+                    {
+                        best = d;
+                        bestIndex = i;
+                    }
+                }
+                if (bestIndex < 0 || best < offsetDistance * 0.8) return false;
+                Tuple<Point2d, Point2d> source = sourceSegments[bestIndex];
+                double cross = (source.Item2.X - source.Item1.X)
+                    * (middle.Y - source.Item1.Y)
+                    - (source.Item2.Y - source.Item1.Y)
+                    * (middle.X - source.Item1.X);
+                int current = cross >= 0 ? 1 : -1;
+                if (side == null) side = current;
+                else if (side != current) return false;
+            }
+            aboveSide = side == 1;
+            return side != null;
+        }
+
+        private static double MinDistanceToLines(Database database, Point3d point,
+            List<ObjectId> sources)
+        {
+            double best = double.MaxValue;
+            using (Transaction transaction = database.TransactionManager
+                .StartTransaction())
+            {
+                foreach (ObjectId id in sources)
+                    if (transaction.GetObject(id, OpenMode.ForRead, true) is Line line)
+                        best = Math.Min(best, DistanceToSegment(
+                            new Point2d(point.X, point.Y),
+                            Tuple.Create(
+                                new Point2d(line.StartPoint.X, line.StartPoint.Y),
+                                new Point2d(line.EndPoint.X, line.EndPoint.Y))));
+                transaction.Commit();
+            }
+            return best;
+        }
+
+        private static double DistanceToSegment(Point2d point,
+            Tuple<Point2d, Point2d> segment)
+        {
+            double dx = segment.Item2.X - segment.Item1.X;
+            double dy = segment.Item2.Y - segment.Item1.Y;
+            double t = ((point.X - segment.Item1.X) * dx
+                        + (point.Y - segment.Item1.Y) * dy) / (dx * dx + dy * dy);
+            t = Math.Max(0, Math.Min(1, t));
+            double px = segment.Item1.X + dx * t, py = segment.Item1.Y + dy * t;
+            return Math.Sqrt((point.X - px) * (point.X - px)
+                + (point.Y - py) * (point.Y - py));
+        }
+
+        private static bool SegmentsIntersect(Point2d a1, Point2d a2, Point2d b1,
+            Point2d b2)
+        {
+            double d1 = Cross(b1, b2, a1), d2 = Cross(b1, b2, a2);
+            double d3 = Cross(a1, a2, b1), d4 = Cross(a1, a2, b2);
+            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
+                && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+            const double eps = 1e-6;
+            return Math.Abs(d1) < eps || Math.Abs(d2) < eps
+                || Math.Abs(d3) < eps || Math.Abs(d4) < eps;
+        }
+
+        private static double Cross(Point2d o, Point2d a, Point2d b)
+            => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
 
         private static void VerifyLegacyBridgeRotation(CadContext context)
         {

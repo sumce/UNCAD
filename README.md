@@ -541,7 +541,8 @@ The stable 3.0.0 build (shipped 2026-11-03, closing the D-039 dev channel) has 3
 | 键 | 含义 | 默认值 |
 | --- | --- | --- |
 | `UNL_TEXT` / `UNL_HEIGHT` / `UNL_POS` / `UNL_OFFSET` | 占位文字 / 高度 / 位置(0居中 1靠边下 2靠边上) / 偏移距离(0=贴线) | 2000mm / 180 / 1 / 0 |
-| `UNQ_TEXT` / `UNQ_HEIGHT` / `UNQ_LINE_OFF` / `UNQ_TEXT_OFF` / `UNQ_SIDE` | 规格 / 高度 / 红线偏移(0=默认15贴线) / 文字偏移(0=贴线) / 侧(1上 0下) | 桥架200*100 10格 / 180 / 0 / 0 / 1 |
+| `UNQ_HEIGHT` / `UNQ_LINE_OFF` / `UNQ_TEXT_OFF` / `UNQ_SIDE` | 高度 / 红线偏移(0=默认15贴线) / 文字偏移(0=贴线) / 侧(1上 0下)；规格由 U1Q1/2/4 固定传入 | 180 / 0 / 0 / 1 |
+| `UNC_CONDUIT_LINE_OFF` / `UNC_CONDUIT_TEXT_OFF` / `UNC_CONDUIT_SIDE` | U1C 紫线偏移(0=默认210) / 文字偏移 / 侧(0下 1上)；D-050 起独立于桥架 | 0 / 0 / 0 |
 | `UNR_DIAMETER` | UNR 拱桥直径 | 300 |
 | `UNC_STYLE_NAME` / `UNC_STYLE_FONT` / `UNC_STYLE_BIGFONT` / `UNC_STYLE_WIDTH` | 文字样式：样式名 / 字体文件 / 大字体(空=TTF) / 宽高比 | UNC-标注 / msyh.ttf / (空) / 0.8 |
 | `UNADD_HEIGHT` / `UNADD_MM_PER_GRID` | 统计输出文字高度 / 桥架每格毫米数 | 180 / 250 |

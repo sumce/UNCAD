@@ -61,13 +61,16 @@ namespace UNCAD.Features.Fill
             if (string.Equals(collapsed, raw, StringComparison.Ordinal)
                 || !TextParser.TryExtractBridgeLabel(collapsed, mmPerGrid,
                     out _, out _)
-                || !ParallelAnnotationMetadata.TryReadCurveRotation(transaction, text,
-                    "U1Q", text.Location, out double rotation)
+                // D-050（2026-11-09）：合并趟标注按锚点在全部成员里找最近曲线取
+                // 角度（SOURCE=首成员不代表标注所在段）；单段标注行为不变。
+                || !ParallelAnnotationMetadata.TryReadAnnotationRotation(transaction,
+                    text, "U1Q", text.Location, out double rotation)
                 || AngleDifference(text.Rotation, rotation) <= 1e-6) return false;
             // 2026-11-05：拐角防误掰——标注角度只要与绑定曲线任意一段的阅读角
             // 一致，说明它本来就按某一段写的；最近点落在另一段导致读出的
             // "修复角"不同时，绝不能动（用户报告 U1F 改变桥架标注角度）。
-            if (ParallelAnnotationMetadata.MatchesAnySegmentTangent(transaction,
+            // D-050：整趟版——与**任意成员**的任意一段一致即视为本来角度。
+            if (ParallelAnnotationMetadata.MatchesAnyRunSegmentTangent(transaction,
                     text, "U1Q", text.Rotation)) return false;
             text.UpgradeOpen();
             text.Rotation = rotation;

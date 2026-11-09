@@ -106,8 +106,10 @@ namespace UNCAD.Tests
         {
             string writer = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "BridgeLabelMigrationWriter.cs"));
+            // 2026-11-09（D-050）：护栏升级为整趟版——与任意成员的任意一段一致
+            // 即不动；单段标注行为等价（无 RUN 时退回单源检查）。
             int guard = writer.IndexOf(
-                "ParallelAnnotationMetadata.MatchesAnySegmentTangent(",
+                "ParallelAnnotationMetadata.MatchesAnyRunSegmentTangent(",
                 StringComparison.Ordinal);
             int rotate = writer.IndexOf("text.Rotation = rotation;",
                 StringComparison.Ordinal);

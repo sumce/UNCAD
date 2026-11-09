@@ -45,6 +45,263 @@ namespace UNCAD.Cad
             }
         }
 
+        /// <summary>
+        /// D-050（2026-11-09）：按"趟"生成——选集先经 ParallelRunPlanner 端点
+        /// 连通分组，每个连通组 = 一条连续偏移线（OffsetPolylineBuilder 解析式
+        /// miter，构造上不翻侧——根治用户报告的"红线与基线交叉"）+ 一个标注。
+        /// runLabelFactory 收到已填好 EstimatedLengthMm（U1L 标签推算）的趟。
+        /// 整趟替换：任一成员句柄命中的旧输出（含旧版单段输出）全部先删再写。
+        /// </summary>
+        public static int AddRuns(CadContext ctx, ObjectId[] ids,
+            ParallelAnnotationOptions options,
+            Func<Core.Geometry.ParallelRun, string> runLabelFactory)
+        {
+            if (ctx == null || ids == null || options == null
+                || runLabelFactory == null) return 0;
+            using (var transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                int count = AddRuns(ctx, transaction, ids, options, runLabelFactory);
+                transaction.Commit();
+                return count;
+            }
+        }
+
+        public static int AddRuns(CadContext ctx, Transaction transaction,
+            ObjectId[] ids, ParallelAnnotationOptions options,
+            Func<Core.Geometry.ParallelRun, string> runLabelFactory)
+        {
+            if (ctx == null || transaction == null || ids == null || options == null
+                || runLabelFactory == null) return 0;
+
+            bool metadataReady = !string.IsNullOrWhiteSpace(options.AnnotationKind)
+                && ParallelAnnotationMetadata.EnsureApplication(ctx.Db, transaction);
+            ObjectId[] sourceIds = ids.Distinct().ToArray();
+            int resolvedGenerated = 0;
+            if (metadataReady)
+                sourceIds = ResolveSourceIds(ctx, transaction, sourceIds,
+                    options.AnnotationKind, out resolvedGenerated);
+            if (sourceIds.Length == 0)
+            {
+                ctx.Write("\n[UNCAD] 选中的对象不是可处理的独立线段，或原始线段已不存在。");
+                return 0;
+            }
+
+            // 成员提取：失败（不支持/退化/已生成物）逐条跳过并计原因。
+            var members = new List<Core.Geometry.ParallelRunMember>();
+            int skipped = 0;
+            foreach (ObjectId id in sourceIds)
+            {
+                Curve source;
+                try { source = transaction.GetObject(id, OpenMode.ForRead, true) as Curve; }
+                catch { skipped++; continue; }
+                if (source == null || !IsSupported(source))
+                {
+                    skipped++;
+                    continue;
+                }
+                if (metadataReady && ParallelAnnotationMetadata.TryRead(source,
+                    out _, out _))
+                {
+                    skipped++;
+                    continue;
+                }
+                if (!ParallelRunGeometry.TryExtractChain(transaction, id,
+                        out List<Core.QuickLine.QuickLinePoint> vertices,
+                        out double lengthMm)
+                    || vertices.Count < 2 || lengthMm <= 0)
+                {
+                    skipped++;
+                    continue;
+                }
+                members.Add(new Core.Geometry.ParallelRunMember
+                {
+                    Handle = id.Handle.ToString(),
+                    LengthMm = lengthMm,
+                    Vertices = vertices
+                });
+            }
+            if (members.Count == 0)
+            {
+                ctx.Write("\n[UNCAD] 没有可合并标注的受支持直线/二维多段线"
+                    + (skipped > 0 ? "（已跳过 " + skipped + " 条）" : "") + "。");
+                return 0;
+            }
+
+            var runs = Core.Geometry.ParallelRunPlanner.Plan(members);
+            var memberHandles = new HashSet<string>(
+                members.Select(member => member.Handle),
+                StringComparer.OrdinalIgnoreCase);
+            // 旧输出快照（SOURCE 命中或 RUN 任一成员命中），新实体不在快照内。
+            var previousEntities = new List<ObjectId>();
+            if (metadataReady)
+            {
+                foreach (KeyValuePair<string, List<ObjectId>> entry in CollectPrevious(
+                    ctx, transaction, options.AnnotationKind, memberHandles))
+                    previousEntities.AddRange(entry.Value);
+            }
+            Dictionary<string, double> u1LMillimetres =
+                ParallelRunGeometry.CollectU1LMillimetresByLineHandle(ctx, transaction);
+            ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
+            // 旧版（无元数据）单行标注快照：整批收集一次，逐趟比对。
+            List<LegacyCandidate> legacy = CollectLegacyCandidates(ctx, transaction,
+                options.ColorIndex);
+
+            int created = 0;
+            int mergedRuns = 0;
+            foreach (Core.Geometry.ParallelRun run in runs)
+            {
+                try
+                {
+                    if (CreateRunAnnotation(ctx, transaction, run, options,
+                        runLabelFactory, u1LMillimetres, metadataReady, styleId,
+                        legacy))
+                    {
+                        created++;
+                        if (run.Merged) mergedRuns++;
+                    }
+                    else skipped++;
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    Log.Warn("Parallel run annotation failed: " + ex.Message);
+                }
+            }
+            // 整趟替换：新输出全部生成后才删旧输出；一趟都没成时不删（不丢标注）。
+            if (created > 0) ErasePreviousEntities(transaction, previousEntities);
+            if (resolvedGenerated > 0)
+                ctx.Write("\n[UNCAD] 已识别已生成的平行标注线，并回溯源线更新 "
+                    + resolvedGenerated + " 条。");
+            ctx.Write("\n[UNCAD] 本次生成 " + created + " 趟连续标注"
+                + (mergedRuns > 0 ? "（其中 " + mergedRuns + " 趟由多段连续线合并）" : "")
+                + (skipped > 0 ? "；跳过 " + skipped + " 条不可偏移的源线。" : "。"));
+            return created;
+        }
+
+        private static bool CreateRunAnnotation(CadContext ctx, Transaction transaction,
+            Core.Geometry.ParallelRun run, ParallelAnnotationOptions options,
+            Func<Core.Geometry.ParallelRun, string> runLabelFactory,
+            Dictionary<string, double> u1LMillimetres, bool metadataReady,
+            ObjectId styleId, List<LegacyCandidate> legacy)
+        {
+            run.EstimatedLengthMm = ParallelRunGeometry.EstimateRunLengthMm(run,
+                u1LMillimetres);
+            double chainLength = ParallelRunGeometry.ChainLengthMm(run.Vertices);
+            ParallelRunGeometry.PointAndDirectionAtDistance(run.Vertices,
+                chainLength / 2.0,
+                out Core.QuickLine.QuickLinePoint anchor,
+                out Core.QuickLine.QuickLinePoint travel);
+
+            // 整趟统一世界侧：以锚点段的"阅读方向 + Above"求期望法向，再判定
+            // 它对应链行进方向的左手（+90°）还是右手——拐角处不再翻转。
+            double readAngle = ReadableLineAngle(
+                new Vector3d(travel.X, travel.Y, 0));
+            double desiredAngle = options.Above
+                ? readAngle + Math.PI / 2 : readAngle - Math.PI / 2;
+            double desiredX = Math.Cos(desiredAngle), desiredY = Math.Sin(desiredAngle);
+            // 左手法向 = 行进方向逆时针转 90°（与 OffsetPolylineBuilder 同口径）。
+            double leftCross = -travel.Y * desiredX + travel.X * desiredY;
+            bool leftOfTravel = leftCross >= 0;
+
+            var outputCurves = new List<Curve>();
+            if (!Core.Geometry.OffsetPolylineBuilder.TryBuild(run.Vertices,
+                    options.CurveOffset, leftOfTravel,
+                    out List<Core.QuickLine.QuickLinePoint> offsetVertices))
+            {
+                // 病态几何兜底：逐成员独立偏移（平行线数学上不交叉，只是拐角断开）。
+                foreach (Core.Geometry.ParallelRunMember member in run.Members)
+                    if (Core.Geometry.OffsetPolylineBuilder.TryBuild(member.Vertices,
+                            options.CurveOffset, leftOfTravel,
+                            out List<Core.QuickLine.QuickLinePoint> memberOffset))
+                        outputCurves.Add(BuildPolyline(memberOffset));
+                if (outputCurves.Count == 0) return false;
+            }
+            else
+            {
+                outputCurves.Add(BuildPolyline(offsetVertices));
+            }
+
+            // 标注锚点：源链半程点在偏移折线上的最近点 + 该处切线。
+            var anchor3d = new Point3d(anchor.X, anchor.Y, 0);
+            Point3d labelPoint = anchor3d;
+            Vector3d labelTangent = new Vector3d(travel.X, travel.Y, 0);
+            Curve labelCurve = outputCurves[0];
+            double bestDistance = double.MaxValue;
+            foreach (Curve curve in outputCurves)
+            {
+                try
+                {
+                    Point3d nearest = curve.GetClosestPointTo(anchor3d, false);
+                    double distance = nearest.DistanceTo(anchor3d);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        labelCurve = curve;
+                        labelPoint = nearest;
+                        Vector3d tangent = curve.GetFirstDerivative(nearest);
+                        if (tangent.Length > 1e-9) labelTangent = tangent;
+                    }
+                }
+                catch { }
+            }
+            double textAngle = ReadableLineAngle(labelTangent);
+            Point3d textPoint = GeoMath.Polar(labelPoint,
+                GeoMath.SideDirection(textAngle, options.Above), options.TextOffset);
+            string label = runLabelFactory(run);
+            string labelKey = LegacyKey(options, label);
+            Entity text = CreateLabel(ctx, label, textPoint, options.TextHeight,
+                textAngle,
+                options.Above ? AttachmentPoint.BottomCenter : AttachmentPoint.TopCenter,
+                options.ColorIndex, styleId);
+            string firstHandle = run.Members[0].Handle;
+            string runHandles = string.Join(
+                ParallelAnnotationMetadata.RunHandleSeparator,
+                run.Members.Select(member => member.Handle));
+
+            foreach (Curve curve in outputCurves)
+            {
+                curve.LayerId = ctx.CurrentLayerId;
+                if (options.ColorIndex != 0) curve.ColorIndex = options.ColorIndex;
+                ctx.AddToCurrentSpace(transaction, curve);
+                if (metadataReady)
+                    ParallelAnnotationMetadata.Set(curve, options.AnnotationKind,
+                        firstHandle, runHandles);
+            }
+            ctx.AddToCurrentSpace(transaction, text);
+            if (metadataReady)
+                ParallelAnnotationMetadata.Set(text, options.AnnotationKind,
+                    firstHandle, runHandles);
+            RemoveLegacyDuplicates(transaction, legacy, text, labelKey, options,
+                outputCurves);
+            return true;
+        }
+
+        private static Polyline BuildPolyline(
+            List<Core.QuickLine.QuickLinePoint> vertices)
+        {
+            var polyline = new Polyline();
+            for (int i = 0; i < vertices.Count; i++)
+                polyline.AddVertexAt(i,
+                    new Point2d(vertices[i].X, vertices[i].Y), 0, 0, 0);
+            polyline.Closed = false;
+            return polyline;
+        }
+
+        private static void ErasePreviousEntities(Transaction transaction,
+            List<ObjectId> previous)
+        {
+            foreach (ObjectId id in previous.Distinct())
+            {
+                try
+                {
+                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true)
+                        as Entity;
+                    if (entity != null && !entity.IsErased) entity.Erase();
+                }
+                catch { }
+            }
+        }
+
         /// <summary>Uses a caller-owned transaction so U1C can update all outputs atomically.</summary>
         public static int Add(CadContext ctx, Transaction transaction, ObjectId[] ids,
             ParallelAnnotationOptions options)
@@ -293,8 +550,17 @@ namespace UNCAD.Cad
                     && string.Equals(existingKind, annotationKind,
                         StringComparison.OrdinalIgnoreCase))
                 {
-                    if (TryResolveHandle(ctx.Db, sourceHandle, out ObjectId sourceId))
+                    // D-050：合并趟输出回溯到全部成员源线（点中趟内任何一段
+                    // 的红线都整趟重建）；单段标注仍回溯唯一 SOURCE。
+                    List<string> handles = ParallelAnnotationMetadata
+                        .TryReadRunHandles(entity);
+                    if (handles.Count == 0 && !string.IsNullOrWhiteSpace(sourceHandle))
+                        handles.Add(sourceHandle);
+                    bool resolvedAny = false;
+                    foreach (string handle in handles)
                     {
+                        if (!TryResolveHandle(ctx.Db, handle, out ObjectId sourceId))
+                            continue;
                         try
                         {
                             Entity source = transaction.GetObject(sourceId,
@@ -302,11 +568,12 @@ namespace UNCAD.Cad
                             if (source is Curve sourceCurve && IsSupported(sourceCurve))
                             {
                                 result.Add(sourceId);
-                                resolvedCount++;
+                                resolvedAny = true;
                             }
                         }
                         catch { }
                     }
+                    if (resolvedAny) resolvedCount++;
                     // A generated line with a missing/invalid source is not a valid
                     // fallback source; offsetting it would compound the error.
                     continue;
@@ -346,12 +613,26 @@ namespace UNCAD.Cad
                 if (entity == null || !ParallelAnnotationMetadata.TryRead(entity,
                     out string existingKind, out string sourceHandle)
                     || !string.Equals(existingKind, kind,
-                        StringComparison.OrdinalIgnoreCase)
-                    || !sourceHandles.Contains(sourceHandle)) continue;
-                if (!result.TryGetValue(sourceHandle, out List<ObjectId> ids))
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                // D-050：旧输出的 SOURCE 命中、或合并趟输出的任一 RUN 成员
+                // 命中，都算"这一趟要替换的旧输出"。
+                string matchKey = sourceHandles.Contains(sourceHandle)
+                    ? sourceHandle : null;
+                if (matchKey == null)
+                {
+                    foreach (string runHandle in ParallelAnnotationMetadata
+                        .TryReadRunHandles(entity))
+                        if (sourceHandles.Contains(runHandle))
+                        {
+                            matchKey = runHandle;
+                            break;
+                        }
+                }
+                if (matchKey == null) continue;
+                if (!result.TryGetValue(matchKey, out List<ObjectId> ids))
                 {
                     ids = new List<ObjectId>();
-                    result[sourceHandle] = ids;
+                    result[matchKey] = ids;
                 }
                 ids.Add(id);
             }

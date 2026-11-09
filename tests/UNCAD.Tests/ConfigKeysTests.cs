@@ -168,12 +168,16 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ConduitAnnotationGeometry_UsesBridgeSettingKeys()
+        public void ConduitAnnotationGeometry_UsesIndependentKeysExceptHeight()
         {
+            // D-050（2026-11-09）：U1C 标注几何拆出独立键——与桥架共用时同一条
+            // 线上的 U1Q/U1C 输出会完全重叠。字高仍共用。
             Assert.Equal(ConfigKeys.UnqHeight, ConfigKeys.ConduitHeight);
-            Assert.Equal(ConfigKeys.UnqLineOff, ConfigKeys.ConduitLineOff);
-            Assert.Equal(ConfigKeys.UnqTextOff, ConfigKeys.ConduitTextOff);
-            Assert.Equal(ConfigKeys.UnqSide, ConfigKeys.ConduitSide);
+            Assert.Equal("UNC_CONDUIT_LINE_OFF", ConfigKeys.ConduitLineOff);
+            Assert.Equal("UNC_CONDUIT_TEXT_OFF", ConfigKeys.ConduitTextOff);
+            Assert.Equal("UNC_CONDUIT_SIDE", ConfigKeys.ConduitSide);
+            Assert.NotEqual(ConfigKeys.UnqLineOff, ConfigKeys.ConduitLineOff);
+            Assert.NotEqual(ConfigKeys.UnqSide, ConfigKeys.ConduitSide);
         }
     }
 }

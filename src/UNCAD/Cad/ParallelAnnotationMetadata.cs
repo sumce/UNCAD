@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 
@@ -12,6 +13,11 @@ namespace UNCAD.Cad
         public const string ApplicationName = "UNCAD_PARALLEL";
         private const string KindKey = "KIND";
         private const string SourceKey = "SOURCE";
+        /// <summary>D-050（2026-11-09）：合并趟的全部成员源句柄（"|" 连接）。
+        /// SOURCE 仍保留 = 首成员句柄，旧读取方（角度修复/3D 分组）不受影响。</summary>
+        private const string RunKey = "RUN";
+        /// <summary>一趟内成员句柄的分隔符（句柄是十六进制串，不含 "|"）。</summary>
+        public const string RunHandleSeparator = "|";
 
         public static bool EnsureApplication(Database database, Transaction transaction)
         {
@@ -35,7 +41,8 @@ namespace UNCAD.Cad
             }
         }
 
-        public static void Set(Entity entity, string kind, string sourceHandle)
+        public static void Set(Entity entity, string kind, string sourceHandle,
+            string runHandles = null)
         {
             if (entity == null || string.IsNullOrWhiteSpace(kind)
                 || string.IsNullOrWhiteSpace(sourceHandle)) return;
@@ -73,14 +80,25 @@ namespace UNCAD.Cad
             values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, SourceKey));
             values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
                 sourceHandle.Trim()));
+            if (!string.IsNullOrWhiteSpace(runHandles))
+            {
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, RunKey));
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
+                    runHandles.Trim()));
+            }
             try { entity.XData = new ResultBuffer(values.ToArray()); }
             catch { /* Annotation metadata is optional; geometry remains valid. */ }
         }
 
         public static bool TryRead(Entity entity, out string kind, out string sourceHandle)
+            => TryRead(entity, out kind, out sourceHandle, out _);
+
+        public static bool TryRead(Entity entity, out string kind,
+            out string sourceHandle, out string runHandles)
         {
             kind = "";
             sourceHandle = "";
+            runHandles = "";
             if (entity == null) return false;
             try
             {
@@ -94,23 +112,31 @@ namespace UNCAD.Cad
                         string text = Convert.ToString(value.Value,
                             CultureInfo.InvariantCulture) ?? "";
                         if (string.Equals(text, KindKey,
-                            StringComparison.OrdinalIgnoreCase)
+                                StringComparison.OrdinalIgnoreCase)
                             || string.Equals(text, SourceKey,
+                                StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(text, RunKey,
                                 StringComparison.OrdinalIgnoreCase))
                         {
                             key = text;
                             continue;
                         }
                         if (string.Equals(key, KindKey,
-                            StringComparison.OrdinalIgnoreCase))
+                                StringComparison.OrdinalIgnoreCase))
                         {
                             kind = text;
                             key = "";
                         }
                         else if (string.Equals(key, SourceKey,
-                            StringComparison.OrdinalIgnoreCase))
+                                StringComparison.OrdinalIgnoreCase))
                         {
                             sourceHandle = text;
+                            key = "";
+                        }
+                        else if (string.Equals(key, RunKey,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            runHandles = text;
                             key = "";
                         }
                     }
@@ -120,8 +146,74 @@ namespace UNCAD.Cad
             {
                 kind = "";
                 sourceHandle = "";
+                runHandles = "";
             }
             return kind.Length > 0 && sourceHandle.Length > 0;
+        }
+
+        /// <summary>读合并趟的全部成员源句柄；单段标注（无 RUN）返回空列表。</summary>
+        public static List<string> TryReadRunHandles(Entity entity)
+        {
+            if (!TryRead(entity, out _, out _, out string runHandles)
+                || string.IsNullOrWhiteSpace(runHandles))
+                return new List<string>();
+            return runHandles.Split(new[] { RunHandleSeparator },
+                StringSplitOptions.RemoveEmptyEntries).ToList();
+        }
+
+        /// <summary>
+        /// D-050：合并趟标注的角度读取——按标注锚点在全部成员里找最近曲线取其
+        /// 阅读角（单段标注退回 TryReadCurveRotation 的 SOURCE 行为）。合并标注
+        /// 落在链中段时 SOURCE（首成员）的方向不代表标注所在段。
+        /// </summary>
+        public static bool TryReadAnnotationRotation(Transaction transaction,
+            Entity annotation, string expectedKind, Point3d anchor, out double rotation)
+        {
+            rotation = 0;
+            foreach (string handle in TryReadRunHandles(annotation))
+            {
+                if (!long.TryParse(handle, NumberStyles.HexNumber,
+                        CultureInfo.InvariantCulture, out long raw)) continue;
+                try
+                {
+                    ObjectId id = annotation.Database.GetObjectId(false,
+                        new Handle(raw), 0);
+                    Curve member = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as Curve;
+                    if (member != null
+                        && TryCurveRotation(member, anchor, out rotation))
+                        return true;
+                }
+                catch { }
+            }
+            return TryReadCurveRotation(transaction, annotation, expectedKind, anchor,
+                out rotation);
+        }
+
+        /// <summary>
+        /// D-050：标注角度与合并趟**任意成员**的任意一段一致即视为本来的角度
+        /// （MatchesAnySegmentTangent 的整趟版）。无 RUN 时退回单源行为。
+        /// </summary>
+        public static bool MatchesAnyRunSegmentTangent(Transaction transaction,
+            Entity annotation, string expectedKind, double currentRotation)
+        {
+            foreach (string handle in TryReadRunHandles(annotation))
+            {
+                if (!long.TryParse(handle, NumberStyles.HexNumber,
+                        CultureInfo.InvariantCulture, out long raw)) continue;
+                try
+                {
+                    ObjectId id = annotation.Database.GetObjectId(false,
+                        new Handle(raw), 0);
+                    Curve member = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as Curve;
+                    if (member != null && MatchesCurveTangent(member, currentRotation))
+                        return true;
+                }
+                catch { }
+            }
+            return MatchesAnySegmentTangent(transaction, annotation, expectedKind,
+                currentRotation);
         }
 
         /// <summary>Uses same-source U1Q geometry to restore a migrated label's angle.</summary>
@@ -207,7 +299,13 @@ namespace UNCAD.Cad
                 catch { }
             }
             if (source == null) return false;
+            return MatchesCurveTangent(source, currentRotation);
+        }
 
+        /// <summary>曲线任意一段（Polyline 逐直线段 / 通用曲线参数采样）的
+        /// 阅读角与给定角度一致即 true。</summary>
+        private static bool MatchesCurveTangent(Curve source, double currentRotation)
+        {
             const double tolerance = 1e-4;
             if (source is Polyline polyline)
             {
