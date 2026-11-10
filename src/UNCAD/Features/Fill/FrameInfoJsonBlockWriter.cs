@@ -105,8 +105,23 @@ namespace UNCAD.Features.Fill
         /// </summary>
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds, string expectedFrameHandle, out string foreignJsonNote)
+            => Read(transaction, blockIds, expectedFrameHandle, null,
+                out foreignJsonNote, out _);
+
+        /// <summary>
+        /// D-052（2026-11-10）身份判别版读取：句柄失配时先走搬场重绑判定——
+        /// 记录身份与本框当前身份一致且原句柄已不在本图（跨文件复制/移动整图框）
+        /// → 判定整机台搬场，收下记录并在 movedJsonNote 说明（不算外来，不触发
+        /// 复制框清理）；否则维持外来拒绝（foreignJsonNote）。老 JSON 无句柄 →
+        /// 不校验（兼容旧图）。
+        /// </summary>
+        internal static FrameInfoJsonRecord Read(Transaction transaction,
+            ObjectId[] blockIds, string expectedFrameHandle,
+            ExistingFillIdentity expectedIdentity,
+            out string foreignJsonNote, out string movedJsonNote)
         {
             foreignJsonNote = "";
+            movedJsonNote = "";
             FrameInfoJsonRecord result = null;
             foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
             {
@@ -120,14 +135,9 @@ namespace UNCAD.Features.Fill
                     if (!IsJsonTag(attribute.Tag) && attributes.Count != 1) continue;
                     FrameInfoJsonRecord record = ParsePayload(AttributeText(attribute), id);
                     if (record == null) continue;
-                    if (record.IsForeignTo(expectedFrameHandle))
-                    {
-                        foreignJsonNote = "图框 " + expectedFrameHandle
-                            + " 范围内发现归属不符的 frameinfo_json 块（块 "
-                            + id.Handle + "，机台 " + record.MachineId
-                            + "），已忽略——多为图框移动后遗留，建议删除该块。";
+                    if (!AcceptRecord(transaction, record, expectedFrameHandle,
+                        expectedIdentity, id, ref foreignJsonNote, ref movedJsonNote))
                         continue;
-                    }
                     result = Merge(result, record, id);
                 }
                 if (block.IsDynamicBlock)
@@ -142,19 +152,62 @@ namespace UNCAD.Features.Fill
                         FrameInfoJsonRecord record = ParsePayload(
                             Convert.ToString(property.Value), id);
                         if (record == null) continue;
-                        if (record.IsForeignTo(expectedFrameHandle))
-                        {
-                            foreignJsonNote = "图框 " + expectedFrameHandle
-                                + " 范围内发现归属不符的 frameinfo_json 块（块 "
-                                + id.Handle + "，机台 " + record.MachineId
-                                + "），已忽略——多为图框移动后遗留，建议删除该块。";
+                        if (!AcceptRecord(transaction, record, expectedFrameHandle,
+                            expectedIdentity, id, ref foreignJsonNote, ref movedJsonNote))
                             continue;
-                        }
                         result = Merge(result, record, id);
                     }
                 }
             }
             return result;
+        }
+
+        /// <summary>
+        /// 句柄校验 + 搬场重绑的统一闸门：句柄一致（或老记录无句柄）→ 收下；
+        /// 句柄失配 → 先判搬场（身份一致且原句柄已不在本图 → 收下并记
+        /// movedJsonNote），否则外来拒绝（foreignJsonNote，语义与 3.0.0.6 相同）。
+        /// </summary>
+        private static bool AcceptRecord(Transaction transaction,
+            FrameInfoJsonRecord record, string expectedFrameHandle,
+            ExistingFillIdentity expectedIdentity, ObjectId id,
+            ref string foreignJsonNote, ref string movedJsonNote)
+        {
+            if (!record.IsForeignTo(expectedFrameHandle)) return true;
+            if (FrameMetadataRebindPolicy.IsMovedFrame(record,
+                    expectedIdentity?.MachineId ?? "", expectedIdentity?.DeviceName ?? "",
+                    handle => HandleAliveInDatabase(id, handle)))
+            {
+                movedJsonNote = "图框 " + expectedFrameHandle
+                    + " 携带的 frameinfo_json 记录属于同一机台（"
+                    + record.MachineId + " / " + record.DeviceName
+                    + "）且原句柄已不在本图——判定为整机台搬场（跨文件复制/移动），"
+                    + "已收下其设备内预留/替代型号/更新历史；本次写入时将盖成本框句柄。";
+                return true;
+            }
+            foreignJsonNote = "图框 " + expectedFrameHandle
+                + " 范围内发现归属不符的 frameinfo_json 块（块 "
+                + id.Handle + "，机台 " + record.MachineId
+                + "），已忽略——多为图框移动后遗留，建议删除该块。";
+            return false;
+        }
+
+        /// <summary>句柄字符串是否仍指向本图一个未删除的实体（解析失败按存在处理）。</summary>
+        private static bool HandleAliveInDatabase(ObjectId sourceId, string handleText)
+        {
+            if (!long.TryParse((handleText ?? "").Trim(), NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture, out long value) || value <= 0)
+                return true; // 解析不出来宁可保守：不判搬场，交回外来语义。
+            try
+            {
+                if (!sourceId.Database.TryGetObjectId(new Handle(value),
+                        out ObjectId found))
+                    return true;
+                return found != ObjectId.Null && !found.IsErased;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
 

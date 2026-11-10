@@ -31,9 +31,13 @@ namespace UNCAD.Features.Fill
         public string LegacyLastUpdated { get; set; } = "";
         public string DeviceState { get; set; }
         public bool DeviceOutletStateKnown { get; set; }
-        public string CableRequestKey { get; set; }
-        public string BusPlugBoxRequestKey { get; set; }
+        /// <summary>D-052-A：本框全部待选替代项（请求键 + 清单项引用），确认后逐项应用。</summary>
+        public List<BatchCatalogAssignment> CatalogAssignments { get; set; }
+            = new List<BatchCatalogAssignment>();
         public bool HoseWasMissingBeforeCableChoice { get; set; }
+        /// <summary>D-052-B：复制图框的 CABLE_INFO 残留解析出的设备内预留建议值
+        /// （毫米）。仅供预留弹窗预填 + 来源标注，不静默写回（3.0.0.8 语义不变）。</summary>
+        public double? DeviceReserveHintMm { get; set; }
         /// <summary>预检阶段（在预检读事务里）算好的表格可写行数；-1 表示未计算。</summary>
         public int Capacity { get; set; } = -1;
         /// <summary>该图框的提示（统计类别不完整/Downstream 状态等），进批量结果窗。</summary>
@@ -47,10 +51,22 @@ namespace UNCAD.Features.Fill
     }
 
     /// <summary>
+    /// D-052-A：一个待选替代项——请求键（进批量选择窗）与它对应的清单项引用
+    /// （确认后逐项 ReplaceWithCatalogItem）。不再只收集电缆/母线插接箱各一条：
+    /// 每一个未匹配固定清单的清单项都必须能在批量窗口里手动选择替代。
+    /// </summary>
+    internal sealed class BatchCatalogAssignment
+    {
+        public string RequestKey { get; set; } = "";
+        public Core.Fill.FillReviewItem Item { get; set; }
+    }
+
+    /// <summary>
     /// 批量 U1U 的单图框预检（2026-11-09 从 BatchFillUpdateCoordinator.Preflight
-    /// 原样拆出，行为与锚点字符串逐字不变）：选集拆分 → 身份/机台匹配 →
-    /// frameinfo_json 读取（带句柄校验）→ CABLE_INFO 预留恢复（带外来 JSON 守卫）
-    /// → D-043 横排毫米标决策（先于统计，吸收文本从统计排除）→ 统计 → 清单规划。
+    /// 拆出）：选集拆分 → 身份/机台匹配 → frameinfo_json 读取（句柄校验 +
+    /// D-052 搬场重绑）→ CABLE_INFO 预留恢复（外来 JSON 守卫 + D-052 预留建议值）
+    /// → D-043 横排毫米标决策（先于统计，吸收文本从统计排除）→ 统计 → 清单规划
+    /// → 全类别替代请求收集。
     /// </summary>
     internal static class BatchFillUpdatePreflight
     {
@@ -111,6 +127,8 @@ namespace UNCAD.Features.Fill
             // 本框是否携带源框元数据（外来 JSON 被拒）——构造 Plan 时挂
             // CopiedFrame，写事务里据此清空源框遗留旧信息属性。
             bool plan_CopiedFrame = false;
+            // D-052-B：复制图框的设备内预留建议值（CABLE_INFO 残留解析，仅预填）。
+            double? plan_DeviceReserveHintMm = null;
 
             // 首次 U1U 时读 frameinfo_json 决定设备内预留；没有记录才询问一次并写入 JSON。
             // 必须同时读图框块上的旧内嵌 FRAMEINFO_JSON：迁移会移除该属性，晚读就丢了。
@@ -123,7 +141,15 @@ namespace UNCAD.Features.Fill
                 FrameInfoJsonBlockWriter.ReadSources(selection),
                 FrameInfoJsonBlockWriter.OwnFrameHandle(readTransaction,
                     selection.FrameBlockIds),
-                out string foreignJsonNote);
+                identity,
+                out string foreignJsonNote, out string movedJsonNote);
+            if (movedJsonNote.Length > 0)
+            {
+                // D-052-C：整机台搬场（跨文件复制/移动，身份未变）——记录收下，
+                // 不算外来、不触发复制框清理；写入时盖成本框句柄。
+                notes.Add(movedJsonNote);
+                Log.Info("[U1U] " + prefix + movedJsonNote);
+            }
             if (foreignJsonNote.Length > 0)
             {
                 plan_CopiedFrame = true;
@@ -150,6 +176,23 @@ namespace UNCAD.Features.Fill
                     previousRecord = previousRecord ?? new FrameInfoJsonRecord();
                     previousRecord.DeviceReserveMm =
                         UNCAD.Core.Text.TextFormatter.FormatNum(recovered);
+                }
+            }
+            else if (foreignJsonNote.Length > 0)
+            {
+                // D-052-B：复制图框不做静默恢复（3.0.0.8 守卫不变），但把源框
+                // CABLE_INFO 残留里可解析的「数值（设备内）」作为建议值带出去
+                // ——预留弹窗预填 + 来源标注，用户核对确认，不再默认 0。
+                string hintCableInfo = CadBlockAttributeWriter.ReadFirstTagged(
+                    readTransaction, selection.FrameBlockIds,
+                    UNCAD.Core.Fill.FrameBlockFiller.TagCable);
+                if (UNCAD.Core.Fill.CableReserveReview.TryParseDeviceReserveMillimeters(
+                        hintCableInfo, out double copiedReserveHint))
+                {
+                    plan_DeviceReserveHintMm = copiedReserveHint;
+                    notes.Add("设备内预留已按源框 CABLE_INFO 预填 "
+                        + UNCAD.Core.Text.TextFormatter.FormatNum(copiedReserveHint)
+                        + " mm（复制源，请在弹窗核对后确认）。");
                 }
             }
             // D-043：老版横排毫米标自动识别（U1SET 可关）。恰好一处→吸收并删除
@@ -281,37 +324,35 @@ namespace UNCAD.Features.Fill
                 return;
             }
             bool hoseWasMissingBeforeCableChoice = review.FlexibleConduitItem() == null;
-            List<FillReviewItem> unresolved = review.Items.Where(item =>
-                item.RequiresCatalogConfirmation).ToList();
-            FillReviewItem unresolvedCable = unresolved.FirstOrDefault(item =>
-                item.Category == TableFillCategory.Cable);
-            string cableRequestKey = "";
-            if (unresolvedCable != null)
+            // D-052-A：全类别收集——每一个未匹配固定清单的清单项都进批量选择窗。
+            // 以前只收集电缆/母线插接箱各一条：桥架/线管/软管等未匹配项（以及
+            // 第二条电缆行）在批量里无处可选，用户把窗内项目选完后仍弹
+            // 「未匹配固定清单」并整批取消——现场报告的死角。
+            var catalogAssignments = new List<BatchCatalogAssignment>();
+            foreach (FillReviewItem item in review.Items.Where(item =>
+                item.RequiresCatalogConfirmation))
             {
-                if (workbook.Catalog.Cables.Count == 0)
-                {
-                    errors.Add(prefix + "固定清单没有可选择的电缆型号。");
-                    return;
-                }
-                cableRequestKey = region.Handle + ":cable";
-                catalogRequests.Add(new BatchCatalogRequest(cableRequestKey,
-                    machine.MachineId, machine.CircuitName, "电缆", review.BoqCableModel,
-                    workbook.Catalog.Cables));
-            }
-
-            string busPlugBoxRequestKey = "";
-            if (unresolved.Any(item => item.Category == TableFillCategory.BusPlugBox))
-            {
-                busPlugBoxRequestKey = region.Handle + ":busPlugBox";
-                var request = new BatchCatalogRequest(busPlugBoxRequestKey,
-                    machine.MachineId, machine.CircuitName, "母线插接箱", machine.Detail,
-                    workbook.Catalog.BusPlugBoxes);
+                string category = FillReviewData.CategoryName(item.Category);
+                string originalModel = item.Category == TableFillCategory.Cable
+                    ? review.BoqCableModel
+                    : item.Category == TableFillCategory.BusPlugBox ? machine.Detail
+                        : item.Name;
+                string key = region.Handle + ":" + category + ":"
+                    + review.Items.IndexOf(item);
+                var request = new BatchCatalogRequest(key, machine.MachineId,
+                    machine.CircuitName, category, originalModel,
+                    workbook.Catalog.SelectableItems);
                 if (request.Candidates.Count == 0)
                 {
-                    errors.Add(prefix + "固定清单没有可选择的母线插接箱规格。");
+                    errors.Add(prefix + "固定清单没有可选择的" + category + "规格。");
                     return;
                 }
                 catalogRequests.Add(request);
+                catalogAssignments.Add(new BatchCatalogAssignment
+                {
+                    RequestKey = key,
+                    Item = item
+                });
             }
 
             if (!string.IsNullOrEmpty(markerNote))
@@ -329,9 +370,9 @@ namespace UNCAD.Features.Fill
                 Review = review,
                 Reserve = reserve,
                 Rows = review.SelectedRows(),
-                CableRequestKey = cableRequestKey,
-                BusPlugBoxRequestKey = busPlugBoxRequestKey,
+                CatalogAssignments = catalogAssignments,
                 HoseWasMissingBeforeCableChoice = hoseWasMissingBeforeCableChoice,
+                DeviceReserveHintMm = plan_DeviceReserveHintMm,
                 DeviceState = deviceState,
                 DeviceOutletStateKnown = deviceOutletStateKnown,
                 Notes = notes,

@@ -97,7 +97,8 @@ namespace UNCAD.Features.Fill
                 selection, options, updateMode,
                 out List<ObjectId> deviceReserveEraseIds,
                 out List<ObjectId> markerExcludedIds,
-                out bool copiedFrameDetected);
+                out bool copiedFrameDetected,
+                out double? copiedDeviceReserveHint);
             SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
                 options, updateMode, markerExcludedIds);
             CableStatResult statistics = summation.Statistics;
@@ -188,6 +189,11 @@ namespace UNCAD.Features.Fill
                 Settings.GetDouble(ConfigKeys.FillCableOwnerReserve,
                     CableReservePolicy.DefaultOwnerReserveMillimeters),
                 options.CableReserve);
+            // D-052-B：复制图框的设备内预留建议值预填进清单确认窗（可见、可改，
+            // 用户确认后才落盘——与 3.0.0.8 的“不静默继承”不冲突）。
+            if (copiedDeviceReserveHint.HasValue && copiedDeviceReserveHint.Value > 0d
+                && cableReserve != null && cableReserve.DeviceReserveMillimeters <= 0d)
+                ApplyDeviceReserve(statistics, cableReserve, copiedDeviceReserveHint.Value);
             // 缺回路的 U1U 跳过 BOQ：不准备输出路径，也就不会登记批次文件。
             if (updateMode && !boqBlockedByCoverage)
             {

@@ -15,15 +15,31 @@ namespace UNCAD.UI
     public sealed class DeviceReserveRow : INotifyPropertyChanged
     {
         public DeviceReserveRow(string machineId, string deviceName)
+            : this(machineId, deviceName, null, "")
+        {
+        }
+
+        /// <summary>
+        /// D-052-B：可带预填值与来源标注（复制图框用源框 CABLE_INFO 解析值预填，
+        /// Note 显示“复制源预填，请核对”）。用户仍可改——预填只是免除“明明图上
+        /// 有预留却让从 0 填起”的困扰，不构成静默继承。
+        /// </summary>
+        public DeviceReserveRow(string machineId, string deviceName,
+            string prefillReserveMm, string note)
         {
             MachineId = machineId ?? "";
             DeviceName = deviceName ?? "";
-            _reserveMm = "0";
+            Note = note ?? "";
+            _reserveMm = string.IsNullOrWhiteSpace(prefillReserveMm) ? "0"
+                : prefillReserveMm.Trim();
         }
 
         public string MachineId { get; }
 
         public string DeviceName { get; }
+
+        /// <summary>来源标注（如“复制源预填，请核对”）；空 = 常规新框。</summary>
+        public string Note { get; }
 
         /// <summary>显示序号（1 起，按构造顺序）。</summary>
         public int Index { get; set; }

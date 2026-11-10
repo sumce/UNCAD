@@ -740,3 +740,39 @@ rewrite an existing entry.
   keep the per-file catch with the named-file reporting, and keep skipping
   explicit (user-confirmed) rather than silent. Skipped files are listed in
   the command-line summary (`SkippedFiles`).
+
+## D-052: Batch U1U All-Category Substitution, Copied-Frame Reserve Prefill, Moved-Frame Metadata Rebind (2026-11-10)
+
+- Status: accepted (field reports: batch U1U "I already picked a replacement,
+  why the unmatched warning again and nothing generated"; cross-file copied
+  frames prompting for device reserve with default 0 despite a visible value)
+- Decision (three clauses, one incident):
+  1. **All-category substitution window.** Batch U1U preflight creates a
+     catalog request for *every* review item that requires catalog
+     confirmation — any category, and multiple items per category — instead
+     of only the first cable and bus-plug-box item. After the user confirms
+     the picker, every selection is applied back to its item; the hose
+     follow-up still runs only when a cable item was replaced. A category
+     with no selectable catalog items fails preflight with a named per-frame
+     error (same wording as the old cable/bus-plug-box checks).
+  2. **Copied-frame reserve prefill.** When a frame is detected as a copy
+     (foreign JSON rejected), the recoverable `数值（设备内）` value in the
+     copied CABLE_INFO text is offered as a *suggestion*: the batch reserve
+     window pre-fills the row (new source-note column) and the single-frame
+     review pre-fills the field. Silent adoption stays forbidden
+     (D-052 keeps the 3.0.0.8 skip); the user confirms the visible value.
+  3. **Moved-frame metadata rebind.** A handle-mismatched frameinfo_json
+     record is accepted when (a) the record's machine/device identity equals
+     the claiming frame's current physical identity and (b) the recorded
+     handle no longer resolves to a live entity in this drawing — that
+     combination means the whole frame *moved* (cross-file copy/paste, or
+     move-with-delete), so its reserve/substitution/history are kept and the
+     handle is re-stamped on the next write. Same-file copies (source frame
+     still present) and renamed/ghost records stay rejected exactly as in
+     3.0.0.6/3.0.0.8/3.0.0.9.
+- Consequence: do not reintroduce a per-category request whitelist in batch
+  preflight; do not restore the "re-enter reserve from 0" behavior for copied
+  frames; do not accept a handle-mismatched record on identity alone without
+  the old-handle-gone check (that would reintroduce same-frame-copy
+  inheritance). Full-catalog persistence (`substitutions[]`, `lastRun`
+  snapshot) was proposed and deferred — decide separately before implementing.

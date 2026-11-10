@@ -101,9 +101,16 @@ namespace UNCAD.Features.Fill
                 .ToList();
             if (reserveMissing.Count > 0)
             {
+                // D-052-B：复制图框的行用源框 CABLE_INFO 解析值预填并标注来源
+                // （仍需用户核对确认，不静默继承——3.0.0.8 语义不变）。
                 var reserveRows = reserveMissing.ConvertAll(plan =>
                     new DeviceReserveRow(plan.Machine?.MachineId ?? "",
-                        plan.Machine?.CircuitName ?? ""));
+                        plan.Machine?.CircuitName ?? "",
+                        plan.DeviceReserveHintMm.HasValue
+                            ? UNCAD.Core.Text.TextFormatter.FormatNum(
+                                plan.DeviceReserveHintMm.Value)
+                            : null,
+                        plan.DeviceReserveHintMm.HasValue ? "复制源预填，请核对" : ""));
                 // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达。
                 var reserveWindow = new DeviceReserveWindow(reserveRows);
                 AcApplication.ShowModalWindow(reserveWindow);
@@ -141,21 +148,27 @@ namespace UNCAD.Features.Fill
                 var picker = new BatchCatalogSelectionWindow(catalogRequests);
                 AcApplication.ShowModalWindow(picker);
                 if (!picker.Confirmed) return;
+                // D-052-A：把用户的选择逐项应用回各框清单（全类别，不再只回写
+                // 电缆/母线插接箱第一条——其余未匹配项以前落回「未匹配固定清单」
+                // 整批取消，即现场报告的“选完了还警告/跳过生成”）。
                 foreach (BatchFillUpdatePlan plan in plans)
                 {
-                    if (!string.IsNullOrWhiteSpace(plan.CableRequestKey))
+                    bool replacedCable = false;
+                    foreach (BatchCatalogAssignment assignment in plan.CatalogAssignments)
                     {
-                        plan.Review.ReplaceWithCatalogItem(plan.Review.CableItem(),
-                            picker.Selections[plan.CableRequestKey], workbook.Catalog);
-                        if (plan.HoseWasMissingBeforeCableChoice
-                            && plan.Review.FlexibleConduitItem() != null
-                            && !FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
-                                plan.Review, workbook.Catalog, options.Planning, true))
-                            return;
+                        if (!picker.Selections.TryGetValue(assignment.RequestKey,
+                                out UNCAD.Core.Excel.ListItem selected))
+                            continue; // 窗体确认要求全部已选，正常不可达。
+                        plan.Review.ReplaceWithCatalogItem(assignment.Item, selected,
+                            workbook.Catalog);
+                        if (assignment.Item.Category == Core.Fill.TableFillCategory.Cable)
+                            replacedCable = true;
                     }
-                    if (!string.IsNullOrWhiteSpace(plan.BusPlugBoxRequestKey))
-                        plan.Review.ReplaceWithCatalogItem(plan.Review.BusPlugBoxItem(),
-                            picker.Selections[plan.BusPlugBoxRequestKey], workbook.Catalog);
+                    if (replacedCable && plan.HoseWasMissingBeforeCableChoice
+                        && plan.Review.FlexibleConduitItem() != null
+                        && !FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
+                            plan.Review, workbook.Catalog, options.Planning, true))
+                        return;
                 }
             }
 

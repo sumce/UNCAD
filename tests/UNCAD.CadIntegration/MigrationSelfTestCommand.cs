@@ -69,6 +69,13 @@ namespace UNCAD.CadIntegration
     ///      ②FillReserveStage 在外来 JSON 时跳过 CABLE_INFO 预留恢复（不继承）
     ///      ③ClearStaleInfo 显式清空复制框旧属性且不波及源框（显式清理）。
     ///
+    /// 2026-11-10 增补阶段 6（整机台搬场重绑，D-052-C，回应用户报告
+    /// “图纸跨文件复制后 U1U 提示输入预留、默认 0”）：同文件克隆后删除源框 =
+    /// 跨文件搬场的等价物（原句柄消失、身份未变），断言
+    ///   g) ①身份一致 + 原句柄已不在本图 → 判搬场收下记录，FillReserveStage
+    ///      不再标记复制框、预留恢复通道重新打开；
+    ///      ②身份不符（复制后改号/幽灵）→ 外来拒绝照旧（3.0.0.6 语义不回归）。
+    ///
     /// FAIL 路径验证：环境变量 %UNCAD_MIGRATION_SELFTEST_SABOTAGE% 支持两种人为破坏
     ///   RowHeight   —— 把期望行高改错（断言 c 必须报警）；
     ///   DropPreRead —— 跳过迁移前的 previous 读取（断言 b 必须报警，证明
@@ -253,6 +260,10 @@ namespace UNCAD.CadIntegration
             // ---------------- 阶段 5：复制图框三重防线（断言 f） ----------------
             _stage = "copied frame defense";
             CopiedFrameDefense(ctx, fixture, selections);
+
+            // ---------------- 阶段 6：整机台搬场重绑（D-052-C，断言 g） ----------
+            _stage = "moved frame rebind";
+            MovedFrameRebindDefense(ctx, fixture, selections);
 
             Info("");
             Info("结论: PASS");
@@ -1029,7 +1040,7 @@ namespace UNCAD.CadIntegration
                 FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx,
                     copySelection, FillSettings.Current(), true,
                     out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
-                    out bool copiedFrameDetected);
+                    out bool copiedFrameDetected, out double? reserveHint);
                 Check(copiedFrameDetected,
                     "FillReserveStage 应检测到复制图框（copiedFrameDetected=false）。");
                 Check(resolved == null
@@ -1038,6 +1049,9 @@ namespace UNCAD.CadIntegration
                     + "继承 3000（实际 DeviceReserveMm='"
                     + (resolved == null ? "" : resolved.DeviceReserveMm)
                     + "'，②防线失效）。");
+                Check(reserveHint.HasValue && Math.Abs(reserveHint.Value - 3000.0) < 0.001,
+                    "D-052-B：复制框应把 CABLE_INFO 的 3000 作为建议值带出（预留弹窗"
+                    + "预填用），实际 " + (reserveHint?.ToString() ?? "<null>") + "。");
                 Check(eraseIds.Count == 0,
                     "复制图框区域内没有横排毫米标，不应有待删除标注。");
                 Info("  ② 不继承: FillReserveStage 跳过 CABLE_INFO 恢复，"
@@ -1081,6 +1095,150 @@ namespace UNCAD.CadIntegration
                 }
                 Info("  ③ 显式清理: ClearStaleInfo 清空 " + cleared
                     + " 个旧属性（CABLE_INFO/FRAMEINFO），源框无损: 通过");
+                tx.Commit();
+            }
+        }
+
+        // ================================================================== phase 6
+
+        /// <summary>
+        /// 整机台搬场重绑自检（D-052-C，2026-11-10）：「同文件复制后删除源框」是
+        /// 「跨文件复制/搬场」的等价物（原句柄已不在本图，身份未变）。断言：
+        /// ①搬场收下——句柄失配但身份一致且原句柄已消失 → Read 判搬场收下记录
+        ///   （非外来），FillReserveStage 不再标记复制框、预留恢复通道重新打开；
+        /// ②改号仍拒——同一克隆用别的机台身份读取 → 外来拒绝照旧（复制去定义
+        ///   另一台设备的语义不回归 3.0.0.6 之前）。
+        /// </summary>
+        private static void MovedFrameRebindDefense(CadContext ctx, Fixture fixture,
+            Dictionary<FrameSlot, FillSelection> selections)
+        {
+            Info("");
+            Info("=== 整机台搬场重绑（D-052-C） ===");
+            FrameSlot source = fixture.Slots.First(slot => !slot.Legacy);
+            const string foreignCableInfo =
+                "电缆ZB-YJV-4*16mm²: 2600+3400（盘内）+3000（设备内）=9000mm";
+
+            ObjectId movedId;
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                BlockReference sourceFrame = (BlockReference)tx.GetObject(source.FrameId,
+                    OpenMode.ForRead, true);
+                ObjectId definitionId = FrameRegionCollector.DefinitionIds(sourceFrame)
+                    .First();
+                var moved = new BlockReference(new Point3d(sourceFrame.Position.X
+                    + FrameGapX * 2, sourceFrame.Position.Y - LegacyFrameHeight * 3, 0),
+                    definitionId);
+                ctx.AddToCurrentSpace(tx, moved);
+                bool cableInfoAttached = false;
+                foreach (KeyValuePair<string, string> pair in Attributes(tx, source.FrameId))
+                {
+                    if (pair.Key.Equals(FrameBlockFiller.TagCable,
+                            StringComparison.OrdinalIgnoreCase))
+                        cableInfoAttached = true;
+                    AttachAttribute(ctx, tx, moved, pair.Key,
+                        pair.Key.Equals(FrameBlockFiller.TagCable,
+                            StringComparison.OrdinalIgnoreCase)
+                            ? foreignCableInfo : pair.Value);
+                }
+                // F5 模板框可能没有 CABLE_INFO 实例属性（阶段 5 同款兜底）——
+                // 没有就补挂，保证恢复通道有源可读。
+                if (!cableInfoAttached)
+                    AttachAttribute(ctx, tx, moved, FrameBlockFiller.TagCable,
+                        foreignCableInfo);
+                // 模板 F5 框的 MACHINEID-* 实例属性不存在（物理身份读取落到定义
+                // 占位值 “MachineID/Device”）——真实场景里搬场框的物理身份与
+                // JSON 记录一致才会触发重绑。给克隆框挂上真实机台身份属性。
+                AttachAttribute(ctx, tx, moved, FrameBlockFiller.TagPower,
+                    FrameBlockFiller.PowerText(source.Machine));
+                AttachAttribute(ctx, tx, moved, FrameBlockFiller.TagDevice,
+                    FrameBlockFiller.DeviceText(source.Machine));
+                movedId = moved.ObjectId;
+                // 搬场等价物：源框从本图消失（原句柄不复存在）。
+                ((BlockReference)tx.GetObject(source.FrameId, OpenMode.ForWrite, true))
+                    .Erase();
+                tx.Commit();
+            }
+            Info("  已克隆源框并删除源框 → 搬场框 " + movedId.Handle);
+
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                    new[] { movedId });
+                Check(regions.Errors.Count == 0 && regions.Groups.Count == 1,
+                    "搬场图框应被分区识别（分组 " + regions.Groups.Count
+                    + "，错误: " + string.Join("; ", regions.Errors) + "）。");
+                var definitions = new CadBlockDefinitionReader(tx);
+                FillSelection movedSelection = FillSelectionCollector.Split(tx,
+                    regions.Groups[0].EntityIds.ToArray(), true, definitions);
+                Check(movedSelection.FrameBlockIds.Length == 1,
+                    "搬场图框选集应识别出唯一图框块（实际 "
+                    + movedSelection.FrameBlockIds.Length + " 个）。");
+
+                // ① 搬场收下：身份一致 + 原句柄已不在本图 → 判搬场，收下记录。
+                string ownHandle = FrameInfoJsonBlockWriter.OwnFrameHandle(tx,
+                    movedSelection.FrameBlockIds);
+                FrameInfoJsonRecord record = FrameInfoJsonBlockWriter.Read(tx,
+                    FrameInfoJsonBlockWriter.ReadSources(movedSelection), ownHandle,
+                    new ExistingFillIdentity
+                    {
+                        MachineId = source.Machine.MachineId,
+                        DeviceName = source.Machine.CircuitName
+                    },
+                    out string foreignNote, out string movedNote);
+                Check(foreignNote.Length == 0 && movedNote.Length > 0 && record != null
+                    && record.MachineId == source.Machine.MachineId,
+                    "搬场图框（身份未变、原句柄已消失）应被判为整机台搬场并收下记录"
+                    + "（foreign='" + foreignNote + "'，moved 长度 " + movedNote.Length
+                    + "，记录 " + (record == null ? "<null>" : record.MachineId)
+                    + "）——否则跨文件复制会丢失全部预留/替代/历史。");
+                Info("  ① 搬场收下: 记录已重绑（机台 " + record.MachineId + "）: 通过");
+
+                // 生产身份读取（物理标注）必须与 JSON 记录一致——占位/改过号的
+                // 物理身份不得触发重绑（下面的②就是这个反例）。
+                FillSelectionCollector.TryReadExistingIdentity(tx, movedSelection,
+                    out ExistingFillIdentity physicalIdentity, out string physicalError);
+                Check(physicalIdentity != null
+                    && physicalIdentity.MachineId == source.Machine.MachineId
+                    && physicalIdentity.DeviceName == source.Machine.CircuitName,
+                    "搬场框的物理身份应与 JSON 记录一致（实际 "
+                    + (physicalIdentity == null
+                        ? "<null>：" + physicalError
+                        : physicalIdentity.MachineId + "/" + physicalIdentity.DeviceName)
+                    + "）——夹具或生产身份读取回归。");
+
+                // 生产链路：不再按复制框处理，预留恢复通道重新打开。
+                FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx,
+                    movedSelection, FillSettings.Current(), true,
+                    out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
+                    out bool copiedFrameDetected, out double? reserveHint);
+                Check(!copiedFrameDetected,
+                    "搬场图框不应再被标记为复制框（copiedFrameDetected=true 会误清"
+                    + "CABLE_INFO 并跳过预留恢复）。");
+                Check(resolved != null
+                    && !string.IsNullOrWhiteSpace(resolved.DeviceReserveMm)
+                    && !reserveHint.HasValue,
+                    "搬场图框应恢复设备内预留（实际 DeviceReserveMm='"
+                    + (resolved == null ? "" : resolved.DeviceReserveMm)
+                    + "'，hint=" + (reserveHint?.ToString() ?? "<null>")
+                    + "）——CABLE_INFO 恢复通道应重新打开。");
+                Check(eraseIds.Count == 0, "搬场图框区域内无横排毫米标，不应有删除项。");
+                Info("  ① 生产链路: 非复制框，预留恢复通道打开（DeviceReserveMm="
+                    + resolved.DeviceReserveMm + "）: 通过");
+
+                // ② 改号仍拒：同一图框按别的机台身份读取 → 外来拒绝照旧。
+                FrameInfoJsonBlockWriter.Read(tx,
+                    FrameInfoJsonBlockWriter.ReadSources(movedSelection), ownHandle,
+                    new ExistingFillIdentity
+                    {
+                        MachineId = "OTHER-MACHINE",
+                        DeviceName = source.Machine.CircuitName
+                    },
+                    out string foreignOther, out string movedOther);
+                Check(foreignOther.Length > 0 && movedOther.Length == 0,
+                    "身份不符（复制后改号/幽灵记录）必须维持外来拒绝"
+                    + "（foreign 长度 " + foreignOther.Length + "，moved 长度 "
+                    + movedOther.Length + "）——3.0.0.6 语义不得回归。");
+                Info("  ② 改号仍拒: 身份不符时外来拒绝照旧: 通过");
                 tx.Commit();
             }
         }

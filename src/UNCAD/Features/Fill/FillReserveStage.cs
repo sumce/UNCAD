@@ -22,12 +22,16 @@ namespace UNCAD.Features.Fill
         /// <summary>恢复上一轮预留并决策预留标记；返回上一轮记录。
         /// copiedFrameDetected：检测到本框携带源框元数据（外来 JSON 被拒）——
         /// 写事务里据此显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息后
-        /// 再写新机台数据（2026-11-06 用户要求 U1F 定义要清干净）。</summary>
+        /// 再写新机台数据（2026-11-06 用户要求 U1F 定义要清干净）。
+        /// deviceReserveHintMm（D-052-B）：复制图框时从源框 CABLE_INFO 残留解析
+        /// 出的设备内预留建议值——不静默恢复（3.0.0.8 守卫不变），仅供清单确认窗
+        /// 预填 + 来源标注，用户核对确认。</summary>
         internal static FrameInfoJsonRecord Resolve(CadContext ctx, FillSelection selection,
             FillRuntimeOptions options, bool updateMode,
             out List<ObjectId> deviceReserveEraseIds,
             out List<ObjectId> markerExcludedIds,
-            out bool copiedFrameDetected)
+            out bool copiedFrameDetected,
+            out double? deviceReserveHintMm)
         {
             FrameInfoJsonRecord frameInfoPrevious;
             string foreignJsonNote;
@@ -37,12 +41,21 @@ namespace UNCAD.Features.Fill
                 // 前读出独立 JSON 块 + 图框块上的记录；读取带本图框句柄校验——
                 // 复制图框带来的源框 JSON（替代型号/设备内预留/更新历史）一律
                 // 不继承，本次保存后将盖成本图框自己的句柄。
+                // D-052-C：句柄失配先走搬场重绑判别（身份一致 + 原句柄已不在
+                // 本图 = 跨文件复制/移动整机台）→ 收下记录，不算外来。
+                FillSelectionCollector.TryReadExistingIdentity(previousTransaction,
+                    selection, out ExistingFillIdentity ownIdentity, out _);
+                string movedJsonNote;
                 frameInfoPrevious = FrameInfoJsonBlockWriter.Read(previousTransaction,
                     FrameInfoJsonBlockWriter.ReadSources(selection),
                     FrameInfoJsonBlockWriter.OwnFrameHandle(previousTransaction,
                         selection.FrameBlockIds),
-                    out foreignJsonNote);
+                    ownIdentity,
+                    out foreignJsonNote, out movedJsonNote);
                 previousTransaction.Commit();
+                if (movedJsonNote.Length > 0)
+                    ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                        + "] " + movedJsonNote);
             }
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
             if (foreignJsonNote.Length > 0)
@@ -59,6 +72,7 @@ namespace UNCAD.Features.Fill
             // ——等于换条路继承。凡检测到外来 JSON（= 本框元数据是复制来的），
             // CABLE_INFO 同源同样不可信，一并跳过恢复；设备内预留由用户重新
             // 填写。老图框（从未写过 JSON、也非复制）不受影响。
+            deviceReserveHintMm = null;
             if (foreignJsonNote.Length == 0
                 && (frameInfoPrevious == null
                     || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
@@ -77,8 +91,24 @@ namespace UNCAD.Features.Fill
                 && (frameInfoPrevious == null
                     || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
             {
-                ctx.Write("\n[" + command + "] 本框携带源框的 CABLE_INFO 文本，"
-                    + "为避免继承源机台的设备内预留，未做恢复；请在清单确认窗重新填写。");
+                // D-052-B：跳过 ≠ 从 0 重填——可解析的残留值作为建议值带出，
+                // 清单确认窗预填 + 来源标注，用户核对确认。不构成静默继承。
+                string copiedCableInfo = CadBlockAttributeWriter.ReadTagged(ctx,
+                    selection.FrameBlockIds, FrameBlockFiller.TagCable);
+                if (CableReserveReview.TryParseDeviceReserveMillimeters(
+                        copiedCableInfo, out double copiedDeviceReserve))
+                {
+                    deviceReserveHintMm = copiedDeviceReserve;
+                    ctx.Write("\n[" + command + "] 本框携带源框的 CABLE_INFO 文本，"
+                        + "未自动恢复其设备内预留 "
+                        + TextFormatter.FormatNum(copiedDeviceReserve)
+                        + " mm；清单确认窗已按该值预填（复制源），请核对后确认。");
+                }
+                else
+                {
+                    ctx.Write("\n[" + command + "] 本框携带源框的 CABLE_INFO 文本，"
+                        + "为避免继承源机台的设备内预留，未做恢复；请在清单确认窗重新填写。");
+                }
             }
 
             // D-043：识别老版设备内预留标记——现场在设备旁横排手写的毫米数文字

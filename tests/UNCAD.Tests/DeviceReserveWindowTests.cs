@@ -31,9 +31,10 @@ namespace UNCAD.Tests
                     Pump(4);
 
                     Assert.Equal(6, window.ReserveGrid.Items.Count);
-                    Assert.Equal(4, window.ReserveGrid.Columns.Count);
-                    // 只有“设备内预留”列可编辑，其余三列只读。
-                    Assert.Equal(3, window.ReserveGrid.Columns.Count(c => c.IsReadOnly));
+                    // D-052-B：新增只读“备注”列（复制图框预填时显示来源标注）。
+                    Assert.Equal(5, window.ReserveGrid.Columns.Count);
+                    // 只有“设备内预留”列可编辑，其余四列只读。
+                    Assert.Equal(4, window.ReserveGrid.Columns.Count(c => c.IsReadOnly));
                     Assert.Equal(1, window.ReserveGrid.Columns.Count(c => !c.IsReadOnly));
                     Assert.All(rows, row => Assert.Equal("0", row.ReserveMm));
                     Assert.True(window.Resources.MergedDictionaries.Count >= 2,
@@ -138,6 +139,22 @@ namespace UNCAD.Tests
         public void ReserveError_FollowsFieldRange(string input, string expected)
         {
             Assert.Equal(expected, DeviceReserveWindow.ReserveError(input));
+        }
+
+        [Fact]
+        public void CopiedFramePrefill_RowStartsAtHintWithSourceNote()
+        {
+            // D-052-B：复制图框的行用源框 CABLE_INFO 解析值预填并带来源标注；
+            // 常规行（无预填）保持默认 0、备注为空。
+            var prefilled = new DeviceReserveRow("M-1", "注塑机", "3000",
+                "复制源预填，请核对");
+            var plain = new DeviceReserveRow("M-2", "模温机");
+            var blankHint = new DeviceReserveRow("M-3", "组装线", "   ", "x");
+            Assert.Equal("3000", prefilled.ReserveMm);
+            Assert.Equal("复制源预填，请核对", prefilled.Note);
+            Assert.Equal("0", plain.ReserveMm);
+            Assert.Equal("", plain.Note);
+            Assert.Equal("0", blankHint.ReserveMm);
         }
 
         private static void Click(System.Windows.Controls.Primitives.ButtonBase button)

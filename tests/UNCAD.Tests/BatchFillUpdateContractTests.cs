@@ -15,6 +15,56 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void BatchUpdate_CatalogPickerCoversEveryUnmatchedItemOfAnyCategory()
+        {
+            // D-052-A（2026-11-10，现场报告“选完了还警告未匹配、整批跳过”）：
+            // 批量预检必须为**每一个**未匹配固定清单的清单项建替代选择请求
+            // （不再只收集电缆/母线插接箱各一条——桥架/线管/软管/第二条电缆行
+            // 以前无处可选，确认后落入“未匹配固定清单”整批取消）。
+            string preflight = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdatePreflight.cs");
+            Assert.Contains("foreach (FillReviewItem item in review.Items.Where(item =>",
+                preflight);
+            Assert.Contains("item.RequiresCatalogConfirmation))", preflight);
+            Assert.Contains("FillReviewData.CategoryName(item.Category)", preflight);
+            Assert.Contains("workbook.Catalog.SelectableItems", preflight);
+            Assert.DoesNotContain("FirstOrDefault(item =>", preflight
+                .Substring(preflight.IndexOf("D-052-A", StringComparison.Ordinal)));
+            Assert.Contains("固定清单没有可选择的\" + category + \"规格", preflight);
+
+            string coordinator = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs");
+            // 确认后逐项应用回清单；软管联动只在电缆被替换时触发。
+            Assert.Contains("foreach (BatchCatalogAssignment assignment in plan.CatalogAssignments)",
+                coordinator);
+            Assert.Contains("picker.Selections.TryGetValue(assignment.RequestKey", coordinator);
+            Assert.Contains("plan.Review.ReplaceWithCatalogItem(assignment.Item, selected,",
+                coordinator);
+            Assert.Contains("assignment.Item.Category == Core.Fill.TableFillCategory.Cable",
+                coordinator);
+        }
+
+        [Fact]
+        public void BatchUpdate_CopiedFrameReserveIsPrefilledNotRestartedAtZero()
+        {
+            // D-052-B（2026-11-10，现场报告“图上明明有预留、弹窗却默认 0”）：
+            // 复制图框的预留弹窗行用源框 CABLE_INFO 解析值预填并标注来源；
+            // 恢复本身仍被守卫跳过（3.0.0.8 不静默继承的语义不变）。
+            string preflight = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdatePreflight.cs");
+            Assert.Contains("plan_DeviceReserveHintMm = copiedReserveHint;", preflight);
+            Assert.Contains("DeviceReserveHintMm = plan_DeviceReserveHintMm", preflight);
+            Assert.Contains("（复制源，请在弹窗核对后确认）", preflight);
+
+            string coordinator = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs");
+            Assert.Contains("new DeviceReserveRow(plan.Machine?.MachineId ?? \"\",",
+                coordinator);
+            Assert.Contains("plan.DeviceReserveHintMm.HasValue", coordinator);
+            Assert.Contains("\"复制源预填，请核对\"", coordinator);
+        }
+
+        [Fact]
         public void BatchUpdate_UnmatchedDefaultsIdentifyAffectedMachineAndImpact()
         {
             string source = Read("src", "UNCAD", "Features", "Fill",

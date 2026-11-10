@@ -86,6 +86,41 @@ namespace UNCAD.Tests
             Assert.Contains("UNC_FILL_DEVICE_RESERVE_AUTO", keys);
         }
 
+        [Fact]
+        public void MovedFrameRebind_WiredIntoJsonReadAndBothU1uPaths()
+        {
+            // D-052-C（2026-11-10，现场报告“图纸跨文件复制后 U1U 提示输入预留、
+            // 默认 0”）：句柄失配不再一律拒绝——身份一致且原句柄已不在本图
+            // （= 整机台跨文件搬场）时收下记录；单框与批量两条读取路径都带身份。
+            string writer = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "FrameInfoJsonBlockWriter.cs"));
+            Assert.Contains("FrameMetadataRebindPolicy.IsMovedFrame", writer);
+            Assert.Contains("movedJsonNote", writer);
+            Assert.Contains("HandleAliveInDatabase", writer);
+            // 外来拒绝文案保持不变（3.0.0.6 语义不回归）。
+            Assert.Contains("多为图框移动后遗留，建议删除该块", writer);
+
+            string batch = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "BatchFillUpdatePreflight.cs"));
+            Assert.Contains("out string foreignJsonNote, out string movedJsonNote", batch);
+            Assert.Contains("identity,", batch);
+
+            string single = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "FillReserveStage.cs"));
+            Assert.Contains("FillSelectionCollector.TryReadExistingIdentity(previousTransaction,",
+                single);
+            Assert.Contains("ownIdentity,", single);
+            Assert.Contains("out double? deviceReserveHintMm", single);
+            // 复制框建议值只做预填（用户核对确认），不静默写回记录。
+            Assert.Contains("清单确认窗已按该值预填（复制源），请核对后确认", single);
+
+            string feature = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "FillFeature.cs"));
+            Assert.Contains("out double? copiedDeviceReserveHint", feature);
+            Assert.Contains("ApplyDeviceReserve(statistics, cableReserve, copiedDeviceReserveHint.Value)",
+                feature);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = System.IO.Path.GetFullPath(System.AppContext.BaseDirectory

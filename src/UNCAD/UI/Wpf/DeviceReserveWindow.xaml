@@ -75,6 +75,7 @@
                         </Style>
                     </DataGridTextColumn.EditingElementStyle>
                 </DataGridTextColumn>
+                <DataGridTextColumn Header="备注" Binding="{Binding Note}" Width="170" IsReadOnly="True" />
             </DataGrid.Columns>
         </DataGrid>
 
