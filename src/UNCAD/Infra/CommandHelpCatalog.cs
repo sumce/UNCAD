@@ -60,7 +60,7 @@ namespace UNCAD.Infra
                 E(CommandIds.DwgExport, "DWG 自动导出", "U1DWG", "按机台导出选中的 frame_20260812/frame/xframe/xframe_v2 图框", "同机台图框在独立 DWG 中横向排列；文件写到输出目录的机台文件夹（与 BOQ/PDF 同夹）。回路不全的机台默认跳过，可在选择窗勾选强制导出；不上传、不联网。"),
                 E(CommandIds.XLayout, "图框自动排版", "XLAYOUT", "选择图框后点击排版基准点，按机台 ID 分行排版并统计回路", "选择窗里可选排列方案：按机台完整性（完整在前，默认）/按机台ID顺序/按上游编号（同上游一行），行内回路按机台 Excel 行序；直接回车使用原点；每行首框左侧生成行标签文字（机台 ID 或上游编号）；重复执行会再追加标签文字（设计行为）。"),
                 E(CommandIds.Statistics, "机台回路统计", "XSTS", "先统计框选图纸中的机台，再仅比较这些机台已框选、应有和缺少的回路，并导出 xlsx", "不会把未框选的其他机台计入应有回路；期望回路读取 U1DATA/U1SET 刷新后的 SQLite 机台快照，命令执行时不读取 Excel、不联网。"),
-                E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。"),
+                E(CommandIds.Merge, "DWG 批量合并", "Xmerge", "通过 GUI 拖入 DWG 或文件夹，递归收集并按 XLAYOUT 规则合并到当前图纸", "文件夹会遍历所有子目录；源文件只读，不会被修改。无法读取的文件（需要修复/损坏/被占用）会逐一点名，确认后跳过并继续合并其余文件（D-051）。"),
                 E(CommandIds.LegacyStatistics, "文字统计汇总", "UNADD", "统计 TEXT/MTEXT 中的电缆、桥架和线管长度", "多行文字和统计分类可在 U1SET 独立开关。"),
                 E(CommandIds.Help, "命令帮助", "U1HELP", "显示全部公开命令的功能、用法和注意事项", "只读操作。"),
                 E(CommandIds.ClientLogin, "在线登录", "UNC_LOGIN", "使用 UNCAD 账号登录并在本机上线；一个账号同时只有一台设备在线", "授权缺失、过期或被其它设备顶掉时仍可运行，是在线授权的恢复入口；重新登录即在本机抢回授权（服务端不支持免密抢回），成功后立即做一次心跳校验。"),

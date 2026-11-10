@@ -22,6 +22,15 @@ namespace UNCAD.Features.XLayout
         public int EntityCount { get; set; }
         public int UnplacedEntityCount { get; set; }
         public string[] Files { get; set; } = Array.Empty<string>();
+        /// <summary>D-051（2026-11-10）：无法读取而被跳过的文件（"路径 —— 原因"）。</summary>
+        public string[] SkippedFiles { get; set; } = Array.Empty<string>();
+    }
+
+    /// <summary>D-051：一个无法读取的源文件（路径 + 用户可读原因）。</summary>
+    internal sealed class UnreadableDrawing
+    {
+        public string Path { get; set; }
+        public string Reason { get; set; }
     }
 
     /// <summary>
@@ -41,6 +50,26 @@ namespace UNCAD.Features.XLayout
         }
 
         public static XmergeResult Merge(Database database, IEnumerable<string> filePaths)
+            => Merge(database, filePaths, null);
+
+        public static XmergeResult Merge(CadContext ctx, IEnumerable<string> filePaths,
+            Func<IReadOnlyList<UnreadableDrawing>, bool> continueWithoutFailed)
+        {
+            if (ctx == null) throw new ArgumentNullException(nameof(ctx));
+            return Merge(ctx.Db, filePaths, continueWithoutFailed);
+        }
+
+        /// <summary>
+        /// D-051（2026-11-10，用户报告 XMERGE eDwgNeedsRecovery 一个坏文件炸整批）：
+        /// 逐文件读取容错。真机探针证明侧库 ReadDwgFile 对损坏/待恢复 DWG 在全部
+        /// FileOpenMode×allowCP 组合下都会抛异常（不存在静默自动恢复），因此坏文件
+        /// 只能收集起来交给调用方：continueWithoutFailed 回调返回 true 才跳过并
+        /// 继续合并可读文件（结果窗与命令行都会列出被跳过文件）；返回 false 或
+        /// 未提供回调则取消并点名全部坏文件。全部文件都读不了时同样点名取消。
+        /// </summary>
+        public static XmergeResult Merge(Database database,
+            IEnumerable<string> filePaths,
+            Func<IReadOnlyList<UnreadableDrawing>, bool> continueWithoutFailed)
         {
             if (database == null) throw new ArgumentNullException(nameof(database));
             string activeDrawing = GetFullPathOrEmpty(database.Filename);
@@ -57,12 +86,41 @@ namespace UNCAD.Features.XLayout
             if (files.Length == 0) throw new InvalidDataException("没有可合并的 DWG 文件。");
 
             var sources = new List<ImportedDrawing>();
+            var unreadable = new List<UnreadableDrawing>();
             PreparedDrawing prepared = null;
             try
             {
                 // Every source stays detached and read-only on disk. Nothing reaches the
                 // user's drawing until collection and the complete RAM layout both succeed.
-                foreach (string file in files) sources.Add(ReadSource(file));
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        sources.Add(ReadSource(file));
+                    }
+                    catch (Autodesk.AutoCAD.Runtime.Exception ex)
+                    {
+                        unreadable.Add(new UnreadableDrawing
+                        {
+                            Path = file,
+                            Reason = DescribeReadFailure(ex)
+                        });
+                        Log.Warn("Xmerge 跳过无法读取的源文件: " + file + " ("
+                            + ex.ErrorStatus + ")");
+                    }
+                }
+                if (unreadable.Count > 0)
+                {
+                    if (sources.Count == 0)
+                        throw new InvalidDataException(BuildUnreadableMessage(unreadable,
+                            "所选文件全部无法读取，已取消："));
+                    bool proceed = continueWithoutFailed != null
+                        && continueWithoutFailed(unreadable);
+                    if (!proceed)
+                        throw new InvalidDataException(BuildUnreadableMessage(unreadable,
+                            "已取消合并。以下文件无法读取："));
+                }
+                string[] readableFiles = sources.Select(source => source.Path).ToArray();
                 List<ImportedFrame> frames = sources.SelectMany(source => source.Frames).ToList();
                 var itemByFrame = new Dictionary<ImportedFrame, XLayoutFrameItem>();
                 var items = frames.Select((frame, index) =>
@@ -87,11 +145,13 @@ namespace UNCAD.Features.XLayout
                             .Select(source => source.Path)));
                 return new XmergeResult
                 {
-                    FileCount = files.Length,
+                    FileCount = readableFiles.Length,
                     FrameCount = frames.Count,
                     EntityCount = prepared.Snapshots.Count,
                     UnplacedEntityCount = unplaced,
-                    Files = files
+                    Files = readableFiles,
+                    SkippedFiles = unreadable.Select(item =>
+                        item.Path + " —— " + item.Reason).ToArray()
                 };
             }
             catch (IncompatibleCloneException ex)
@@ -255,6 +315,30 @@ namespace UNCAD.Features.XLayout
                 throw;
             }
         }
+
+        /// <summary>D-051：把 AutoCAD 读取异常翻译成用户可读、可行动的原因。</summary>
+        internal static string DescribeReadFailure(
+            Autodesk.AutoCAD.Runtime.Exception exception)
+        {
+            switch (exception.ErrorStatus)
+            {
+                case Autodesk.AutoCAD.Runtime.ErrorStatus.DwgNeedsRecovery:
+                    return "图纸需要修复（上次保存可能被中断）：请在 AutoCAD 中打开该文件"
+                        + "让其自动恢复并保存，然后再合并";
+                case Autodesk.AutoCAD.Runtime.ErrorStatus.EndOfFile:
+                case Autodesk.AutoCAD.Runtime.ErrorStatus.FilerError:
+                    return "文件已损坏或不是有效的 DWG";
+                case Autodesk.AutoCAD.Runtime.ErrorStatus.FileSharingViolation:
+                    return "文件正被其他程序占用，请关闭后重试";
+                default:
+                    return "无法读取（" + exception.ErrorStatus + "）";
+            }
+        }
+
+        private static string BuildUnreadableMessage(
+            IReadOnlyList<UnreadableDrawing> unreadable, string headline)
+            => headline + "\r\n" + string.Join("\r\n", unreadable.Select(item =>
+                "  " + item.Path + " —— " + item.Reason));
 
         private static ImportedDrawing ReadSource(string path)
         {

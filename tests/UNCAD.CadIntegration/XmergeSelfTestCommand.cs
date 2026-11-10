@@ -212,6 +212,8 @@ namespace UNCAD.CadIntegration
                 if (!string.IsNullOrWhiteSpace(realSource)
                     && (File.Exists(realSource) || Directory.Exists(realSource)))
                     VerifyRealSource(ctx, document.Database, tempRoot, realSource);
+
+                VerifyUnreadableFileTolerance(ctx, document.Database, tempRoot);
                 Pass(document);
             }
             catch (System.Exception ex)
@@ -226,6 +228,70 @@ namespace UNCAD.CadIntegration
             {
                 try { Directory.Delete(tempRoot, true); } catch { }
             }
+        }
+
+        /// <summary>
+        /// D-051（2026-11-10，用户报告 XMERGE eDwgNeedsRecovery 一个坏文件炸整批）：
+        /// 好文件+截断文件 → 确认回调=true 跳过坏文件继续合并并在结果里点名；
+        /// 回调=false → 取消并点名坏文件；全部坏文件 → 取消并点名。
+        /// </summary>
+        private static void VerifyUnreadableFileTolerance(CadContext ctx,
+            Database database, string tempRoot)
+        {
+            int before = CurrentEntityCount(database);
+            string goodPath = Path.Combine(tempRoot, "tolerance-good.dwg");
+            CreateSource(goodPath, "xframe", "MTOL", "DEVTOL", 100d);
+            string badPath = Path.Combine(tempRoot, "tolerance-broken.dwg");
+            string badPath2 = Path.Combine(tempRoot, "tolerance-broken-2.dwg");
+            byte[] bytes = File.ReadAllBytes(goodPath);
+            byte[] truncated = new byte[Math.Max(64, bytes.Length - 2048)];
+            Array.Copy(bytes, truncated, truncated.Length);
+            File.WriteAllBytes(badPath, truncated);
+            File.WriteAllBytes(badPath2, truncated);
+
+            // 确认回调 = true：只合并好文件，坏文件进 SkippedFiles（含文件名与原因）。
+            XmergeResult partial = XmergeService.Merge(database,
+                new List<string> { goodPath, badPath }, unreadable => true);
+            Require(partial.FileCount == 1, "tolerance: readable file count");
+            Require(partial.SkippedFiles.Length == 1,
+                "tolerance: skipped file count");
+            Require(partial.SkippedFiles[0].Contains("tolerance-broken.dwg"),
+                "tolerance: skipped entry names the file (got '"
+                + partial.SkippedFiles[0] + "')");
+            Require(CurrentEntityCount(database) > before,
+                "tolerance: good file was still merged");
+
+            // 确认回调 = false：取消并点名坏文件，图纸不变。
+            int afterPartial = CurrentEntityCount(database);
+            bool cancelRejected = false;
+            try
+            {
+                XmergeService.Merge(database,
+                    new List<string> { goodPath, badPath }, unreadable => false);
+            }
+            catch (InvalidDataException ex)
+            {
+                cancelRejected = ex.Message.Contains("tolerance-broken.dwg");
+            }
+            Require(cancelRejected,
+                "tolerance: cancel must name the unreadable file");
+            Require(CurrentEntityCount(database) == afterPartial,
+                "tolerance: cancel must not change the drawing");
+
+            // 全部坏文件：点名取消。
+            bool allBadRejected = false;
+            try
+            {
+                XmergeService.Merge(database,
+                    new List<string> { badPath, badPath2 }, unreadable => true);
+            }
+            catch (InvalidDataException ex)
+            {
+                allBadRejected = ex.Message.Contains("tolerance-broken.dwg")
+                    && ex.Message.Contains("tolerance-broken-2.dwg");
+            }
+            Require(allBadRejected,
+                "tolerance: all-bad selection must be rejected with file names");
         }
 
         private static void CreateSource(string path, string frameName,

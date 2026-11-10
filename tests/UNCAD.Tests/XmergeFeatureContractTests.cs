@@ -66,6 +66,29 @@ namespace UNCAD.Tests
             Assert.Contains("已按源坐标导入", feature);
         }
 
+        [Fact]
+        public void Xmerge_UnreadableFiles_AreNamedAndToleratedPerFile()
+        {
+            // D-051（2026-11-10，用户报告 XMERGE eDwgNeedsRecovery 一个坏文件炸整批）：
+            // 坏文件逐一点名（含恢复指引），确认后跳过继续合并其余文件；真机探针
+            // 证明侧库 ReadDwgFile 无静默自动恢复路径，所以不做"悄悄重试"。
+            string service = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "XLayout", "XmergeService.cs"));
+            Assert.Contains("catch (Autodesk.AutoCAD.Runtime.Exception ex)", service);
+            Assert.Contains("DescribeReadFailure(ex)", service);
+            Assert.Contains("让其自动恢复并保存", service); // eDwgNeedsRecovery 指引
+            Assert.Contains("SkippedFiles", service);
+            Assert.Contains("continueWithoutFailed", service);
+            Assert.Contains("所选文件全部无法读取，已取消", service);
+
+            string feature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "XLayout", "XmergeFeature.cs"));
+            // 命令侧：坏文件弹确认（是=跳过继续/否=取消），结果点名被跳过文件。
+            Assert.Contains("XmergeService.Merge(ctx, window.Files, unreadable =>", feature);
+            Assert.Contains("是否跳过这些文件，继续合并其余文件", feature);
+            Assert.Contains("已跳过 " + "\" + result.SkippedFiles.Length", feature);
+        }
+
         private static string RepoFile(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(System.AppContext.BaseDirectory,

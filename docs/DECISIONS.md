@@ -720,3 +720,23 @@ rewrite an existing entry.
   do not bypass `OffsetPolylineBuilder` with raw `GetOffsetCurves`, and do not
   read `UNQ_*` keys for conduit geometry. Statistics semantics are unchanged
   (label text only); a merged label anchors to exactly one frame.
+
+## D-051: Xmerge Per-File Tolerance For Unreadable Source Drawings (2026-11-10)
+
+- Status: accepted (user-reported XMERGE `eDwgNeedsRecovery` failure where one
+  damaged source drawing aborted the whole merge with no file name)
+- Decision: `Xmerge` reads source drawings one by one; a file that cannot be
+  read is collected with a user-actionable reason (needs-recovery drawings get
+  the "open it in AutoCAD to auto-recover, save, then merge again" guidance;
+  damaged/invalid files and file-sharing locks are named as such) instead of
+  aborting the command. When at least one file is readable, a confirmation
+  dialog lists every unreadable file and asks whether to skip them and merge
+  the rest; declining (or no callback) cancels with the same list. When every
+  selected file is unreadable, the merge is rejected with the full list. A
+  real-machine probe proved that side-database `ReadDwgFile` fails for damaged
+  drawings under every FileOpenMode/allowCPConversion combination, so no silent
+  auto-recovery is attempted.
+- Consequence: do not add hidden retry/recovery logic around `ReadDwgFile`;
+  keep the per-file catch with the named-file reporting, and keep skipping
+  explicit (user-confirmed) rather than silent. Skipped files are listed in
+  the command-line summary (`SkippedFiles`).
