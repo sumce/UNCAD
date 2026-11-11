@@ -412,6 +412,14 @@ namespace UNCAD.Features.Fill
                         CadDrawingInfoTableWriter.Write(transaction,
                             plan.Selection.DrawingInfoTableIds, plan.Machine, DateTime.Now);
 
+                        // 2026-11-06：复制框先清空源框遗留旧信息再写新数据。
+                        // 3.0.0.14 修正顺序：清空必须先于 FillFrame。旧代码清空排
+                        // 在 FillFrame 之后，把本次刚写入的 CABLE_INFO/CONDUIT_INFO
+                        // 一并抹掉——复制框的电缆信息永远为空（用户报告：左下角
+                        // 电缆信息直接不出现）。
+                        if (plan.CopiedFrame)
+                            CadBlockAttributeWriter.ClearStaleInfo(transaction,
+                                plan.Selection.FrameBlockIds);
                         FillWriteResult frame = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                             plan.Selection.FrameBlockIds, plan.Machine,
                             plan.Statistics,
@@ -424,10 +432,6 @@ namespace UNCAD.Features.Fill
                             ?? plan.Machine.Dia;
                         FillWriteResult ruanguan = RuanguanBlockWriter.FillModelAndLength(ctx,
                             transaction, plan.Selection.RuanguanBlockIds, hoseDiameter);
-                        // 2026-11-06：复制框先清空源框遗留旧信息再写新数据。
-                        if (plan.CopiedFrame)
-                            CadBlockAttributeWriter.ClearStaleInfo(transaction,
-                                plan.Selection.FrameBlockIds);
                         FillWriteResult frameInfo = FrameInfoJsonBlockWriter.FillOrMigrate(ctx,
                             transaction, plan.Selection.FrameBlockIds,
                             plan.Selection.FrameInfoJsonBlockIds, plan.Machine,

@@ -175,7 +175,7 @@ namespace UNCAD.Features.Fill
             if (!record.IsForeignTo(expectedFrameHandle)) return true;
             if (FrameMetadataRebindPolicy.IsMovedFrame(record,
                     expectedIdentity?.MachineId ?? "", expectedIdentity?.DeviceName ?? "",
-                    handle => HandleAliveInDatabase(id, handle)))
+                    handle => HandleAliveInDatabase(transaction, id, handle)))
             {
                 movedJsonNote = "图框 " + expectedFrameHandle
                     + " 携带的 frameinfo_json 记录属于同一机台（"
@@ -191,8 +191,14 @@ namespace UNCAD.Features.Fill
             return false;
         }
 
-        /// <summary>句柄字符串是否仍指向本图一个未删除的实体（解析失败按存在处理）。</summary>
-        private static bool HandleAliveInDatabase(ObjectId sourceId, string handleText)
+        /// <summary>句柄字符串是否仍指向本图一个未删除的**图框块**（解析失败按存在处理）。
+        /// 3.0.0.14 收紧：句柄号回答的是“本图还有没有源框”，不能拿“任意同号实体”
+        /// 当源框还在——跨文件复制后，记录里的原句柄极易与目标图的无关实体（图层/
+        /// 线型等表记录、直线、文字）撞号，撞号会被误判成同文件复制，搬场记录被拒、
+        /// 图框被当复制框清理。只有句柄仍指向携带图框属性（FRAMEINFO/CABLE_INFO/
+        /// CONDUIT_INFO/MACHINEID-*）的块参照才算源框还在。</summary>
+        private static bool HandleAliveInDatabase(Transaction transaction,
+            ObjectId sourceId, string handleText)
         {
             if (!long.TryParse((handleText ?? "").Trim(), NumberStyles.HexNumber,
                     CultureInfo.InvariantCulture, out long value) || value <= 0)
@@ -202,12 +208,39 @@ namespace UNCAD.Features.Fill
                 if (!sourceId.Database.TryGetObjectId(new Handle(value),
                         out ObjectId found))
                     return true;
-                return found != ObjectId.Null && !found.IsErased;
+                if (found == ObjectId.Null || found.IsErased) return false;
+                return transaction.GetObject(found, OpenMode.ForRead, true)
+                    is BlockReference candidate && LooksLikeFrame(transaction, candidate);
             }
             catch
             {
                 return true;
             }
+        }
+
+        /// <summary>块参照是否仍带着图框身份属性（句柄撞号防御用）。
+        /// 同文件复制出的复制框与源框都带这些属性；无关块参照（设备块/图签等）
+        /// 不带——撞上它们不代表源框还在。</summary>
+        private static bool LooksLikeFrame(Transaction transaction, BlockReference block)
+        {
+            if (block.AttributeCollection == null) return false;
+            foreach (ObjectId attributeId in block.AttributeCollection)
+            {
+                if (!(transaction.GetObject(attributeId, OpenMode.ForRead, true)
+                        is AttributeReference attribute)) continue;
+                string tag = attribute.Tag ?? "";
+                if (IsJsonTagName(tag)
+                    || string.Equals(tag, FrameBlockFiller.TagCable,
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, FrameBlockFiller.TagConduit,
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, FrameBlockFiller.TagDevice,
+                        StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, FrameBlockFiller.TagPower,
+                        StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
 

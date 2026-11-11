@@ -175,6 +175,13 @@ namespace UNCAD.Tests
                 StringComparison.Ordinal);
             Assert.True(clear >= 0 && migrate > clear,
                 "单框写事务必须先清空旧信息再写新 JSON");
+            // 3.0.0.14：清空还必须先于 FillFrame——旧顺序先写后清，复制框刚写入的
+            // CABLE_INFO/CONDUIT_INFO 会被清理步骤抹空（用户报告：左下角电缆信息
+            // 直接不出现）。
+            int frameWrite = fill.IndexOf("CadBlockAttributeWriter.FillFrame(",
+                StringComparison.Ordinal);
+            Assert.True(clear >= 0 && frameWrite > clear,
+                "单框写事务必须先清空旧信息再写 CABLE_INFO/CONDUIT_INFO");
 
             string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs"));
@@ -184,6 +191,10 @@ namespace UNCAD.Tests
                 StringComparison.Ordinal);
             Assert.True(batchClear >= 0 && batchMigrate > batchClear,
                 "批量写事务必须先清空旧信息再写新 JSON");
+            int batchFrameWrite = batch.IndexOf("CadBlockAttributeWriter.FillFrame(",
+                StringComparison.Ordinal);
+            Assert.True(batchClear >= 0 && batchFrameWrite > batchClear,
+                "批量写事务必须先清空旧信息再写 CABLE_INFO/CONDUIT_INFO");
             // 复制框检测在预检阶段（BatchFillUpdatePreflight）置位并随 Plan 传递。
             string batchPreflight = File.ReadAllText(Repo("src", "UNCAD", "Features",
                 "Fill", "BatchFillUpdatePreflight.cs"));

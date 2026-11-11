@@ -11,6 +11,7 @@ using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
+using UNCAD.Core.Stat;
 using UNCAD.Features.Fill;
 using UNCAD.Infra;
 
@@ -67,14 +68,19 @@ namespace UNCAD.CadIntegration
     /// 「+3000（设备内）」残留文本），断言
     ///   f) ①句柄校验拒绝外来 JSON（不复读，源框自身读取不受影响）
     ///      ②FillReserveStage 在外来 JSON 时跳过 CABLE_INFO 预留恢复（不继承）
-    ///      ③ClearStaleInfo 显式清空复制框旧属性且不波及源框（显式清理）。
+    ///      ③ClearStaleInfo 显式清空复制框旧属性且不波及源框（显式清理）
+    ///      ④清理→FillFrame 后新写的 CABLE_INFO 存活（3.0.0.14 顺序锁：旧顺序
+    ///        先写后清，复制框电缆信息永远为空——用户报告“左下角电缆信息直接
+    ///        不出现”的根因）。
     ///
     /// 2026-11-10 增补阶段 6（整机台搬场重绑，D-052-C，回应用户报告
     /// “图纸跨文件复制后 U1U 提示输入预留、默认 0”）：同文件克隆后删除源框 =
     /// 跨文件搬场的等价物（原句柄消失、身份未变），断言
     ///   g) ①身份一致 + 原句柄已不在本图 → 判搬场收下记录，FillReserveStage
     ///      不再标记复制框、预留恢复通道重新打开；
-    ///      ②身份不符（复制后改号/幽灵）→ 外来拒绝照旧（3.0.0.6 语义不回归）。
+    ///      ②身份不符（复制后改号/幽灵）→ 外来拒绝照旧（3.0.0.6 语义不回归）；
+    ///      ③句柄撞号免疫（3.0.0.14）——记录句柄指向无关实体（直线）不得误判
+    ///        “源框还在”，身份一致仍判搬场收下。
     ///
     /// FAIL 路径验证：环境变量 %UNCAD_MIGRATION_SELFTEST_SABOTAGE% 支持两种人为破坏
     ///   RowHeight   —— 把期望行高改错（断言 c 必须报警）；
@@ -941,7 +947,9 @@ namespace UNCAD.CadIntegration
         /// 当前代图框，FRAMEINFO 携带源框句柄的 JSON、CABLE_INFO 携带
         /// 「+3000（设备内）」源框残留），逐层断言 3.0.0.6/3.0.0.8/3.0.0.9 的防线：
         /// ①不复读（句柄校验拒外来 JSON）②不继承（外来 JSON 时跳过 CABLE_INFO
-        /// 预留恢复）③显式清理（ClearStaleInfo 清空旧属性、不波及源框）。
+        /// 预留恢复）③显式清理（ClearStaleInfo 清空旧属性、不波及源框）
+        /// ④清后新写存活（3.0.0.14：清理→FillFrame 之后新电缆公式必须在，
+        /// 锁死“清空先于写入”的顺序——旧顺序把刚写的 CABLE_INFO 抹空）。
         /// </summary>
         private static void CopiedFrameDefense(CadContext ctx, Fixture fixture,
             Dictionary<FrameSlot, FillSelection> selections)
@@ -1090,11 +1098,38 @@ namespace UNCAD.CadIntegration
                             && sourceJson.TrimStart().StartsWith("{",
                                 StringComparison.Ordinal),
                             "ClearStaleInfo 只清复制框，源框 FRAMEINFO 必须完好。");
+                        // ④ 清后新写存活（3.0.0.14 顺序修正的直接回归）：生产顺序是
+                        // ClearStaleInfo → FillFrame——清理之后写入的新机台
+                        // CABLE_INFO 必须存活；旧顺序（FillFrame 在前、清空在后）
+                        // 会把刚写的公式当源框残留抹掉，这里应读到空串。
+                        var freshStat = new CableStatResult
+                        {
+                            CableSum = 14.8,
+                            MeasuredCableSum = 6.4,
+                            CableReserveApplied = true,
+                            PanelReserveMillimeters = 3400,
+                            DeviceReserveMillimeters = 2000,
+                            OwnerReserveMillimeters = 3000
+                        };
+                        freshStat.CableFormatted.Add("1.0");
+                        freshStat.CableFormatted.Add("5.4");
+                        CadBlockAttributeWriter.FillFrame(ctx, clearTx,
+                            copySelection.FrameBlockIds, source.Machine, freshStat,
+                            false, false);
+                        string afterRewrite = CadBlockAttributeWriter.ReadFirstTagged(
+                            clearTx, copySelection.FrameBlockIds,
+                            FrameBlockFiller.TagCable);
+                        Check(afterRewrite != null && afterRewrite.IndexOf(
+                                "1000+5400+3400（盘内）+2000（设备内）+3000（预留）=14800mm",
+                                StringComparison.Ordinal) >= 0,
+                            "复制框清理后写入的新 CABLE_INFO 必须存活（实际 '"
+                            + afterRewrite + "'）——3.0.0.14 前的清空顺序会把它抹空。");
                         clearTx.Abort(); // 自检不改图。
                     }
                 }
                 Info("  ③ 显式清理: ClearStaleInfo 清空 " + cleared
                     + " 个旧属性（CABLE_INFO/FRAMEINFO），源框无损: 通过");
+                Info("  ④ 清后新写: 清理→写入的新电缆公式存活（…=14800mm）: 通过");
                 tx.Commit();
             }
         }
@@ -1107,7 +1142,9 @@ namespace UNCAD.CadIntegration
         /// ①搬场收下——句柄失配但身份一致且原句柄已消失 → Read 判搬场收下记录
         ///   （非外来），FillReserveStage 不再标记复制框、预留恢复通道重新打开；
         /// ②改号仍拒——同一克隆用别的机台身份读取 → 外来拒绝照旧（复制去定义
-        ///   另一台设备的语义不回归 3.0.0.6 之前）。
+        ///   另一台设备的语义不回归 3.0.0.6 之前）；
+        /// ③撞号免疫（3.0.0.14）——记录句柄指向无关实体（直线）时不得误判
+        ///   “源框还在”，身份一致仍判搬场收下。
         /// </summary>
         private static void MovedFrameRebindDefense(CadContext ctx, Fixture fixture,
             Dictionary<FrameSlot, FillSelection> selections)
@@ -1239,6 +1276,72 @@ namespace UNCAD.CadIntegration
                     + "（foreign 长度 " + foreignOther.Length + "，moved 长度 "
                     + movedOther.Length + "）——3.0.0.6 语义不得回归。");
                 Info("  ② 改号仍拒: 身份不符时外来拒绝照旧: 通过");
+                tx.Commit();
+            }
+
+            // ③ 撞号免疫（3.0.0.14）：跨文件复制后，记录里的原句柄号可能与目标图
+            // 的无关实体（图层/线型等表记录、直线、文字）撞号——句柄存在 ≠ 源框
+            // 还在。构造：记录句柄指向一根普通直线、身份一致 → 必须仍判搬场收下。
+            ObjectId colliderLineId, colliderFrameId;
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var colliderLine = new Line(new Point3d(0, -400000, 0),
+                    new Point3d(1000, -400000, 0));
+                ctx.AddToCurrentSpace(tx, colliderLine);
+                BlockReference movedFrame = (BlockReference)tx.GetObject(movedId,
+                    OpenMode.ForRead, true);
+                ObjectId definitionId = FrameRegionCollector.DefinitionIds(movedFrame)
+                    .First();
+                var collider = new BlockReference(new Point3d(
+                    movedFrame.Position.X + FrameGapX,
+                    movedFrame.Position.Y - LegacyFrameHeight, 0), definitionId);
+                ctx.AddToCurrentSpace(tx, collider);
+                var collisionRecord = new FrameInfoJsonRecord
+                {
+                    MachineId = source.Machine.MachineId,
+                    DeviceName = source.Machine.CircuitName,
+                    FrameHandle = colliderLine.ObjectId.Handle.ToString()
+                };
+                AttachAttribute(ctx, tx, collider,
+                    FrameInfoJsonBlockWriter.FrameInfoTag,
+                    FrameInfoJsonCodec.Serialize(collisionRecord));
+                AttachAttribute(ctx, tx, collider, FrameBlockFiller.TagPower,
+                    FrameBlockFiller.PowerText(source.Machine));
+                AttachAttribute(ctx, tx, collider, FrameBlockFiller.TagDevice,
+                    FrameBlockFiller.DeviceText(source.Machine));
+                colliderLineId = colliderLine.ObjectId;
+                colliderFrameId = collider.ObjectId;
+                tx.Commit();
+            }
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                    new[] { colliderFrameId });
+                Check(regions.Errors.Count == 0 && regions.Groups.Count == 1,
+                    "撞号图框应被分区识别（分组 " + regions.Groups.Count
+                    + "，错误: " + string.Join("; ", regions.Errors) + "）。");
+                var definitions = new CadBlockDefinitionReader(tx);
+                FillSelection colliderSelection = FillSelectionCollector.Split(tx,
+                    regions.Groups[0].EntityIds.ToArray(), true, definitions);
+                FrameInfoJsonBlockWriter.Read(tx,
+                    FrameInfoJsonBlockWriter.ReadSources(colliderSelection),
+                    FrameInfoJsonBlockWriter.OwnFrameHandle(tx,
+                        colliderSelection.FrameBlockIds),
+                    new ExistingFillIdentity
+                    {
+                        MachineId = source.Machine.MachineId,
+                        DeviceName = source.Machine.CircuitName
+                    },
+                    out string foreignCollider, out string movedCollider);
+                Check(foreignCollider.Length == 0 && movedCollider.Length > 0,
+                    "记录句柄撞上无关实体（直线）时不得误判同文件复制——身份一致"
+                    + "必须仍判搬场收下（foreign 长度 " + foreignCollider.Length
+                    + "，moved 长度 " + movedCollider.Length
+                    + "）——否则跨文件搬场在实体较多的图纸上基本必被误拒。");
+                Info("  ③ 撞号免疫: 句柄指向直线（非图框块）仍判搬场收下: 通过");
+                // 清理自测实体（先断言后清理：擦除后句柄失效，断言就失真了）。
+                tx.GetObject(colliderFrameId, OpenMode.ForWrite, true).Erase();
+                tx.GetObject(colliderLineId, OpenMode.ForWrite, true).Erase();
                 tx.Commit();
             }
         }

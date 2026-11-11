@@ -30,6 +30,13 @@ deferred, or important for support diagnosis.
 
 ## Support Notes
 
+- 3.0.0.9–3.0.0.13: on any frame detected as a copy (foreign JSON rejected),
+  the freshly written CABLE_INFO/CONDUIT_INFO was wiped by the cleanup step
+  that ran *after* the write — the frame's cable info ended up empty even
+  with measured labels. Fixed in 3.0.0.14 (clear-before-write order; the
+  same release also stops same-numbered unrelated entities from being
+  misread as "source frame still present" in the moved-frame rebind check).
+  Redo U1F/U1U on the affected frames to regenerate the info.
 - U1PDF always plots with `DWG To PDF.pc3`. If a workstation reports
   "PDF 不带颜色", check for third-party plot devices (e.g. `M_PDF.PC3`) or a
   non-colour plot style table; the built-in exporter asserts colour in

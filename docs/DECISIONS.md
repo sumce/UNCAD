@@ -770,6 +770,25 @@ rewrite an existing entry.
      handle is re-stamped on the next write. Same-file copies (source frame
      still present) and renamed/ghost records stay rejected exactly as in
      3.0.0.6/3.0.0.8/3.0.0.9.
+- Amendment (2026-11-11, 3.0.0.14 — field report "CABLE_INFO never appears
+  on copied frames"): two corrections, both regression-tested on real AutoCAD
+  (migration selftest phase 5 ④ / phase 6 ③):
+  1. **Clear-before-write order.** The 3.0.0.9 explicit cleanup must run
+     *before* `FillFrame`, not after. The shipped 3.0.0.9–3.0.0.13 order
+     (write, then clear) wiped the freshly written CABLE_INFO/CONDUIT_INFO on
+     every frame detected as a copy, so a copied frame's cable info was always
+     empty. It stayed hidden until 3.0.0.13 unblocked batch writes that
+     previously aborted at the unmatched-catalog guard. After the fix: clear
+     stale first, then write; with no measurements the copy stays empty
+     (the 2026-11-06 "clear it" requirement), with measurements the new
+     formula survives.
+  2. **Handle-collision guard for the rebind check.** "Recorded handle still
+     in this drawing" must mean *still pointing at a live block reference
+     carrying frame attributes* (FRAMEINFO/CABLE_INFO/CONDUIT_INFO/
+     MACHINEID-*). A same-numbered unrelated entity (layer/linetype table
+     record, line, text) no longer counts as "source frame present" —
+     collisions are near-certain when pasting into a populated drawing, and
+     they misrouted genuine moved frames into the copy-reject path.
 - Consequence: do not reintroduce a per-category request whitelist in batch
   preflight; do not restore the "re-enter reserve from 0" behavior for copied
   frames; do not accept a handle-mismatched record on identity alone without

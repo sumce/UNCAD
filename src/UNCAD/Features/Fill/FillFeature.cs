@@ -342,6 +342,16 @@ namespace UNCAD.Features.Fill
                     if (filled < 0) return;
                     CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
                         picked, DateTime.Now);
+                    // 2026-11-06（用户要求 U1F 定义要清干净）：复制来的图框先把
+                    // 源框遗留的 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 显式清空，再写
+                    // 新机台数据——同一事务，整体提交或整体回滚。
+                    // 3.0.0.14 修正顺序：清空必须先于 FillFrame。旧代码清空排在
+                    // FillFrame 之后，把本次刚写入的 CABLE_INFO/CONDUIT_INFO 一并
+                    // 抹掉——复制框的电缆信息永远为空（用户报告：左下角电缆信息
+                    // 直接不出现）。
+                    if (copiedFrameDetected)
+                        CadBlockAttributeWriter.ClearStaleInfo(transaction,
+                            selection.FrameBlockIds);
                     frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                         selection.FrameBlockIds, picked,
                         statistics,
@@ -351,12 +361,6 @@ namespace UNCAD.Features.Fill
                         selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
                     ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
                         selection.RuanguanBlockIds, picked.Dia);
-                    // 2026-11-06（用户要求 U1F 定义要清干净）：复制来的图框先把
-                    // 源框遗留的 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 显式清空，再写
-                    // 新机台数据——同一事务，整体提交或整体回滚。
-                    if (copiedFrameDetected)
-                        CadBlockAttributeWriter.ClearStaleInfo(transaction,
-                            selection.FrameBlockIds);
                     frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
                         selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
                         updateMode ? CommandIds.FillUpdate : CommandIds.Fill, null,
