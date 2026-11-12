@@ -1120,7 +1120,7 @@ namespace UNCAD.CadIntegration
                             clearTx, copySelection.FrameBlockIds,
                             FrameBlockFiller.TagCable);
                         Check(afterRewrite != null && afterRewrite.IndexOf(
-                                "1000+5400+3400（盘内）+2000（设备内）+3000（预留）=14800mm",
+                                "1000 +5400 +3400（盘内） +2000（设备内） +3000（预留）=14800mm",
                                 StringComparison.Ordinal) >= 0,
                             "复制框清理后写入的新 CABLE_INFO 必须存活（实际 '"
                             + afterRewrite + "'）——3.0.0.14 前的清空顺序会把它抹空。");

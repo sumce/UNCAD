@@ -90,7 +90,13 @@ namespace UNCAD.Core.Fill
             if (stat != null && stat.CableSum > 0)
             {
                 // 与现场约定一致：全部 mm，明细统一写成「数值（说明）」，最后 =总长mm。
-                // 例：电缆ZB-YJVR-5*4mm²: 1000+700+3400（盘内）+2000（设备内）+3000（预留）=93300mm
+                // 例：电缆ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +2000（设备内） +3000（预留）=93300mm
+                // 3.0.0.15：段间用「 +」连接（空格在加号前）——MText 只能在空格/
+                // 汉字处断行，"1000+5400+…"纯数字串是一整个不可断词，段数一多
+                // 首行放不下整串就整串下移（首行只剩型号，用户报告 3 行实际 2 行
+                // 就够）。空格给每个段边界一个断点后，型号与数字同排一行、贪心
+                // 填满，行数最少；读回方只认「数值（设备内）」紧贴结构与型号
+                // 前缀，段间空格不影响。
                 double measuredMm = (stat.CableReserveApplied
                     ? stat.MeasuredCableSum : stat.CableSum) * 1000d;
                 var parts = new List<string>();
@@ -114,12 +120,12 @@ namespace UNCAD.Core.Fill
                         parts.Add(FormatMillimeters(stat.DeviceReserveMillimeters) + "（设备内）");
                     if (stat.OwnerReserveMillimeters > 0)
                         parts.Add(FormatMillimeters(stat.OwnerReserveMillimeters) + "（预留）");
-                    formula = string.Join("+", parts) + "="
+                    formula = string.Join(" +", parts) + "="
                         + FormatMillimeters(stat.CableSum * 1000d) + "mm";
                 }
                 else
                 {
-                    formula = string.Join("+", parts) + "mm";
+                    formula = string.Join(" +", parts) + "mm";
                 }
                 // 图框显示带工程前缀的完整型号（ZB-YJV- / ZB-YJVR-，由型号是否含
                 // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目

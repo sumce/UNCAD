@@ -107,7 +107,7 @@ namespace UNCAD.Tests
             }, 250.0);
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
-            Assert.Equal("电缆ZB-YJV-3*70+1*35mm²: 2000+3000+3000+4000+4400mm",
+            Assert.Equal("电缆ZB-YJV-3*70+1*35mm²: 2000 +3000 +3000 +4000 +4400mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -122,8 +122,8 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "电缆ZB-YJV-3*70+1*35mm²: 2000+3000+3400（盘内）+500（设备内）"
-                + "+3000（预留）=11900mm",
+                "电缆ZB-YJV-3*70+1*35mm²: 2000 +3000 +3400（盘内） +500（设备内）"
+                + " +3000（预留）=11900mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -135,8 +135,8 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "电缆ZB-YJV-3*70+1*35mm²: 2000+1000（盘内）+500（设备内）"
-                + "+3000（预留）=6500mm",
+                "电缆ZB-YJV-3*70+1*35mm²: 2000 +1000（盘内） +500（设备内）"
+                + " +3000（预留）=6500mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -148,7 +148,7 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "电缆ZB-YJV-3*70+1*35mm²: 2000+3400（盘内）+3000（预留）=8400mm",
+                "电缆ZB-YJV-3*70+1*35mm²: 2000 +3400（盘内） +3000（预留）=8400mm",
                 v[FrameBlockFiller.TagCable]);
         }
 

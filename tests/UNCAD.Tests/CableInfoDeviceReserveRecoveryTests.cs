@@ -12,6 +12,7 @@ namespace UNCAD.Tests
     {
         [Theory]
         [InlineData("电缆ZB-YJVR-5*4mm²: 1000+700+3400（盘内）+800（设备内）+3000（预留）=8900mm", 800d)]
+        [InlineData("电缆ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +800（设备内） +3000（预留）=8900mm", 800d)] // 3.0.0.15 段间空格
         [InlineData("电缆ZB-YJVR-5*4mm²: 1000+1500.5（设备内）=2500.5mm", 1500.5d)]
         [InlineData("1000(设备内)", 1000d)]                                 // 半角括号
         [InlineData("…+950 （设备内）+…", 950d)]                             // 括号前空白

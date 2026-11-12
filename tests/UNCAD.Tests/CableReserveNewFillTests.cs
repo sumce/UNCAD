@@ -133,7 +133,7 @@ namespace UNCAD.Tests
             };
             string info = FrameBlockFiller.BuildValues(
                 machine, statistics)[FrameBlockFiller.TagCable];
-            Assert.Contains("1000+700", info);
+            Assert.Contains("1000 +700", info);
             Assert.Contains("3400（盘内）", info);
             Assert.Contains("5000（设备内）", info);
             Assert.Contains("3000（预留）", info);
