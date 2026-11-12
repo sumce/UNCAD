@@ -114,12 +114,16 @@ namespace UNCAD.Features.Fill
             // D-043：识别老版设备内预留标记——现场在设备旁横排手写的毫米数文字
             // （本次框选范围内，水平、纯数字±mm）。恰好一处→吸收为设备内预留并
             // 在写事务里删除该标注；多处→不乱取，提示人工确认。
+            // 3.0.0.16：复制框（外来 JSON）例外——随框带过来的毫米标是源框残留，
+            // 不能自动吸收（否则源机台的设备内预留从这条暗道静默继承回来，还把
+            // 图上文字删了）。只从统计排除（“3000mm”不排除会当电缆长度双算），
+            // 保留图上文字给用户对照，设备内预留交清单确认窗重新填写。
             deviceReserveEraseIds = new List<ObjectId>();
             markerExcludedIds = new List<ObjectId>();
             copiedFrameDetected = foreignJsonNote.Length > 0;
             DeviceReserveMarkerReader.Result reserveMarkers =
                 DeviceReserveMarkerReader.CollectInSelection(ctx, selection.TextIds);
-            if (reserveMarkers.Hits.Count == 1)
+            if (reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0)
             {
                 DeviceReserveMarkerHit marker = reserveMarkers.Hits[0];
                 double? decided = DeviceReserveMarker.Decide(
@@ -136,6 +140,14 @@ namespace UNCAD.Features.Fill
                     ctx.Write("\n[" + command + "] 已识别设备内预留标记 " + marker.Text
                         + " mm，将删除图上标注、计入设备内预留并不再计入米数统计。");
                 }
+            }
+            else if (reserveMarkers.Hits.Count == 1)
+            {
+                markerExcludedIds.AddRange(reserveMarkers.EntityIds);
+                ctx.Write("\n[" + command + "] 复制图框携带源框的横排毫米标 "
+                    + reserveMarkers.Hits[0].Text + "，未自动吸收为设备内预留"
+                    + "（源框残留，避免静默继承），也不计入米数统计；图上文字保留，"
+                    + "如适用请在清单确认窗手动填写。");
             }
             else if (reserveMarkers.Hits.Count > 1)
             {

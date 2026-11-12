@@ -30,6 +30,13 @@ deferred, or important for support diagnosis.
 
 ## Support Notes
 
+- 3.0.0.13–3.0.0.15, batch U1U: when *every* selected machine failed the
+  whole-machine circuit gate and none was force-generated, the command ended
+  with a false "BOQ 输出失败，请重跑 U1S" error dialog. The drawings were
+  updated correctly and no BOQ files were touched — rerunning U1S was never
+  the right advice (its circuit gate would abort). Fixed in 3.0.0.16 (the
+  BOQ stage is skipped entirely, matching single-frame behavior). No drawing
+  repair is needed.
 - 3.0.0.9–3.0.0.13: on any frame detected as a copy (foreign JSON rejected),
   the freshly written CABLE_INFO/CONDUIT_INFO was wiped by the cleanup step
   that ran *after* the write — the frame's cable info ended up empty even

@@ -789,6 +789,28 @@ rewrite an existing entry.
      record, line, text) no longer counts as "source frame present" —
      collisions are near-certain when pasting into a populated drawing, and
      they misrouted genuine moved frames into the copy-reject path.
+- Amendment (2026-11-12, 3.0.0.16 — U1F/U1U audit): two more copied-frame
+  dark-path closures plus two batch-flow corrections, locked by contract
+  tests and migration selftest phase 5 ⑤:
+  3. **D-043 marker absorption joins the foreign-JSON guard.** A horizontal
+     millimeter marker carried over by a whole-frame copy is source residue,
+     not this machine's reserve: do not absorb it, do not delete the text,
+     but still exclude it from cable statistics ("3000mm" matches the cable
+     length pattern; without exclusion the total double-counts). Non-copied
+     frames keep the sole-marker auto-absorb behavior (D-043 unchanged).
+  4. **Copied frames never use the update-preserve flags.** "Preserve the
+     existing quantity when nothing new was measured" preserves a value the
+     cleanup just wiped to empty — a copied frame without labels ended with
+     CABLE_INFO empty on U1U but model-only on U1F. Copied frames always
+     write from scratch (U1F semantics); normal frames keep U1U preserve.
+  5. **Batch U1U flow corrections** (not copied-frame related): when every
+     selected machine fails circuit coverage and none is force-generated,
+     `boqPlans` is empty and the whole BOQ stage must be skipped (calling
+     Write anyway threw "no frame records" *after* the CAD commit and showed
+     a false "BOQ failed, rerun U1S" error — which the U1S hard gate then
+     blocks: a dead end). And the preflight-error dialog must precede the
+     device-reserve window (users filled a whole form before being told the
+     batch aborts).
 - Consequence: do not reintroduce a per-category request whitelist in batch
   preflight; do not restore the "re-enter reserve from 0" behavior for copied
   frames; do not accept a handle-mismatched record on identity alone without

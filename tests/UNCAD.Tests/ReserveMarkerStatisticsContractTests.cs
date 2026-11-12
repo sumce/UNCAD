@@ -202,6 +202,100 @@ namespace UNCAD.Tests
             Assert.Contains("CopiedFrame = plan_CopiedFrame", batchPreflight);
         }
 
+        [Fact]
+        public void CopiedFrame_MarkerAbsorption_IsGuardedByForeignJsonCheck()
+        {
+            // 3.0.0.16（U1F/U1U 审计）：复制框携带源框的横排毫米标（"3000"）时
+            // D-043 自动吸收没有外来守卫——源机台的设备内预留从毫米标这条暗道
+            // 静默继承回来（批量路径连确认窗都不弹），还把图上文字删了。
+            // 修复：外来 JSON 时只从统计排除（"3000mm"不排除会当电缆长度双算），
+            // 不吸收、不删除、点名提示。
+            string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillReserveStage.cs"));
+            int guard = stage.IndexOf(
+                "reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0",
+                StringComparison.Ordinal);
+            int decide = stage.IndexOf("DeviceReserveMarker.Decide(",
+                StringComparison.Ordinal);
+            Assert.True(guard >= 0 && decide > guard,
+                "单图：唯一毫米标的自动吸收必须在「非外来 JSON」守卫之内");
+            Assert.Contains("未自动吸收为设备内预留", stage);
+            Assert.Contains("不计入米数统计", stage);
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdatePreflight.cs"));
+            int batchGuard = batch.IndexOf(
+                "reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0",
+                StringComparison.Ordinal);
+            int batchDecide = batch.IndexOf("DeviceReserveMarker.Decide(",
+                StringComparison.Ordinal);
+            Assert.True(batchGuard >= 0 && batchDecide > batchGuard,
+                "批量：唯一毫米标的自动吸收同样必须在「非外来 JSON」守卫之内");
+            Assert.Contains("未自动吸收（源框残留", batch);
+        }
+
+        [Fact]
+        public void CopiedFrame_FillFrameNeverPreservesJustClearedValues()
+        {
+            // 3.0.0.16：复制框 ClearStaleInfo 之后 FillFrame 不得再走「保留旧值」
+            // ——旧值刚被清成空串，“保留”保住的是空（CABLE_INFO 停留空，与 U1F
+            // 写型号行的结果不一致）。复制框一律按 U1F 口径现算现写。
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            int clear = fill.IndexOf("CadBlockAttributeWriter.ClearStaleInfo(",
+                StringComparison.Ordinal);
+            int frameWrite = fill.IndexOf("CadBlockAttributeWriter.FillFrame(",
+                StringComparison.Ordinal);
+            int preserveGuard = fill.IndexOf("!copiedFrameDetected",
+                StringComparison.Ordinal);
+            Assert.True(clear >= 0 && frameWrite > clear && preserveGuard > clear,
+                "单图：清空之后的 FillFrame 传参必须带 !copiedFrameDetected 守卫");
+
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int batchClear = batch.IndexOf("CadBlockAttributeWriter.ClearStaleInfo(",
+                StringComparison.Ordinal);
+            int batchFrameWrite = batch.IndexOf("CadBlockAttributeWriter.FillFrame(",
+                StringComparison.Ordinal);
+            int batchGuard = batch.IndexOf("!plan.CopiedFrame",
+                StringComparison.Ordinal);
+            Assert.True(batchClear >= 0 && batchFrameWrite > batchClear
+                && batchGuard > batchClear,
+                "批量：清空之后的 FillFrame 传参必须带 !plan.CopiedFrame 守卫");
+        }
+
+        [Fact]
+        public void BatchU1u_EmptyBoqPlans_SkipsBoqStageEntirely()
+        {
+            // 3.0.0.16：全部机台缺回路且无一强制生成时 boqPlans 为空——D-044 的
+            // 正常结果（图纸更新、BOQ 跳过）。旧代码照样调 Write，空记录抛
+            // “没有可写入 Excel 的图框记录”，弹“BOQ 输出失败请重跑 U1S”假错误，
+            // 而 U1S 的回路硬门禁又把用户拦住（死胡同）。必须整段跳过。
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int skip = batch.IndexOf("if (boqPlans.Count == 0)",
+                StringComparison.Ordinal);
+            int boqWrite = batch.IndexOf("AutomaticSubmissionService.Write(",
+                StringComparison.Ordinal);
+            Assert.True(skip >= 0 && boqWrite > skip,
+                "批量：boqPlans 为空必须在 BOQ 写入之前整段跳过");
+        }
+
+        [Fact]
+        public void BatchU1u_PreflightErrorGate_PrecedesReserveWindow()
+        {
+            // 3.0.0.16：预检错误门先于一切询问窗——旧顺序让用户先白填设备内
+            // 预留窗、再被告知“预检失败整批取消”。
+            string batch = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs"));
+            int errorGate = batch.IndexOf("批量更新预检失败，图纸未修改",
+                StringComparison.Ordinal);
+            int reserveWindow = batch.IndexOf("new DeviceReserveWindow(",
+                StringComparison.Ordinal);
+            Assert.True(errorGate >= 0 && reserveWindow > errorGate,
+                "批量：预检错误弹窗必须排在设备内预留填写窗之前");
+        }
+
         private static string Repo(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

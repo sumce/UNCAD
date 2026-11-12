@@ -352,11 +352,16 @@ namespace UNCAD.Features.Fill
                     if (copiedFrameDetected)
                         CadBlockAttributeWriter.ClearStaleInfo(transaction,
                             selection.FrameBlockIds);
+                    // 3.0.0.16：复制框不走“保留旧值”——旧值刚被清空，“保留”保住
+                    // 的是空串（CABLE_INFO 停留空，与 U1F 写型号行不一致）。
+                    // 复制框一律按 U1F 口径现算现写；普通框的 U1U 保留语义不变。
                     frameResult = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                         selection.FrameBlockIds, picked,
                         statistics,
-                        updateMode && statistics.CableState == MeasurementState.Unknown,
-                        updateMode && statistics.ConduitState == MeasurementState.Unknown);
+                        !copiedFrameDetected
+                            && updateMode && statistics.CableState == MeasurementState.Unknown,
+                        !copiedFrameDetected
+                            && updateMode && statistics.ConduitState == MeasurementState.Unknown);
                     deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
                         selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
                     ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,

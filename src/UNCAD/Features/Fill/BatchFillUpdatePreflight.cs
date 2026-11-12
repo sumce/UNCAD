@@ -197,11 +197,15 @@ namespace UNCAD.Features.Fill
             }
             // D-043：老版横排毫米标自动识别（U1SET 可关）。恰好一处→吸收并删除
             // 标注；多处→不乱取，备注进结果窗交人工确认。
+            // 3.0.0.16：复制框（外来 JSON）例外——随框带过来的毫米标是源框残留，
+            // 不自动吸收、不删除（否则源机台设备内预留从这条暗道静默继承，批量
+            // 路径连确认窗都不弹）。只从统计排除（“3000mm”不排除会当电缆长度
+            // 双算），图上文字保留给用户对照，设备内预留交预留弹窗重新填写。
             DeviceReserveMarkerReader.Result reserveMarkers =
                 DeviceReserveMarkerReader.Collect(readTransaction,
                     selection.TextIds);
             var markerExcludedIds = new List<ObjectId>();
-            if (reserveMarkers.Hits.Count == 1)
+            if (reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0)
             {
                 double? decided = DeviceReserveMarker.Decide(
                     options.DeviceReserveAutoDetect, reserveMarkers.Hits,
@@ -216,6 +220,14 @@ namespace UNCAD.Features.Fill
                     markerNote = "设备内预留自动识别 " + reserveMarkers.Hits[0].Text
                         + " mm（已删除图上标注，不计入米数统计）";
                 }
+            }
+            else if (reserveMarkers.Hits.Count == 1)
+            {
+                markerExcludedIds.AddRange(reserveMarkers.EntityIds);
+                markerNote = "复制图框携带源框的横排毫米标 "
+                    + reserveMarkers.Hits[0].Text
+                    + "，未自动吸收（源框残留，避免静默继承），也不计入米数统计；"
+                    + "图上文字保留，如适用请在弹窗手动填写";
             }
             else if (reserveMarkers.Hits.Count > 1)
             {

@@ -71,7 +71,9 @@ namespace UNCAD.CadIntegration
     ///      ③ClearStaleInfo 显式清空复制框旧属性且不波及源框（显式清理）
     ///      ④清理→FillFrame 后新写的 CABLE_INFO 存活（3.0.0.14 顺序锁：旧顺序
     ///        先写后清，复制框电缆信息永远为空——用户报告“左下角电缆信息直接
-    ///        不出现”的根因）。
+    ///        不出现”的根因）
+    ///      ⑤复制框携带的横排毫米标不被 D-043 自动吸收（3.0.0.16：源框残留
+    ///        不算本机台预留；不吸收、不删除，但仍从统计排除防 3000mm 双算）。
     ///
     /// 2026-11-10 增补阶段 6（整机台搬场重绑，D-052-C，回应用户报告
     /// “图纸跨文件复制后 U1U 提示输入预留、默认 0”）：同文件克隆后删除源框 =
@@ -949,7 +951,9 @@ namespace UNCAD.CadIntegration
         /// ①不复读（句柄校验拒外来 JSON）②不继承（外来 JSON 时跳过 CABLE_INFO
         /// 预留恢复）③显式清理（ClearStaleInfo 清空旧属性、不波及源框）
         /// ④清后新写存活（3.0.0.14：清理→FillFrame 之后新电缆公式必须在，
-        /// 锁死“清空先于写入”的顺序——旧顺序把刚写的 CABLE_INFO 抹空）。
+        /// 锁死“清空先于写入”的顺序——旧顺序把刚写的 CABLE_INFO 抹空）
+        /// ⑤复制框毫米标不吸收（3.0.0.16：随框带过来的横排毫米标是源框残留，
+        /// D-043 自动吸收被外来 JSON 守卫拦住——不吸收、不删除、只从统计排除）。
         /// </summary>
         private static void CopiedFrameDefense(CadContext ctx, Fixture fixture,
             Dictionary<FrameSlot, FillSelection> selections)
@@ -1130,6 +1134,71 @@ namespace UNCAD.CadIntegration
                 Info("  ③ 显式清理: ClearStaleInfo 清空 " + cleared
                     + " 个旧属性（CABLE_INFO/FRAMEINFO），源框无损: 通过");
                 Info("  ④ 清后新写: 清理→写入的新电缆公式存活（…=14800mm）: 通过");
+
+                // ⑤ 复制框毫米标不吸收（3.0.0.16 审计修复）：随框带过来的横排
+                // 毫米标是源框残留——D-043 自动吸收必须被外来 JSON 守卫拦住，
+                // 否则源机台的设备内预留从这条暗道静默继承回来（设备内预留
+                // 直接变 3000），图上文字还被删掉。守卫语义：不吸收、不删除、
+                // 只从统计排除（"3000mm"同时命中电缆长度判据，不排除会双算）。
+                {
+                    ObjectId markerId;
+                    using (Transaction markerTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        BlockReference copyFrame = (BlockReference)markerTx.GetObject(
+                            copyId, OpenMode.ForRead);
+                        var marker = new DBText();
+                        marker.SetDatabaseDefaults();
+                        marker.Position = new Point3d(copyFrame.Position.X + 2000,
+                            copyFrame.Position.Y - 3000, 0);
+                        marker.Rotation = 0d; // 横排是 D-043 的候选判据。
+                        marker.Height = 300d;
+                        marker.TextString = "3000mm";
+                        markerId = ctx.AddToCurrentSpace(markerTx, marker);
+                        markerTx.Commit();
+                    }
+                    // 夹具自检：这段文字同时是 D-043 候选和电缆长度——排除是
+                    // 守卫后唯一防双算的闸门。
+                    Check(DeviceReserveMarker.TryParseMillimeters("3000mm",
+                            out double markerMm) && Math.Abs(markerMm - 3000d) < 0.001,
+                        "夹具自检：3000mm 应是 D-043 预留标记候选。");
+                    Check(UNCAD.Core.Text.TextParser.ExtractCableLength("3000mm")
+                            .HasValue,
+                        "夹具自检：3000mm 同时命中电缆长度判据——不排除会双算。");
+                    var markerSelection = new FillSelection
+                    {
+                        SourceIds = copySelection.SourceIds,
+                        FrameBlockIds = copySelection.FrameBlockIds,
+                        FrameInfoJsonBlockIds = copySelection.FrameInfoJsonBlockIds,
+                        TextIds = new[] { markerId }
+                    };
+                    FrameInfoJsonRecord markerResolved = FillReserveStage.Resolve(ctx,
+                        markerSelection, FillSettings.Current(), true,
+                        out List<ObjectId> markerEraseIds,
+                        out List<ObjectId> markerExcludedIds,
+                        out bool markerCopied, out double? markerHint);
+                    Check(markerCopied,
+                        "携带毫米标的复制框仍应被判定为复制图框。");
+                    Check(markerResolved == null
+                        || string.IsNullOrWhiteSpace(markerResolved.DeviceReserveMm),
+                        "复制框携带的源框毫米标不得被自动吸收为设备内预留"
+                        + "（实际 DeviceReserveMm='"
+                        + (markerResolved == null ? "" : markerResolved.DeviceReserveMm)
+                        + "'——旧代码会把源机台的 3000 从这条暗道继承回来）。");
+                    Check(markerEraseIds.Count == 0,
+                        "未吸收的毫米标不得登记删除（图上文字保留给用户对照）。");
+                    Check(markerExcludedIds.Count == 1 && markerExcludedIds[0] == markerId,
+                        "复制框毫米标必须从米数统计排除（实际排除 "
+                        + markerExcludedIds.Count + " 个），否则 3000mm 双算。");
+                    Info("  ⑤ 复制框毫米标: 不吸收、不删除、只从统计排除（防暗道"
+                        + "继承+防双算）: 通过");
+                    using (Transaction cleanupTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        cleanupTx.GetObject(markerId, OpenMode.ForWrite).Erase();
+                        cleanupTx.Commit();
+                    }
+                }
                 tx.Commit();
             }
         }

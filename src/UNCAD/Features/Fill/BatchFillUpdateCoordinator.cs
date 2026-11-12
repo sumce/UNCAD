@@ -92,6 +92,19 @@ namespace UNCAD.Features.Fill
             perfPreflight = perfPhase.ElapsedMilliseconds;
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
 
+            // 3.0.0.16：预检错误门必须先于一切询问窗——旧顺序先弹设备内预留
+            // 填写窗再报“预检失败整批取消”，用户白填一窗。
+            if (errors.Count > 0)
+            {
+                string message = "批量更新预检失败，图纸未修改：\r\n\r\n"
+                    + string.Join("\r\n", errors.Take(20));
+                if (errors.Count > 20) message += "\r\n其余 " + (errors.Count - 20) + " 项请查看日志。";
+                MessageBox.Show(Owner(), message, "U1U 批量预检",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                foreach (string error in errors) ctx.Write("\n[U1U] " + error);
+                return;
+            }
+
             // 首次使用的图框：在 GUI 里逐框填写设备内预留（不同设备预留通常
             // 不同，不能整批共用一个值）；已有 frameinfo_json 记录的图框保持
             // 原值，不再询问。命令行不出现任何输入提示。
@@ -131,16 +144,6 @@ namespace UNCAD.Features.Fill
                 }
             }
 
-            if (errors.Count > 0)
-            {
-                string message = "批量更新预检失败，图纸未修改：\r\n\r\n"
-                    + string.Join("\r\n", errors.Take(20));
-                if (errors.Count > 20) message += "\r\n其余 " + (errors.Count - 20) + " 项请查看日志。";
-                MessageBox.Show(Owner(), message, "U1U 批量预检",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                foreach (string error in errors) ctx.Write("\n[U1U] " + error);
-                return;
-            }
 
             if (catalogRequests.Count > 0)
             {
@@ -420,11 +423,16 @@ namespace UNCAD.Features.Fill
                         if (plan.CopiedFrame)
                             CadBlockAttributeWriter.ClearStaleInfo(transaction,
                                 plan.Selection.FrameBlockIds);
+                        // 3.0.0.16：复制框不走“保留旧值”——旧值刚被清空，“保留”
+                        // 保住的是一个空串（CABLE_INFO 停留空，与 U1F 写型号行的
+                        // 结果不一致）。复制框一律按 U1F 口径现算现写。
                         FillWriteResult frame = CadBlockAttributeWriter.FillFrame(ctx, transaction,
                             plan.Selection.FrameBlockIds, plan.Machine,
                             plan.Statistics,
-                            plan.Statistics.CableState == MeasurementState.Unknown,
-                            plan.Statistics.ConduitState == MeasurementState.Unknown);
+                            !plan.CopiedFrame
+                                && plan.Statistics.CableState == MeasurementState.Unknown,
+                            !plan.CopiedFrame
+                                && plan.Statistics.ConduitState == MeasurementState.Unknown);
                         FillWriteResult device = CadBlockAttributeWriter.FillDeviceName(ctx,
                             transaction, plan.Selection.DeviceBlockIds,
                             DeviceBlockFiller.BuildValue(plan.Machine));
@@ -516,7 +524,17 @@ namespace UNCAD.Features.Fill
 
             // CAD 已提交：按 docs/DEVELOPMENT.md 的顺序，现在才读真实 CAD 结果并写 BOQ。
             // 这一段失败不再回滚图纸，只回滚本批 BOQ 文件，并明确要求重跑 U1S。
+            // 3.0.0.16：全部机台都缺回路且没有一个强制生成时 boqPlans 为空——
+            // 必须像单图路径一样整段跳过（D-044：图纸照常更新、BOQ 跳过是正常
+            // 结果）。旧代码照样调 Write，空记录触发“没有可写入 Excel 的图框
+            // 记录”异常，弹“BOQ 输出失败请重跑 U1S”的假错误——而 U1S 的回路
+            // 硬门禁又会把用户拦住，等于指了条死路。
             perfPhase.Restart();
+            if (boqPlans.Count == 0)
+            {
+                outputBatch.Complete();
+            }
+            else
             try
             {
                 AutomaticSubmissionService.ValidateTargetRevisions(
