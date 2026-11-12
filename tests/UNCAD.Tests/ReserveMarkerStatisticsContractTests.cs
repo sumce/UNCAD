@@ -296,6 +296,29 @@ namespace UNCAD.Tests
                 "批量：预检错误弹窗必须排在设备内预留填写窗之前");
         }
 
+        [Fact]
+        public void MachineRedefineGuard_RunsAfterPick_BeforeReserveResolution()
+        {
+            // 3.0.0.17（现场报告“U1F 会计算复制过来之前的预留米数”）：机台身份
+            // 守卫必须在机台选定之后（U1F 才知道选的是不是原机台）、电缆预留
+            // 解析之前（旧记录/建议值不得流进清单与公式）。
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            int pick = fill.IndexOf("FillMachinePickStage.PickNewMachine(",
+                StringComparison.Ordinal);
+            int guard = fill.IndexOf("FrameRedefineGuard.Apply(",
+                StringComparison.Ordinal);
+            int reserve = fill.IndexOf("ResolveCableReserve(",
+                StringComparison.Ordinal);
+            Assert.True(pick >= 0, "U1F 选机台入口必须存在");
+            Assert.True(guard > pick, "身份守卫必须在选机台之后（否则不知道选了谁）");
+            Assert.True(reserve > guard, "身份守卫必须在电缆预留解析之前");
+            // 物理身份由预留阶段带出（复制框上=源机台身份），守卫拿它判原属。
+            string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillReserveStage.cs"));
+            Assert.Contains("out ExistingFillIdentity frameIdentity", stage);
+        }
+
         private static string Repo(params string[] parts)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,

@@ -98,7 +98,8 @@ namespace UNCAD.Features.Fill
                 out List<ObjectId> deviceReserveEraseIds,
                 out List<ObjectId> markerExcludedIds,
                 out bool copiedFrameDetected,
-                out double? copiedDeviceReserveHint);
+                out double? copiedDeviceReserveHint,
+                out UNCAD.Core.Fill.ExistingFillIdentity frameIdentity);
             SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
                 options, updateMode, markerExcludedIds);
             CableStatResult statistics = summation.Statistics;
@@ -147,6 +148,19 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[U1F] 已选择: "
                     + picked.MachineId + " " + picked.CircuitName);
             }
+
+            // 3.0.0.17 机台身份守卫（现场报告：U1F 会把复制过来之前的预留米数
+            // 算进新机台）：旧 JSON 记录与 CABLE_INFO 建议值属于「图框原来的
+            // 那台机」。U1F 改选别的机台（复制改号/换机台重定义）时整体丢弃，
+            // 不进清单、不进公式、不进新 JSON；同机台（重跑/同机台第二只框/
+            // 跨文件搬场）不受影响。U1U 的机台来自图框自身身份，恒等于原机台，
+            // 守卫天然空转。
+            frameInfoPrevious = UNCAD.Core.Fill.FrameRedefineGuard.Apply(frameIdentity,
+                frameInfoPrevious, picked, ref copiedDeviceReserveHint,
+                out string redefineNote);
+            if (redefineNote.Length > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] " + redefineNote);
 
             // 整机回路校验（U1SET 可关闭）。D-034：部分回路的 BOQ 会丢掉未选
             // 回路的工程量，宁可少生成也不能写错数。D-044（2026-11-03）：U1F 与

@@ -73,7 +73,9 @@ namespace UNCAD.CadIntegration
     ///        先写后清，复制框电缆信息永远为空——用户报告“左下角电缆信息直接
     ///        不出现”的根因）
     ///      ⑤复制框携带的横排毫米标不被 D-043 自动吸收（3.0.0.16：源框残留
-    ///        不算本机台预留；不吸收、不删除，但仍从统计排除防 3000mm 双算）。
+    ///        不算本机台预留；不吸收、不删除，但仍从统计排除防 3000mm 双算）
+    ///      ⑥改号守卫（3.0.0.17：U1F 改选别的机台时源框建议值/旧记录整体
+    ///        丢弃，选回源机台保留——现场报告“U1F 会计算复制之前的预留米数”）。
     ///
     /// 2026-11-10 增补阶段 6（整机台搬场重绑，D-052-C，回应用户报告
     /// “图纸跨文件复制后 U1U 提示输入预留、默认 0”）：同文件克隆后删除源框 =
@@ -953,7 +955,8 @@ namespace UNCAD.CadIntegration
         /// ④清后新写存活（3.0.0.14：清理→FillFrame 之后新电缆公式必须在，
         /// 锁死“清空先于写入”的顺序——旧顺序把刚写的 CABLE_INFO 抹空）
         /// ⑤复制框毫米标不吸收（3.0.0.16：随框带过来的横排毫米标是源框残留，
-        /// D-043 自动吸收被外来 JSON 守卫拦住——不吸收、不删除、只从统计排除）。
+        /// D-043 自动吸收被外来 JSON 守卫拦住——不吸收、不删除、只从统计排除）
+        /// ⑥改号守卫（3.0.0.17：U1F 改选别的机台时源框建议值/旧记录整体丢弃）。
         /// </summary>
         private static void CopiedFrameDefense(CadContext ctx, Fixture fixture,
             Dictionary<FrameSlot, FillSelection> selections)
@@ -1052,7 +1055,8 @@ namespace UNCAD.CadIntegration
                 FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx,
                     copySelection, FillSettings.Current(), true,
                     out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
-                    out bool copiedFrameDetected, out double? reserveHint);
+                    out bool copiedFrameDetected, out double? reserveHint,
+                    out ExistingFillIdentity copyIdentity);
                 Check(copiedFrameDetected,
                     "FillReserveStage 应检测到复制图框（copiedFrameDetected=false）。");
                 Check(resolved == null
@@ -1176,7 +1180,8 @@ namespace UNCAD.CadIntegration
                         markerSelection, FillSettings.Current(), true,
                         out List<ObjectId> markerEraseIds,
                         out List<ObjectId> markerExcludedIds,
-                        out bool markerCopied, out double? markerHint);
+                        out bool markerCopied, out double? markerHint,
+                        out ExistingFillIdentity markerFrameIdentity);
                     Check(markerCopied,
                         "携带毫米标的复制框仍应被判定为复制图框。");
                     Check(markerResolved == null
@@ -1198,6 +1203,48 @@ namespace UNCAD.CadIntegration
                         cleanupTx.GetObject(markerId, OpenMode.ForWrite).Erase();
                         cleanupTx.Commit();
                     }
+                }
+
+                // ⑥ 改号换机台守卫（3.0.0.17，现场报告“U1F 会计算复制过来之前
+                // 的预留米数”）：复制框的物理身份=源机台——U1F 改选别的机台时，
+                // 源框 CABLE_INFO 建议值与旧记录必须整体丢弃（不进清单/公式/新
+                // JSON）；选回源机台（同机台第二只框/重跑）时建议值保留。
+                // 生产接线在 FillFeature 机台选定之后（FrameRedefineGuard.Apply）。
+                // 同机台对照组按复制框读出的物理身份构造（生产里用户从工作簿选
+                // 回同一台时 MatchMachine 保证同写法）。
+                {
+                    Check(copyIdentity != null
+                        && !string.IsNullOrWhiteSpace(copyIdentity.MachineId),
+                        "复制框应读出物理身份（源机台），改号守卫才有判定基准。");
+                    double? redefinedHint = reserveHint;
+                    var newMachine = new MachineRow
+                    {
+                        MachineId = "MIG-NEW", CircuitName = "NEW-1"
+                    };
+                    FrameInfoJsonRecord dropped = FrameRedefineGuard.Apply(
+                        copyIdentity, resolved, newMachine, ref redefinedHint,
+                        out string dropNote);
+                    Check(redefinedHint == null && dropped == null
+                        && dropNote.Length > 0,
+                        "改选别的机台：源框建议值与旧记录必须丢弃并点名提示"
+                        + "（实际 hint=" + (redefinedHint?.ToString() ?? "<null>")
+                        + "，note='" + dropNote + "'）。");
+                    double? sameMachineHint = reserveHint;
+                    var sameMachine = new MachineRow
+                    {
+                        MachineId = copyIdentity.MachineId,
+                        CircuitName = copyIdentity.DeviceName
+                    };
+                    FrameInfoJsonRecord kept = FrameRedefineGuard.Apply(
+                        copyIdentity, resolved, sameMachine, ref sameMachineHint,
+                        out string keptNote);
+                    Check(sameMachineHint.HasValue
+                        && Math.Abs(sameMachineHint.Value - 3000.0) < 0.001
+                        && keptNote.Length == 0,
+                        "选回源机台（同机台第二只框/重跑 U1F）：建议值必须保留"
+                        + "（实际 hint="
+                        + (sameMachineHint?.ToString() ?? "<null>") + "）。");
+                    Info("  ⑥ 改号守卫: 改选新机台丢建议值丢旧记录，选回源机台保留: 通过");
                 }
                 tx.Commit();
             }
@@ -1316,7 +1363,8 @@ namespace UNCAD.CadIntegration
                 FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx,
                     movedSelection, FillSettings.Current(), true,
                     out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
-                    out bool copiedFrameDetected, out double? reserveHint);
+                    out bool copiedFrameDetected, out double? reserveHint,
+                    out ExistingFillIdentity movedFrameIdentity);
                 Check(!copiedFrameDetected,
                     "搬场图框不应再被标记为复制框（copiedFrameDetected=true 会误清"
                     + "CABLE_INFO 并跳过预留恢复）。");

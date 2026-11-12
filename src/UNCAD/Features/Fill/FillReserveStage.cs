@@ -20,6 +20,10 @@ namespace UNCAD.Features.Fill
     internal static class FillReserveStage
     {
         /// <summary>恢复上一轮预留并决策预留标记；返回上一轮记录。
+        /// frameIdentity（3.0.0.17）：图框当前的物理身份（MACHINEID-* 属性读出）。
+        /// 复制框上它=源机台身份——U1F 随后改选别的机台时，FrameRedefineGuard
+        /// 用它判「图框原属谁」，把旧记录/建议值挡在新机台之外（现场报告：
+        /// U1F 会把复制之前的预留米数算进新机台）。
         /// copiedFrameDetected：检测到本框携带源框元数据（外来 JSON 被拒）——
         /// 写事务里据此显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息后
         /// 再写新机台数据（2026-11-06 用户要求 U1F 定义要清干净）。
@@ -31,7 +35,8 @@ namespace UNCAD.Features.Fill
             out List<ObjectId> deviceReserveEraseIds,
             out List<ObjectId> markerExcludedIds,
             out bool copiedFrameDetected,
-            out double? deviceReserveHintMm)
+            out double? deviceReserveHintMm,
+            out ExistingFillIdentity frameIdentity)
         {
             FrameInfoJsonRecord frameInfoPrevious;
             string foreignJsonNote;
@@ -45,6 +50,7 @@ namespace UNCAD.Features.Fill
                 // 本图 = 跨文件复制/移动整机台）→ 收下记录，不算外来。
                 FillSelectionCollector.TryReadExistingIdentity(previousTransaction,
                     selection, out ExistingFillIdentity ownIdentity, out _);
+                frameIdentity = ownIdentity;
                 string movedJsonNote;
                 frameInfoPrevious = FrameInfoJsonBlockWriter.Read(previousTransaction,
                     FrameInfoJsonBlockWriter.ReadSources(selection),

@@ -811,6 +811,20 @@ rewrite an existing entry.
      blocks: a dead end). And the preflight-error dialog must precede the
      device-reserve window (users filled a whole form before being told the
      batch aborts).
+  6. **Machine-redefine guard for U1F** (2026-11-12 field report: "U1F
+     computes the reserve carried over from before the copy"). The prior
+     record and the D-052-B CABLE_INFO hint belong to the machine the frame
+     *physically* claims — but U1F lets the user pick a different machine
+     (copy-and-renumber / reassign). Nothing re-validated after the pick, so
+     the source machine's device reserve flowed into the new machine's
+     review window prefill and formula; on a moved-rebind frame the whole
+     record (reserve + substitutions + history) leaked the same way. Fix:
+     `FrameRedefineGuard` (pure Core) runs after the pick, before reserve
+     resolution — different machine ⇒ drop record + hint with a named
+     command-line note; same machine ⇒ keep everything (re-run U1F reuse,
+     second frame of the same machine, cross-file relocation all intact).
+     U1U never picks, so its machine always equals the frame identity and
+     the guard is a no-op there.
 - Consequence: do not reintroduce a per-category request whitelist in batch
   preflight; do not restore the "re-enter reserve from 0" behavior for copied
   frames; do not accept a handle-mismatched record on identity alone without

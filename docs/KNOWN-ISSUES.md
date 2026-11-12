@@ -30,6 +30,13 @@ deferred, or important for support diagnosis.
 
 ## Support Notes
 
+- 3.0.0.13–3.0.0.16, U1F on a copied frame with a **different** machine
+  picked: the source machine's device reserve leaked into the new machine
+  (review-window prefill from the copied CABLE_INFO hint, or the whole
+  record on moved-rebind frames), so the cable formula included e.g.
+  "3000（设备内）" from a machine that was never on this frame. Fixed in
+  3.0.0.17 (machine-redefine guard). Redo U1F on the affected frames,
+  picking the intended machine — the reserve now starts from 0.
 - 3.0.0.13–3.0.0.15, batch U1U: when *every* selected machine failed the
   whole-machine circuit gate and none was force-generated, the command ended
   with a false "BOQ 输出失败，请重跑 U1S" error dialog. The drawings were
