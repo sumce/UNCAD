@@ -30,6 +30,12 @@ namespace UNCAD.UI
         public static readonly Color TextSecondary = Color.FromArgb(0x5B, 0x64, 0x6D);
         public static readonly Color TextDisabled = Color.FromArgb(0xA3, 0xA7, 0xAB);
 
+        // ---- 功能区图标（Ribbon）----
+        // 功能区活在 AutoCAD 的深色主题里，窗体的浅色板不适用；3.1.0.2 起
+        // 图标统一为 AutoCAD 原生风格的浅灰线性（对齐原生功能区图标观感，
+        // 取代旧的"一命令一色"商务色方案）。
+        public static readonly Color RibbonIcon = Color.FromArgb(0xD0, 0xD0, 0xCE);
+
         // ---- 主色：深墨蓝（动作层）----
         public static readonly Color Ink = Color.FromArgb(0x14, 0x30, 0x4A);
         public static readonly Color InkHover = Color.FromArgb(0x1D, 0x41, 0x62);

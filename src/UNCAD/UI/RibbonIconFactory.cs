@@ -114,25 +114,17 @@ namespace UNCAD.UI
         }
 
         // 图标色取自 UiTheme 色板。WPF Color 与 WinForms Color 类型不通用，
-        // 因此这里做一次显式转换，而不是各自维护一份十六进制值——原先两处
-        // 独立定义会随主题调整漂移。
-        // 商务体系：同一面板内用“深墨蓝 / 钢蓝 / 深钢蓝”三档区分动作层级，
-        // 只有 PDF（交付物）与拱桥（开洞风险）使用语义色，避免图标变成彩虹。
-        private static Color IconColor(string icon)
+        // 因此这里做一次显式转换，而不是各自维护一份十六进制值。
+        // 3.1.0.2：全部图标统一为单一浅灰（UiTheme.RibbonIcon，AutoCAD 原生
+        // 功能区风格）。旧的"一命令一色"商务色方案（绿提交/红 PDF/橙拱桥/
+        // 各档钢蓝）让功能区看起来像彩虹盘，与 AutoCAD 深色主题下原生面板
+        // 的统一浅灰线性图标反差强烈（2026-11-15 用户对照截图直言"我们的
+        // 明显难看"）。命令区分靠图标形状与文字标签，与原生一致；SVG 线性
+        // 图标族本身已是统一的 1.8px 圆角笔画。
+        internal static Color IconColor(string icon)
         {
-            if (icon == "fill") return ToWpf(UiTheme.Ink);
-            if (icon == "submit" || icon == "excel") return ToWpf(UiTheme.SuccessFg);
-            if (icon == "pdf") return ToWpf(UiTheme.DangerFg);
-            if (icon == "arch") return ToWpf(UiTheme.WarningFg);
-            if (icon == "settings" || icon == "about" || icon == "stat")
-                return ToWpf(UiTheme.TextSecondary);
-            if (icon == "data") return ToWpf(UiTheme.AccentDark);
-            if (icon == "login") return ToWpf(UiTheme.Ink);
-            if (icon == "help") return ToWpf(UiTheme.Accent);
-            if (icon == "tray" || icon == "dwg") return ToWpf(UiTheme.AccentDark);
-            if (icon == "conduit" || icon == "line" || icon == "layout" || icon == "merge"
-                || icon == "line3d") return ToWpf(UiTheme.Accent);
-            return ToWpf(UiTheme.TextDisabled);
+            _ = icon;
+            return ToWpf(UiTheme.RibbonIcon);
         }
 
         private static Color ToWpf(System.Drawing.Color token)
