@@ -1,0 +1,49 @@
+# UNCAD 全量单测 CI:push/PR 后自动跑纯单测兜底(文本契约测试脆,需要
+# push 后自动验证)。本地与 CI 同源:直接复用 scripts/ci-local.ps1,
+# 含"执行数 == 源码期望数"门禁,防 xunit 静默跳过整程序集的假绿。
+#
+# 为什么必须 self-hosted:测试项目经 $(AutoCADDir) HintPath 引用本机安装的
+# AutoCAD 2022 托管程序集(tests/UNCAD.Tests/UNCAD.Tests.csproj 默认
+# "D:\Program Files\Autodesk\AutoCAD 2022"),GitHub 托管 runner 上没有这套
+# 引用程序集,连编译都无法通过。runner 机器要求:已安装 AutoCAD 2022 且位于
+# 默认路径;若换路径,须统一改传 AutoCADDir 属性并同步下方检查。
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一 ref 只保留最新一次运行,防止连续 push 在单台 self-hosted 机器上堆积。
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # AutoCAD 程序集走本机 HintPath,托管 runner 拿不到 → 只能 self-hosted。
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 60
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      # fail fast:先把"runner 机器不满足构建前提"与"代码测试失败"区分开。
+      - name: 检查 AutoCAD 2022 目录
+        shell: powershell
+        run: |
+          $acad = 'D:\Program Files\Autodesk\AutoCAD 2022'
+          if (-not (Test-Path -LiteralPath $acad -PathType Container)) {
+            Write-Host ("::error::runner 机器缺少 AutoCAD 2022(期望 {0})。UNCAD.Tests 经 AutoCADDir HintPath 引用该目录下的 Ac*.dll/AdWindows.dll,缺失则无法构建;请在 runner 上安装 AutoCAD 2022 到默认路径,或统一改传 AutoCADDir 属性并同步修改本检查。" -f $acad)
+            exit 1
+          }
+          Write-Host "AutoCAD 目录就绪: $acad"
+
+      # 以子进程调用并透传退出码(0 成功 / 1 测试或门禁失败 / 2 并发保护 / 3 环境);
+      # 脚本内部自带并发保护、tmp\ci\ 日志落盘与期望数门禁。
+      - name: 运行本地 CI 脚本
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci-local.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

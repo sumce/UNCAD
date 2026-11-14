@@ -31,6 +31,12 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
             new List<VersionChangeLogEntry>
             {
+                new VersionChangeLogEntry("3.1.0", "2026-11-14",
+                    "UNCAD 3.1 | 如切如磋，如琢如磨——工程加固版：基于 3.0.0.17 现场稳定代码，零命令行为变更，全部投入在测试、流程与文档的可信度上。",
+                    "新增：真实台账脱敏测试夹具——真实客户汇总表（832 机台 / 4999 数据行 / 163 删除线行）整体脱敏后入库为固定夹具，并新增解析冒烟测试：统一 U_ 表头绑定、删除线行忽略、机台数与占位符模式逐项锁定；自动化测试从此覆盖真实文件格式（合并单元格 / 公式缓存 / 多 run 富文本），不再只依赖程序合成的理想夹具。",
+                    "新增：本地与远端 CI 兜底——scripts/ci-local.ps1 一键全量测试（含「执行数=源码期望数」核对，防测试宿主静默跳过整程序集的假绿，日志落 tmp/ci/）；.github/workflows/tests.yml 提供 self-hosted runner 工作流，push / PR 自动跑全量单测（AutoCAD 程序集依赖本机安装，托管 runner 不可用）。",
+                    "新增：发布运维手册 docs/RELEASE-RUNBOOK.md——发布七道门禁的顺序与产物、参数速查、门禁失败处置（结果变量 / 保留日志 / SABOTAGE 自证机制）、self-hosted runner 注册待办、运营连续性清单（发布密码异地备份 / 双远端核对）；docs/KNOWN-ISSUES.md 增设「悬置决策季度复查清单」（D-006 / D-049 / D-052 暂缓项）与「U1U 批量链 FrameRedefineGuard 前提风险」两条记录。",
+                    "校准：文档与代码对齐——命令审计文档（COMMAND-AUDIT）移除易漂移的源码行号、补齐 3.0 行为关键词（D-042 / 044 / 045 / 047 / 048 / 050 / 051）；README 补 3.0.0.1–.17 补丁线摘要；CLAUDE.md 修正决策范围（D-052）与 UI 现状（全量 WPF）；DEVELOPMENT.md 记录 QuickLine3D 布局脚本用法。"),
                 new VersionChangeLogEntry("3.0.0", "2026-11-03",
                     "3.0 正式版（D-039 开发通道收官）。图框 JSON 存储重构（D-040，用户模板 FRAME_20261102）：JSON 改为图框块内 FRAMEINFO 文字属性，随图框复制/移动零丢失，U1F/U1U 自动把四代旧图框迁移到新模板，独立 frameinfo_json 块与旧内嵌属性降级为遗留读源；含幽灵机台全套修复（句柄绑定/身份仲裁/继承守卫）、UI 全量 WPF 迁移、FillFeature 拆分、性能与迁移双门禁、大批量进度窗与三色机台标签、安全加固。",
                     "改进：UI/UX 全面修缮（2026-11-03）——① 窗口自适应：所有窗体尺寸钳制到屏幕工作区 92% 并居中启动（小屏/低分屏不再被截断，SizeToContent 的窗不碰）；② WPF 统一设计令牌 FluentKit：11 个设置页与机台选择窗共用一套字号/间距/卡片样式（卡片内边距 18/16、下间距 12 统一，字段标签/说明文字/开关行一致），改观感只动一个文件；③ U1F 机台选择窗：相似建议改浮层下拉（不再把下方内容顶下去）、新增回路筛选框与计数（显示 X / N）、长文本省略号+悬浮看全文、列表与预览按 2:1 弹性随窗口拉伸；④ XSTS/XLAYOUT/批量/DWG/PDF 五个结果窗长文本列（路径/备注/原因/回路）省略号+悬浮提示；⑤ 修复清单与表格页网格缺行定义、统计页开关底距缺失等细节。",

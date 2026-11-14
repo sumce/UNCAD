@@ -73,6 +73,14 @@
 4. 点击线段端点时从对应端开始；点击中部时确认方向询问只影响本次遍历，端点容差范围内的线段可连通，交叉但端点不相接的线段不得串入。
 5. 至少输入一次真实的 `2000mm`；对带 U1L 关联的复合文字确认只替换唯一 `mm` 数值且保留前后说明。
 
+### QuickLine3D 布局健壮性脚本（quickline3d-layout.cjs）
+
+- `tests/quickline3d-layout.cjs`：Playwright 脚本，本地起静态服务加载 QuickLine3D 页面，
+  跑 4 组视口/DPR × 基准/稠密载荷，断言分组行数一致、无横向溢出、3D canvas 非空、零 pageerror。
+- 运行：本机装好 Playwright 后 `node tests/quickline3d-layout.cjs`；设
+  `UNCAD_LAYOUT_SCREENSHOT`（值作为截图路径，按视口追加宽度后缀）可输出截图。
+- 当前为手动运行的手工检查项，不在任何发布门禁内。
+
 ## AutoCAD 写入
 
 - 同一业务动作中的表格和块属性变更必须共享一个数据库事务；任一未处理异常整体回滚。

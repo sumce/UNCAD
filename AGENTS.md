@@ -32,9 +32,9 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.0.0` (full WPF UI, D-038; the D-039 dev
-  channel closed with the 3.0.0 release on 2026-11-03; patches increment the
-  fourth version part per D-032).
+- Product: `UNCAD Pro`. Stable line: `3.1.0` (engineering-hardening release on
+  the 3.0.0.17 code base, 2026-11-14; full WPF UI since 3.0.0, D-038; patches
+  increment the fourth version part per D-032).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -94,7 +94,8 @@ Do not move Excel matching into `Cad`, put business rules in forms, or make
 - Add one focused regression test for every non-trivial behavior change.
 - Run a targeted test first, then `dotnet test UNCAD.slnx --no-restore`.
 - For a release, run `.\release.ps1 -NoRestore` and inspect the generated
-  package under `artifacts\Pro`.
+  package under `artifacts\Pro`; release steps and gate-failure handling are
+  in `docs/RELEASE-RUNBOOK.md`.
 - Do not include `bin`, `obj`, `tmp`, logs, customer drawings, or user Excel
   files in commits.
 - Update a decision or known-issue document only when behavior or scope has

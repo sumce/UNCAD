@@ -65,6 +65,31 @@ deferred, or important for support diagnosis.
 - User drawings, customer workbooks, logs, `bin`, `obj`, and `artifacts` are
   local inputs/outputs and are not source-of-truth project files.
 
+## Quarterly Review — Suspended Decisions
+
+Deferred is not rejected. Walk this list roughly once a quarter and either
+keep deferring (with the current reason) or open the decision again.
+
+- D-006 (deferred by request): U1LX-entered distances stay out of U1U/U1F
+  statistics; do not silently add them to cable, bridge, or conduit totals.
+- D-049: number stays reserved for the pending ghost-frame proposal
+  (预留号待定；see the D-050 status note at `docs/DECISIONS.md:697`).
+- D-052 appendix: full-catalog substitution persistence (`substitutions[]`
+  for every category) plus a `lastRun` snapshot JSON expansion — the user
+  deferred both to a separate decision; do not implement before reopening
+  D-052.
+
+## Premise Risk — Batch U1U Chain And FrameRedefineGuard
+
+- `FrameRedefineGuard` runs on the shared fill path but is a no-op for the
+  batch U1U chain: the premise is that a U1U machine always comes from the
+  frame's own identity, so it can never differ from the recorded machine
+  (see the comment at `src/UNCAD/Features/Fill/FillFeature.cs:152-158`).
+- Any future feature that lets batch U1U re-pick machines or renumber them
+  breaks that premise and must amend D-052 first; otherwise the
+  "source machine's reserve leaks into the new machine" defect fixed in
+  3.0.0.17 revives in the batch chain.
+
 ## Resolved In 2.3.0
 
 - QuickLine text-only helpers no longer eagerly resolve AutoCAD RX classes.

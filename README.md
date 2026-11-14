@@ -2,7 +2,9 @@
 
 **UNCAD · AutoCAD Engineering Tools**
 
-The stable 3.0.0 build (shipped 2026-11-03, closing the D-039 dev channel) has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. 3.0 migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding and lives inside the frame block, D-040), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. Machine workbooks accept local/UNC paths and HTTP/HTTPS URLs (download-only, D-041); output lands one folder per machine (D-042); device-reserve markers are auto-absorbed (D-043); U1F fills frames on partial coverage (D-044); XLAYOUT offers three arrange modes (D-045) on the shared WPF design tokens with window adaptation (D-046). `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook; all cloud uploads stay removed (account validation stays). Older command references below are historical release notes.
+Current stable: **3.1.0**（2026-11-14，工程加固版——`如切如磋，如琢如磨`）：基于 3.0.0.17 现场稳定代码，零命令行为变更；新增真实台账脱敏测试夹具（解析冒烟测试覆盖真实文件格式）、本地/远端 CI 测试兜底（`scripts/ci-local.ps1` + self-hosted 工作流）、发布运维手册 `docs/RELEASE-RUNBOOK.md`，并全面校准文档与代码（审计文档去行号补 3.0 行为、README 补 3.0.0.1–.17 补丁线摘要）。
+
+The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 35 commands (including `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. 3.0 migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding and lives inside the frame block, D-040), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. Machine workbooks accept local/UNC paths and HTTP/HTTPS URLs (download-only, D-041); output lands one folder per machine (D-042); device-reserve markers are auto-absorbed (D-043); U1F fills frames on partial coverage (D-044); XLAYOUT offers three arrange modes (D-045) on the shared WPF design tokens with window adaptation (D-046). `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook; all cloud uploads stay removed (account validation stays). Older command references below are historical release notes.
 
 维护入口：先读 `AGENTS.md` 和 `docs/PROJECT_CONTEXT.md`；产品决策记录在
 `docs/DECISIONS.md`，按模块收集源码与测试使用 `scripts/context.ps1`。
@@ -10,6 +12,16 @@ The stable 3.0.0 build (shipped 2026-11-03, closing the D-039 dev channel) has 3
 `XSTS` opens a GUI report for selected frame drawings, first identifies the selected machine IDs, then compares only those machines' selected circuits with the configured machine workbook, and exports an `.xlsx` report. `Xmerge` opens a drag-and-drop DWG picker, recursively expands folders, and imports the selected drawings into the active drawing using XLAYOUT spacing.
 
 `U1F/U1U` update frame, device, upstream and BOQ data without creating connection geometry. Device-side blocks are normalized to the configured green and upstream-side blocks to the configured magenta. The removed automatic upstream connection behavior remains documented only in older release notes.
+
+## v3.1.0（2026-11-14 工程加固版）
+
+> UNCAD 3.1 | 如切如磋，如琢如磨
+
+- 定位：**工程加固版**——基于 3.0.0.17 现场稳定代码，零命令行为变更、不动任何决策（D-001~D-052 维持），全部投入在测试、流程与文档的可信度上。
+- 测试：**真实台账脱敏夹具**入库（832 机台 / 4999 行 / 163 删除线行，三重泄漏检查零命中）+ 3 条解析冒烟测试——自动化测试从此覆盖真实文件格式（合并单元格/公式缓存/富文本），全量 1431/1431。
+- CI：`scripts/ci-local.ps1` 本地一键全量测试（「执行数=源码期望数」防假绿核对 + 三层并发锁）；`.github/workflows/tests.yml` GitHub Actions self-hosted 工作流（push/PR 自动兜底）。
+- 运维：发布运维手册 `docs/RELEASE-RUNBOOK.md`（七道门禁/参数速查/失败处置/运营连续性清单）；KNOWN-ISSUES 增设悬置决策季度复查清单与 U1U 批量链前提风险记录。
+- 文档：COMMAND-AUDIT 去行号 + 补 D-042/044/045/047/048/050/051 行为关键词；CLAUDE.md/DEVELOPMENT.md 过时表述校准。
 
 ## v3.0.0（2026-11-03 正式发布）
 
@@ -22,6 +34,24 @@ The stable 3.0.0 build (shipped 2026-11-03, closing the D-039 dev channel) has 3
 - 重构：FillFeature 1425 行拆为 8 个阶段服务（余 695 行），电缆预留纯逻辑下沉 Core，行数守卫测试防回潮。
 - 发布门禁：`UNCAD_PERF_SMOKE`（合成大图时间预算）与 `UNCAD_MIGRATION_SELFTEST`（四代图框迁移不改表格尺寸）默认随 release.ps1 执行（`-SkipPerf`/`-SkipMigration` 可跳过）。
 - 加固：登录凭证 DPAPI 加密（旧明文自动升级）、日志账户脱敏、登录页拦弹窗；分层守卫测试冻结模块边界。
+
+## 3.0.0 补丁线（.1–.17）
+
+- `.1`–`.2`：U1SET WPF 控件样式与浮层点击修复。
+- `.3`：全面审计收口——20 处绑定静默失效、TrustedClock 摘除 NTP 恢复“绘图永不联网”、复制图框 JSON 句柄校验 5 处全覆盖。
+- `.4`：U1DWG 按机台导出 + 强制选择窗（D-047）；U1U 对比窗无变化不再弹出。
+- `.5`：U1SET 侧边栏 WPF-UI 库缺陷修复。
+- `.6`：U1U 强制 BOQ 确认窗（D-048）。
+- `.7`：毫米标与统计双算修复。
+- `.8`–`.9`：复制图框预留泄漏修复 + 显式清理防线。
+- `.10`：编排器拆分与守卫扩面（954 行拆分、Features 800 行硬线）。
+- `.11`：U1Q/U1C 连续段合并一趟 + 根治偏移线交叉（D-050）。
+- `.12`：Xmerge 坏文件容错（D-051）。
+- `.13`：批量 U1U 未匹配全类别可选 + 复制框预留预填 + 跨文件搬场重绑（D-052）。
+- `.14`：复制框 CABLE_INFO 清空顺序装反修复 + 搬场撞号免疫。
+- `.15`：长电缆公式断行优化（段间「 +」）。
+- `.16`：全链审计四修（空 boqPlans 假错误 / 错误门次序 / 复制框口径 / 毫米标暗道）。
+- `.17`：U1F 改选机台旧预留泄漏修复（FrameRedefineGuard）。
 
 ## v2.10.0
 

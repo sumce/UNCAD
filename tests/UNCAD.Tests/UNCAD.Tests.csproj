@@ -30,6 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 真实台账脱敏夹具（tools/FixtureSanitizer 生成，生成时已过泄漏检查）随测试输出复制。 -->
+    <None Include="..\Fixtures\*.xlsx" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- UNCAD.dll 鐨?AutoCAD 渚濊禆蹇呴』鐢辨祴璇曢」鐩嚜宸变繚璇?CopyLocal锛?         浠ュ墠闈?杈撳嚭鐩綍閲屾伆濂芥湁杩欏嚑涓?dll"锛屼竴鏃﹀埆鐨勬瀯寤烘竻鐞嗚繃灏变細鍙樻垚
          could not find dependent assembly 'Acdbmgd'锛屾祴璇曢潤榛樿窇 0 椤广€?-->
     <!-- UNCAD.dll 渚濊禆鐨?AutoCAD 鎵樼绋嬪簭闆嗗繀椤荤敱娴嬭瘯椤圭洰鑷繁 CopyLocal锛?         鍚﹀垯娴嬭瘯杈撳嚭鐩綍閲屾病鏈夊畠浠紝娴嬭瘯瀹夸富浼氭姤

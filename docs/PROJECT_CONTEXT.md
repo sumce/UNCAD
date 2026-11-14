@@ -5,9 +5,9 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.0.0` (2026-11-03; the D-039 development channel
-  closed with this release — future fixes increment the fourth version part
-  per D-032).
+- Current stable release: `3.1.0` (2026-11-14; engineering-hardening release on
+  the 3.0.0.17 code base, zero command-behavior changes — future fixes
+  increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.

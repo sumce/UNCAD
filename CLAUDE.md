@@ -10,8 +10,9 @@ documents assume you already know.
 
 1. `AGENTS.md` — hard constraints, layer rules, change protocol.
 2. `docs/PROJECT_CONTEXT.md` — module and command map.
-3. `docs/DECISIONS.md` — accepted decisions (D-001…D-027) that are not open for
-   re-litigation. Check `docs/KNOWN-ISSUES.md` before "fixing" deferred behavior.
+3. `docs/DECISIONS.md` — accepted decisions (D-001…D-052; D-031 is a void number
+   and D-049 is reserved) that are not open for re-litigation. Check
+   `docs/KNOWN-ISSUES.md` before "fixing" deferred behavior.
 4. The relevant section of `docs/DEVELOPMENT.md` (bilingual, Chinese; the
    engineering rules live here).
 
@@ -86,11 +87,15 @@ unit-testable and what the test suite covers.
   `CommandHelpCatalog`, `ConfigKeys`, settings, logging, metadata, licensing.
 - `src/UNCAD/Features/<Name>/` — one directory per command; orchestration and
   the single transaction boundary.
-- `src/UNCAD/UI/` — WinForms shells that edit a passed-in model only. All dialogs
-  are native WinForms; styling comes from `UiTheme` and form sizing from
-  `DialogLayout`. The only remaining WebView2 use is `StartupSplashForm`, which
-  renders the splash from `docs.html` (embedded as `UNCAD.Assets.StartupSplash.html`)
-  with `StartupSplashCanvas` as its native fallback. An HTML-based dialog
+- `src/UNCAD/UI/` — since 3.0 every dialog is WPF (`UI/Wpf`, WPF-UI / Fluent
+  style, D-037/D-038) and edits a passed-in model only; the WinForms shells are
+  gone. WebView2 survives only in targeted spots: the online login window
+  (`ClientLoginWindow`), the license fallback window (`OnlineLicenseWindow`,
+  opened from the login window's manual-verify entry), the U1L3D/U13D preview
+  (`U1L3DPreviewWindow`, WebView2 virtual host mapped to the local
+  `Web/QuickLine3D` folder), and the startup splash (`StartupSplashWindow`
+  renders the brand animation from the embedded `UNCAD.Assets.StartupSplash.html`
+  with `StartupSplashCanvas` as its native fallback). An HTML-based dialog
   framework was tried and removed — do not reintroduce one without a decision.
 
 Adding a command means touching all of: `CommandIds`, the `CommandMethod`
@@ -162,7 +167,6 @@ Exclude `bin`, `obj`, `tmp`, logs, customer drawings, and user Excel files —
 `.gitignore` already covers these, along with bundle DLLs, `artifacts/`, and
 non-fixture `.xlsx`/`.dwg`.
 
-Note that untracked files are not all junk: working-tree additions such as
-`src/UNCAD/Features/Dimension/` and `src/UNCAD/Core/Text/DimensionTextFormatter.cs`
-are real source. Run `git status --short` before assuming anything untracked is
-disposable.
+Note that untracked files are not all junk (manuals, scripts, and fixtures can
+be real content). Run `git status --short` before assuming anything untracked
+is disposable.

@@ -1,0 +1,59 @@
+# UNCAD Pro 3.1.0
+
+发布日期：2026-11-14
+
+UNCAD 3.1 | 如切如磋，如琢如磨——工程加固版。基于 3.0.0.17 现场稳定代码，
+**零命令行为变更**：不新增功能、不修改任何决策（D-001~D-052 全部维持），
+全部投入在测试、流程与文档的可信度上。升级无感知，图纸与输出产物不受影响。
+
+## 新增
+
+- **真实台账脱敏测试夹具**：真实客户汇总表（832 机台 / 4999 数据行 / 163 删除线行）
+  整体脱敏后入库为固定夹具（`tests/Fixtures/machine-ledger-sanitized.xlsx`，
+  三重泄漏检查零命中），新增 3 条解析冒烟测试——统一 U_ 表头绑定、删除线行忽略、
+  机台数与占位符模式逐项锁定。自动化测试从此覆盖**真实文件格式**
+  （合并单元格 / 公式缓存字符串 / 多 run 富文本），不再只依赖程序合成的理想夹具；
+  真实台账的列名与格式漂移可在门禁内暴露，不必再等现场报告。
+- **本地与远端 CI 兜底**：`scripts/ci-local.ps1` 一键全量测试——按源码动态统计期望数
+  （[Fact] + [InlineData] 行，与 tests.runsettings 同口径）并核对「执行数=期望数」，
+  防测试宿主静默跳过整程序集的假绿；三层并发锁避免与交互构建冲突；日志落 `tmp/ci/`。
+  `.github/workflows/tests.yml` 提供 GitHub Actions self-hosted 工作流
+  （push / PR 自动跑全量单测；AutoCAD 程序集依赖本机安装，托管 runner 不可用，
+  runner 注册步骤见运维手册）。
+- **发布运维手册 `docs/RELEASE-RUNBOOK.md`**：发布七道门禁的顺序与产物位置、
+  release.ps1 参数速查、门禁失败处置（结果变量 / tmp 保留日志 / SABOTAGE 自证机制）、
+  self-hosted runner 注册待办、运营连续性清单（发布密码异地备份 / 双远端核对 /
+  pro.key 属服务端数据不在包内）。
+- **KNOWN-ISSUES 两条长效记录**：「悬置决策季度复查清单」（D-006 / D-049 /
+  D-052 附录暂缓项，暂缓≠否决）；「U1U 批量链 FrameRedefineGuard 前提风险」
+  （U1U 机台恒来自图框自身身份、守卫天然空转——未来开"批量改选机台/改号"
+  功能必须先修订 D-052）。
+
+## 校准（文档与代码对齐）
+
+- **COMMAND-AUDIT**：移除易漂移的源码行号（定位以 `rg` / CommandIds.cs 为准），
+  补齐 3.0 行为关键词（D-042 / D-044 / D-045 / D-047 / D-048 / D-050 / D-051）；
+  CommandAuditTests 全部断言保持通过（35/35 命令覆盖）。
+- **README**：补 3.0.0.1–.17 补丁线摘要（17 个补丁逐条）。
+- **CLAUDE.md**：决策范围修正为 D-001~D-052；UI 现状修正为全量 WPF
+  （WebView2 定向用于登录窗 / 授权兜底 / U1L3D 预览 / 启动动画）。
+- **DEVELOPMENT.md**：记录 QuickLine3D 布局脚本 `tests/quickline3d-layout.cjs` 的
+  用法与"手动运行、不在门禁内"的现状。
+
+## 不做什么
+
+- 不改任何命令行为、设置键默认值、输出布局与授权逻辑；
+- 不动 DECISIONS.md（无行为/范围变更）；
+- 不推送远端、不上传安装包托管（交付边界为本地发布包）。
+
+## 验证
+
+- `dotnet test UNCAD.slnx`：**1431/1431 全部通过**
+  （1428 基线 + 3 条真实夹具冒烟测试）。
+- `release.ps1` 发布门禁全绿：构建完整性 SHA256 逐文件一致 → 全量单测 →
+  `UNCAD_PERF_SMOKE` 真机性能门禁 → `UNCAD_MIGRATION_SELFTEST` 真机图框迁移门禁 →
+  包校验 → 版本一致性（D-032/D-010：csproj / PackageContents / VersionLabel 三处
+  对齐 3.1.0(.0)，RELEASE 页与 v3.1.0 tag 就位）。
+- 产物：`artifacts\Pro\UNCAD-Pro-v3.1.0.0.zip` + SHA-256 校验和清单
+  （archive SHA-256 `7AF40CE6F027AA9830130A39F3693D1360C147D9324AC139BCF26B9B6B120967`，
+  bundle 内 24 文件逐文件校验全过）。

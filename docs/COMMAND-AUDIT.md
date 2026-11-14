@@ -1,5 +1,7 @@
-# UNCAD 命令审计矩阵（2.10.0）
+# UNCAD 命令审计矩阵
 
+> 口径版本：当前 **3.1.0**。矩阵全量审计于 **2.10.0** 时点完成，下文“本轮”均指该轮；
+> 3.0 起的行为变更以各命令行内 D-0xx 标注补充，不重写 2.10.0 审计结论。
 > 审计对象：`CommandIds.Registered` 全部 **35 条**公开命令（21 条正式命令 + 1 条别名 + 6 条命令族/扩展命令 + 7 条兼容旧名）。
 > 依据：`AGENTS.md`、`docs/PROJECT_CONTEXT.md`、`docs/DECISIONS.md`、`docs/DEVELOPMENT.md`；以源码与测试作为观察实现。
 > 结论：**35/35** 唯一注册、**35/35** 有帮助条目、Ribbon 覆盖全部正式命令（兼容旧名按设计不设 Ribbon 按钮）。
@@ -21,43 +23,45 @@
 
 ## 2. 注册 / 文档 / Ribbon 矩阵（35 条）
 
+> 源码行号随版本漂移，已从矩阵移除；定位命令入口以 `rg` / `Infra/CommandIds.cs` 为准。
+
 | 命令 | 类别 | `[CommandMethod]` 位置 | 帮助 | Ribbon 按钮 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `U1L` | 正式 | `Features/Unl/UnlFeature.cs:26` | ✓ | 绘制线条 | 已审计 |
-| `U1LX` | 正式 | `Features/Unl/QuickLineFeature.cs:26` | ✓ | 快速标注距离 | 已审计 |
-| `U1L3D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs:37` | ✓ | U1L 三维预览 | 已审计 |
-| `U13D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs:40` | ✓ | U13D 多图框预览 | 已审计 |
-| `U1DT` | 正式 | `Features/Dimension/DimensionTextFeature.cs:16` | ✓ | 标注转文字 | 已审计 |
-| `U1R` | 正式 | `Features/Unr/UnrFeature.cs:53` | ✓ | 开拱桥 | 已审计 |
-| `U1Q1` | 正式 | `Features/Unq/UnqFeature.cs:22` | ✓ | 桥架 100 | 已审计 |
-| `U1Q2` | 正式 | `Features/Unq/UnqFeature.cs:25` | ✓ | 桥架 200 | 已审计 |
-| `U1Q4` | 正式 | `Features/Unq/UnqFeature.cs:28` | ✓ | 桥架 400 | 已审计 |
-| `U1F` | 正式 | `Features/Fill/FillFeature.cs:36` | ✓ | U1F 生成 | 已审计（Lead 范围） |
-| `U1U` | 正式 | `Features/Fill/FillFeature.cs:39` | ✓ | U1U 更新 | 已审计（Lead 范围） |
-| `U1S` | 正式 | `Features/Submit/SubmitFeature.cs:19` | ✓ | U1S 提交 | 已审计（A 范围） |
-| `U1C` | 正式 | `Features/Conduit/ConduitFeature.cs:20` | ✓ | 线管 默认 | 已审计 |
-| `U1C20` | 命令族 | `Features/Conduit/ConduitFeature.cs:23` | ✓ | 线管 20 | 已审计 |
-| `U1C25` | 命令族 | `Features/Conduit/ConduitFeature.cs:26` | ✓ | 线管 25 | 已审计 |
-| `U1C38` | 命令族 | `Features/Conduit/ConduitFeature.cs:29` | ✓ | 线管 38 | 已审计 |
-| `U1C51` | 命令族 | `Features/Conduit/ConduitFeature.cs:32` | ✓ | 线管 51 | 已审计 |
-| `U1A` | 正式 | `Features/About/AboutFeature.cs:13` | ✓ | 关于与授权 | 已审计 |
-| `U1SET` | 正式 | `Features/ConfigCenter/SettingsFeature.cs:19` | ✓ | U1SET 设置 | 已审计 |
-| `U1DATA` | 正式 | `Features/ConfigCenter/MachineDataRefreshFeature.cs:14` | ✓ | U1DATA 刷新 | 已审计（A 范围） |
-| `U1DWG` | 正式 | `Features/DwgExport/DwgExportFeature.cs:19` | ✓ | U1DWG 导出 | 已审计（A 范围） |
-| `XLAYOUT` | 正式 | `Features/XLayout/XLayoutFeature.cs:30` | ✓ | XLAYOUT 排版 | 已审计 |
-| `XSTS` | 正式 | `Features/Stat/XstsFeature.cs:32` | ✓ | XSTS 回路统计 | 已审计 |
-| `Xmerge` | 正式 | `Features/XLayout/XmergeFeature.cs:14` | ✓ | Xmerge 合并 DWG | 已审计 |
-| `U1HELP` | 正式 | `Features/Help/HelpFeature.cs:14` | ✓ | U1HELP 命令帮助 | 已审计 |
-| `UNC_LOGIN` | 正式 | `Features/About/ClientLoginFeature.cs:23` | ✓ | 在线登录 | 已审计 |
-| `U1PDF` | 正式 | `Features/PdfExport/PdfExportFeature.cs:39` | ✓ | U1PDF 出图 | 已审计（A 范围） |
-| `U1D` | 别名 | `Features/DwgExport/DwgExportFeature.cs:22` | ✓ | 同 U1DWG（不重复设按钮） | 已审计 |
-| `UNL` | 兼容旧名 | `Features/Unl/UnlFeature.cs:33` | ✓ | 无（转发 U1L） | 已审计 |
-| `UNLX` | 兼容旧名 | `Features/Unl/QuickLineAliasCommand.cs:9` | ✓ | 无（转发 U1LX） | 已审计 |
-| `UNR` | 兼容旧名 | `Features/Unr/UnrFeature.cs:57` | ✓ | 无（转发 U1R） | 已审计 |
-| `UNQ1` | 兼容旧名 | `Features/Unq/UnqFeature.cs:31` | ✓ | 无（转发 U1Q1） | 已审计 |
-| `UNQ2` | 兼容旧名 | `Features/Unq/UnqFeature.cs:32` | ✓ | 无（转发 U1Q2） | 已审计 |
-| `UNQ4` | 兼容旧名 | `Features/Unq/UnqFeature.cs:33` | ✓ | 无（转发 U1Q4） | 已审计 |
-| `UNADD` | 兼容旧名 | `Features/Unadd/UnaddFeature.cs:24` | ✓ | 图纸统计 | 已审计 |
+| `U1L` | 正式 | `Features/Unl/UnlFeature.cs` | ✓ | 绘制线条 | 已审计 |
+| `U1LX` | 正式 | `Features/Unl/QuickLineFeature.cs` | ✓ | 快速标注距离 | 已审计 |
+| `U1L3D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U1L 三维预览 | 已审计 |
+| `U13D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U13D 多图框预览 | 已审计 |
+| `U1DT` | 正式 | `Features/Dimension/DimensionTextFeature.cs` | ✓ | 标注转文字 | 已审计 |
+| `U1R` | 正式 | `Features/Unr/UnrFeature.cs` | ✓ | 开拱桥 | 已审计 |
+| `U1Q1` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 100 | 已审计 |
+| `U1Q2` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 200 | 已审计 |
+| `U1Q4` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 400 | 已审计 |
+| `U1F` | 正式 | `Features/Fill/FillFeature.cs` | ✓ | U1F 生成 | 已审计（Lead 范围） |
+| `U1U` | 正式 | `Features/Fill/FillFeature.cs` | ✓ | U1U 更新 | 已审计（Lead 范围） |
+| `U1S` | 正式 | `Features/Submit/SubmitFeature.cs` | ✓ | U1S 提交 | 已审计（A 范围） |
+| `U1C` | 正式 | `Features/Conduit/ConduitFeature.cs` | ✓ | 线管 默认 | 已审计 |
+| `U1C20` | 命令族 | `Features/Conduit/ConduitFeature.cs` | ✓ | 线管 20 | 已审计 |
+| `U1C25` | 命令族 | `Features/Conduit/ConduitFeature.cs` | ✓ | 线管 25 | 已审计 |
+| `U1C38` | 命令族 | `Features/Conduit/ConduitFeature.cs` | ✓ | 线管 38 | 已审计 |
+| `U1C51` | 命令族 | `Features/Conduit/ConduitFeature.cs` | ✓ | 线管 51 | 已审计 |
+| `U1A` | 正式 | `Features/About/AboutFeature.cs` | ✓ | 关于与授权 | 已审计 |
+| `U1SET` | 正式 | `Features/ConfigCenter/SettingsFeature.cs` | ✓ | U1SET 设置 | 已审计 |
+| `U1DATA` | 正式 | `Features/ConfigCenter/MachineDataRefreshFeature.cs` | ✓ | U1DATA 刷新 | 已审计（A 范围） |
+| `U1DWG` | 正式 | `Features/DwgExport/DwgExportFeature.cs` | ✓ | U1DWG 导出 | 已审计（A 范围） |
+| `XLAYOUT` | 正式 | `Features/XLayout/XLayoutFeature.cs` | ✓ | XLAYOUT 排版 | 已审计 |
+| `XSTS` | 正式 | `Features/Stat/XstsFeature.cs` | ✓ | XSTS 回路统计 | 已审计 |
+| `Xmerge` | 正式 | `Features/XLayout/XmergeFeature.cs` | ✓ | Xmerge 合并 DWG | 已审计 |
+| `U1HELP` | 正式 | `Features/Help/HelpFeature.cs` | ✓ | U1HELP 命令帮助 | 已审计 |
+| `UNC_LOGIN` | 正式 | `Features/About/ClientLoginFeature.cs` | ✓ | 在线登录 | 已审计 |
+| `U1PDF` | 正式 | `Features/PdfExport/PdfExportFeature.cs` | ✓ | U1PDF 出图 | 已审计（A 范围） |
+| `U1D` | 别名 | `Features/DwgExport/DwgExportFeature.cs` | ✓ | 同 U1DWG（不重复设按钮） | 已审计 |
+| `UNL` | 兼容旧名 | `Features/Unl/UnlFeature.cs` | ✓ | 无（转发 U1L） | 已审计 |
+| `UNLX` | 兼容旧名 | `Features/Unl/QuickLineAliasCommand.cs` | ✓ | 无（转发 U1LX） | 已审计 |
+| `UNR` | 兼容旧名 | `Features/Unr/UnrFeature.cs` | ✓ | 无（转发 U1R） | 已审计 |
+| `UNQ1` | 兼容旧名 | `Features/Unq/UnqFeature.cs` | ✓ | 无（转发 U1Q1） | 已审计 |
+| `UNQ2` | 兼容旧名 | `Features/Unq/UnqFeature.cs` | ✓ | 无（转发 U1Q2） | 已审计 |
+| `UNQ4` | 兼容旧名 | `Features/Unq/UnqFeature.cs` | ✓ | 无（转发 U1Q4） | 已审计 |
+| `UNADD` | 兼容旧名 | `Features/Unadd/UnaddFeature.cs` | ✓ | 图纸统计 | 已审计 |
 
 Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25/38/51`、`U1PDF`、`UNC_LOGIN`、`UNADD`（“图纸统计”按钮）；未覆盖的 7 条（`U1D` + 7 条兼容旧名中的 6 条转发入口）——即 `U1D`、`UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`，都是转发入口，按设计不增加重复按钮。
 
@@ -65,17 +69,17 @@ Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25
 
 | 命令 | CAD 写入与事务边界 | 取消 / 失败路径 | 读取配置（`ConfigKeys`） | 回归测试 |
 | --- | --- | --- | --- | --- |
-| `U1F` | 写入阶段**一个**事务提交表格、块属性与 `frameinfo_json`；BOQ xlsx 在 CAD 提交后单独写，失败不回滚图纸并提示重跑 `U1S` | 未匹配清单行在写事务前中止（D-016）；模块失败由 `ModuleRunner` 带模块 ID/阶段编号；BOQ 写失败只提示 | `FillSettings` 整组（Excel 路径、表行/清空行、文字高度、预留、类别开关、Downstream 开关等） | `BatchFillUpdateContractTests`、`FillFeatureWorkbookSourceContractTests`、`TableGenerationModuleTests`、`CableReserveNewFillTests` |
-| `U1U` | 多图框统一预检后一个批量写事务；替换型号/插座数量按 D-005/D-008/D-015 处理 | 预检失败整批不写；未匹配项先集中选择；取消不写图 | 同 `U1F` | `BatchFillUpdateContractTests`、`BatchCatalogSelectionFormTests`、`FillUpdateRowMergerTests`、`RuanguanUpdatePolicyTests` |
-| `U1S` | 无 CAD 写入；只读图框清单后写 BOQ xlsx（输出目录占用预检在写盘前） | 图框识别失败/无清单项 → 中文提示且不写文件；写盘异常中止并提示图纸未修改 | `SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `SubmitFeatureContractTests`、`SubmissionRecordExtractorTests`、`BoqWorkbookWriterTests` |
-| `U1DWG` / `U1D` | 身份读取只读事务；导出为磁盘 IO（Wblock + SaveAs + 原子替换），不修改当前图纸 | 占用预检失败/无图框 → 中止且不生成文件；逐机台失败原因写日志+命令行 | `SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `DwgExportLayoutTests`、`DwgPathDiscoveryTests` |
-| `U1PDF` | 无 CAD 写入；打印设置逐字段恢复，失败按 `PdfPlotCommitPolicy` 回滚本次布局改动；占用预检在出图前 | 缺 “DWG To PDF.pc3”、图框身份无法解析、文件被占用 → 中止；单份出图失败聚合为首个诊断，不影响其它份 | `SubmitFolder`、`OutputByDrawing`、`OutputSeparateKinds` | `PdfExportTests`、`PdfPlotPipelineTests`、`PdfPlotCommitPolicyTests` |
-| `XLAYOUT` | 身份读取只读事务 + 排版写事务；排版只移动图框/写机台 ID 文字 | 身份错误聚合后提示；重复执行追加机台 ID 文字是 **D-009 设计行为**，性能优化不得消除 | `FillExcelPath`（只用于快照路径） | `XLayoutFeatureContractTests`、`XLayoutLayoutTests`、`XLayoutDiagnosticTests`、`XLayoutSelectionFilterTests` |
+| `U1F` | 写入阶段**一个**事务提交表格、块属性与 `frameinfo_json`；BOQ xlsx 在 CAD 提交后单独写，失败不回滚图纸并提示重跑 `U1S` | 未匹配清单行在写事务前中止（D-016）；模块失败由 `ModuleRunner` 带模块 ID/阶段编号；BOQ 写失败只提示；缺回路机台照常填图、仅跳过该机 BOQ（D-044） | `FillSettings` 整组（Excel 路径、表行/清空行、文字高度、预留、类别开关、Downstream 开关等） | `BatchFillUpdateContractTests`、`FillFeatureWorkbookSourceContractTests`、`TableGenerationModuleTests`、`CableReserveNewFillTests` |
+| `U1U` | 多图框统一预检后一个批量写事务；替换型号/插座数量按 D-005/D-008/D-015 处理 | 预检失败整批不写；未匹配项先集中选择；取消不写图；缺回路机台照常填图、仅跳过该机 BOQ（D-044），确认窗可按已画回路强制出 BOQ（D-048） | 同 `U1F` | `BatchFillUpdateContractTests`、`BatchCatalogSelectionFormTests`、`FillUpdateRowMergerTests`、`RuanguanUpdatePolicyTests` |
+| `U1S` | 无 CAD 写入；只读图框清单后写 BOQ xlsx（输出目录占用预检在写盘前）；输出一机台一文件夹（D-042） | 图框识别失败/无清单项 → 中文提示且不写文件；写盘异常中止并提示图纸未修改；缺任一回路整单中止并列缺失清单（D-034 硬门禁，纯本地写盘） | `SubmitFolder`（按图纸/分类型两键已随 D-042 删除） | `SubmitFeatureContractTests`、`SubmissionRecordExtractorTests`、`BoqWorkbookWriterTests` |
+| `U1DWG` / `U1D` | 身份读取只读事务；导出为磁盘 IO（Wblock + SaveAs + 原子替换），不修改当前图纸；输出一机台一文件夹（D-042） | 占用预检失败/无图框 → 中止且不生成文件；逐机台失败原因写日志+命令行；逐机台评估回路完整性（D-047）：缺回路机台默认跳过、完整机台必导出、选择窗可强制导出 | `SubmitFolder`（D-042 一机台一文件夹） | `DwgExportLayoutTests`、`DwgPathDiscoveryTests` |
+| `U1PDF` | 无 CAD 写入；打印设置逐字段恢复，失败按 `PdfPlotCommitPolicy` 回滚本次布局改动；占用预检在出图前；输出一机台一文件夹（D-042） | 缺 “DWG To PDF.pc3”、图框身份无法解析、文件被占用 → 中止；单份出图失败聚合为首个诊断，不影响其它份 | `SubmitFolder`（D-042 一机台一文件夹） | `PdfExportTests`、`PdfPlotPipelineTests`、`PdfPlotCommitPolicyTests` |
+| `XLAYOUT` | 身份读取只读事务 + 排版写事务；排版只移动图框/写机台 ID 文字；行序三模式（机台完整性/机台 ID/上游编号），行内按 Excel 行序（D-045） | 身份错误聚合后提示；重复执行追加机台 ID 文字是 **D-009 设计行为**，性能优化不得消除 | `FillExcelPath`（只用于快照路径） | `XLayoutFeatureContractTests`、`XLayoutLayoutTests`、`XLayoutDiagnosticTests`、`XLayoutSelectionFilterTests` |
 | `XSTS` | 只读事务读取图框身份；随后写 xlsx 到 `<输出根>\UNCAD_XSTS_时间.xlsx`（D-035，直接放输出根），不写 CAD | 无图框/身份失败逐条列出；期望数据来自 SQLite 快照，未刷新时显式提示执行 `U1DATA`；目录准备失败/报告被占用在写盘前中文中止 | `FillExcelPath`、`SubmitFolder` | `XstsReportTests`、`XstsExcelReporterTests`、`XstsFormTests`、`XstsOutputLayoutTests` |
-| `Xmerge` | `XmergeService` 内事务合并，失败整体回滚；源 DWG 只读不修改 | 未选文件 → 提示；同定义不兼容按 D-022 分离重试；未定位实体有数量提示 | 无 | `XmergeFeatureContractTests`、`FrameRegionCollectorTests` |
-| `U1C` | **一个**事务同时写 Ruanguan 块属性与线管标注并提交 | 固定清单无对应型号 → 写图前中止（D-016）；预选图框但无 Ruanguan → 仍可只做曲线标注 | `ConduitDiameter`、`ConduitHeight/LineOff/TextOff/Side`（= UNQ_* 键） | `ConduitLabelFormatterTests`、`ConduitDiameterTests`、`FlexibleConduitCableMapTests`、`RuanguanLabelFormatterTests` |
+| `Xmerge` | `XmergeService` 内事务合并，失败整体回滚；源 DWG 只读不修改 | 未选文件 → 提示；同定义不兼容按 D-022 分离重试；未定位实体有数量提示；坏文件点名跳过、不中断整批（D-051） | 无 | `XmergeFeatureContractTests`、`FrameRegionCollectorTests` |
+| `U1C` | **一个**事务同时写 Ruanguan 块属性与线管标注并提交；连续段按端点连通合并为一趟、解析式偏移防交叉（D-050） | 固定清单无对应型号 → 写图前中止（D-016）；预选图框但无 Ruanguan → 仍可只做曲线标注 | `ConduitDiameter`、`ConduitHeight/LineOff/TextOff/Side`（D-050 起独立成键，不再与桥架共用） | `ConduitLabelFormatterTests`、`ConduitDiameterTests`、`FlexibleConduitCableMapTests`、`RuanguanLabelFormatterTests` |
 | `U1C20/25/38/51` | 同 `U1C`，管径固定不读默认值 | 清单缺该管径 → 中止；标注长度固定 2000mm 占位（`DEVELOPMENT.md` 约定） | 同 `U1C`（不读 `ConduitDiameter`） | 同 `U1C` + `CommandRegistrationTests` |
-| `U1Q1/Q2/Q4` + `UNQ1/2/4` | `ParallelCurveAnnotator` 内部**一个**事务生成红线+两行标注；旧单行标签就地替换（D-018） | 规格无法解析/固定清单缺型号 → 写图前中止（D-016）；未选到可偏移曲线 → 提示并取消 | `UnqText`（仅防御性默认分支）、`UnaddMmPerGrid`、`UnqHeight/LineOff/TextOff/Side` | `BridgeLabelFormatterTests`、`AnnotationLabelPairTests`、`BridgeLabelMigrationContractTests`、`BoqCatalogIndexTests` |
+| `U1Q1/Q2/Q4` + `UNQ1/2/4` | `ParallelCurveAnnotator` 内部**一个**事务生成红线+两行标注；旧单行标签就地替换（D-018）；连续段合并为一趟、解析式偏移防交叉，标注初值取成员 U1L 毫米标合计（D-050） | 规格无法解析/固定清单缺型号 → 写图前中止（D-016）；未选到可偏移曲线 → 提示并取消 | `UnaddMmPerGrid`、`UnqHeight/LineOff/TextOff/Side`（`UnqText` 键已按 C-10 删除） | `BridgeLabelFormatterTests`、`AnnotationLabelPairTests`、`BridgeLabelMigrationContractTests`、`BoqCatalogIndexTests` |
 | `U1L` / `UNL` | `InteractiveDrawer` 每段一个事务（Line + 毫米文字 + 线/标注关联），Esc 结束并保留已完成段 | 长度配置非法 → 回退 2000mm 并提示；偏移 >2 倍字高 → 贴线处理；取消不写剩余段 | `UnlText`、`UnlHeight`、`UnlPos`、`UnlOffset` | `QuickLineMillimeterTextTests`、`QuickLineTraversalTests`、`QuickLineFeatureContractTests` |
 | `U1LX` / `UNLX` | 每段写入一个事务（`QuickLineCadService.TryWriteSegmentMillimetre`）；仅处理选中线的端点连通分量 | 输入非法重试本段；Esc/取消保留已完成部分；单段写失败跳过并继续 | 无（沿用标注关联） | `QuickLineTraversalTests`、`QuickLineCadServiceTests`、`QuickLineFeatureContractTests` |
 | `U1L3D` / `U13D` | 无 CAD 写入；只读事务收集 U1L 路由；只读 WebView2 预览（D-024/D-025） | 非完整图框/无 U1L 路由 → 提示；快照缺失时显示诊断；不联网不刷新 Excel | `FillExcelPath`（仅快照路径） | `QuickLine3dPreviewTests` |
