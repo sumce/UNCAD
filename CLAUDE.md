@@ -91,11 +91,11 @@ unit-testable and what the test suite covers.
   style, D-037/D-038) and edits a passed-in model only; the WinForms shells are
   gone. WebView2 survives only in targeted spots: the online login window
   (`ClientLoginWindow`), the license fallback window (`OnlineLicenseWindow`,
-  opened from the login window's manual-verify entry), the U1L3D/U13D preview
+  opened from the login window's manual-verify entry), and the U1L3D/U13D preview
   (`U1L3DPreviewWindow`, WebView2 virtual host mapped to the local
-  `Web/QuickLine3D` folder), and the startup splash (`StartupSplashWindow`
-  renders the brand animation from the embedded `UNCAD.Assets.StartupSplash.html`
-  with `StartupSplashCanvas` as its native fallback). An HTML-based dialog
+  `Web/QuickLine3D` folder). The startup splash is pure WPF since 3.1.0.1
+  (`StartupSplashCanvas` single path — the WebView2 takeover switch was the
+  cause of the every-launch flicker and unreliable click-to-skip). An HTML-based dialog
   framework was tried and removed — do not reintroduce one without a decision.
 
 Adding a command means touching all of: `CommandIds`, the `CommandMethod`

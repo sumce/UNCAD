@@ -3,46 +3,33 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
 using UNCAD.Infra;
 
 namespace UNCAD.UI
 {
     /// <summary>
-    /// WebView2 启动动画 + 原生粒子兜底（3.0 WPF 版，D-038，P6 瞬时提示：
-    /// 无交互、无边框全屏）。只换皮不改时序：5 秒自动关闭、WebView2 初始化
-    /// 2.5 秒超时回退原生动画、点击/按键跳过，全部与旧 StartupSplashForm
-    /// 一致；关闭只走 Close()，不依赖 DialogResult。
+    /// 原生粒子启动动画（3.1.0.1 起单路径，D-038 P6 瞬时提示：无交互、无边框
+    /// 全屏）。3.0~3.1.0 的双路径设计是每次启动闪烁的根源：原生粒子先播，
+    /// WebView2 就绪后接管，网页动画从 0 帧重播——早换手肉眼可见重播闪烁
+    /// （2026-11-04 只修了晚换手），WebView2 环境创建还让启动卡顿一下，点击
+    /// 跳过换手后要经浏览器层中转时灵时不灵（2026-11-15 用户报告三项）。
+    /// 现移除 WebView2 换手机制：原生动画是唯一路径——无切换、无启动开销，
+    /// 点击/按键直达 Close；时序不变：5 秒自动关闭，关闭只走 Close()。
     /// </summary>
     public sealed class StartupSplashWindow : Window
     {
         internal const int AutoCloseMilliseconds = 5000;
-        private const int WebInitializationTimeoutMilliseconds = 2500;
-        /// <summary>
-        /// 网页动画接管的最后期限（原生 Logo 于 1450ms 开始淡入）。就绪晚于它
-        /// 就保留原生动画播到底——中途换手会让网页动画从 0 帧重播，用户看到的
-        /// 就是"启动画面闪一下"（2026-11-04 用户报告）。
-        /// </summary>
-        internal const int WebTakeoverDeadlineMilliseconds = 1200;
-        private const string HtmlResourceName = "UNCAD.Assets.StartupSplash.html";
 
         private readonly DispatcherTimer _timer =
             new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
         private readonly Stopwatch _clock = new Stopwatch();
         private readonly StartupSplashCanvas _canvas = new StartupSplashCanvas();
         private readonly System.Drawing.Rectangle _screenBounds;
-        private Microsoft.Web.WebView2.Wpf.WebView2 _webView;
-        private bool _webStartupPending;
-        private bool _webStartupAbandoned;
-        private bool _webAnimationRunning;
-        private bool _closed;
 
         internal static bool SupportsHost(string processName, bool userInteractive)
             => userInteractive
@@ -63,17 +50,17 @@ namespace UNCAD.UI
             Background = Brushes.White;
             Title = "UNCAD";
 
-            var layout = new Grid();
+            // 内容 Grid 显式带背景画刷：整窗任意位置都可命中测试，点击跳过
+            // 不依赖落点（空背景 Grid 对鼠标透明）。
+            var layout = new Grid { Background = Brushes.White };
             layout.Children.Add(_canvas);
-            TryCreateWebView(layout);
             Content = layout;
 
-            _canvas.MouseDown += (sender, args) => Close();
+            // 点击/按键跳过：单路径原生渲染，无浏览器层中转，直达 Close。
             MouseDown += (sender, args) => Close();
             PreviewKeyDown += (sender, args) => Close();
             ContentRendered += OnShown;
             _timer.Tick += OnTick;
-            Closed += OnClosed;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -103,7 +90,6 @@ namespace UNCAD.UI
         {
             _clock.Restart();
             _timer.Start();
-            InitializeWebViewAsync();
         }
 
         private void OnTick(object sender, EventArgs args)
@@ -114,178 +100,22 @@ namespace UNCAD.UI
                 Close();
                 return;
             }
-            if (_webAnimationRunning) return;
-            if (_webStartupPending && elapsed >= WebInitializationTimeoutMilliseconds)
-                UseNativeFallback("WebView2 启动动画初始化超时", "超过 2.5 秒");
-
             _canvas.ElapsedMilliseconds = elapsed;
             _canvas.InvalidateVisual();
-        }
-
-        private void TryCreateWebView(Grid layout)
-        {
-            try
-            {
-                _webView = new Microsoft.Web.WebView2.Wpf.WebView2
-                {
-                    Visibility = Visibility.Collapsed,
-                    DefaultBackgroundColor = System.Drawing.Color.White
-                };
-                layout.Children.Add(_webView);
-                _webStartupPending = true;
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("WebView2 启动动画控件创建失败，使用原生动画: " + ex.Message);
-                _webView = null;
-            }
-        }
-
-        private async void InitializeWebViewAsync()
-        {
-            if (_webView == null) return;
-            try
-            {
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "UNCAD", "WebView2");
-                CoreWebView2Environment environment =
-                    await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-                if (_closed || _webStartupAbandoned) return;
-                await _webView.EnsureCoreWebView2Async(environment);
-                if (_closed || _webStartupAbandoned) return;
-
-                CoreWebView2 core = _webView.CoreWebView2;
-                core.Settings.AreDefaultContextMenusEnabled = false;
-                core.Settings.AreDevToolsEnabled = false;
-                core.Settings.AreBrowserAcceleratorKeysEnabled = false;
-                core.Settings.IsStatusBarEnabled = false;
-                core.Settings.IsZoomControlEnabled = false;
-                core.WebMessageReceived += OnWebMessageReceived;
-                core.ProcessFailed += OnWebProcessFailed;
-                await core.AddScriptToExecuteOnDocumentCreatedAsync(
-                    "addEventListener('pointerdown',()=>chrome.webview.postMessage('close'),true);"
-                    + "addEventListener('keydown',()=>chrome.webview.postMessage('close'),true);");
-                _webView.NavigationCompleted += OnWebNavigationCompleted;
-                _webView.NavigateToString(LoadSplashHtml());
-            }
-            catch (Exception ex)
-            {
-                if (_closed || _webStartupAbandoned) return;
-                UseNativeFallback("WebView2 启动动画初始化失败", ex.Message);
-            }
-        }
-
-        private void OnWebNavigationCompleted(object sender,
-            CoreWebView2NavigationCompletedEventArgs args)
-        {
-            if (!args.IsSuccess)
-            {
-                UseNativeFallback("WebView2 启动动画加载失败", args.WebErrorStatus.ToString());
-                return;
-            }
-            StartWebAnimation();
-        }
-
-        private void OnWebMessageReceived(object sender,
-            CoreWebView2WebMessageReceivedEventArgs args)
-        {
-            try
-            {
-                string message = args.TryGetWebMessageAsString();
-                if (string.Equals(message, "close", StringComparison.Ordinal))
-                {
-                    Close();
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("WebView2 启动动画消息读取失败: " + ex.Message);
-            }
-        }
-
-        private void OnWebProcessFailed(object sender,
-            CoreWebView2ProcessFailedEventArgs args)
-            => UseNativeFallback("WebView2 启动动画进程异常", args.ProcessFailedKind.ToString());
-
-        private void StartWebAnimation()
-        {
-            if (_closed || _webStartupAbandoned || _webView == null) return;
-            int elapsed = (int)_clock.ElapsedMilliseconds;
-            if (elapsed >= WebTakeoverDeadlineMilliseconds)
-            {
-                // 换手过晚：原生动画已播到粒子汇聚/Logo 淡入阶段，此刻切成
-                // 网页动画会从 0 帧重播一遍——这就是"启动画面闪一下"。保留
-                // 原生动画到底（与超时回退同语义），不再接管。
-                _webStartupPending = false;
-                _webStartupAbandoned = true;
-                Log.Info("WebView2 启动动画就绪过晚（" + elapsed
-                    + " ms ≥ " + WebTakeoverDeadlineMilliseconds
-                    + " ms），保留原生动画避免切换闪烁");
-                return;
-            }
-            _webStartupPending = false;
-            _webAnimationRunning = true;
-            _webView.Visibility = Visibility.Visible;
-            // 换手完成：停掉底层原生粒子绘制，避免边缘露出与重复重绘。
-            _canvas.Visibility = Visibility.Collapsed;
-            _webView.Focus();
-        }
-
-        private void UseNativeFallback(string reason, string detail)
-        {
-            if (_closed || _webStartupAbandoned) return;
-            _webStartupPending = false;
-            _webStartupAbandoned = true;
-            _webAnimationRunning = false;
-            if (_webView != null) _webView.Visibility = Visibility.Collapsed;
-            _canvas.InvalidateVisual();
-            Log.Warn(reason + "，使用原生动画: " + detail);
-        }
-
-        internal static string LoadSplashHtml()
-        {
-            Assembly assembly = typeof(StartupSplashWindow).Assembly;
-            using (Stream stream = assembly.GetManifestResourceStream(HtmlResourceName))
-            {
-                if (stream == null)
-                    throw new InvalidOperationException("启动动画 HTML 资源不存在: "
-                        + HtmlResourceName);
-                using (var reader = new StreamReader(stream, Encoding.UTF8, true))
-                    return reader.ReadToEnd().Replace(
-                        "{{VERSION}}", ProductMetadata.VersionText);
-            }
-        }
-
-        private void OnClosed(object sender, EventArgs args)
-        {
-            _closed = true;
-            _webStartupAbandoned = true;
-            _timer.Stop();
-            if (_webView?.CoreWebView2 != null)
-            {
-                _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
-                _webView.CoreWebView2.ProcessFailed -= OnWebProcessFailed;
-            }
-            if (_webView != null)
-            {
-                _webView.NavigationCompleted -= OnWebNavigationCompleted;
-                _webView.Dispose();
-                _webView = null;
-            }
         }
     }
 
     /// <summary>
     /// 原生粒子启动动画（WPF 版）：粒子从全屏边缘汇聚成品牌标志，再浮出
-    /// “UNSIAO”字标与产品说明。粒子布局与旧 GDI+ 版完全一致（同一采样步长、
-    /// 同一随机种子），只是渲染 API 从 GDI+ 换成 DrawingContext。
+    /// “UNSIAO”字标、产品说明与版本标语。粒子布局与旧 GDI+ 版完全一致
+    /// （同一采样步长、同一随机种子），只是渲染 API 从 GDI+ 换成 DrawingContext。
     /// </summary>
     public sealed class StartupSplashCanvas : System.Windows.FrameworkElement
     {
         private const string LogoResourceName = "UNCAD.Assets.unsiao-mark.png";
         private const int MaximumParticles = 2400;
+        /// <summary>版本标语（3.1 版本语，动画尾段在版本号下方淡入）。</summary>
+        internal const string BrandMotto = "如切如磋，如琢如磨";
         private readonly BitmapFrame _logo;
         private readonly List<Particle> _particles;
 
@@ -337,8 +167,12 @@ namespace UNCAD.UI
                 Ease(Progress(ElapsedMilliseconds, 1450, 350)));
             DrawWordmark(graphics, wordFont, wordSize, finalLogo.Right + gap,
                 finalLogo.Top + (logoHeight - wordSize) / 2d, pixelsPerDip);
+            double captionTop = finalLogo.Bottom + logoHeight * 0.18d;
             DrawProductCaption(graphics, finalLogo.Left,
-                finalLogo.Bottom + logoHeight * 0.18d, groupWidth, logoHeight,
+                captionTop, groupWidth, logoHeight,
+                pixelsPerDip);
+            DrawBrandMotto(graphics, finalLogo.Left,
+                captionTop, groupWidth, logoHeight,
                 pixelsPerDip);
         }
 
@@ -429,6 +263,25 @@ namespace UNCAD.UI
                 "UNCAD Pro · v" + ProductMetadata.VersionText, brush, pixelsPerDip);
             double textX = left + (width - text.Width) / 2d;
             graphics.DrawText(text, new System.Windows.Point(textX, top));
+        }
+
+        /// <summary>版本标语（如切如磋，如琢如磨）：版本号下方居中，尾段淡入。</summary>
+        private void DrawBrandMotto(DrawingContext graphics, double left, double top,
+            double width, double logoHeight, double pixelsPerDip)
+        {
+            double progress = Ease(Progress(ElapsedMilliseconds, 2700, 450));
+            if (progress <= 0d) return;
+            double captionFontSize = Math.Max(14d, logoHeight * 0.10d);
+            double fontSize = Math.Max(15d, logoHeight * 0.115d);
+            var font = new Typeface(new FontFamily(UiTheme.BrandFontFamily),
+                FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            var brush = new SolidColorBrush(Color.FromArgb(
+                (byte)(185 * progress), 70, 78, 86));
+            brush.Freeze();
+            var text = MakeText(font, fontSize, BrandMotto, brush, pixelsPerDip);
+            double textX = left + (width - text.Width) / 2d;
+            graphics.DrawText(text, new System.Windows.Point(textX,
+                top + captionFontSize * 1.9d));
         }
 
         private static FormattedText MakeText(Typeface font, double fontSize,

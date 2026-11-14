@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -238,7 +238,8 @@ namespace UNCAD.Tests
             Assert.Contains("Content Include=\"Web\\QuickLine3D", csproj);
             Assert.Contains("SetVirtualHostNameToFolderMapping", File.ReadAllText(
                 RepoFile("src", "UNCAD", "UI", "Wpf", "U1L3DPreviewWindow.xaml.cs")));
-            Assert.Contains("UNCAD.Assets.StartupSplash.html", csproj);
+            // 3.1.0.1 启动动画单路径化：网页动画资源随 WebView2 换手机制一并移除。
+            Assert.DoesNotContain("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);
             Assert.DoesNotContain("UNCAD_TEMPORARY_LICENSE", csproj);

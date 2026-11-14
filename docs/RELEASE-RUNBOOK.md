@@ -40,7 +40,7 @@ dotnet test UNCAD.slnx --no-restore        # 先跑一遍全量，尽早暴露
 | --- | --- | --- |
 | `-Suffix <string>` | 追加到包名后缀（默认空） | 仅命名，不影响门禁 |
 | `-Configuration <string>` | 默认 `Release` | 仅允许 Release，其他值直接抛错 |
-| `-NoBuild` | 跳过构建，复用现有输出 | 任何源文件/脚本/manifest/docs.html/bundle 内容比 `UNCAD.dll` 新即拒绝（防旧产物出包）；bundle 与输出不一致也会拒绝 |
+| `-NoBuild` | 跳过构建，复用现有输出 | 任何源文件/脚本/manifest/bundle 内容比 `UNCAD.dll` 新即拒绝（防旧产物出包）；bundle 与输出不一致也会拒绝 |
 | `-NoRestore` | build/test 加 `--no-restore` | 需先还原过包 |
 | `-SkipPerf` | 跳过 PERF_SMOKE 门禁 | 仅紧急发布；**须在发布记录中注明原因** |
 | `-SkipMigration` | 跳过 MIGRATION_SELFTEST 门禁 | 仅紧急发布；**须在发布记录中注明原因** |
