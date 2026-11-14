@@ -31,7 +31,7 @@ namespace UNCAD.Tests
 
                     Assert.True(window.Resources.MergedDictionaries.Count >= 2,
                         "Fluent 主题字典必须按窗口合并");
-                    Assert.Equal("已更新到 " + ProductMetadata.VersionText, window.Heading);
+                    Assert.Equal("已更新到 " + ProductMetadata.DetailedVersionText, window.Heading);
                     Assert.Equal("知道了", window.CloseButton.Content);
 
                     // 默认选中第一个（最新）版本，详情与该版本一致。

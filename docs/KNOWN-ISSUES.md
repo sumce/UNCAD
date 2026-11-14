@@ -58,6 +58,22 @@ deferred, or important for support diagnosis.
 - Outputs from the pre-2.10.0 flat layout stay in their old folder; moving them
   into the new layout is manual (see `docs/RELEASE-2.10.0.md`).
 
+## Xauto Scope Limits (3.2.0)
+
+- Hopped Polylines (lines a manual U1R already converted) take part in
+  neither the proportion relay nor the crossing detection: the scanner
+  reads LINE entities only. After a relay their hop positions no longer
+  match the moved geometry — erase the old hops and rerun Xauto (it lays
+  its own hops at the final crossings).
+- Crossing detection covers the U1L lines of the box-selected frames only;
+  a line crossing *into* the selection from a frame outside it is not
+  examined. Crossings between two selected frames are detected.
+- The relay does not de-collide mm labels: densely clamped short segments
+  can end up with labels close together; adjust by hand if needed.
+- Unconfirmed placeholder labels (trailing 00mm without a completion
+  marker) relay by their current drawn length — their mm value is neither
+  guessed nor rewritten; run U1LX to confirm them, then rerun Xauto.
+
 ## Environment Limits
 
 - CAD integration tests and real command acceptance require AutoCAD 2022 and

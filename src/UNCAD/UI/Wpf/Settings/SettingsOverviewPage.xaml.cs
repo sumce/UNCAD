@@ -13,7 +13,7 @@ namespace UNCAD.UI
         {
             InitializeComponent();
             ProductText.Text = ProductMetadata.ProductName;
-            VersionText.Text = ProductMetadata.VersionLabel
+            VersionText.Text = ProductMetadata.DetailedVersionText
                 + "（" + ProductMetadata.ReleaseDateUtc + "）";
         }
     }

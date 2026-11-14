@@ -33,6 +33,7 @@
 | `U13D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U13D 多图框预览 | 已审计 |
 | `U1DT` | 正式 | `Features/Dimension/DimensionTextFeature.cs` | ✓ | 标注转文字 | 已审计 |
 | `U1R` | 正式 | `Features/Unr/UnrFeature.cs` | ✓ | 开拱桥 | 已审计 |
+| `Xauto` | 正式 | `Features/XAuto/XAutoFeature.cs` | ✓ | 自动优化 | 已审计 |
 | `U1Q1` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 100 | 已审计 |
 | `U1Q2` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 200 | 已审计 |
 | `U1Q4` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 400 | 已审计 |

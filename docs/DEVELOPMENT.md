@@ -25,6 +25,18 @@
 - `Manual`只表示“由用户手动加入评审”，不是自定义材料。该行必须由固定清单`ListItem`创建，编码、名称、特征和单位不可自由编辑，只有数量属于本次评审。
 - 后续模块使用稳定、可搜索的英文ID，中文名称可以调整但不得复用ID。
 
+### Xauto 自动优化排障（3.2.0）
+
+- 链路：`Features/XAuto/XAutoFeature.cs` 编排 → `Core/QuickLine/SketchProportionPlanner.cs`
+  （按 mm 重排+钳位+包络锚定，复用 `QuickLineIsometricSceneBuilder` 重建）→
+  `Core/QuickLine/RouteCrossingPlanner.cs`（最终几何交叉检测+深度裁定）→
+  `Cad/QuickLine/ArchBridgePolyline.cs`（与 U1R 共享的半圆洞几何）。
+- 等测约定：`Core/QuickLine/IsometricProjection.cs` 是 3D→草图的逆映射
+  （X=30°/Z=90°/Y=150°），相机深度 = z−x−y（视线零向量 (1,1,−1)），与
+  U1L3D/U13D 的场景分类共用同一套轴测方向。
+- 整分量跳过的点名原因（未标注/不可分类/包络退化）都出现在命令行报告里；
+  语义边界见 `docs/DECISIONS.md` D-053 与 `docs/KNOWN-ISSUES.md` Xauto 一节。
+
 ## 注释硬性要求
 
 - 新增模块、公开类型和跨层契约必须有简洁的 `summary`，说明责任边界而不是复述类型名。

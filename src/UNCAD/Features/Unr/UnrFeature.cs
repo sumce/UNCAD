@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Contracts;
-using UNCAD.Core.Geometry;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 
@@ -101,20 +102,25 @@ namespace UNCAD.Features.Unr
             Line line, Point3d pickedPoint, double diameter, out string warning)
         {
             warning = string.Empty;
-            if (!TryPlanOpening(line.StartPoint, line.EndPoint, pickedPoint,
-                    diameter, out OpeningPlan plan, out warning)) return false;
+            if (!ArchBridgePolyline.TryPlanOpening(line.StartPoint, line.EndPoint,
+                    ProjectCenterDistance(line.StartPoint, line.EndPoint,
+                        pickedPoint), diameter,
+                    out ArchBridgeOpening plan, out warning))
+                return false;
 
-            var merged = new Polyline(4);
-            merged.SetDatabaseDefaults(ctx.Db);
-            merged.SetPropertiesFrom(line);
-            merged.Normal = Vector3d.ZAxis;
-            merged.Elevation = line.StartPoint.Z;
-            merged.Thickness = line.Thickness;
-            merged.AddVertexAt(0, ToPlanPoint(line.StartPoint), 0.0, 0.0, 0.0);
-            merged.AddVertexAt(1, ToPlanPoint(plan.First), plan.Bulge,
-                0.0, 0.0);
-            merged.AddVertexAt(2, ToPlanPoint(plan.Second), 0.0, 0.0, 0.0);
-            merged.AddVertexAt(3, ToPlanPoint(line.EndPoint), 0.0, 0.0, 0.0);
+            var vertices = new List<KeyValuePair<Point2d, double>>
+            {
+                new KeyValuePair<Point2d, double>(
+                    new Point2d(line.StartPoint.X, line.StartPoint.Y), 0.0),
+                new KeyValuePair<Point2d, double>(
+                    new Point2d(plan.First.X, plan.First.Y), plan.Bulge),
+                new KeyValuePair<Point2d, double>(
+                    new Point2d(plan.Second.X, plan.Second.Y), 0.0),
+                new KeyValuePair<Point2d, double>(
+                    new Point2d(line.EndPoint.X, line.EndPoint.Y), 0.0)
+            };
+            Polyline merged = ArchBridgePolyline.BuildMerged(ctx.Db, line,
+                vertices);
 
             var owner = tr.GetObject(line.OwnerId, OpenMode.ForWrite)
                 as BlockTableRecord;
@@ -167,8 +173,9 @@ namespace UNCAD.Features.Unr
 
             Point3d start = polyline.GetPoint3dAt(segmentIndex);
             Point3d end = polyline.GetPoint3dAt(segmentIndex + 1);
-            if (!TryPlanOpening(start, end, pickedPoint, diameter,
-                    out OpeningPlan plan, out warning)) return false;
+            if (!ArchBridgePolyline.TryPlanOpening(start, end,
+                    ProjectCenterDistance(start, end, pickedPoint), diameter,
+                    out ArchBridgeOpening plan, out warning)) return false;
 
             double startWidth = polyline.GetStartWidthAt(segmentIndex);
             double endWidth = polyline.GetEndWidthAt(segmentIndex);
@@ -191,79 +198,20 @@ namespace UNCAD.Features.Unr
             return true;
         }
 
-        private static bool TryPlanOpening(Point3d start, Point3d end,
-            Point3d pickedPoint, double diameter, out OpeningPlan plan,
-            out string warning)
+        /// <summary>洞心 = 拾取点在线段上的投影，钳在 [0, 线段长]。</summary>
+        private static double ProjectCenterDistance(Point3d start, Point3d end,
+            Point3d pickedPoint)
         {
-            plan = default;
-            warning = string.Empty;
-            const double tolerance = 1e-7;
-            if (diameter <= tolerance || double.IsNaN(diameter)
-                || double.IsInfinity(diameter))
-            {
-                warning = "拱桥直径无效。";
-                return false;
-            }
-            if (Math.Abs(start.Z - end.Z) > tolerance)
-            {
-                warning = "仅支持位于同一 XY 平面的二维直线。";
-                return false;
-            }
-
             Vector3d path = end - start;
             double totalLength = path.Length;
-            if (totalLength <= diameter + tolerance)
-            {
-                warning = "直线段长度必须大于洞口直径，已跳过。";
-                return false;
-            }
+            if (totalLength <= 0.0) return 0.0;
             double fraction = start.GetVectorTo(pickedPoint).DotProduct(path)
                 / (totalLength * totalLength);
             fraction = Math.Max(0.0, Math.Min(1.0, fraction));
-            double centerDistance = totalLength * fraction;
-            if (!SemicircleGeometry.CanSplit(totalLength, diameter,
-                    centerDistance, tolerance))
-            {
-                warning = "位置太靠近直线段端点，已跳过。";
-                return false;
-            }
-
-            double radius = diameter / 2.0;
-            Point3d center = start + path * fraction;
-            double firstFraction = (centerDistance - radius) / totalLength;
-            double secondFraction = (centerDistance + radius) / totalLength;
-            Point3d first = start + path * firstFraction;
-            Point3d second = start + path * secondFraction;
-            double bulge = SemicircleGeometry.Bulge(center.X, center.Y,
-                first.X, first.Y, second.X, second.Y, radius);
-            plan = new OpeningPlan(first, second, bulge,
-                firstFraction, secondFraction);
-            return true;
+            return totalLength * fraction;
         }
-
-        private static Point2d ToPlanPoint(Point3d point)
-            => new Point2d(point.X, point.Y);
 
         private static double Interpolate(double start, double end, double fraction)
             => start + (end - start) * fraction;
-
-        private readonly struct OpeningPlan
-        {
-            public OpeningPlan(Point3d first, Point3d second, double bulge,
-                double firstFraction, double secondFraction)
-            {
-                First = first;
-                Second = second;
-                Bulge = bulge;
-                FirstFraction = firstFraction;
-                SecondFraction = secondFraction;
-            }
-
-            public Point3d First { get; }
-            public Point3d Second { get; }
-            public double Bulge { get; }
-            public double FirstFraction { get; }
-            public double SecondFraction { get; }
-        }
     }
 }

@@ -28,18 +28,38 @@ namespace UNCAD.Infra
         public const string Website = "www.unsiao.com";
         public const string WebsiteUrl = "https://www.unsiao.com";
         public const string Copyright = "© 2026 UNSIAO.Ltd";
-        public const string ReleaseDateUtc = "2026-11-14";
+        public const string ReleaseDateUtc = "2026-11-15";
         /// <summary>
         /// 版本通道（D-039）：`X.Y.Z-dev` = 开发版（只出验收装机包，不打 tag 不发
         /// 客户）；去掉 `-dev` 后缀即为正式版。3.0.0 于 2026-11-03 转正（3.0 迭代
-        /// 收官）；后续修补按 D-032 递增第四位。
+        /// 收官）；3.2.0 新增 Xauto 自动优化；后续修补按 D-032 递增第四位。
         /// </summary>
-        public const string VersionLabel = "3.1.0";
+        public const string VersionLabel = "3.2.0";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
         public const string VersionSuffix = "";
 
         public static string VersionText
             => VersionLabel + (VersionSuffix.Length == 0 ? "" : " " + VersionSuffix);
+
+        /// <summary>
+        /// 四段完整版本（用户要求展示一律带详细号，2026-11-15）：`X.Y.Z.第四段`，
+        /// 如 3.2.0.0。第四段取自 AssemblyVersion（D-032：与 FileVersion/AppVersion
+        /// 由 Bump-Version 同步移动）。仅供展示/诊断（关于页、启动动画、更新弹窗
+        /// 标题、心跳 UA、配置分享记录）；**更新日志比较与“已看版本”存储仍用
+        /// 三段 VersionLabel**——VersionChangeLog 的条目键是 X.Y.Z，四段参与
+        /// 比较会让更新弹窗永远不再出现。
+        /// </summary>
+        public static string DetailedVersionText
+        {
+            get
+            {
+                var version = typeof(ProductMetadata).Assembly.GetName().Version;
+                string revision = version == null ? "0" : version.Revision.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+                return VersionLabel + "." + revision
+                    + (VersionSuffix.Length == 0 ? "" : " " + VersionSuffix);
+            }
+        }
 
         public static string Version
         {

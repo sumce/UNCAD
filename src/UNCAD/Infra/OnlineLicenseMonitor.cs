@@ -288,7 +288,7 @@ namespace UNCAD.Infra
             }.Uri;
             HttpWebRequest request = WebRequest.CreateHttp(requestUri);
             request.Method = "GET";
-            request.UserAgent = "UNCAD/" + ProductMetadata.VersionLabel;
+            request.UserAgent = "UNCAD/" + ProductMetadata.DetailedVersionText;
             request.Accept = "application/json,text/plain,*/*";
             request.AllowAutoRedirect = false;
             request.AutomaticDecompression = DecompressionMethods.GZip

@@ -138,7 +138,7 @@ namespace UNCAD.Tests
             string source = File.ReadAllText(RepoFile(
                 "src", "UNCAD", "UI", "Wpf", "StartupSplashWindow.cs"));
             Assert.Contains("DrawBrandMotto", source);
-            Assert.Contains("UNCAD Pro · v\" + ProductMetadata.VersionText", source);
+            Assert.Contains("UNCAD Pro · v\" + ProductMetadata.DetailedVersionText", source);
         }
 
         [Fact]

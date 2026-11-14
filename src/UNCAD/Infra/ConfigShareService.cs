@@ -130,7 +130,7 @@ namespace UNCAD.Infra
             {
                 Version = ConfigSharePayload.CurrentVersion,
                 Product = ConfigSharePayload.ProductName,
-                AppVersion = ProductMetadata.VersionLabel,
+                AppVersion = ProductMetadata.DetailedVersionText,
                 CreatedUtc = DateTimeOffset.Now,
                 Items = items
             };

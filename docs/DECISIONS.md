@@ -831,3 +831,37 @@ rewrite an existing entry.
   the old-handle-gone check (that would reintroduce same-frame-copy
   inheritance). Full-catalog persistence (`substitutions[]`, `lastRun`
   snapshot) was proposed and deferred — decide separately before implementing.
+
+## D-053: Xauto Proportion Relay And Camera-Depth Hops (2026-11-15)
+
+- Status: accepted
+- Decision: new command `Xauto` optimises a selected scope of frames in one
+  shot. Scope is **box-selected complete frames** (same interaction as
+  U13D). Two stages, both driven purely by the mm labels:
+  1. **Proportion relay.** Each endpoint-connected component is re-embedded
+     through `QuickLineIsometricSceneBuilder` with real millimetre display
+     distances (unconfirmed trailing-00mm placeholders keep their current
+     drawn length — the same input convention as the 3D preview), then
+     re-projected onto the sketch plane. Final drawn length ∝ real mm;
+     short segments are clamped to a minimum readable length
+     (≥ 1.5 × hop diameter); scale k = min(current/new width, height) so the
+     component stays inside its current envelope, anchored at the envelope
+     centre. Cable models play no role — the user misspoke; only mm labels
+     matter.
+  2. **Automatic hops.** Crossings are detected on the final geometry
+     (strict interior intersections only; shared endpoints and T-junctions
+     are junctions). The segment nearer to the camera opens the semicircle:
+     closeness = z−x−y along the projection's null direction (1,1,−1), so
+     an elevated run hops over a floor run under the from-above convention.
+     Hop diameter reuses the U1R `UNR_DIAMETER` setting.
+- Consequence: crossings whose depth cannot be decided (either side
+  unclassifiable, mixed projection families, or equal depth = a true 3D
+  intersection) are **skipped and named**, never guessed — the user hops
+  them manually with U1R. A component containing any unlabelled or
+  unclassifiable line is skipped as a whole and named; partial moves are
+  forbidden (they would tear endpoint connections). One write transaction
+  for the whole command (one U undoes everything); label text is never
+  rewritten; hopped lines get their U1LX metadata re-linked with the
+  COMPLETED marker preserved; statistics (U1F/U1U) are unaffected. Do not
+  add heuristic hop decisions for undeterminable crossings, and do not
+  reintroduce scale factors unrelated to the mm labels.

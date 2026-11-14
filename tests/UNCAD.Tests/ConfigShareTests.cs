@@ -51,7 +51,8 @@ namespace UNCAD.Tests
 
             Assert.Equal(ConfigSharePayload.CurrentVersion, payload.Version);
             Assert.Equal(ConfigSharePayload.ProductName, payload.Product);
-            Assert.Equal(ProductMetadata.VersionLabel, payload.AppVersion);
+            // 3.2.0 起配置分享记录详细四段号（与展示口径一致），便于现场排障定位补丁位。
+            Assert.Equal(ProductMetadata.DetailedVersionText, payload.AppVersion);
             Assert.Contains(ConfigKeys.UnlHeight, payload.Items.Keys);
             Assert.Contains(ConfigKeys.SubmitFolder, payload.Items.Keys);
             Assert.Equal("180", payload.Items[ConfigKeys.UnlHeight]);

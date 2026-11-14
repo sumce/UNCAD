@@ -17,6 +17,8 @@ namespace UNCAD.Infra
         public const string XLayout = "XLAYOUT";
         public const string Statistics = "XSTS";
         public const string Merge = "Xmerge";
+        /// <summary>Xauto：框选图框，按毫米标注自动重排等测草图比例并自动开拱桥。</summary>
+        public const string XAuto = "Xauto";
         public const string Help = "U1HELP";
         /// <summary>
         /// 在线登录命令：授权缺失/过期时用户唯一的恢复入口，因此它绝不调用
@@ -68,13 +70,14 @@ namespace UNCAD.Infra
         public const string XLayoutFeatureCommands = XLayout;
         public const string XstsFeatureCommands = Statistics;
         public const string MergeFeatureCommands = Merge;
+        public const string XAutoFeatureCommands = XAuto;
         public const string HelpFeatureCommands = Help;
         public const string ClientLoginFeatureCommands = ClientLogin;
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
             Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
-            Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help
+            Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto, Help
         };
 
         public static IReadOnlyList<string> Aliases { get; } = new[]
@@ -92,8 +95,8 @@ namespace UNCAD.Infra
         {
             Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
-            About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, Help,
-            ClientLogin,
+            About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto,
+            Help, ClientLogin,
             PdfExport,
             DwgExportShort,
             LegacyLine, LegacyLineQuick, LegacyArch, LegacyTray100, LegacyTray200,

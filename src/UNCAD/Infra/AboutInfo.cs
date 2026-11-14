@@ -38,7 +38,7 @@ namespace UNCAD.Infra
                 Website = ProductMetadata.Website,
                 WebsiteUrl = ProductMetadata.WebsiteUrl,
                 Copyright = ProductMetadata.Copyright,
-                Version = ProductMetadata.VersionText,
+                Version = ProductMetadata.DetailedVersionText,
                 BuildTime = ParseBuildTime(file.ProductVersion),
                 UpdatedOn = BuildDateOrFallback(file.ProductVersion),
                 Authorization = license.StatusText,

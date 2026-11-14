@@ -260,7 +260,7 @@ namespace UNCAD.UI
                 (byte)(150 * progress), 70, 78, 86));
             brush.Freeze();
             var text = MakeText(font, fontSize,
-                "UNCAD Pro · v" + ProductMetadata.VersionText, brush, pixelsPerDip);
+                "UNCAD Pro · v" + ProductMetadata.DetailedVersionText, brush, pixelsPerDip);
             double textX = left + (width - text.Width) / 2d;
             graphics.DrawText(text, new System.Windows.Point(textX, top));
         }
