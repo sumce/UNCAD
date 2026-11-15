@@ -53,7 +53,8 @@ namespace UNCAD.Features.Fill
                 + stageClock.ElapsedMilliseconds + " ms");
             if (selection.IsEmpty)
             {
-                ctx.Write("\n[U1F] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
                 return;
             }
             if (updateMode)
@@ -79,12 +80,14 @@ namespace UNCAD.Features.Fill
             }
             if (!selection.HasWriteTargets)
             {
-                ctx.Write("\n[U1F] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 已选到统计文字，但没有清单表或可写入块；本次未修改图纸。");
                 return;
             }
             if (selection.TableIds.Length > 1 || selection.FrameBlockIds.Length > 1)
             {
-                ctx.Write("\n[U1F] 一次只允许一个清单表和一个目标图框块，避免批量误写。");
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] 一次只允许一个清单表和一个目标图框块，避免批量误写。");
                 return;
             }
 
@@ -353,7 +356,14 @@ namespace UNCAD.Features.Fill
                         selection.TextIds, options.MmPerGrid);
                     filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
                         startRow, clearRowCount, tableRows, textHeight);
-                    if (filled < 0) return;
+                    // 3.2.0.6（审计修复）：写表失败不再静默返回——此前单框只无声
+                    // return（事务 Dispose 回滚，用户只看到一行表格日志、不知道
+                    // 整体已回滚），批量同条件却抛异常。统一为抛出+点名回滚，
+                    // 与批量链同口径（CommandBase 打印"错误: "）。
+                    if (filled < 0)
+                        throw new InvalidOperationException(
+                            "清单表写入失败（表格列数不足或格式不兼容），"
+                            + "本次图纸修改已整体回滚；请检查清单表是否被改动后重试。");
                     CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
                         picked, DateTime.Now);
                     // 2026-11-06（用户要求 U1F 定义要清干净）：复制来的图框先把

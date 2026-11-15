@@ -58,6 +58,13 @@ namespace UNCAD.UI
                 Status.Severity = InfoBarSeverity.Success;
                 Status.Message = "授权验证成功。";
                 Saved = true;
+                // 3.2.0.6（审计修复）：Close() 同步引发 Closing，而 _validating 要到
+                // finally 才复位——验证成功路径的 Close() 此前 100% 被自己的守卫
+                // 取消，窗口停在"验证成功"不关闭；用户点"取消"还会把 Saved 置
+                // false（凭证其实已写入并上线），上游 ClientLoginWindow 把已完成的
+                // 登录显示成失败。姊妹窗 ClientLoginWindow 是先复位再 Close 的正确
+                // 写法，此处对齐。
+                _validating = false;
                 Close();
             }
             catch (Exception ex)

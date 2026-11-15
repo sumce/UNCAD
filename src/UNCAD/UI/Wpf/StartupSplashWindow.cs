@@ -61,6 +61,7 @@ namespace UNCAD.UI
             PreviewKeyDown += (sender, args) => Close();
             ContentRendered += OnShown;
             _timer.Tick += OnTick;
+            Closed += OnClosedStopTimer;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -102,6 +103,15 @@ namespace UNCAD.UI
             }
             _canvas.ElapsedMilliseconds = elapsed;
             _canvas.InvalidateVisual();
+        }
+
+        private void OnClosedStopTimer(object sender, EventArgs args)
+        {
+            // 3.2.0.6（审计修复）：DispatcherTimer 不 Stop 就被调度器强持有——
+            // 此前 5 秒结束/点击跳过后定时器仍每 16ms 空转（Render 优先级还与
+            // 真实渲染抢档），窗口/画布/2400 粒子/Logo 位图经 Tick 处理器常驻
+            // 内存，每次 CAD 启动累积一份，直到进程退出。
+            _timer.Stop();
         }
     }
 

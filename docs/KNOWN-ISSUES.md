@@ -89,7 +89,7 @@ keep deferring (with the current reason) or open the decision again.
 - D-006 (deferred by request): U1LX-entered distances stay out of U1U/U1F
   statistics; do not silently add them to cable, bridge, or conduit totals.
 - D-049: number stays reserved for the pending ghost-frame proposal
-  (预留号待定；see the D-050 status note at `docs/DECISIONS.md:697`).
+  (预留号待定；see the D-050 status note in `docs/DECISIONS.md`).
 - D-052 appendix: full-catalog substitution persistence (`substitutions[]`
   for every category) plus a `lastRun` snapshot JSON expansion — the user
   deferred both to a separate decision; do not implement before reopening

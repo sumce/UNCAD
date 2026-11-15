@@ -1,10 +1,10 @@
 # UNCAD 命令审计矩阵
 
-> 口径版本：当前 **3.1.0**。矩阵全量审计于 **2.10.0** 时点完成，下文“本轮”均指该轮；
+> 口径版本：当前 **3.2.0**。矩阵全量审计于 **2.10.0** 时点完成，下文“本轮”均指该轮；
 > 3.0 起的行为变更以各命令行内 D-0xx 标注补充，不重写 2.10.0 审计结论。
-> 审计对象：`CommandIds.Registered` 全部 **35 条**公开命令（21 条正式命令 + 1 条别名 + 6 条命令族/扩展命令 + 7 条兼容旧名）。
+> 审计对象：`CommandIds.Registered` 全部 **36 条**公开命令（22 条正式命令 + 1 条别名 + 6 条命令族/扩展命令 + 7 条兼容旧名；3.2.0 新增 `Xauto`，D-053）。
 > 依据：`AGENTS.md`、`docs/PROJECT_CONTEXT.md`、`docs/DECISIONS.md`、`docs/DEVELOPMENT.md`；以源码与测试作为观察实现。
-> 结论：**35/35** 唯一注册、**35/35** 有帮助条目、Ribbon 覆盖全部正式命令（兼容旧名按设计不设 Ribbon 按钮）。
+> 结论：**36/36** 唯一注册、**36/36** 有帮助条目、Ribbon 覆盖全部正式命令（兼容旧名按设计不设 Ribbon 按钮）。
 > 本轮发现并修复 9 项（均在 2.10.0-C 的写 scope 内），上报其它 scope 1 项，明确“不是缺陷”的既有行为 7 项。
 
 ## 1. 审计口径
@@ -21,7 +21,7 @@
 
 2.10.0 起命令入口统一由 `Cad/CommandBase.Run` 包裹：`Log.Command(命令名)`（文件日志行带命令标签）+ `OperationLog.Begin(命令名, 摘要)`（成功 `Complete`、ESC `Cancel`、异常 `Fail` 后继续抛出）；异常统一打印到命令行并写日志，`finally` 清理隐式选择集，避免下一条 `UsePickSet` 命令复用失效 ID。
 
-## 2. 注册 / 文档 / Ribbon 矩阵（35 条）
+## 2. 注册 / 文档 / Ribbon 矩阵（36 条）
 
 > 源码行号随版本漂移，已从矩阵移除；定位命令入口以 `rg` / `Infra/CommandIds.cs` 为准。
 
@@ -64,7 +64,7 @@
 | `UNQ4` | 兼容旧名 | `Features/Unq/UnqFeature.cs` | ✓ | 无（转发 U1Q4） | 已审计 |
 | `UNADD` | 兼容旧名 | `Features/Unadd/UnaddFeature.cs` | ✓ | 图纸统计 | 已审计 |
 
-Ribbon 覆盖 28/35：全部 21 条 `CommandIds.Canonical`、命令族 `U1C20/25/38/51`、`U1PDF`、`UNC_LOGIN`、`UNADD`（“图纸统计”按钮）；未覆盖的 7 条（`U1D` + 7 条兼容旧名中的 6 条转发入口）——即 `U1D`、`UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`，都是转发入口，按设计不增加重复按钮。
+Ribbon 覆盖 29/36：全部 22 条 `CommandIds.Canonical`（3.2.0 起 `Xauto` 也在“标注”面板）、命令族 `U1C20/25/38/51`、`U1PDF`、`UNC_LOGIN`、`UNADD`（“图纸统计”按钮）；未覆盖的 7 条（`U1D` + 7 条兼容旧名中的 6 条转发入口）——即 `U1D`、`UNL`、`UNLX`、`UNR`、`UNQ1`、`UNQ2`、`UNQ4`，都是转发入口，按设计不增加重复按钮。
 
 ## 3. 事务 / 失败路径 / 配置 / 测试矩阵
 

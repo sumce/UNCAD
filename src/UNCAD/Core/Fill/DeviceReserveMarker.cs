@@ -55,7 +55,10 @@ namespace UNCAD.Core.Fill
             if (!double.TryParse(match.Groups["value"].Value,
                     NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 return false;
-            if (value < MinimumMillimeters || value > MaximumMillimeters) return false;
+            // 3.2.0.6（审计修复）：值为 0 一律拒绝——"0mm" 不匹配正则（至少两位），
+            // 但 "00mm"/"000mm" 匹配且解析为 0，D-043 Amendment 的"0mm 不是候选"
+            // 被这批同形写法绕过：吸收成 0 还删图上文字，纯丢数据。
+            if (value <= MinimumMillimeters || value > MaximumMillimeters) return false;
             millimeters = value;
             return true;
         }

@@ -108,9 +108,17 @@ namespace UNCAD.Features.Fill
 
             owner.AppendEntity(replacement);
             transaction.AddNewlyCreatedDBObject(replacement, true);
-            if (ParallelAnnotationMetadata.TryRead(source,
-                    out string kind, out string sourceHandle))
-                ParallelAnnotationMetadata.Set(replacement, kind, sourceHandle);
+            // 3.2.0.6（审计修复）：RUN 字段随迁移透传——此前只拷 SOURCE，一旦
+            // 出现带 RUN 的单行标注（合并趟成员），迁移后整趟替换与角度修复
+            // 退化为 SOURCE 单段口径。
+            if (ParallelAnnotationMetadata.TryRead(source, out string kind,
+                    out string sourceHandle, out string runHandles)
+                && !string.IsNullOrWhiteSpace(runHandles))
+                ParallelAnnotationMetadata.Set(replacement, kind, sourceHandle,
+                    runHandles);
+            else if (ParallelAnnotationMetadata.TryRead(source,
+                    out string plainKind, out string plainSource))
+                ParallelAnnotationMetadata.Set(replacement, plainKind, plainSource);
             source.UpgradeOpen();
             source.Erase();
             return true;

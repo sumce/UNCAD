@@ -19,6 +19,10 @@ namespace UNCAD.UI
         {
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
+            // 3.2.0.6（审计修复）：进度窗不可手动关闭——此前保留标题栏 X，批量
+            // 中途点掉后命令继续跑但用户失去进度可见（后续 Update 静默作用于已
+            // 关窗口）。进度窗没有取消语义，关闭动作只会制造"卡死了？"的错觉。
+            Closing += (sender, args) => args.Cancel = true;
         }
 
         public ProgressWindow(string title) : this()

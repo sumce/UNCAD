@@ -416,13 +416,17 @@ namespace UNCAD.Cad.QuickLine
 
             try
             {
-                var text = transaction.GetObject(labelId, OpenMode.ForWrite, false)
-                    as DBText;
-                if (text == null || text.IsErased) return false;
+                // 3.2.0.6（审计修复）：放宽到 Entity——此前只认 DBText，MText 毫米标
+                //（扫描链路明确支持）重挂恒 false，Xauto 开洞后其元数据仍指向已删
+                // 的 Line，U1Q/U1C 趟长度推算取不到标签退回几何长度。
+                // HasCompletionMarker/Build 都基于 DBObject，本就类型无关。
+                Entity label = transaction.GetObject(labelId, OpenMode.ForWrite, false)
+                    as Entity;
+                if (label == null || label.IsErased) return false;
 
-                bool completed = QuickLineMetadataStore.HasCompletionMarker(text);
+                bool completed = QuickLineMetadataStore.HasCompletionMarker(label);
                 if (!QuickLineMetadataStore.EnsureApplication(ctx.Db, transaction)) return false;
-                text.XData = QuickLineMetadataStore.Build(text,
+                label.XData = QuickLineMetadataStore.Build(label,
                     lineId.Handle.ToString(), completed);
                 return true;
             }

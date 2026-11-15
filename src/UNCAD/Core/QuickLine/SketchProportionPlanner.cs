@@ -209,14 +209,17 @@ namespace UNCAD.Core.QuickLine
             var anchored = new List<SketchSegmentMove>();
             for (int attempt = 0; attempt < MaxFitAttempts; attempt++)
             {
+                // 重复尝试会重复追加诊断：每轮先把上一轮的追加段清掉。
+                // 3.2.0.6（审计修复）：截断移到本轮 ApplyComponent 之前——原实现
+                // 在本轮装配之后才截断，第二轮自己的诊断（三维闭合偏差/包络退化
+                // 等）也被一并切掉，收敛失败时用户拿不到任何线索。
+                if (attempt > 0 && diagnostics.Count > diagnosticsBefore)
+                    diagnostics.RemoveRange(diagnosticsBefore,
+                        diagnostics.Count - diagnosticsBefore);
                 anchored.Clear();
                 foreach (PreparedComponent item in prepared)
                     ApplyComponent(graph, item, minFinalUnits, scale,
                         new QuickLinePoint(0, 0), anchored, depths, diagnostics);
-                // 重复尝试会重复追加诊断：每轮先把上一轮的追加段清掉。
-                if (attempt > 0 && diagnostics.Count > diagnosticsBefore)
-                    diagnostics.RemoveRange(diagnosticsBefore,
-                        diagnostics.Count - diagnosticsBefore);
                 if (!MovesExtents(anchored, out double extentMinX,
                         out double extentMinY, out double extentMaxX,
                         out double extentMaxY))

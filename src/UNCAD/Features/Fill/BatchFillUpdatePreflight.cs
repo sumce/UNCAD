@@ -157,6 +157,22 @@ namespace UNCAD.Features.Fill
                     + "不继承其设备内预留/电缆替代型号/更新历史；"
                     + "写入时会清空源框遗留的旧信息属性。");
             }
+            // 3.2.0.6（审计修复）：批量链补 FrameRedefineGuard——与单框 FillFeature
+            // 对齐。批量机台恒来自图框身份（改机分支天然空转），此处防的是
+            // 幽灵记录：物理身份就是本机台、但 JSON 记录指向别机（历史残留/
+            // 手工移植）。单框链有 SameMachine_GhostRecordIsDropped 防御，批量链
+            // 此前没有——别机的设备内预留会被 ResolveCableReserve 采用、经
+            // Update 写进全新 JSON，以本机台名义永久化。空机台号会话合成记录
+            //（D-043 吸收/块A 恢复）在 Guard 入口原样放行，不受影响。
+            string guardNote;
+            previousRecord = UNCAD.Core.Fill.FrameRedefineGuard.Apply(
+                identity, previousRecord, machine,
+                ref plan_DeviceReserveHintMm, out guardNote);
+            if (guardNote.Length > 0)
+            {
+                notes.Add(guardNote);
+                Log.Info("[U1U] " + prefix + guardNote);
+            }
             // 现场需求（2026-11-02）：JSON 没有设备内预留记录时，默认采用图框
             // CABLE_INFO 文本里已有的「数值（设备内）」——不询问用户；恢复值
             // 写回记录，后续不重复恢复并随 JSON 持久化。

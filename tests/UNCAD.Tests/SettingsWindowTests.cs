@@ -502,7 +502,8 @@ namespace UNCAD.Tests
             {
                 "UnlText", "UnlHeight", "UnlPos", "UnlOffset",
                 "UnqHeight", "UnqLineOff", "UnqTextOff", "UnqSide",
-                // D-050（2026-11-09）：U1C 标注几何拆出独立键（默认下侧外圈 210）。
+                // D-050（2026-11-09）：U1C 标注几何拆出独立键；2026-11-15 默认
+                // 改为与桥架同车道（上侧 15），独立键本身不变。
                 "ConduitDiameter", "ConduitLineOff", "ConduitTextOff", "ConduitSide",
                 "UnrDiameter",
                 "UnaddHeight", "UnaddMmPerGrid", "UnaddTextEnabled",

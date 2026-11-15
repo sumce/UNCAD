@@ -151,8 +151,15 @@ namespace UNCAD.Features.XAuto
             {
                 try
                 {
-                    ApplyMoves(ctx, tr, frames);
-                    ApplyHops(ctx, tr, frames, crossing, diameter);
+                    // 3.2.0.6（审计修复，D-053×D-050 交界）：重排/开洞同时处理图面
+                    // 上已有的 U1Q/U1C 平行标注输出——重排随线平移、开洞改挂句柄。
+                    // 否则旧输出指向已移动/已删除的线：重排后旧输出停在原地，
+                    // 开洞后 SOURCE/RUN 指向已删句柄，重跑 U1Q/U1C 的
+                    // CollectPrevious 也认不出（孤儿红线+标注永久残留）。
+                    Dictionary<string, List<ObjectId>> parallelOutputs =
+                        ParallelCurveAnnotator.CollectBySourceHandle(ctx, tr);
+                    ApplyMoves(ctx, tr, frames, parallelOutputs);
+                    ApplyHops(ctx, tr, frames, crossing, diameter, parallelOutputs);
                     tr.Commit();
                 }
                 catch
@@ -323,7 +330,8 @@ namespace UNCAD.Features.XAuto
         }
 
         private static void ApplyMoves(CadContext ctx, Transaction tr,
-            List<FramePlan> frames)
+            List<FramePlan> frames,
+            Dictionary<string, List<ObjectId>> parallelOutputs)
         {
             foreach (FramePlan frame in frames)
             {
@@ -341,9 +349,14 @@ namespace UNCAD.Features.XAuto
                     double endZ = line.EndPoint.Z;
                     line.StartPoint = new Point3d(move.NewStart.X,
                         move.NewStart.Y, startZ);
-                    line.EndPoint = new Point3d(move.NewEnd.X, move.NewEnd.Y,
-                        endZ);
+                    line.EndPoint = new Point3d(move.NewEnd.X,
+                        move.NewEnd.Y, endZ);
 
+                    Point3d oldMid = segment.MidPoint;
+                    var newMid = new Point3d(
+                        (move.NewStart.X + move.NewEnd.X) / 2.0,
+                        (move.NewStart.Y + move.NewEnd.Y) / 2.0,
+                        oldMid.Z);
                     // 标注随线平移：保留原来的相对偏移（含 U1L 三种贴边位置）。
                     if (!segment.LabelId.IsNull && segment.LabelId.IsValid)
                     {
@@ -351,11 +364,6 @@ namespace UNCAD.Features.XAuto
                             OpenMode.ForWrite, false) as Entity;
                         if (label is DBText || label is MText)
                         {
-                            Point3d oldMid = segment.MidPoint;
-                            var newMid = new Point3d(
-                                (move.NewStart.X + move.NewEnd.X) / 2.0,
-                                (move.NewStart.Y + move.NewEnd.Y) / 2.0,
-                                oldMid.Z);
                             label.TransformBy(Matrix3d.Displacement(
                                 newMid - oldMid));
                         }
@@ -364,6 +372,12 @@ namespace UNCAD.Features.XAuto
                             labelSkipped++;
                         }
                     }
+                    // 3.2.0.6：该线的 U1Q/U1C 旧输出随源线平移（句柄未变，重跑
+                    // U1Q/U1C 仍能按 SOURCE/RUN 认出并整趟替换成重排后的新几何）。
+                    if (parallelOutputs != null
+                        && parallelOutputs.TryGetValue(id, out List<ObjectId> outputs))
+                        ParallelCurveAnnotator.TranslateOutputs(tr, outputs,
+                            newMid - oldMid);
                 }
                 if (labelSkipped > 0)
                     ctx.Write("\n[Xauto] " + frame.Name + "：" + labelSkipped
@@ -372,7 +386,8 @@ namespace UNCAD.Features.XAuto
         }
 
         private static void ApplyHops(CadContext ctx, Transaction tr,
-            List<FramePlan> frames, RouteCrossingPlan crossing, double diameter)
+            List<FramePlan> frames, RouteCrossingPlan crossing, double diameter,
+            Dictionary<string, List<ObjectId>> parallelOutputs)
         {
             var hopById = crossing.Hops.ToDictionary(item => item.SegmentId,
                 StringComparer.OrdinalIgnoreCase);
@@ -412,13 +427,25 @@ namespace UNCAD.Features.XAuto
                 }
                 owner.AppendEntity(merged);
                 tr.AddNewlyCreatedDBObject(merged, true);
+                string newHandle = merged.Id.Handle.ToString();
                 line.Erase();
+
+                // 3.2.0.6：旧线的 U1Q/U1C 输出元数据改挂到新 Polyline——旧
+                // SOURCE/RUN 指向已删句柄，不改挂则重跑 U1Q/U1C 也无法回收
+                // 旧输出（CollectPrevious 按句柄匹配）；改挂后重跑即整趟替换。
+                if (parallelOutputs != null
+                    && parallelOutputs.TryGetValue(pair.Key,
+                        out List<ObjectId> hopOutputs))
+                    ParallelCurveAnnotator.RetargetHandles(tr, hopOutputs,
+                        pair.Key, newHandle);
 
                 // Line→Polyline 后重挂 U1LX 关联（保留 COMPLETED 标记），
                 // 下一次 U1LX/U1F 扫描仍能按元数据认领标注。
-                if (!segment.LabelId.IsNull && segment.LabelId.IsValid)
-                    QuickLineCadService.TryLinkLineAndLabel(ctx, tr, merged.Id,
-                        segment.LabelId);
+                if (!segment.LabelId.IsNull && segment.LabelId.IsValid
+                    && !QuickLineCadService.TryLinkLineAndLabel(ctx, tr, merged.Id,
+                        segment.LabelId))
+                    Log.Warn("[Xauto] 线段 " + pair.Key
+                        + " 毫米标注重挂失败，其元数据仍指向已删除的线。");
             }
         }
     }

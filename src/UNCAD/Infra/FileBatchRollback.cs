@@ -104,6 +104,7 @@ namespace UNCAD.Infra
             // 损坏。Rollback 因此必须是幂等的：批次一旦收尾就什么都不做。
             if (_completed) return;
             var failures = new List<Exception>();
+            var failedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int index = _entries.Count - 1; index >= 0; index--)
             {
                 Entry entry = _entries[index];
@@ -125,16 +126,33 @@ namespace UNCAD.Infra
                 catch (Exception ex)
                 {
                     failures.Add(new IOException("无法恢复输出文件：" + entry.Target, ex));
+                    failedTargets.Add(entry.Target);
                 }
             }
-            try { DeleteBackups(); }
+            // 3.2.0.6（审计修复）：恢复失败的条目保留备份——备份的全部意义就是
+            // 恢复失败时的最后防线；此前无论恢复成败一律删除备份，恰在"无法
+            // 完整恢复"这一刻把旧版唯一副本销毁（写入后被外部短暂锁定的窄窗口
+            // 下，用户手里只剩已写入新内容的输出文件，旧数据不可找回）。
+            try { DeleteBackups(failedTargets); }
             finally
             {
                 _completed = true;
                 ReleaseLocks();
             }
             if (failures.Count > 0)
-                throw new AggregateException("批次输出失败后无法完整恢复原文件。", failures);
+            {
+                var retained = new List<string>();
+                foreach (Entry entry in _entries)
+                    if (failedTargets.Contains(entry.Target)
+                        && !string.IsNullOrEmpty(entry.Backup))
+                        retained.Add(entry.Backup);
+                throw new AggregateException(
+                    "批次输出失败后无法完整恢复原文件。"
+                    + (retained.Count > 0
+                        ? "以下旧版备份已保留，可用其手工恢复："
+                        + string.Join("；", retained)
+                        : ""), failures);
+            }
         }
 
         public void Dispose()
@@ -150,10 +168,13 @@ namespace UNCAD.Infra
             }
         }
 
-        private void DeleteBackups()
+        private void DeleteBackups(HashSet<string> keepTargets = null)
         {
             foreach (Entry entry in _entries)
             {
+                // keepTargets（3.2.0.6）：恢复失败的条目不删备份——它是旧版的
+                // 最后一份副本，留给用户手工恢复（见 Rollback）。
+                if (keepTargets != null && keepTargets.Contains(entry.Target)) continue;
                 try
                 {
                     if (!string.IsNullOrEmpty(entry.Backup) && File.Exists(entry.Backup))

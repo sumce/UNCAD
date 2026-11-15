@@ -374,7 +374,13 @@ namespace UNCAD.Features.DwgExport
             try
             {
                 File.Replace(temporary, target, backup, true);
-                if (File.Exists(backup)) File.Delete(backup);
+                // 3.2.0.6（审计修复）：替换已成功，备份删除属清理——此前
+                // File.Delete 抛 IOException（杀毒/索引器短暂占用备份）会被下面
+                // 的 catch (IOException) 吞掉并落入降级分支：File.Move(target,
+                // backup) 因备份仍存在必抛 → rethrow → 上层 batch.Rollback() 把
+                // 本批已正确写盘的 DWG 一起回滚（成功批次被误伤）。改 TryDelete
+                //（与 BoqWorkbookWriter.Replace 同口径），删不掉只留一个 .bak。
+                UNCAD.Core.IO.FileCleanup.TryDelete(backup);
                 return;
             }
             catch (PlatformNotSupportedException) { }

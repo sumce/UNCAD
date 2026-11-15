@@ -61,10 +61,10 @@ namespace UNCAD.Features.Fill
                 previousTransaction.Commit();
             // 3.2.0.5：搬场"收下记录"的说明只在 U1U 打印——U1F=重新定义，
             // 记录随复位块丢弃，先说"收下其设备内预留/替代型号/更新历史"
-            // 再丢弃是自相矛盾（审计 P7）。
+            // 再丢弃是自相矛盾（审计 P7）。3.2.0.6 顺带清理恒真三元（守卫已
+            // 保证 updateMode，后半支不可达）。
             if (updateMode && movedJsonNote.Length > 0)
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] " + movedJsonNote);
+                ctx.Write("\n[" + CommandIds.FillUpdate + "] " + movedJsonNote);
             }
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
 

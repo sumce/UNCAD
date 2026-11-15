@@ -98,8 +98,15 @@ namespace UNCAD.Features.PdfExport
                             // ——临时设备/纸张/旋转/窗口被永久写进用户图纸，还原被
                             // AutoCAD 拒绝且只记日志。失败路径必须整体回滚，不提交。
                             ReportFailure(circuitName, diagnostics);
+                            PdfRenderResult failure = PdfRenderResult.Fail(
+                                diagnostics.FailureReason, diagnostics.Lines);
+                            // 3.2.0.6（审计修复）：残件清理必须先释放会话——此前在
+                            // using 内直接 return（return 表达式先于 Dispose 求值），
+                            // 管线中途失败且引擎仍持有 PDF 句柄时 TryDelete 被吞，
+                            // 半个 PDF（有头无尾）留在机台文件夹，打开是空白页。
+                            session.Dispose();
                             TryDelete(file);
-                            return PdfRenderResult.Fail(diagnostics.FailureReason, diagnostics.Lines);
+                            return failure;
                         }
                         note = session.Describe();
                         // 还原用户设置 → 只在**还原干净**时提交；不干净就整体回滚

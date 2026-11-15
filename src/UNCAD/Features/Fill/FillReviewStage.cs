@@ -81,7 +81,7 @@ namespace UNCAD.Features.Fill
                 && MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "当前没有要生成的清单项。继续将只清空模板数据区，不写入新清单。",
-                    "U1F 空清单确认", MessageBoxButtons.YesNo,
+                    "清单空清单确认", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
                 != DialogResult.Yes)
             {
@@ -96,7 +96,7 @@ namespace UNCAD.Features.Fill
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "清单共 " + tableRows.Count + " 项，所选表格实际可写范围只有 "
                     + tableCapacity + " 行。请删除部分清单项，或在 U1SET 中调整起始行和清除行数。",
-                    "U1F 表格容量不足", MessageBoxButtons.OK,
+                    "清单表格容量不足", MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return false;
             }

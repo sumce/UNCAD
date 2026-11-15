@@ -134,7 +134,14 @@ namespace UNCAD
                 }
                 if (_updateNotesDialogOpen) return;
                 string seen = Settings.Get(ConfigKeys.UpdateNotesSeenVersion, "").Trim();
-                if (string.Equals(seen, ProductMetadata.VersionText, StringComparison.Ordinal)) return;
+                // 3.2.0.6（审计修复）：已看过当前版本也要退订——此前该分支裸
+                // return，Idle 回调常驻订阅，之后每次 AutoCAD 空闲都白读一次
+                // 注册表（与"条目为空"分支的退订语义不一致）。
+                if (string.Equals(seen, ProductMetadata.VersionText, StringComparison.Ordinal))
+                {
+                    DetachUpdateNotesIdle();
+                    return;
+                }
                 List<VersionChangeLogEntry> entries =
                     VersionChangeLog.EntriesNewerThan(seen);
                 if (entries.Count == 0)

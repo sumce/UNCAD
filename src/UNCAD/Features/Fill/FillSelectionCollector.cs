@@ -23,7 +23,9 @@ namespace UNCAD.Features.Fill
                 selection = ExpandSingleFrame(ctx, Split(ctx, implied.Value.GetObjectIds()));
                 if (!selection.IsEmpty)
                 {
-                    ctx.Write("\n[U1F] 已使用预选：表格 " + selection.TableIds.Length
+                    // 3.2.0.6（审计修复）：U1F/U1U 两模式共用本收集器，前缀写死
+                    // [U1F] 会在 U1U 误导向——改中性双标。
+                    ctx.Write("\n[U1F/U1U] 已使用预选：表格 " + selection.TableIds.Length
                         + " 个，统计文字 " + selection.TextIds.Length + " 个，图框块 "
                         + selection.FrameBlockIds.Length + " 个，DEVICENAME 设备块 "
                         + selection.DeviceBlockIds.Length + " 个，上游信息块 "

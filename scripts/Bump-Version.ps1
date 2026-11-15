@@ -72,7 +72,10 @@ if ($Kind -eq "Feature") {
     Replace-Once $csprojPath '<Version>[^<]+</Version>' ("<Version>" + $nextLabel + "</Version>") "csproj Version"
     Replace-Once $metadataPath 'VersionLabel\s*=\s*"[^"]+"' ('VersionLabel = "' + $nextLabel + '"') "ProductMetadata VersionLabel"
     Replace-Once $metadataPath 'ReleaseDateUtc\s*=\s*"[^"]+"' ('ReleaseDateUtc = "' + $today + '"') "ProductMetadata ReleaseDateUtc"
-    Replace-Once $configTestsPath ('Assert\.Equal\("' + [regex]::Escape($currentLabel) + '", info\.Version\);') ('Assert.Equal("' + $nextLabel + '", info.Version);') "ConfigKeysTests 期望值"
+    # 3.2.0.6（审计修复）：ConfigKeysTests 自 3.2.0 起改为格式锁定断言
+    #（^\d+\.\d+\.\d+\.\d+$ + StartsWith(VersionLabel+".")，运行时自适应），
+    # 旧的字面量替换模式已永远失配——失配即 throw，会把 Feature 版本推进卡死在
+    # "csproj/manifest 已改、测试未改"的半完成状态。测试无需随 bump 改动。
 
     $releaseNote = Join-Path $root ("docs\RELEASE-" + $nextLabel + ".md")
     if (-not (Test-Path -LiteralPath $releaseNote)) {

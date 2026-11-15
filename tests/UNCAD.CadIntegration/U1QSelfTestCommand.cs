@@ -211,7 +211,8 @@ namespace UNCAD.CadIntegration
                 Require(ReadRunGenerated(context.Db, lines).Count == 2,
                     "whole-run replacement must not leave stale outputs");
 
-                // ⑤ U1C 车道：独立配置（默认几何侧 210）不与基线/U1L 文字带重叠。
+                // ⑤ U1C 显式偏移几何（D-050 Amendment 后生产默认已是桥架车道
+                // 上侧 15；此处仍以显式 下侧/210 证明偏移与侧向完全可配置）。
                 int conduitRuns = ParallelCurveAnnotator.AddRuns(context,
                     lines.ToArray(), RunOptions("U1C", 6, false, 210),
                     run => "镀锌穿线管EMT PIPE 20mm(3/4\")\\P2000mm");
@@ -223,14 +224,14 @@ namespace UNCAD.CadIntegration
                 double laneDistance = MinDistanceToLines(context.Db,
                     conduitLabel.Location, lines);
                 Require(laneDistance >= 150,
-                    "U1C label must sit in its own lane (>=150 from baseline, got "
+                    "U1C explicit lane must be honored (>=150 from baseline, got "
                     + laneDistance.ToString("0.#") + ")");
                 double toU1L1 = conduitLabel.Location.DistanceTo(
                     new Point3d(bx + 500, by + 20, 0));
                 double toU1L2 = conduitLabel.Location.DistanceTo(
                     new Point3d(bx + 1020, by + 500, 0));
                 Require(toU1L1 >= 100 && toU1L2 >= 100,
-                    "U1C label must not overlap the U1L millimetre band (distances "
+                    "U1C explicit lane must clear the U1L millimetre band (distances "
                     + toU1L1.ToString("0.#") + "/" + toU1L2.ToString("0.#") + ")");
             }
             finally

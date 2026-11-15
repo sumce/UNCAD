@@ -142,7 +142,7 @@ namespace UNCAD.Features.Fill
                             Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                         "Device 当前为插座状态，但 DETAIL 电流无法匹配插座 8.2/8.3。"
                         + "请在清单确认中选择对应插座型号。",
-                        "U1F 插座型号未匹配", MessageBoxButtons.OK,
+                        "清单插座型号未匹配", MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
                     return null;
                 }
@@ -255,13 +255,13 @@ namespace UNCAD.Features.Fill
                 "固定清单找不到电缆型号：" + anomaly.Subject
                     + "\r\n\r\n是否从固定清单选择替代型号？"
                     + "\r\n替代型号只用于本次清单，图框和块属性中的设备原型号保持不变。",
-                "U1F 电缆型号异常", MessageBoxButtons.YesNo,
+                "清单电缆型号异常", MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
             if (replace != DialogResult.Yes) return;
             if (catalog.Cables.Count == 0)
             {
                 MessageBox.Show(owner, "固定清单中没有可选择的电缆型号。",
-                    "U1F 电缆型号异常", MessageBoxButtons.OK,
+                    "清单电缆型号异常", MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }

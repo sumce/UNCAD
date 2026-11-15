@@ -38,7 +38,17 @@ namespace UNCAD.Features.Fill
                 string handle;
                 try
                 {
-                    switch (transaction.GetObject(id, OpenMode.ForRead))
+                    DBObject source = transaction.GetObject(id, OpenMode.ForRead);
+                    // 3.2.0.6（审计修复）：带 U1LX 线关联的文字 = UNCAD 自己生成的
+                    // U1L/U1LX 毫米标注，不是现场手写的设备预留标。水平线的标注
+                    //（正交草图的 "2000mm" 等）与 D-043 判据完全同形，不排除会被
+                    // 当预留标吸收：文字被删、长度从米数统计剔除，一箭三伤。
+                    // 判据本身不动（决策口径），读侧按来源排除。
+                    if (!string.IsNullOrEmpty(
+                            UNCAD.Cad.QuickLine.QuickLineMetadataStore
+                                .ReadAssociatedLineHandle(source)))
+                        continue;
+                    switch (source)
                     {
                         case DBText dbText:
                             text = dbText.TextString ?? "";

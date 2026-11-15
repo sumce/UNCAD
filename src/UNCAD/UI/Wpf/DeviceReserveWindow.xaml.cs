@@ -161,10 +161,23 @@ namespace UNCAD.UI
                     ShowError("第 " + (i + 1) + " 行（机台 " + _rows[i].MachineId
                         + "）" + error);
                     // 单元格级选区：直接选中出问题的那个输入格。
-                    ReserveGrid.SelectedCells.Clear();
-                    ReserveGrid.SelectedCells.Add(new System.Windows.Controls
-                        .DataGridCellInfo(_rows[i], ReserveGrid.Columns[3]));
-                    ReserveGrid.Focus();
+                    // 3.2.0.6（审计修复）：按表头找列，不再硬编码索引 3——
+                    // XAML 列序一变就会选错格子。
+                    System.Windows.Controls.DataGridColumn reserveColumn = null;
+                    foreach (var column in ReserveGrid.Columns)
+                        if ((column.Header as string ?? "").IndexOf("预留",
+                                System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            reserveColumn = column;
+                            break;
+                        }
+                    if (reserveColumn != null)
+                    {
+                        ReserveGrid.SelectedCells.Clear();
+                        ReserveGrid.SelectedCells.Add(new System.Windows.Controls
+                            .DataGridCellInfo(_rows[i], reserveColumn));
+                        ReserveGrid.Focus();
+                    }
                     return;
                 }
             }

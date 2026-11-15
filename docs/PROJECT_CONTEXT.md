@@ -6,7 +6,7 @@ shorter than the historical release notes.
 ## Status
 
 - Current stable release: `3.2.0` (2026-11-15; Xauto release line with patches
-  through 3.2.0.5 — future fixes increment the fourth version part per D-032).
+  through 3.2.0.6 — future fixes increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.

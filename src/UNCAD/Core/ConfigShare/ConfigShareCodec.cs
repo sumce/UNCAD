@@ -23,6 +23,10 @@ namespace UNCAD.Core.ConfigShare
         public const int CurrentVersion = 1;
         public const string ProductName = "UNCAD Pro";
 
+        /// <summary>3.2.0.6：解码可接受的分享码版本集合（前向兼容——旧版本码
+        /// 永远可导入；升 CurrentVersion 时把旧版本号补进来即可）。</summary>
+        public static readonly int[] KnownShareVersions = { 1 };
+
         public int Version { get; set; } = CurrentVersion;
         public string Product { get; set; } = ProductName;
         /// <summary>导出方插件版本标签，例如 2.10.0；仅用于显示，不参与兼容判断。</summary>
@@ -105,9 +109,16 @@ namespace UNCAD.Core.ConfigShare
                     "配置分享码内容损坏（JSON 无法解析），请重新复制完整分享码。");
 
             int version = ReadInt(body, "v");
-            if (version != ConfigSharePayload.CurrentVersion)
+            // 3.2.0.6（审计修复）：前向兼容口径——只拒绝"比自己新"的版本，已知
+            // 旧版（v1）一律接受。此前严格相等，未来 CurrentVersion 升 2 时旧
+            // 客户端导出的 v1 码会被新客户端拒绝，错误文案却让已是新版的用户
+            // "升级 UNCAD"，死循环。未来升版本只需把旧版本号加进 KnownVersions。
+            if (version > ConfigSharePayload.CurrentVersion)
                 throw new ConfigShareFormatException("配置分享码版本不支持（v=" + version
                     + "），请升级 UNCAD 后重试。");
+            if (!ConfigSharePayload.KnownShareVersions.Contains(version))
+                throw new ConfigShareFormatException("配置分享码版本无法识别（v=" + version
+                    + "），请重新导出分享码。");
 
             string product = ReadString(body, "product");
             if (!string.Equals(product, ConfigSharePayload.ProductName,

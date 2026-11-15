@@ -83,23 +83,34 @@ namespace UNCAD.Cad
             if (space == null) return result;
             foreach (ObjectId id in space)
             {
-                DBText text;
+                // 3.2.0.6（审计修复）：口径对齐扫描链路（DBText+MText）——此前只认
+                // 单行文字，MText 形态的 U1L 毫米标即使带句柄关联也不参与趟长度
+                // 推算，静默退回几何长度。
+                Entity entity;
                 try
                 {
-                    text = transaction.GetObject(id, OpenMode.ForRead, true) as DBText;
+                    entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
                 }
                 catch { continue; }
-                if (text == null) continue;
+                if (!(entity is DBText || entity is MText)) continue;
+                string contents;
+                try
+                {
+                    contents = entity is MText mText
+                        ? UNCAD.Core.Text.TextParser.CleanMText(mText.Contents ?? "")
+                        : ((DBText)entity).TextString ?? "";
+                }
+                catch { continue; }
                 string lineHandle;
                 try
                 {
-                    lineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(text);
+                    lineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(entity);
                 }
                 catch { continue; }
                 if (string.IsNullOrWhiteSpace(lineHandle)
                     || result.ContainsKey(lineHandle))
                     continue;
-                if (Core.QuickLine.QuickLineMillimeterText.TryParseCad(text.TextString,
+                if (Core.QuickLine.QuickLineMillimeterText.TryParseCad(contents,
                         out double millimetres) && millimetres > 0)
                     result[lineHandle] = millimetres;
             }

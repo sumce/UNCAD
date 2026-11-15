@@ -300,7 +300,17 @@ namespace UNCAD.Infra
             string token = DeviceIdentity.GetToken();
             if (token.Length > 0) request.Headers[TokenHeaderName] = token;
 
-            using (var response = (HttpWebResponse)request.GetResponse())
+            // 3.2.0.6（审计修复）：非 2xx 时 GetResponse 抛 WebException，其
+            // Response（HttpWebResponse）随异常带出但无人释放——连接要等 GC 才
+            // 归还连接池；先显式释放再抛。
+            HttpWebResponse webResponse;
+            try { webResponse = (HttpWebResponse)request.GetResponse(); }
+            catch (System.Net.WebException webEx)
+            {
+                (webEx.Response as HttpWebResponse)?.Dispose();
+                throw;
+            }
+            using (var response = webResponse)
             {
                 if (response.StatusCode != HttpStatusCode.OK)
                     throw new IOException("授权服务器返回 HTTP "

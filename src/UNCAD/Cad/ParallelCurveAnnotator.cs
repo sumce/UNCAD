@@ -132,13 +132,18 @@ namespace UNCAD.Cad
                 members.Select(member => member.Handle),
                 StringComparer.OrdinalIgnoreCase);
             // 旧输出快照（SOURCE 命中或 RUN 任一成员命中），新实体不在快照内。
+            // 3.2.0.6（审计修复）：按成员句柄保留分桶——此前全部成员的旧输出
+            // 合成一个并集，只要有任一趟生成成功就整体删除；A 趟成功、B 趟
+            // 中途失败（CreateRunAnnotation 抛错只 skipped++）时，B 趟旧标注
+            // 被删且无新输出顶上（数据丢失）。现在只删除成功趟的旧输出；
+            // 一趟都没成时仍然全不删（原保护语义不变）。
+            Dictionary<string, List<ObjectId>> previousByMember = metadataReady
+                ? CollectPrevious(ctx, transaction, options.AnnotationKind,
+                    memberHandles)
+                : new Dictionary<string, List<ObjectId>>(
+                    StringComparer.OrdinalIgnoreCase);
             var previousEntities = new List<ObjectId>();
-            if (metadataReady)
-            {
-                foreach (KeyValuePair<string, List<ObjectId>> entry in CollectPrevious(
-                    ctx, transaction, options.AnnotationKind, memberHandles))
-                    previousEntities.AddRange(entry.Value);
-            }
+            var previousSeen = new HashSet<ObjectId>();
             Dictionary<string, double> u1LMillimetres =
                 ParallelRunGeometry.CollectU1LMillimetresByLineHandle(ctx, transaction);
             ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
@@ -158,6 +163,13 @@ namespace UNCAD.Cad
                     {
                         created++;
                         if (run.Merged) mergedRuns++;
+                        // 只有生成成功的趟才登记它的旧输出待删（3.2.0.6）。
+                        foreach (Core.Geometry.ParallelRunMember member in run.Members)
+                            if (previousByMember.TryGetValue(member.Handle,
+                                    out List<ObjectId> memberOutputs))
+                                foreach (ObjectId previousId in memberOutputs)
+                                    if (previousSeen.Add(previousId))
+                                        previousEntities.Add(previousId);
                     }
                     else skipped++;
                 }
@@ -637,6 +649,121 @@ namespace UNCAD.Cad
                 ids.Add(id);
             }
             return result;
+        }
+
+        /// <summary>
+        /// 3.2.0.6（审计修复，D-053×D-050 交界）：收集当前空间里全部 UNCAD_PARALLEL
+        /// 输出实体，按"输出引用的源线句柄"建倒排表（SOURCE 与每个 RUN 成员各记
+        /// 一条）。Xauto 重排/开洞时用一个句柄查到要跟随处理的旧输出，避免旧输出
+        /// 指向已移动/已删除的线而孤儿化（重跑 U1Q/U1C 也无法按句柄回收）。
+        /// </summary>
+        internal static Dictionary<string, List<ObjectId>> CollectBySourceHandle(
+            CadContext ctx, Transaction transaction)
+        {
+            var result = new Dictionary<string, List<ObjectId>>(
+                StringComparer.OrdinalIgnoreCase);
+            if (ctx == null || transaction == null) return result;
+            BlockTableRecord space;
+            try
+            {
+                space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                    OpenMode.ForRead, false) as BlockTableRecord;
+            }
+            catch { return result; }
+            if (space == null) return result;
+            foreach (ObjectId id in space)
+            {
+                Entity entity;
+                try { entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity; }
+                catch { continue; }
+                if (entity == null) continue;
+                try
+                {
+                    if (!ParallelAnnotationMetadata.TryRead(entity,
+                            out string kind, out string sourceHandle)) continue;
+                    AddOutputRef(result, sourceHandle, id);
+                    foreach (string runHandle in ParallelAnnotationMetadata
+                            .TryReadRunHandles(entity))
+                        AddOutputRef(result, runHandle, id);
+                }
+                catch { continue; }
+            }
+            return result;
+        }
+
+        private static void AddOutputRef(Dictionary<string, List<ObjectId>> map,
+            string handle, ObjectId id)
+        {
+            if (string.IsNullOrWhiteSpace(handle)) return;
+            if (!map.TryGetValue(handle, out List<ObjectId> ids))
+            {
+                ids = new List<ObjectId>();
+                map[handle] = ids;
+            }
+            if (!ids.Contains(id)) ids.Add(id);
+        }
+
+        /// <summary>把一组 U1Q/U1C 旧输出整体平移（Xauto 重排时随源线走，
+        /// 保留相对位置；句柄未变，重跑 U1Q/U1C 仍能按元数据整趟替换）。</summary>
+        internal static void TranslateOutputs(Transaction transaction,
+            IEnumerable<ObjectId> entities, Vector3d delta)
+        {
+            if (delta.IsZeroLength()) return;
+            foreach (ObjectId id in entities ?? Array.Empty<ObjectId>())
+            {
+                try
+                {
+                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true)
+                        as Entity;
+                    if (entity == null || entity.IsErased) continue;
+                    entity.TransformBy(Matrix3d.Displacement(delta));
+                }
+                catch { /* 单个输出移动失败不阻断重排 */ }
+            }
+        }
+
+        /// <summary>把输出元数据里的旧线句柄（SOURCE/RUN）改挂到新实体句柄——
+        /// Xauto 开洞把 Line 擦除换成带洞 Polyline 后，旧句柄指向已删实体，
+        /// 不改挂则重跑 U1Q/U1C 的 CollectPrevious 按句柄匹配落空、旧输出
+        /// 永久残留；改挂后重跑即整趟替换。</summary>
+        internal static void RetargetHandles(Transaction transaction,
+            IEnumerable<ObjectId> entities, string oldHandle, string newHandle)
+        {
+            if (string.IsNullOrWhiteSpace(oldHandle)
+                || string.IsNullOrWhiteSpace(newHandle)
+                || string.Equals(oldHandle, newHandle, StringComparison.OrdinalIgnoreCase))
+                return;
+            foreach (ObjectId id in entities ?? Array.Empty<ObjectId>())
+            {
+                try
+                {
+                    Entity entity = transaction.GetObject(id, OpenMode.ForWrite, true)
+                        as Entity;
+                    if (entity == null || entity.IsErased) continue;
+                    if (!ParallelAnnotationMetadata.TryRead(entity,
+                            out string kind, out string sourceHandle,
+                            out string runHandles)) continue;
+                    bool changed = false;
+                    if (string.Equals(sourceHandle, oldHandle,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        sourceHandle = newHandle;
+                        changed = true;
+                    }
+                    string retargeted = string.Join(
+                        ParallelAnnotationMetadata.RunHandleSeparator,
+                        ParallelAnnotationMetadata.TryReadRunHandles(entity)
+                            .Select(handle => string.Equals(handle, oldHandle,
+                                    StringComparison.OrdinalIgnoreCase)
+                                ? newHandle : handle));
+                    if (!string.Equals(retargeted, runHandles ?? "",
+                            StringComparison.Ordinal)) changed = true;
+                    if (changed)
+                        ParallelAnnotationMetadata.Set(entity, kind,
+                            sourceHandle, retargeted);
+                }
+                catch { /* 单个输出改挂失败不阻断开洞 */ }
+            }
         }
 
         private static void ErasePrevious(Transaction transaction,

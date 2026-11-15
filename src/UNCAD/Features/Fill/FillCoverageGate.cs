@@ -76,8 +76,12 @@ namespace UNCAD.Features.Fill
                 catch (System.Exception ex)
                 {
                     // 快照查询失败时不要误判为"回路不全"，交给后续流程给出真实错误。
+                    // 3.2.0.6（审计修复）：命令行点名一行——此前只写日志，快照损坏
+                    // 导致全部查询失败时整机回路校验整体静默失效，用户无感。
                     Log.Warn("整机回路校验读取机台数据失败: " + machineId + " → "
                         + ex.Message);
+                    ctx.Write("\n[" + command + "] 机台 " + machineId
+                        + " 的数据读取失败，本轮未做整机回路校验。");
                     continue;
                 }
                 if (expected.Count == 0) continue;

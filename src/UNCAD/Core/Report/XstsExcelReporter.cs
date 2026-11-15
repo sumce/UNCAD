@@ -19,12 +19,39 @@ namespace UNCAD.Core.Report
             string directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
             if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
             IWorkbook workbook = CreateWorkbook(report);
+            // 3.2.0.6（审计修复）：临时文件+替换的原子写——此前 FileMode.Create
+            // 直写最终目标（全仓唯一一个直写目标的导出器），NPOI 写到一半失败
+            //（磁盘满/杀毒拦截）会留下半个 xlsx，与失败文案"未生成 Excel"矛盾。
+            string temporary = filePath + ".tmp-" + Guid.NewGuid().ToString("N");
             try
             {
-                using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write,
-                    FileShare.Read)) workbook.Write(stream);
+                using (var stream = new FileStream(temporary, FileMode.Create,
+                    FileAccess.Write, FileShare.Read)) workbook.Write(stream);
+                if (File.Exists(filePath))
+                {
+                    try { File.Replace(temporary, filePath, null, true); }
+                    catch (PlatformNotSupportedException) { FallbackSwap(); }
+                    catch (NotSupportedException) { FallbackSwap(); }
+                }
+                else File.Move(temporary, filePath);
+            }
+            catch
+            {
+                TryDeleteFile(temporary);
+                throw;
             }
             finally { workbook.Close(); }
+
+            void FallbackSwap()
+            {
+                File.Delete(filePath);
+                File.Move(temporary, filePath);
+            }
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
         public static IWorkbook CreateWorkbook(XstsReport report)

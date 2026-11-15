@@ -93,14 +93,52 @@ namespace UNCAD.Features.PdfExport
 
             // 预先分配每份 PDF 的文件名与最终路径：同批同名冲突加 -2/-3，
             // 这样出图前就能做"文件被占用"预检，也不会让后出的图覆盖前一份。
+            // 3.2.0.6（审计修复）两处：
+            // ① 逐机台创建 <root>\<机台>\ 目录——全链此前只建根目录（本文件下方
+            //   注释却声称"每份 PDF 的目录在分配路径时按机台创建"），首跑新机台
+            //   （从未出过 BOQ/DWG、无人替它建目录）时 HDI 打印驱动写文件失败，
+            //   该份出图必败。BOQ/DWG 侧一直各自建目录，唯 PDF 漏建。
+            // ② 机台ID先过文件名合法性——目录部分此前原样进路径：含 "/" 会被当
+            //   分隔符静默产生嵌套目录（D-042"BOQ/DWG/PDF 同夹"被击穿），含 ":"
+            //   等字符则写盘抛系统级异常。非法即点名跳过该份（与"一份失败只跳
+            //   一份"的协程语义一致），与 BOQ/DWG 的 ValidatePathPart 口径对齐。
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pathProblems = new List<string>();
+            var printable = new List<PdfExportTarget>();
             foreach (PdfExportTarget target in targets)
             {
+                if ((target.MachineId ?? "").IndexOfAny(
+                        System.IO.Path.GetInvalidFileNameChars()) >= 0)
+                {
+                    pathProblems.Add("机台 " + target.MachineId
+                        + "：机台ID含非法文件名字符，不能作为输出文件夹名。");
+                    continue;
+                }
                 string fileName = PdfExportNaming.AllocateFileName(target.MachineId,
                     target.CircuitName, usedNames);
                 target.FilePath = OutputLayout.ComposePdfPath(root, target.MachineId,
                     fileName);
+                try
+                {
+                    System.IO.Directory.CreateDirectory(
+                        System.IO.Path.GetDirectoryName(target.FilePath));
+                }
+                catch (System.Exception ex)
+                {
+                    pathProblems.Add("机台 " + target.MachineId
+                        + "：无法创建输出目录（" + ex.Message + "）。");
+                    continue;
+                }
+                printable.Add(target);
             }
+            foreach (string problem in pathProblems)
+                ctx.Write("\n[U1PDF] 已跳过：" + problem);
+            if (printable.Count == 0)
+            {
+                ctx.Write("\n[U1PDF] 没有可出图的目标，未生成 PDF。");
+                return;
+            }
+            targets = printable;
             try
             {
                 OutputLayout.ValidateNotLocked(targets.Select(target => target.FilePath));

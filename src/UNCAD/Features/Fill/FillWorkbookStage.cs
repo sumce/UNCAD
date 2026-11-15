@@ -35,18 +35,22 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[U1F] 读取机台 SQLite 快照失败: " + ex.Message);
-                Log.Error("U1F read machine SQLite snapshot failed", ex);
+                // 3.2.0.6（审计修复）：单框 U1U 也走本加载器，前缀此前硬编码
+                // [U1F]——用户跑 U1U 却被提示去查 U1F，误导排查方向。
+                ctx.Write("\n[" + (updateMode ? "U1U" : "U1F")
+                    + "] 读取机台 SQLite 快照失败: " + ex.Message);
+                Log.Error((updateMode ? "U1U" : "U1F")
+                    + " read machine SQLite snapshot failed", ex);
                 return null;
             }
-            ctx.Write("\n[U1F] 机台数据 "
+            ctx.Write("\n[" + (updateMode ? "U1U" : "U1F") + "] 机台数据 "
                 + (workbook.MachineCacheHit ? "已使用SQLite快照" : "状态未知")
                 + "：" + workbook.MachineSourcePath
                 + "；内嵌固定清单 " + workbook.CatalogItemCount + " 项。");
 
             if (workbook.MachineIds.Count == 0)
             {
-                ctx.Write("\n[U1F] Excel 中无机台ID数据。");
+                ctx.Write("\n[" + (updateMode ? "U1U" : "U1F") + "] Excel 中无机台ID数据。");
                 return null;
             }
             if (workbook.ListItems.Count == 0)
@@ -55,7 +59,7 @@ namespace UNCAD.Features.Fill
                 MessageBox.Show(new WindowWrapper(
                         Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle),
                     "插件内没有固定清单数据，已停止本次填充。请重新安装完整版本。",
-                    "U1F 固定清单异常", MessageBoxButtons.OK,
+                    "清单固定清单异常", MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
                 return null;
             }

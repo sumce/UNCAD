@@ -278,13 +278,14 @@ namespace UNCAD.UI
 
             DrawPage.ConduitDiameter.Text = ConduitDiameter.NormalizeOrDefault(
                 Settings.Get(ConfigKeys.ConduitDiameter, "20"), "20");
-            // D-050：U1C 标注几何独立（默认下侧外圈 210，避开毫米标/桥架文字带）。
+            // D-050 Amendment（2026-11-15）：U1C 标注几何独立键保留，默认与
+            // 桥架同车道（上侧、偏移 15）——有线管的线不会有桥架，不会重叠。
             SetNumber(DrawPage.ConduitLineOff,
-                Settings.GetDouble(ConfigKeys.ConduitLineOff, 210.0));
+                Settings.GetDouble(ConfigKeys.ConduitLineOff, 15.0));
             SetNumber(DrawPage.ConduitTextOff,
                 Settings.GetDouble(ConfigKeys.ConduitTextOff, 0.0));
             DrawPage.ConduitSide.SelectedValue =
-                Settings.Get(ConfigKeys.ConduitSide, "0") == "1" ? "1" : "0";
+                Settings.Get(ConfigKeys.ConduitSide, "1") == "1" ? "1" : "0";
 
             SetNumber(DrawPage.UnrDiameter, Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0));
 
@@ -475,13 +476,13 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.UnqSide,
                 Convert.ToString(DrawPage.UnqSide.SelectedValue ?? "1") == "0" ? "0" : "1");
 
-            // 线管：管径 + 独立标注几何（D-050；字高仍共用 UNQ_HEIGHT）。
+            // 线管：管径 + 独立标注几何（D-050 + 2026-11-15 默认改桥架同车道；字高仍共用 UNQ_HEIGHT）。
             Settings.Set(ConfigKeys.ConduitDiameter,
                 ConduitDiameter.NormalizeOrDefault(DrawPage.ConduitDiameter.Text, "20"));
             Settings.Set(ConfigKeys.ConduitLineOff, NumberText(DrawPage.ConduitLineOff));
             Settings.Set(ConfigKeys.ConduitTextOff, NumberText(DrawPage.ConduitTextOff));
             Settings.Set(ConfigKeys.ConduitSide,
-                Convert.ToString(DrawPage.ConduitSide.SelectedValue ?? "0") == "1"
+                Convert.ToString(DrawPage.ConduitSide.SelectedValue ?? "1") == "1"
                     ? "1" : "0");
 
             // 拱桥

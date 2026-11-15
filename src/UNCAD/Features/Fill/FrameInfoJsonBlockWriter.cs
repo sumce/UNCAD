@@ -344,9 +344,9 @@ namespace UNCAD.Features.Fill
                 {
                     // 块内 JSON 属性（新 FRAMEINFO 或旧 FRAMEINFO_JSON）是首选档案源。
                     FrameInfoJsonRecord embedded = ReadBlock(transaction, frame);
-                    // 继承担卫：内嵌旧 JSON 同样不得是他机遗留（见 Fill 内注释）。
-                    if (embedded != null && embedded.BelongsToMachine(machine.MachineId))
-                        previous = Merge(previous, embedded, frameId);
+                    // 继承担卫：不得是他机遗留；3.2.0.6：U1F(inherit=false)不合并内嵌旧记录
+                    //(无时间戳会话记录在 Merge 恒败给旧记录，旧预留从写侧暗道复活)。
+                    if (embedded != null && embedded.BelongsToMachine(machine.MachineId) && inheritLegacyStandaloneRecord) previous = Merge(previous, embedded, frameId);
                     // 只有旧式 FRAMEINFO_JSON 属性需要迁移后清空；FRAMEINFO 是主存储。
                     if (HasLegacyJsonAttribute(transaction, frame))
                         legacyFrames.Add(frameId);

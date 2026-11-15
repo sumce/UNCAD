@@ -72,14 +72,31 @@ namespace UNCAD.UI
         private void OnAddFolder(object sender, RoutedEventArgs e)
         {
             // net48 WPF 没有原生文件夹选择框；沿用 WinForms 的 FolderBrowserDialog。
+            // 3.2.0.6（审计修复）：传窗口句柄做 Owner——此前裸调 ShowDialog()，
+            // 对话框不模态于本窗（任务栏多一项，还可能掉到 CAD 主窗后面）。
             using (var dialog = new System.Windows.Forms.FolderBrowserDialog
             {
                 Description = "选择包含 DWG 的文件夹"
             })
             {
-                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                if (dialog.ShowDialog(new WpfWindowHandle(this))
+                        == System.Windows.Forms.DialogResult.OK)
                     _ = AddPathsAsync(new[] { dialog.SelectedPath });
             }
+        }
+
+        /// <summary>把 WPF 窗口句柄暴露给 WinForms FolderBrowserDialog 做属主
+        ///（与 SettingsWindow 同款，3.2.0.6）。 </summary>
+        private sealed class WpfWindowHandle : System.Windows.Forms.IWin32Window
+        {
+            private readonly IntPtr _handle;
+
+            public WpfWindowHandle(System.Windows.Window window)
+            {
+                _handle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            }
+
+            public IntPtr Handle => _handle;
         }
 
         private void OnRemoveSelected(object sender, RoutedEventArgs e)
