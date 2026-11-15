@@ -37,6 +37,8 @@ namespace UNCAD.Features.XAuto
         {
             public string Name;
             public FrameRectangle Boundary;
+            /// <summary>框内清单/制图信息表的占位矩形（3.2.0.3：重排目标要扣除）。</summary>
+            public List<FrameRectangle> TableRects = new List<FrameRectangle>();
             public List<QuickLineCadSegment> Segments = new List<QuickLineCadSegment>();
             public SketchProportionPlan Proportion;
             public Dictionary<string, SketchSegmentMove> MovesById
@@ -101,11 +103,12 @@ namespace UNCAD.Features.XAuto
                     QuickLineMillimeterText.IsPlaceholder(item.LabelText),
                     EstimateLabelWidthUnits(item.LabelText, textHeight)))
                     .ToList();
-                // 3.2.0.1（D-053 修订）：重排目标 = 图框可用空间（边界内缩一个
-                // 洞径）——草图整体按毫米比例铺满该空间并联合居中，分量相对
-                // 位置不变；内缩后尺寸非正回退旧行为（原图包络内重排）。
+                // 3.2.0.1（D-053 修订）：重排目标 = 图框可用空间——草图整体按
+                // 毫米比例铺满该空间并联合居中，分量相对位置不变；3.2.0.3 起
+                // 可用空间扣除框内表格占位，Planner 装后校验保证最终几何不超。
                 frame.Proportion = SketchProportionPlanner.Plan(inputs,
-                    minFinalUnits, 1.0, BuildFrameTarget(frame.Boundary, diameter));
+                    minFinalUnits, 1.0,
+                    BuildFrameTarget(frame.Boundary, frame.TableRects, diameter));
                 foreach (SketchSegmentMove move in frame.Proportion.Moves)
                     frame.MovesById[move.Id] = move;
                 frame.MovedCount = frame.Proportion.Moves.Count;
@@ -193,21 +196,17 @@ namespace UNCAD.Features.XAuto
         }
 
         /// <summary>
-        /// 图框可用空间（3.2.0.1 D-053 修订）：图框边界内缩一个洞径——
-        /// 草图重排铺满该矩形并联合居中。内缩后尺寸非正（图框太小于洞径）
-        /// 回退 null（旧行为：原图包络内重排），不抛错。
+        /// 图框可用空间（3.2.0.3）：FrameUsableArea.Compute——边界内缩一个洞径
+        /// 并扣除框内表格占位（右列/左列裁横向、上下条裁纵向）；草图重排铺满
+        /// 扣除后的矩形并按它居中。图框/可用区非正回退 null（旧行为：原图包络
+        /// 内重排），不抛错。
         /// </summary>
         private static SketchProportionTarget BuildFrameTarget(
-            FrameRectangle boundary, double diameter)
+            FrameRectangle boundary, List<FrameRectangle> tableRects,
+            double diameter)
         {
             if (boundary == null) return null;
-            double width = boundary.Width - diameter * 2.0;
-            double height = boundary.Height - diameter * 2.0;
-            if (width <= 0 || height <= 0) return null;
-            return new SketchProportionTarget(
-                (boundary.MinX + boundary.MaxX) / 2.0,
-                (boundary.MinY + boundary.MaxY) / 2.0,
-                width, height);
+            return FrameUsableArea.Compute(boundary, tableRects, diameter);
         }
 
         /// <summary>
@@ -253,13 +252,40 @@ namespace UNCAD.Features.XAuto
             }
 
             var result = new List<FramePlan>(groups.Count);
-            for (int index = 0; index < groups.Count; index++)
-                result.Add(new FramePlan
+            using (Transaction tableTx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                for (int index = 0; index < groups.Count; index++)
                 {
-                    Name = names[index],
-                    Boundary = groups[index].Boundary
-                });
-            foreach (QuickLineCadSegment segment in scanned ?? 
+                    // 3.2.0.3：框内表格占位矩形——重排目标空间必须扣除（铺满全框
+                    // 会把草图压到清单表/标题栏上，用户现场报告"超了"）。
+                    var tableRects = new List<FrameRectangle>();
+                    foreach (ObjectId id in groups[index].EntityIds)
+                    {
+                        if (!(tableTx.GetObject(id, OpenMode.ForRead, true)
+                                is Table table))
+                            continue;
+                        try
+                        {
+                            Extents3d extents = table.GeometricExtents;
+                            tableRects.Add(new FrameRectangle("table",
+                                extents.MinPoint.X, extents.MinPoint.Y,
+                                extents.MaxPoint.X, extents.MaxPoint.Y));
+                        }
+                        catch
+                        {
+                            // 单个表取不到外包框只影响该表的扣除，不炸整框。
+                        }
+                    }
+                    result.Add(new FramePlan
+                    {
+                        Name = names[index],
+                        Boundary = groups[index].Boundary,
+                        TableRects = tableRects
+                    });
+                }
+                tableTx.Commit();
+            }
+            foreach (QuickLineCadSegment segment in scanned ??
                 Array.Empty<QuickLineCadSegment>())
             {
                 if (segment == null) continue;

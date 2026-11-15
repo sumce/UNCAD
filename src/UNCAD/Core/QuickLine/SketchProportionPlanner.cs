@@ -201,11 +201,45 @@ namespace UNCAD.Core.QuickLine
                     + scale.ToString("0.###") + "），整帧未重排。");
                 return new SketchProportionPlan(moves, depths, diagnostics);
             }
-            // 先按各分量当前中心锚定产出坐标，再统一平移到目标中心居中。
+            // 3.2.0.3：钳位下限会撑大二遍包络（二分只按一遍投影估计），装后
+            // 校验真实联合包络，超了按比例收缩 k 重装（≤4 轮收敛）——最终
+            // 几何保证落在目标矩形内（用户现场报告"超了"的第二个根因）。
+            const int MaxFitAttempts = 4;
+            int diagnosticsBefore = diagnostics.Count;
             var anchored = new List<SketchSegmentMove>();
-            foreach (PreparedComponent item in prepared)
-                ApplyComponent(graph, item, minFinalUnits, scale,
-                    new QuickLinePoint(0, 0), anchored, depths, diagnostics);
+            for (int attempt = 0; attempt < MaxFitAttempts; attempt++)
+            {
+                anchored.Clear();
+                foreach (PreparedComponent item in prepared)
+                    ApplyComponent(graph, item, minFinalUnits, scale,
+                        new QuickLinePoint(0, 0), anchored, depths, diagnostics);
+                // 重复尝试会重复追加诊断：每轮先把上一轮的追加段清掉。
+                if (attempt > 0 && diagnostics.Count > diagnosticsBefore)
+                    diagnostics.RemoveRange(diagnosticsBefore,
+                        diagnostics.Count - diagnosticsBefore);
+                if (!MovesExtents(anchored, out double extentMinX,
+                        out double extentMinY, out double extentMaxX,
+                        out double extentMaxY))
+                    break;
+                double unionWidth = extentMaxX - extentMinX;
+                double unionHeight = extentMaxY - extentMinY;
+                if (unionWidth <= target.Width + BboxEpsilon
+                    && unionHeight <= target.Height + BboxEpsilon)
+                    break;
+                if (attempt == MaxFitAttempts - 1) break;
+                double shrink = Math.Min(
+                    target.Width / Math.Max(unionWidth, BboxEpsilon),
+                    target.Height / Math.Max(unionHeight, BboxEpsilon)) * 0.995;
+                if (shrink >= 1.0) break;
+                scale *= shrink;
+            }
+            if (!IsUsableScale(scale))
+            {
+                diagnostics.Add("目标空间内放不下重排草图（收缩后 k="
+                    + scale.ToString("0.###") + "），整帧未重排。");
+                return new SketchProportionPlan(moves, depths, diagnostics);
+            }
+            // 先按各分量当前中心锚定产出坐标，再统一平移到目标中心居中。
             if (anchored.Count > 0)
             {
                 QuickLinePoint unionCentre = MovesUnionCentre(anchored);
@@ -458,19 +492,36 @@ namespace UNCAD.Core.QuickLine
         private static QuickLinePoint MovesUnionCentre(
             IReadOnlyList<SketchSegmentMove> moves)
         {
-            double minX = double.MaxValue, maxX = double.MinValue;
-            double minY = double.MaxValue, maxY = double.MinValue;
+            MovesExtents(moves, out double minX, out double minY,
+                out double maxX, out double maxY);
+            return new QuickLinePoint((minX + maxX) / 2.0, (minY + maxY) / 2.0);
+        }
+
+        /// <summary>联合包络边界（无 moves 返回 false——调用方据此跳过）。</summary>
+        private static bool MovesExtents(IReadOnlyList<SketchSegmentMove> moves,
+            out double minX, out double minY, out double maxX, out double maxY)
+        {
+            minX = double.MaxValue;
+            minY = double.MaxValue;
+            maxX = double.MinValue;
+            maxY = double.MinValue;
+            bool any = false;
             foreach (SketchSegmentMove move in moves)
             {
                 foreach (QuickLinePoint point in new[] { move.NewStart, move.NewEnd })
                 {
+                    any = true;
                     minX = Math.Min(minX, point.X);
                     maxX = Math.Max(maxX, point.X);
                     minY = Math.Min(minY, point.Y);
                     maxY = Math.Max(maxY, point.Y);
                 }
             }
-            return new QuickLinePoint((minX + maxX) / 2.0, (minY + maxY) / 2.0);
+            if (!any)
+            {
+                minX = 0; minY = 0; maxX = 0; maxY = 0;
+            }
+            return any;
         }
 
         private static void ReportTargetOverflow(

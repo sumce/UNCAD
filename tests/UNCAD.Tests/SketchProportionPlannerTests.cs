@@ -215,6 +215,35 @@ namespace UNCAD.Tests
             Assert.Equal(0.0, (MinY(plan) + MaxY(plan)) / 2.0, 2);
         }
 
+        [Fact]
+        public void ClampedLayout_FinalEnvelopeNeverExceedsTarget()
+        {
+            // 3.2.0.3：钳位下限会撑大二遍包络（二分只按一遍估计）——装后校验
+            // 收缩环必须把最终几何收回目标内（用户现场报告"超了"）。54000mm
+            // 主导 + 200mm 短段（标注宽 1000 → 下限 1150），窄目标逼钳位生效。
+            var aEnd = new QuickLinePoint(5400 * Cos30, 5400 * Sin30);
+            var target = new SketchProportionTarget(0.0, 0.0, 40000.0, 5000.0);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 54000),
+                new SketchProportionInput("B", aEnd,
+                    new QuickLinePoint(aEnd.X, aEnd.Y + 200), 200,
+                    completed: true, placeholderLabel: false, labelWidthUnits: 1000.0)
+            }, 450.0, 1.0, target);
+
+            Assert.Equal(2, plan.RelaidSegmentCount);
+            Assert.True(MaxX(plan) - MinX(plan) <= 40000.0 + 0.5,
+                "钳位后联合包络宽必须收回目标内（实测 "
+                + (MaxX(plan) - MinX(plan)).ToString("0") + " > 40000）。");
+            Assert.True(MaxY(plan) - MinY(plan) <= 5000.0 + 0.5,
+                "钳位后联合包络高必须收回目标内（实测 "
+                + (MaxY(plan) - MinY(plan)).ToString("0") + " > 5000）。");
+            // 收缩不牺牲短段下限精神：B 仍明显长于洞径下限 450 的比例值。
+            Assert.True(Length(Move(plan, "B")) > 450.0,
+                "收缩后短段仍应保住可读下限的精神（实测 "
+                + Length(Move(plan, "B")).ToString("0") + "）。");
+        }
+
         private static SketchProportionInput Input(string id,
             QuickLinePoint start, QuickLinePoint end, double millimetres)
             => new SketchProportionInput(id, start, end, millimetres,
