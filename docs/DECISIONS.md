@@ -832,6 +832,20 @@ rewrite an existing entry.
   inheritance). Full-catalog persistence (`substitutions[]`, `lastRun`
   snapshot) was proposed and deferred — decide separately before implementing.
 
+  Appendix 7 (2026-11-15, 3.2.0.4 — user's explicit U1F/U1U split): **U1F is
+  redefine-mode.** Step 1 wipes every piece of old frame info unconditionally
+  (previous frameinfo_json record is not reused for reserve recovery or
+  prefill hints; the CABLE_INFO recovery fallback and the D-052-B copied-source
+  prefill do not run; the write transaction clears stale attributes on every
+  run, not just copied frames). Step 2 absorbs the sole horizontal
+  single-line `0mm`-suffixed marker **unconditionally** — the copied-frame
+  marker guard now applies to **U1U only** (on U1F the visible marker is the
+  user's on-drawing intent for whatever machine they pick). The D-043 marker
+  criteria tighten to: horizontal, single-line, integer ending in `0` with a
+  mandatory `mm` suffix (`3000mm` ✓; `3000`, `550mm`, decimals, multi-line ✗).
+  U1U keeps every pre-3.2.0.4 semantic unchanged (guards, recovery, record
+  reuse, moved-frame rebind).
+
 ## D-053: Xauto Proportion Relay And Camera-Depth Hops (2026-11-15)
 
 - Status: accepted

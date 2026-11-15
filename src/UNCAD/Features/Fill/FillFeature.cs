@@ -363,7 +363,10 @@ namespace UNCAD.Features.Fill
                     // FillFrame 之后，把本次刚写入的 CABLE_INFO/CONDUIT_INFO 一并
                     // 抹掉——复制框的电缆信息永远为空（用户报告：左下角电缆信息
                     // 直接不出现）。
-                    if (copiedFrameDetected)
+                    // 3.2.0.4：U1F = 重新定义——无条件清空图框旧信息属性再写新
+                    // 数据（旧 JSON 记录已在 FillReserveStage 清掉，这里清图上
+                    // 可见残留）；U1U 保持只在复制框（copiedFrameDetected）时清。
+                    if (!updateMode || copiedFrameDetected)
                         CadBlockAttributeWriter.ClearStaleInfo(transaction,
                             selection.FrameBlockIds);
                     // 3.0.0.16：复制框不走“保留旧值”——旧值刚被清空，“保留”保住

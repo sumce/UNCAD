@@ -35,15 +35,22 @@ namespace UNCAD.Core.Fill
         /// <summary>水平判定容差（弧度）：约 1° 以内视为横排。</summary>
         public const double HorizontalToleranceRadians = 0.0175;
 
+        // 3.2.0.4（用户规格）：候选=水平·单行·末尾"0mm"——整数以 0 结尾
+        // （10 的倍数）且必须带 mm 后缀（"3000mm" ✓；"3000"、"550mm"、
+        // "3000.5mm"、"0mm"、多行文字 ✗）。末尾 0 收窄误吸收轴号/序号；
+        // 单行排除多行清单文字；无后缀的裸数字留给电缆长度统计那套判据。
         private static readonly Regex MillimetersPattern = new Regex(
-            @"^\s*(?<value>\d{1,6}(?:[.]\d{1,2})?)\s*(?:mm|MM|毫米)?\s*$",
+            @"^\s*(?<value>\d{1,6}0)\s*(?:mm|MM)\s*$",
             RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture);
 
         /// <summary>文本是否是一个设备预留毫米标；解析出毫米数。</summary>
         public static bool TryParseMillimeters(string text, out double millimeters)
         {
             millimeters = 0d;
-            Match match = MillimetersPattern.Match(text ?? "");
+            string candidate = text ?? "";
+            if (candidate.IndexOf('\n') >= 0 || candidate.IndexOf('\r') >= 0)
+                return false; // 单行判据：多行文字不是预留标。
+            Match match = MillimetersPattern.Match(candidate);
             if (!match.Success) return false;
             if (!double.TryParse(match.Groups["value"].Value,
                     NumberStyles.Float, CultureInfo.InvariantCulture, out double value))

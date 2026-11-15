@@ -64,6 +64,19 @@ namespace UNCAD.Features.Fill
                         + "] " + movedJsonNote);
             }
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
+
+            // 3.2.0.4（用户规格）：U1F = 重新定义，第一步就清理图框所有旧信息
+            // ——旧 JSON 记录不用于恢复（预留/替代型号/建议值一律不带出，首跑
+            // 也不预填），CABLE_INFO 恢复兜底与 D-052-B 复制源预填只在 U1U 生效；
+            // 复制框毫米标守卫（不吸收、保文字）也只在 U1U——U1F 里图上横排
+            // 0mm 标记是现场可见的真实意图，直接吸收为本机台设备内预留。
+            // 身份读取与 copiedFrameDetected 检测照常（写事务据此+U1F 无条件
+            // 清旧属性）。U1U 的恢复/复用/守卫语义全部不变。
+            if (!updateMode)
+            {
+                frameInfoPrevious = null;
+                deviceReserveHintMm = null;
+            }
             if (foreignJsonNote.Length > 0)
                 ctx.Write("\n[" + command + "] 检测到复制图框遗留的其他图框 JSON 记录，"
                     + "已忽略：不继承其设备内预留/电缆替代型号/更新历史；本次保存后"
@@ -79,7 +92,10 @@ namespace UNCAD.Features.Fill
             // CABLE_INFO 同源同样不可信，一并跳过恢复；设备内预留由用户重新
             // 填写。老图框（从未写过 JSON、也非复制）不受影响。
             deviceReserveHintMm = null;
-            if (foreignJsonNote.Length == 0
+            // 3.2.0.4：恢复兜底（块A）与 D-052-B 建议值（块B）只在 U1U——
+            // U1F 上面刚清空记录，这里再从旧 CABLE_INFO 文本救回就是换条路
+            // 继承旧信息。
+            if (updateMode && foreignJsonNote.Length == 0
                 && (frameInfoPrevious == null
                     || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
             {
@@ -93,7 +109,7 @@ namespace UNCAD.Features.Fill
                         TextFormatter.FormatNum(recoveredDeviceReserve);
                 }
             }
-            else if (foreignJsonNote.Length > 0
+            else if (updateMode && foreignJsonNote.Length > 0
                 && (frameInfoPrevious == null
                     || string.IsNullOrWhiteSpace(frameInfoPrevious.DeviceReserveMm)))
             {
@@ -129,7 +145,10 @@ namespace UNCAD.Features.Fill
             copiedFrameDetected = foreignJsonNote.Length > 0;
             DeviceReserveMarkerReader.Result reserveMarkers =
                 DeviceReserveMarkerReader.CollectInSelection(ctx, selection.TextIds);
-            if (reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0)
+            // 3.2.0.4：吸收守卫只在 U1U（复制框外来 JSON 时保文字点名）；
+            // U1F 无条件吸收（重新定义，图上横排 0mm 是现场意图）。
+            if (reserveMarkers.Hits.Count == 1
+                && (!updateMode || foreignJsonNote.Length == 0))
             {
                 DeviceReserveMarkerHit marker = reserveMarkers.Hits[0];
                 double? decided = DeviceReserveMarker.Decide(

@@ -539,7 +539,7 @@ namespace UNCAD.CadIntegration
         private static void OldFrameMarkerCase(CadContext ctx, ObjectId frameId,
             string label, string expectMm, bool formattedMText = false)
         {
-            const string FormattedMTextContents = "{\\fSimSun|b0|i0;3000}";
+            const string FormattedMTextContents = "{\\fSimSun|b0|i0;3000mm}";
             if (formattedMText)
                 Check(DeviceReserveMarker.TryParseMillimeters(
                         UNCAD.Core.Text.TextParser.CleanMText(FormattedMTextContents),
@@ -570,7 +570,7 @@ namespace UNCAD.CadIntegration
                         frame.Position.Y + LegacyFrameHeight * 0.5, 0);
                     marker.Rotation = 0d; // 横排是 D-043 的候选判据。
                     marker.Height = 300d;
-                    marker.TextString = "3000";
+                    marker.TextString = "3000mm";
                     markerId = ctx.AddToCurrentSpace(tx, marker);
                 }
                 tx.Commit();
@@ -1355,6 +1355,63 @@ namespace UNCAD.CadIntegration
                         .StartTransaction())
                     {
                         cleanupTx.GetObject(markerId, OpenMode.ForWrite).Erase();
+                        cleanupTx.Commit();
+                    }
+                }
+
+                // ⑧ 复制框毫米标 + U1F 模式（3.2.0.4 用户规格）：U1F=重新定义
+                // ——复制框守卫只在 U1U；U1F 里图上横排 0mm 是现场可见意图，
+                // 无条件吸收为本机台设备内预留并登记删除（与⑤的 U1U 守卫对照：
+                // 同一夹具、同一标记，仅 updateMode 不同，行为相反）。
+                {
+                    ObjectId u1fMarkerId;
+                    using (Transaction markerTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        BlockReference copyFrame = (BlockReference)markerTx.GetObject(
+                            copyId, OpenMode.ForRead);
+                        var marker = new DBText();
+                        marker.SetDatabaseDefaults();
+                        marker.Position = new Point3d(copyFrame.Position.X + 2000,
+                            copyFrame.Position.Y - 3000, 0);
+                        marker.Rotation = 0d;
+                        marker.Height = 300d;
+                        marker.TextString = "3000mm";
+                        u1fMarkerId = ctx.AddToCurrentSpace(markerTx, marker);
+                        markerTx.Commit();
+                    }
+                    var u1fSelection = new FillSelection
+                    {
+                        SourceIds = copySelection.SourceIds,
+                        FrameBlockIds = copySelection.FrameBlockIds,
+                        FrameInfoJsonBlockIds = copySelection.FrameInfoJsonBlockIds,
+                        TextIds = new[] { u1fMarkerId }
+                    };
+                    FrameInfoJsonRecord u1fResolved = FillReserveStage.Resolve(ctx,
+                        u1fSelection, FillSettings.Current(), false,
+                        out List<ObjectId> u1fEraseIds,
+                        out List<ObjectId> u1fExcludedIds,
+                        out bool u1fCopied, out double? u1fHint,
+                        out ExistingFillIdentity u1fIdentity);
+                    Check(u1fCopied,
+                        "U1F 模式仍应检测到复制图框（写事务据此+无条件清旧属性）。");
+                    Check(u1fResolved != null && u1fResolved.DeviceReserveMm == "3000",
+                        "U1F=重新定义：复制框携带的横排 0mm 标记必须无条件吸收为"
+                        + "设备内预留（实测 '"
+                        + (u1fResolved == null ? "<null>" : u1fResolved.DeviceReserveMm)
+                        + "'——守卫语义已在 3.2.0.4 移到仅 U1U）。");
+                    Check(u1fEraseIds.Count == 1 && u1fEraseIds[0] == u1fMarkerId,
+                        "U1F 模式应登记删除毫米标源文本（实测 "
+                        + u1fEraseIds.Count + " 个）。");
+                    Check(u1fExcludedIds.Count == 1,
+                        "U1F 模式毫米标仍须从统计排除防双算（实测 "
+                        + u1fExcludedIds.Count + " 个）。");
+                    Info("  ⑧ U1F 重新定义: 复制框毫米标无条件吸收+登记删除"
+                        + "（守卫仅 U1U）: 通过");
+                    using (Transaction cleanupTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        cleanupTx.GetObject(u1fMarkerId, OpenMode.ForWrite).Erase();
                         cleanupTx.Commit();
                     }
                 }

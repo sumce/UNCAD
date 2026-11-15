@@ -31,16 +31,18 @@ namespace UNCAD.Tests
             // 碰撞类别存在性证明："数字+mm（无空格）"两边都命中——这就是必须
             // 排除的原因（电缆判据 ^数字0mm$ 不容空白；带空格的 "1200 mm" 只
             // 是标记候选，不进电缆统计，无冲突）。
-            foreach (string marker in new[] { "3000mm", "500mm" })
+            foreach (string marker in new[] { "3000mm", "2000mm" })
             {
                 Assert.True(DeviceReserveMarker.TryParseMillimeters(marker, out _),
                     marker + " 应是 D-043 预留标记候选");
                 Assert.True(TextParser.ExtractCableLength(marker).HasValue,
                     marker + " 同时会被米数统计当电缆长度——不排除就双算");
             }
-            // 纯数字（无 mm）是标记候选但不进电缆统计——无冲突。
-            Assert.True(DeviceReserveMarker.TryParseMillimeters("3000", out _));
+            // 纯数字（无 mm）不是标记候选（3.2.0.4 起必须 mm 后缀+末尾 0）也
+            // 不进电缆统计——无冲突；"555mm" 末尾非 0 同理不是候选。
+            Assert.False(DeviceReserveMarker.TryParseMillimeters("3000", out _));
             Assert.False(TextParser.ExtractCableLength("3000").HasValue);
+            Assert.False(DeviceReserveMarker.TryParseMillimeters("555mm", out _));
             Assert.True(DeviceReserveMarker.TryParseMillimeters("1200 mm", out _));
             Assert.False(TextParser.ExtractCableLength("1200 mm").HasValue);
         }
@@ -203,22 +205,43 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void U1F_Redefine_ClearsAllOldInfoAndAbsorbsMarkerUnconditionally()
+        {
+            // 3.2.0.4 用户规格：U1F = 重新定义——①无条件清理图框所有旧信息
+            // （旧 JSON 记录复位、CABLE_INFO 恢复兜底与 D-052-B 建议值不跑、
+            // 写事务清旧属性不再限于复制框）②横排·单行·末尾 0mm 标记无条件
+            // 吸收并删除（复制框守卫只在 U1U）③正常求和 ④写入。U1U 语义不变。
+            string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillReserveStage.cs"));
+            Assert.Contains("if (!updateMode)", stage);
+            Assert.Contains("updateMode && foreignJsonNote.Length == 0", stage);
+            Assert.Contains("(!updateMode || foreignJsonNote.Length == 0)", stage);
+
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            Assert.Contains("!updateMode || copiedFrameDetected", fill);
+        }
+
+        [Fact]
         public void CopiedFrame_MarkerAbsorption_IsGuardedByForeignJsonCheck()
         {
             // 3.0.0.16（U1F/U1U 审计）：复制框携带源框的横排毫米标（"3000"）时
             // D-043 自动吸收没有外来守卫——源机台的设备内预留从毫米标这条暗道
             // 静默继承回来（批量路径连确认窗都不弹），还把图上文字删了。
-            // 修复：外来 JSON 时只从统计排除（"3000mm"不排除会当电缆长度双算），
-            // 不吸收、不删除、点名提示。
+            // 3.2.0.4（D-052 附录7）：该守卫移到**仅 U1U**——U1F=重新定义，
+            // 图上横排 0mm 是现场意图，无条件吸收；批量链是 U1U 专用，守卫
+            // 原样。外来 JSON 时 U1U 只从统计排除（"3000mm"不排除会当电缆
+            // 长度双算），不吸收、不删除、点名提示。
             string stage = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "FillReserveStage.cs"));
             int guard = stage.IndexOf(
-                "reserveMarkers.Hits.Count == 1 && foreignJsonNote.Length == 0",
+                "(!updateMode || foreignJsonNote.Length == 0)",
                 StringComparison.Ordinal);
             int decide = stage.IndexOf("DeviceReserveMarker.Decide(",
                 StringComparison.Ordinal);
             Assert.True(guard >= 0 && decide > guard,
-                "单图：唯一毫米标的自动吸收必须在「非外来 JSON」守卫之内");
+                "单图：唯一毫米标的吸收守卫（!updateMode || 非外来 JSON）必须在"
+                + " Decide 之前——U1F 无条件、U1U 外来时不吸收");
             Assert.Contains("未自动吸收为设备内预留", stage);
             Assert.Contains("不计入米数统计", stage);
 
@@ -230,7 +253,7 @@ namespace UNCAD.Tests
             int batchDecide = batch.IndexOf("DeviceReserveMarker.Decide(",
                 StringComparison.Ordinal);
             Assert.True(batchGuard >= 0 && batchDecide > batchGuard,
-                "批量：唯一毫米标的自动吸收同样必须在「非外来 JSON」守卫之内");
+                "批量（U1U 专用）：唯一毫米标的自动吸收必须在「非外来 JSON」守卫之内");
             Assert.Contains("未自动吸收（源框残留", batch);
         }
 

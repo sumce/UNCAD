@@ -13,13 +13,10 @@ namespace UNCAD.Tests
     public sealed class DeviceReserveMarkerTests
     {
         [Theory]
-        [InlineData("2000", 2000)]
         [InlineData("2000mm", 2000)]
         [InlineData("2000MM", 2000)]
-        [InlineData(" 950 毫米 ", 950)]
-        [InlineData("1500.5", 1500.5)]
-        [InlineData("0", 0)]
-        [InlineData("100000", 100000)]
+        [InlineData(" 3000mm ", 3000)]
+        [InlineData("100000mm", 100000)]
         public void TryParse_AcceptsPlainHorizontalMillimeterText(
             string text, double expected)
         {
@@ -39,6 +36,14 @@ namespace UNCAD.Tests
         [InlineData("-500")]
         [InlineData("120000")]
         [InlineData("1000.123")]
+        // 3.2.0.4 判据收紧：必须整数以 0 结尾 + mm 后缀 + 单行。
+        [InlineData("2000")]
+        [InlineData("950 毫米")]
+        [InlineData("555mm")]
+        [InlineData("1500.5mm")]
+        [InlineData("0")]
+        [InlineData("0mm")]
+        [InlineData("3000mm\n2000mm")]
         public void TryParse_RejectsNonMarkerText(string text)
         {
             Assert.False(DeviceReserveMarker.TryParseMillimeters(text, out _));
