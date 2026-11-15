@@ -59,9 +59,12 @@ namespace UNCAD.Features.Fill
                     ownIdentity,
                     out foreignJsonNote, out movedJsonNote);
                 previousTransaction.Commit();
-                if (movedJsonNote.Length > 0)
-                    ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                        + "] " + movedJsonNote);
+            // 3.2.0.5：搬场"收下记录"的说明只在 U1U 打印——U1F=重新定义，
+            // 记录随复位块丢弃，先说"收下其设备内预留/替代型号/更新历史"
+            // 再丢弃是自相矛盾（审计 P7）。
+            if (updateMode && movedJsonNote.Length > 0)
+                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                    + "] " + movedJsonNote);
             }
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
 
@@ -74,8 +77,9 @@ namespace UNCAD.Features.Fill
             // 清旧属性）。U1U 的恢复/复用/守卫语义全部不变。
             if (!updateMode)
             {
+                // 3.2.0.5：只复位记录（deviceReserveHintMm 下方统一置 null，
+                // 此处重复赋值是死语句）。
                 frameInfoPrevious = null;
-                deviceReserveHintMm = null;
             }
             if (foreignJsonNote.Length > 0)
                 ctx.Write("\n[" + command + "] 检测到复制图框遗留的其他图框 JSON 记录，"

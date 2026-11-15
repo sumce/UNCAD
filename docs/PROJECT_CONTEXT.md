@@ -5,9 +5,8 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.1.0` (2026-11-14; engineering-hardening release on
-  the 3.0.0.17 code base, zero command-behavior changes — future fixes
-  increment the fourth version part per D-032).
+- Current stable release: `3.2.0` (2026-11-15; Xauto release line with patches
+  through 3.2.0.5 — future fixes increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -36,7 +35,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1PDF` (colour PDF per circuit), `U1SET`, `U1DATA` |
 | Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
-| Project tools | `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
+| Project tools | `Xauto`, `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Online account | `UNC_LOGIN` (WebView2 login; account + single-device online) |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
 
@@ -123,7 +122,10 @@ XLAYOUT/XSTS
   written to `frameinfo_json`, and prefilled later. Copied frames do not
   inherit the source machine's device reserve: the copied FRAMEINFO record is
   rejected by frame handle, and the copied CABLE_INFO text is then also
-  excluded from reserve recovery (2026-11-06). CABLE_INFO uses
+  excluded from reserve recovery (2026-11-06). Since 3.2.0.4 U1F is always a
+  full redefine (D-052 appendix 7): the previous record, CABLE_INFO recovery
+  and the copied-source prefill never run on U1F, and the sole horizontal
+  `0mm` marker is absorbed unconditionally. CABLE_INFO uses
   millimetres only and writes every detail as value（label）, ending with =totalmm.
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is

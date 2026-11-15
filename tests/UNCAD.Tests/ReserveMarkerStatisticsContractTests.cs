@@ -223,6 +223,27 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void U1F_Redefine_MarkerAbsorptionAndLegacyInheritance_AuditFixes()
+        {
+            // 3.2.0.5（全链审计 P1/P2/P3）：
+            // P1/P2——空机台号吸收记录是会话合成，Guard 不得丢弃（同机/改机都保留，
+            // D-052 附录7"标记是对所选机台的意图"）；
+            // P3——FillOrMigrate 遗留独立块继承要能被 U1F 关闭（"清理所有旧信息"）。
+            string guard = File.ReadAllText(Repo("src", "UNCAD", "Core", "Fill",
+                "FrameRedefineGuard.cs"));
+            Assert.Contains("IsNullOrWhiteSpace(previous.MachineId)", guard);
+
+            string writer = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FrameInfoJsonBlockWriter.cs"));
+            Assert.Contains("bool inheritLegacyStandaloneRecord = true", writer);
+            Assert.Contains("previous == null && inheritLegacyStandaloneRecord", writer);
+
+            string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "FillFeature.cs"));
+            Assert.Contains("不继承遗留独立块记录", fill);
+        }
+
+        [Fact]
         public void CopiedFrame_MarkerAbsorption_IsGuardedByForeignJsonCheck()
         {
             // 3.0.0.16（U1F/U1U 审计）：复制框携带源框的横排毫米标（"3000"）时

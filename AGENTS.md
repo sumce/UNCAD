@@ -32,9 +32,9 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.1.0` (engineering-hardening release on
-  the 3.0.0.17 code base, 2026-11-14; full WPF UI since 3.0.0, D-038; patches
-  increment the fourth version part per D-032).
+- Product: `UNCAD Pro`. Stable line: `3.2.0` (Xauto release line, 2026-11-15;
+  full WPF UI since 3.0.0, D-038; patches increment the fourth version part
+  per D-032).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -54,11 +54,17 @@ when their version numbers or counts are stale.
   force-export incomplete ones. U1F/U1U keep updating frames
   on partial selections but skip that machine's BOQ (D-034, D-044); U1U adds a
   confirmation GUI (D-048) where the user can force BOQ generation for
-  incomplete machines from the circuits actually drawn. U1F/U1U
-  also auto-absorb the legacy horizontal millimeter reserve marker when it is
-  the sole candidate in the selection and delete the text (D-043,
-  `UNC_FILL_DEVICE_RESERVE_AUTO`, default on; multiple candidates are never
-  auto-absorbed). XLAYOUT row order has three modes — machine readiness,
+  incomplete machines from the circuits actually drawn. **U1F is redefine
+  mode** (D-052 appendix 7, 3.2.0.4): every run wipes the frame's old info
+  (no record reuse, no recovery fallback, unconditional stale-attribute
+  clear) and absorbs the sole horizontal millimeter reserve marker
+  unconditionally, deleting the text. U1U keeps the update semantics:
+  record reuse, recovery fallback, copied-source prefill, and the
+  copied-frame marker guard (marker kept but excluded from statistics).
+  Marker candidates must be single-line integers ending in `0` with a
+  mandatory `mm` suffix (D-043 as amended; multiple candidates are never
+  auto-absorbed; `UNC_FILL_DEVICE_RESERVE_AUTO`, default on). XLAYOUT row
+  order has three modes — machine readiness,
   machine ID, upstream number — with in-row order from the workbook's Excel
   row sequence (D-045, `UNC_XLAYOUT_ARRANGE`). Output layout is one
   folder per machine — `<root>\<machine>\` holds that machine's BOQ, DWG and

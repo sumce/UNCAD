@@ -308,7 +308,8 @@ namespace UNCAD.Features.Fill
             ObjectId[] frameBlockIds, ObjectId[] blockIds, MachineRow machine,
             FillReviewData review, string commandName,
             MetadataBlockIndex sharedIndex, CableReserveInfo reserve = null,
-            FrameInfoJsonRecord previousRecord = null)
+            FrameInfoJsonRecord previousRecord = null,
+            bool inheritLegacyStandaloneRecord = true)
         {
             // D-040（2026-11-02，用户模板）：JSON 主存储 = 图框块内的 FRAMEINFO
             // 文字属性（FRAME_20261102 模板自带）。元数据跟着图框实体走，复制/
@@ -359,7 +360,11 @@ namespace UNCAD.Features.Fill
                     legacyJsonBlocks.Add(existing);
             }
 
-            if (previous == null)
+            // 3.2.0.5（D-052 附录7 贯彻）：U1F=重新定义时不继承遗留独立块记录
+            // （"清理图框旧信息(所有的旧信息)"——否则老图纸的独立 frameinfo_json
+            // 块会把旧替代型号/预留/历史从这条写侧暗道复活回来）。U1U 保持继承
+            // （D-040 迁移语义不变）。
+            if (previous == null && inheritLegacyStandaloneRecord)
             {
                 foreach (ObjectId id in legacyJsonBlocks)
                 {

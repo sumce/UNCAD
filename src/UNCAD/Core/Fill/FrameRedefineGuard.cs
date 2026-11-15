@@ -27,6 +27,15 @@ namespace UNCAD.Core.Fill
                 || string.IsNullOrWhiteSpace(frameIdentity.MachineId))
                 return previous;
 
+            // 3.2.0.5：空机台号记录 = 本会话合成（D-043 毫米标吸收 / 块A 的
+            // CABLE_INFO 恢复兜底），不是图框旧信息——同机/改机两分支都不丢。
+            // D-052 附录7（3.2.0.4）：横排 0mm 标记是用户对"所选机台"的现场
+            // 意图；U1F 吸收产出的正是空机台号记录，此前会被下面的分支静默
+            // 丢弃（命令行刚宣布"计入设备内预留"、确认窗却预填 0，改机分支
+            // 还打印"记录属于机台 "+空名）。带机台号的旧记录防御不变。
+            if (previous != null && string.IsNullOrWhiteSpace(previous.MachineId))
+                return previous;
+
             bool frameOwnsPicked = IdentityTextNormalizer.Equals(
                 frameIdentity.MachineId, picked.MachineId)
                 && (string.IsNullOrWhiteSpace(frameIdentity.DeviceName)

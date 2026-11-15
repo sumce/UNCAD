@@ -19,6 +19,36 @@ namespace UNCAD.Tests
             => new MachineRow { MachineId = machine, CircuitName = circuit };
 
         [Fact]
+        public void EmptyMachineRecord_IsSessionBorn_KeptOnSameMachinePick()
+        {
+            // 3.2.0.5（审计 P1）：D-043 毫米标吸收产出的记录是空机台号合成记录
+            // ——不是图框旧信息。同机台重跑场景此前被幽灵分支误丢（命令行宣布
+            // "计入设备内预留"、确认窗却预填 0，还打印"记录属于机台 "+空名）。
+            double? hint = null;
+            var absorbed = new FrameInfoJsonRecord { DeviceReserveMm = "3000" };
+            FrameInfoJsonRecord result = FrameRedefineGuard.Apply(
+                Identity("MQ-01", "A-1"), absorbed, Machine("MQ-01", "A-1"),
+                ref hint, out string note);
+            Assert.Same(absorbed, result);
+            Assert.Equal("", note);
+        }
+
+        [Fact]
+        public void EmptyMachineRecord_IsKeptOnCrossMachinePick()
+        {
+            // 3.2.0.5（审计 P2，D-052 附录7）：横排 0mm 标记是用户对"所选机台"
+            // 的现场意图——改选别的机台时吸收值必须跟着走（标记已删已排除，
+            // 值却进不了任何机台=命令行口径与结果矛盾）。
+            double? hint = null;
+            var absorbed = new FrameInfoJsonRecord { DeviceReserveMm = "3000" };
+            FrameInfoJsonRecord result = FrameRedefineGuard.Apply(
+                Identity("MQ-01", "A-1"), absorbed, Machine("MQ-02", "B-1"),
+                ref hint, out string note);
+            Assert.Same(absorbed, result);
+            Assert.Equal("3000", result.DeviceReserveMm);
+        }
+
+        [Fact]
         public void RedefinedMachine_DropsHintAndRecord()
         {
             // 同事报告的场景：复制框（物理身份=源机台 A）跑 U1F 选了新机台 B

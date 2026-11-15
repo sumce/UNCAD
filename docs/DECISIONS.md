@@ -43,6 +43,14 @@ rewrite an existing entry.
   result window notes and the command line for manual confirmation.
   `UNC_FILL_DEVICE_RESERVE_AUTO` (U1SET list/table page, default on) turns the
   whole feature off.
+- Amendment (2026-11-15, 3.2.0.4/3.2.0.5, D-052 appendix 7): the candidate must
+  be a **single-line integer ending in `0` with a mandatory `mm`/`MM` suffix**
+  (bare numbers, `毫米` suffixes, decimals, `0mm` and multi-line text are no
+  longer candidates; `3000mm`/`550mm` qualify, `555mm` does not). **U1F absorbs
+  unconditionally** (redefine mode — the marker is the user's intent for
+  whatever machine they pick); the copied-frame guard is **U1U-only**. The
+  absorbed value rides an empty-machine-id session record that survives
+  machine re-picks (3.2.0.5 audit fix).
 - Rationale: the reserve journey was JSON first-ask, then CABLE_INFO recovery;
   drawings produced with the old manual habit still carry the horizontal mm
   text, so crews retyped the number into the prompt and deleted the text by
@@ -842,9 +850,13 @@ rewrite an existing entry.
   marker guard now applies to **U1U only** (on U1F the visible marker is the
   user's on-drawing intent for whatever machine they pick). The D-043 marker
   criteria tighten to: horizontal, single-line, integer ending in `0` with a
-  mandatory `mm` suffix (`3000mm` ✓; `3000`, `550mm`, decimals, multi-line ✗).
+  mandatory `mm` suffix (`3000mm` ✓; `3000`, `555mm`, decimals, multi-line ✗).
   U1U keeps every pre-3.2.0.4 semantic unchanged (guards, recovery, record
-  reuse, moved-frame rebind).
+  reuse, moved-frame rebind). Appendix 7 addendum (3.2.0.5 audit): the
+  absorbed marker value rides an **empty-machine-id session record** that
+  `FrameRedefineGuard` must keep on both same-machine and re-pick paths, and
+  `FillOrMigrate` skips legacy standalone-block inheritance on U1F so the
+  redefine really starts from a clean slate.
 
 ## D-053: Xauto Proportion Relay And Camera-Depth Hops (2026-11-15)
 

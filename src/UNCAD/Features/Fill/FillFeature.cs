@@ -386,7 +386,9 @@ namespace UNCAD.Features.Fill
                     frameInfoResult = FrameInfoJsonBlockWriter.FillOrMigrate(ctx, transaction,
                         selection.FrameBlockIds, selection.FrameInfoJsonBlockIds, picked, review,
                         updateMode ? CommandIds.FillUpdate : CommandIds.Fill, null,
-                        cableReserve, frameInfoPrevious);
+                        cableReserve, frameInfoPrevious,
+                        // 3.2.0.5：U1F=重新定义，不继承遗留独立块记录（D-052 附录7）。
+                        updateMode);
                     upstreamInfoResult = CadBlockAttributeWriter.FillTagged(ctx, transaction,
                         selection.UpstreamInfoBlockIds, ConnectionBlockFiller.TagUpstreamInfo,
                         ConnectionBlockFiller.UpstreamInfo(picked), true);

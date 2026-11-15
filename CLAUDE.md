@@ -10,7 +10,7 @@ documents assume you already know.
 
 1. `AGENTS.md` — hard constraints, layer rules, change protocol.
 2. `docs/PROJECT_CONTEXT.md` — module and command map.
-3. `docs/DECISIONS.md` — accepted decisions (D-001…D-052; D-031 is a void number
+3. `docs/DECISIONS.md` — accepted decisions (D-001…D-053; D-031 is a void number
    and D-049 is reserved) that are not open for re-litigation. Check
    `docs/KNOWN-ISSUES.md` before "fixing" deferred behavior.
 4. The relevant section of `docs/DEVELOPMENT.md` (bilingual, Chinese; the

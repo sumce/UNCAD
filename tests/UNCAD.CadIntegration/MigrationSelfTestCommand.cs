@@ -1406,6 +1406,23 @@ namespace UNCAD.CadIntegration
                     Check(u1fExcludedIds.Count == 1,
                         "U1F 模式毫米标仍须从统计排除防双算（实测 "
                         + u1fExcludedIds.Count + " 个）。");
+                    // 3.2.0.5（审计 P2）：吸收记录是空机台号合成记录——即使
+                    // U1F 改选别的机台，Guard 也不得丢（D-052 附录7：标记是
+                    // 对所选机台的现场意图；否则标记已删已排除、值却进不了
+                    // 任何机台）。
+                    if (u1fResolved != null)
+                    {
+                        double? guardHint = null;
+                        FrameInfoJsonRecord guarded = FrameRedefineGuard.Apply(
+                            u1fIdentity, u1fResolved,
+                            new MachineRow { MachineId = "MIG-NEW", CircuitName = "泵X" },
+                            ref guardHint, out string guardNote);
+                        Check(guarded != null
+                            && guarded.DeviceReserveMm == "3000",
+                            "改选机台时吸收值必须保留（实测 '"
+                            + (guarded == null ? "<null>" : guarded.DeviceReserveMm)
+                            + "'——3.2.0.5 前 Guard 会把空机台号吸收记录静默丢弃）。");
+                    }
                     Info("  ⑧ U1F 重新定义: 复制框毫米标无条件吸收+登记删除"
                         + "（守卫仅 U1U）: 通过");
                     using (Transaction cleanupTx = ctx.Db.TransactionManager
