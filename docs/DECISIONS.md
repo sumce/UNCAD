@@ -843,11 +843,18 @@ rewrite an existing entry.
      distances (unconfirmed trailing-00mm placeholders keep their current
      drawn length — the same input convention as the 3D preview), then
      re-projected onto the sketch plane. Final drawn length ∝ real mm;
-     short segments are clamped to a minimum readable length
-     (≥ 1.5 × hop diameter); scale k = min(current/new width, height) so the
-     component stays inside its current envelope, anchored at the envelope
-     centre. Cable models play no role — the user misspoke; only mm labels
-     matter.
+     short segments are clamped to a per-segment readability floor of
+     max(1.5 × hop diameter, mm-label text width × 1.15). **Amended
+     2026-11-15 (3.2.0.1)** — the original rule scaled k against the sketch's
+     current envelope (a small scribble stayed small) and floored only by hop
+     diameter (segments came out shorter than their own mm labels); both
+     field-reported. The relay target is now the selected frame's usable
+     interior (frame boundary inset by one hop diameter): all components of
+     the frame share one scale k (binary-searched so their joint envelope
+     fills the usable rect), jointly centred on the frame centre with
+     inter-component offsets preserved. A frame too small to inset falls
+     back to the original envelope-capped behaviour. Cable models play no
+     role — only mm labels matter.
   2. **Automatic hops.** Crossings are detected on the final geometry
      (strict interior intersections only; shared endpoints and T-junctions
      are junctions). The segment nearer to the camera opens the semicircle:

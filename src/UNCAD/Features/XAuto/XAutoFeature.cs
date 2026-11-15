@@ -9,6 +9,7 @@ using UNCAD.Cad;
 using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Geometry;
 using UNCAD.Core.QuickLine;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
@@ -19,7 +20,8 @@ namespace UNCAD.Features.XAuto
     /// Xauto：框选完整图框，按毫米标注自动重排等测草图比例并自动开拱桥。
     ///
     /// 重排：复用 3D 预览的等测重建链路，把显示距离换成真实毫米值重新
-    /// 展开，再投影回草图平面；短段钳到最小可读长度，包络中心锚定。
+    /// 展开，再投影回草图平面；草图整体铺满图框可用空间并联合居中
+    /// （3.2.0.1 D-053 修订），短段钳到"洞+毫米标文字都放得下"的下限。
     /// 拱桥：交叉处靠近相机的一侧开半圆洞（直径沿用 U1SET 的 U1R 设置），
     /// 无法判定深度的交叉跳过并点名。整个命令一个写事务，一次 U 全回退。
     /// </summary>
@@ -34,6 +36,7 @@ namespace UNCAD.Features.XAuto
         private sealed class FramePlan
         {
             public string Name;
+            public FrameRectangle Boundary;
             public List<QuickLineCadSegment> Segments = new List<QuickLineCadSegment>();
             public SketchProportionPlan Proportion;
             public Dictionary<string, SketchSegmentMove> MovesById
@@ -66,7 +69,8 @@ namespace UNCAD.Features.XAuto
             }
 
             double diameter = Settings.GetDouble(ConfigKeys.UnrDiameter, 300.0);
-            // 最小可读长度 = 1.5×洞径：洞和毫米标在短段上放得下。
+            // 最小可读长度 = 1.5×洞径（洞放得下）；毫米标文字宽度下限在
+            // Planner 内按逐段 LabelWidthUnits 再取 max（3.2.0.1）。
             double minFinalUnits = diameter * 1.5;
 
             IReadOnlyList<QuickLineCadSegment> scanned =
@@ -83,6 +87,9 @@ namespace UNCAD.Features.XAuto
             }
 
             var diagnostics = new List<string>();
+            // 3.2.0.1（D-053 修订）：短段下限必须放得下自己的毫米标文字
+            // （宽≈0.9×字高×字符数），1.5×洞径只保洞放得下不够。
+            double textHeight = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
             foreach (FramePlan frame in frames)
             {
                 if (frame.Segments.Count == 0) continue;
@@ -91,10 +98,14 @@ namespace UNCAD.Features.XAuto
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                     new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y),
                     item.LabelMillimetres, item.HasCompletionMarker,
-                    QuickLineMillimeterText.IsPlaceholder(item.LabelText)))
+                    QuickLineMillimeterText.IsPlaceholder(item.LabelText),
+                    EstimateLabelWidthUnits(item.LabelText, textHeight)))
                     .ToList();
+                // 3.2.0.1（D-053 修订）：重排目标 = 图框可用空间（边界内缩一个
+                // 洞径）——草图整体按毫米比例铺满该空间并联合居中，分量相对
+                // 位置不变；内缩后尺寸非正回退旧行为（原图包络内重排）。
                 frame.Proportion = SketchProportionPlanner.Plan(inputs,
-                    minFinalUnits);
+                    minFinalUnits, 1.0, BuildFrameTarget(frame.Boundary, diameter));
                 foreach (SketchSegmentMove move in frame.Proportion.Moves)
                     frame.MovesById[move.Id] = move;
                 frame.MovedCount = frame.Proportion.Moves.Count;
@@ -171,6 +182,35 @@ namespace UNCAD.Features.XAuto
         }
 
         /// <summary>
+        /// 毫米标文字宽度估算（图上单位）：≈0.9×字高×字符数（数字与 mm 后缀
+        /// 在标准字体下的近似宽）。空标注返回 0（不参与下限）。
+        /// </summary>
+        private static double EstimateLabelWidthUnits(string labelText,
+            double textHeight)
+        {
+            string text = labelText ?? string.Empty;
+            return text.Length == 0 ? 0.0 : 0.9 * textHeight * text.Length;
+        }
+
+        /// <summary>
+        /// 图框可用空间（3.2.0.1 D-053 修订）：图框边界内缩一个洞径——
+        /// 草图重排铺满该矩形并联合居中。内缩后尺寸非正（图框太小于洞径）
+        /// 回退 null（旧行为：原图包络内重排），不抛错。
+        /// </summary>
+        private static SketchProportionTarget BuildFrameTarget(
+            FrameRectangle boundary, double diameter)
+        {
+            if (boundary == null) return null;
+            double width = boundary.Width - diameter * 2.0;
+            double height = boundary.Height - diameter * 2.0;
+            if (width <= 0 || height <= 0) return null;
+            return new SketchProportionTarget(
+                (boundary.MinX + boundary.MaxX) / 2.0,
+                (boundary.MinY + boundary.MaxY) / 2.0,
+                width, height);
+        }
+
+        /// <summary>
         /// 把整份扫描结果按图框分桶（含未标注线，供"分量含未标注线整分量
         /// 跳过"的判定）；同一线段落入多个图框时只归第一个，避免重复处理。
         /// </summary>
@@ -214,7 +254,11 @@ namespace UNCAD.Features.XAuto
 
             var result = new List<FramePlan>(groups.Count);
             for (int index = 0; index < groups.Count; index++)
-                result.Add(new FramePlan { Name = names[index] });
+                result.Add(new FramePlan
+                {
+                    Name = names[index],
+                    Boundary = groups[index].Boundary
+                });
             foreach (QuickLineCadSegment segment in scanned ?? 
                 Array.Empty<QuickLineCadSegment>())
             {

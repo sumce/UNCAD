@@ -136,6 +136,85 @@ namespace UNCAD.Tests
             Assert.Equal(990.0, Length(move), 3);
         }
 
+        [Fact]
+        public void TargetSpace_SketchScalesUpToFillFrameAndCentres()
+        {
+            // 3.2.0.1（D-053 修订）：图框可用空间 75000×7500、中心 (40000,2000)。
+            // 3000(X)+1000(Z) 的投影包络 = 2598.08×2500 → k = min(28.87, 3) = 3：
+            // A 最终 9000、B 最终 3000，联合包络 7794.23×7500 恰好贴住高度，
+            // 包络中心精确落在目标中心（不再是旧的"原图范围内原地不动"）。
+            var aEnd = new QuickLinePoint(1000 * Cos30, 1000 * Sin30);
+            var target = new SketchProportionTarget(40000.0, 2000.0, 75000.0, 7500.0);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 3000),
+                Input("B", aEnd, new QuickLinePoint(aEnd.X, aEnd.Y + 1000), 1000)
+            }, 450.0, 1.0, target);
+
+            Assert.Equal(2, plan.RelaidSegmentCount);
+            Assert.Equal(9000.0, Length(Move(plan, "A")), 3);
+            Assert.Equal(3000.0, Length(Move(plan, "B")), 3);
+            Assert.Equal(30.0, Angle(Move(plan, "A")), 4);
+            Assert.Equal(90.0, Angle(Move(plan, "B")), 4);
+
+            Assert.Equal(40000.0, (MinX(plan) + MaxX(plan)) / 2.0, 2);
+            Assert.Equal(2000.0, (MinY(plan) + MaxY(plan)) / 2.0, 2);
+            Assert.True(MaxY(plan) - MinY(plan) <= 7500.0 + 1e-3,
+                "联合包络高度不得超出目标空间");
+            Assert.True(MaxX(plan) - MinX(plan) <= 75000.0 + 1e-3,
+                "联合包络宽度不得超出目标空间");
+        }
+
+        [Fact]
+        public void ShortSegment_NeverShorterThanItsMillimetreLabel()
+        {
+            // 现场报告"短段比毫米标还短"：A=54000mm 主导把 k 压到
+            // min(75000/46765, 7500/27200)=0.2757，200mm 段本会缩到 55；
+            // 标注文字宽 1000 单位 → 下限 = max(450, 1000×1.15) = 1150，
+            // B 最终被钳到恰好 1150（不再比自己的毫米标短）。
+            var aEnd = new QuickLinePoint(5400 * Cos30, 5400 * Sin30);
+            var target = new SketchProportionTarget(0.0, 0.0, 75000.0, 7500.0);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 54000),
+                new SketchProportionInput("B", aEnd,
+                    new QuickLinePoint(aEnd.X, aEnd.Y + 200), 200,
+                    completed: true, placeholderLabel: false, labelWidthUnits: 1000.0)
+            }, 450.0, 1.0, target);
+
+            Assert.Equal(2, plan.RelaidSegmentCount);
+            Assert.Equal(1150.0, Length(Move(plan, "B")), 3);
+            Assert.True(Length(Move(plan, "B")) >= 1150.0 * 0.999,
+                "短段必须放得下自己的毫米标");
+        }
+
+        [Fact]
+        public void TwoComponents_ShareOneScaleAndKeepRelativeOffset()
+        {
+            // 两个相距 20000 的独立单段（各 1000mm，30°）。联合包络随 k：
+            // 宽 = 20000+866k ≤ 75000、高 = 500k ≤ 7500 → k = 15。
+            // 两段等长（同比例）、中心距保持 20000（相对位置不变）、居中目标。
+            var target = new SketchProportionTarget(0.0, 0.0, 75000.0, 7500.0);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("P", new QuickLinePoint(0, 0),
+                    new QuickLinePoint(1000 * Cos30, 1000 * Sin30), 1000),
+                Input("Q", new QuickLinePoint(20000.0, 0),
+                    new QuickLinePoint(20000.0 + 1000 * Cos30, 1000 * Sin30), 1000)
+            }, 10.0, 1.0, target);
+
+            Assert.Equal(2, plan.RelaidSegmentCount);
+            double lengthP = Length(Move(plan, "P"));
+            double lengthQ = Length(Move(plan, "Q"));
+            Assert.Equal(15000.0, lengthP, 2);
+            Assert.Equal(lengthP, lengthQ, 4);
+
+            double centreOffset = MoveCentreX(plan, "Q") - MoveCentreX(plan, "P");
+            Assert.Equal(20000.0, centreOffset, 2);
+            Assert.Equal(0.0, (MinX(plan) + MaxX(plan)) / 2.0, 2);
+            Assert.Equal(0.0, (MinY(plan) + MaxY(plan)) / 2.0, 2);
+        }
+
         private static SketchProportionInput Input(string id,
             QuickLinePoint start, QuickLinePoint end, double millimetres)
             => new SketchProportionInput(id, start, end, millimetres,
@@ -162,5 +241,17 @@ namespace UNCAD.Tests
 
         private static double MaxY(SketchProportionPlan plan)
             => plan.Moves.Max(item => Math.Max(item.NewStart.Y, item.NewEnd.Y));
+
+        private static double MinX(SketchProportionPlan plan)
+            => plan.Moves.Min(item => Math.Min(item.NewStart.X, item.NewEnd.X));
+
+        private static double MinY(SketchProportionPlan plan)
+            => plan.Moves.Min(item => Math.Min(item.NewStart.Y, item.NewEnd.Y));
+
+        private static double MoveCentreX(SketchProportionPlan plan, string id)
+        {
+            SketchSegmentMove move = Move(plan, id);
+            return (move.NewStart.X + move.NewEnd.X) / 2.0;
+        }
     }
 }
