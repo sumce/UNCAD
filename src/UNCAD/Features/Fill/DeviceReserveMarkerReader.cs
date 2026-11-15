@@ -46,7 +46,12 @@ namespace UNCAD.Features.Fill
                             handle = dbText.Handle.ToString();
                             break;
                         case MText mText:
-                            text = mText.Contents ?? "";
+                            // 3.2.0.2：先剥格式码再判据——旧版软件写的 MText 常带
+                            // {\f字体;…}/\A 对齐码，原始 Contents 永远过不了纯数字
+                            // 判据（统计链路一直有 CleanMText，这里漏了；用户报告
+                            // 老框毫米标不被吸收的候选根因之一）。
+                            text = UNCAD.Core.Text.TextParser.CleanMText(
+                                mText.Contents ?? "");
                             rotation = mText.Rotation;
                             handle = mText.Handle.ToString();
                             break;

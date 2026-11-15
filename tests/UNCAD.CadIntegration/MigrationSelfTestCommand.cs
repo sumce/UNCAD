@@ -227,6 +227,70 @@ namespace UNCAD.CadIntegration
                 tx.Commit();
             }
 
+            // ---------------- 阶段 2.5：老框首跑 U1F 的毫米标吸收（2026-11-15 用户报告
+            // “之前版本的老框 U1F 不会加设备预留，横线 mm 标没有自动改为设备预留并删除”）。
+            // 铸两只未迁移的 frame 代老框（从未填过 / 带 v1 旧记录含 2000 预留），各放
+            // 一处横排 3000 毫米标，走生产选集链（FrameRegionCollector.Collect →
+            // FillSelectionCollector.Split，= ExpandSingleFrame 同款）构造 FillSelection，
+            // 以 U1F 模式（updateMode=false）跑 FillReserveStage：都要吸收 3000、登记
+            // 删除、排除统计；有旧记录的还必须用图纸标注覆盖 v1 的 2000。必须在迁移
+            // （阶段 3）之前跑——迁移会替换 frame 定义，之后铸的就不是真老框；夹具
+            // 用完即删，不影响阶段 3/4 的迁移计数断言。 ----------------
+            _stage = "legacy marker absorb";
+            {
+                ObjectId neverFilledId, filledId;
+                using (Transaction oldTx = ctx.Db.TransactionManager
+                    .StartTransaction())
+                {
+                    var blocks = (BlockTable)oldTx.GetObject(ctx.Db.BlockTableId,
+                        OpenMode.ForRead);
+                    InsertLegacyFrame(ctx, oldTx, blocks, fixture, 7,
+                        FrameRegionCollector.LegacyFrameName, true, false,
+                        NewMachine("MIG-OLD1", "泵9", "A区", "ZB-YJV-4*2.5", "1.5",
+                            "详图九", "21", "20", "配电盘", "A9", "D9", "2F", "1F",
+                            "QF9"), null);
+                    InsertLegacyFrame(ctx, oldTx, blocks, fixture, 8,
+                        FrameRegionCollector.LegacyFrameName, true, true,
+                        NewMachine("MIG-OLD2", "泵8", "B区", "ZB-YJV-4*2.5", "2.2",
+                            "详图八", "22", "20", "配电盘", "B9", "E9", "2F", "1F",
+                            "QF8"),
+                        "{\"machineId\":\"MIG-OLD2\",\"deviceName\":\"泵8\","
+                        + "\"originalCableModel\":\"ZB-YJV-4*2.5\","
+                        + "\"boqCableModel\":\"ZB-YJVR-4*2.5\","
+                        + "\"lastModifiedUtc\":\"2026-06-20T07:00:00.000Z\","
+                        + "\"measuredCableM\":\"6.2\",\"deviceReserveMm\":\"2000\"}");
+                    neverFilledId = fixture.Slots[fixture.Slots.Count - 2].FrameId;
+                    filledId = fixture.Slots[fixture.Slots.Count - 1].FrameId;
+                    oldTx.Commit();
+                }
+                try
+                {
+                    OldFrameMarkerCase(ctx, neverFilledId, "⑦a 从未填过的老框",
+                        "3000");
+                    OldFrameMarkerCase(ctx, filledId,
+                        "⑦b 带 v1 旧记录(预留2000)的老框", "3000");
+                    // ⑦c（3.2.0.2）：旧版软件写的毫米标常是带格式码的 MText
+                    //（{\f字体;3000}）——原始 Contents 过不了纯数字判据，必须
+                    // 先 CleanMText 再判（用户报告老框不吸收的候选根因）。
+                    OldFrameMarkerCase(ctx, neverFilledId,
+                        "⑦c 带格式码 MText 毫米标的老框", "3000", true);
+                }
+                finally
+                {
+                    using (Transaction cleanupTx = ctx.Db.TransactionManager
+                        .StartTransaction())
+                    {
+                        foreach (ObjectId id in new[] { neverFilledId, filledId })
+                            cleanupTx.GetObject(id, OpenMode.ForWrite).Erase();
+                        cleanupTx.Commit();
+                    }
+                    // slot 也必须摘掉：阶段 3 迁移按 fixture.Slots 查选集字典，
+                    // 实体删了 slot 留着会让迁移查字典抛 KeyNotFound。
+                    fixture.Slots.RemoveAt(fixture.Slots.Count - 1);
+                    fixture.Slots.RemoveAt(fixture.Slots.Count - 1);
+                }
+            }
+
             // ---------------- 阶段 3：执行迁移链（单写事务，与 U1U 批量写入同构） ----------------
             _stage = "run migration";
             XFrameMigrationResult migration;
@@ -464,6 +528,96 @@ namespace UNCAD.CadIntegration
             + "\"changes\":[{\"timestampUtc\":\"2026-08-01T00:00:00.000Z\","
             + "\"command\":\"U1U\",\"field\":\"DeviceReserveMm\","
             + "\"before\":\"\",\"after\":\"0\",\"note\":\"旧版历史样例乙\"}]}";
+
+        /// <summary>
+        /// 阶段 2.5 剧本⑦：在未迁移老框内放一处横排 3000 毫米标，走生产选集链
+        /// （FrameRegionCollector.Collect → FillSelectionCollector.Split，即
+        /// ExpandSingleFrame 的同款调用）构造 FillSelection，再以 U1F 模式跑
+        /// FillReserveStage.Resolve——断言吸收为设备内预留、登记删除、排除统计。
+        /// 任何一环断红即指出“老框 U1F 不吸收毫米标”卡在哪一步。
+        /// </summary>
+        private static void OldFrameMarkerCase(CadContext ctx, ObjectId frameId,
+            string label, string expectMm, bool formattedMText = false)
+        {
+            const string FormattedMTextContents = "{\\fSimSun|b0|i0;3000}";
+            if (formattedMText)
+                Check(DeviceReserveMarker.TryParseMillimeters(
+                        UNCAD.Core.Text.TextParser.CleanMText(FormattedMTextContents),
+                        out double cleanedMm) && Math.Abs(cleanedMm - 3000d) < 0.001,
+                    "夹具自检：格式码 MText 清洗后应是 D-043 候选（3000）。");
+            ObjectId markerId;
+            using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var frame = (BlockReference)tx.GetObject(frameId, OpenMode.ForRead);
+                if (formattedMText)
+                {
+                    var mtext = new MText();
+                    mtext.SetDatabaseDefaults();
+                    mtext.Location = new Point3d(
+                        frame.Position.X + LegacyFrameWidth * 0.5,
+                        frame.Position.Y + LegacyFrameHeight * 0.5, 0);
+                    mtext.Rotation = 0d; // 横排是 D-043 的候选判据。
+                    mtext.TextHeight = 300d;
+                    mtext.Contents = FormattedMTextContents;
+                    markerId = ctx.AddToCurrentSpace(tx, mtext);
+                }
+                else
+                {
+                    var marker = new DBText();
+                    marker.SetDatabaseDefaults();
+                    marker.Position = new Point3d(
+                        frame.Position.X + LegacyFrameWidth * 0.5,
+                        frame.Position.Y + LegacyFrameHeight * 0.5, 0);
+                    marker.Rotation = 0d; // 横排是 D-043 的候选判据。
+                    marker.Height = 300d;
+                    marker.TextString = "3000";
+                    markerId = ctx.AddToCurrentSpace(tx, marker);
+                }
+                tx.Commit();
+            }
+            try
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                    new[] { frameId });
+                Check(regions.Errors.Count == 0 && regions.Groups.Count == 1,
+                    label + "：老框应被分区识别（errors=" + regions.Errors.Count
+                    + "，groups=" + regions.Groups.Count + "）。");
+                Check(regions.Groups[0].EntityIds.Count > 0,
+                    label + "：老框分区应收集到区域内实体。");
+                FillSelection selection = FillSelectionCollector.Split(ctx,
+                    regions.Groups[0].EntityIds.ToArray(), true);
+                Check(selection.FrameBlockIds.Length == 1,
+                    label + "：分区结果应含 1 个图框块（实测 "
+                    + selection.FrameBlockIds.Length + "）。");
+                Check(Array.IndexOf(selection.TextIds, markerId) >= 0,
+                    label + "：横排毫米标必须进入选集 TextIds（实测 "
+                    + selection.TextIds.Length + " 个文字）——进不了选集就永远谈不上吸收。");
+                FrameInfoJsonRecord resolved = FillReserveStage.Resolve(ctx, selection,
+                    FillSettings.Current(), false,
+                    out List<ObjectId> eraseIds, out List<ObjectId> excludedIds,
+                    out bool copied, out double? hint, out ExistingFillIdentity identity);
+                Check(!copied, label + "：老框不应被判定为复制图框。");
+                Check(resolved != null && resolved.DeviceReserveMm == expectMm,
+                    label + "：横排毫米标应吸收为设备内预留 " + expectMm
+                    + "（实测 '" + (resolved == null ? "<null>"
+                        : resolved.DeviceReserveMm) + "'）。");
+                Check(eraseIds.Count == 1 && eraseIds[0] == markerId,
+                    label + "：应登记删除毫米标（实测 " + eraseIds.Count + " 个）。");
+                Check(excludedIds.Count == 1 && excludedIds[0] == markerId,
+                    label + "：毫米标应从米数统计排除防双算（实测 "
+                    + excludedIds.Count + " 个）。");
+                Info("  " + label + ": 横排毫米标→设备内预留 " + expectMm
+                    + " +登记删除 +排除统计: 通过");
+            }
+            finally
+            {
+                using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    tx.GetObject(markerId, OpenMode.ForWrite).Erase();
+                    tx.Commit();
+                }
+            }
+        }
 
         private static void InsertLegacyFrame(CadContext ctx, Transaction tx,
             BlockTable blocks, Fixture fixture, int index, string definitionName,
