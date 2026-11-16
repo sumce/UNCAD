@@ -127,6 +127,9 @@ namespace UNCAD.UI
             = new ObservableCollection<XLayoutSelectionNode>();
         private readonly DispatcherTimer _filterTimer;
         private IReadOnlyList<string> _terms = Array.Empty<string>();
+        // 3.2.0.9：已知机台号全集——筛选词恰好是完整机台号时按精确匹配
+        //（粘贴 ID 清单不再把同号异组的 PSP/OHVC 双胞胎按子串捞进来）。
+        private readonly IReadOnlyList<string> _knownMachineIds;
         private bool _suppressCascade;
 
         public XLayoutSelectionWindow(IReadOnlyList<XLayoutFrameItem> items,
@@ -135,6 +138,10 @@ namespace UNCAD.UI
         {
             _items = (items ?? Array.Empty<XLayoutFrameItem>())
                 .Where(item => item != null).ToList();
+            _knownMachineIds = _items
+                .Select(item => (item.MachineId ?? "").Trim())
+                .Where(id => id.Length > 0).Distinct()
+                .ToList();
             foreach (XLayoutFrameItem item in _items) _checked.Add(item);
             // 1276 个回路时每敲一个字都重建树会明显卡顿：输入停顿 250ms 再筛选。
             _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -160,7 +167,7 @@ namespace UNCAD.UI
         {
             return _items.Where(item => _checked.Contains(item)
                 && XLayoutSelectionFilter.MatchesCircuit(item.MachineId,
-                    item.DeviceName, _terms)).ToList();
+                    item.DeviceName, _terms, _knownMachineIds)).ToList();
         }
 
         /// <summary>把筛选框文本直接应用到树（跳过 250ms 防抖；测试与回车用）。</summary>
@@ -212,12 +219,13 @@ namespace UNCAD.UI
             foreach (IGrouping<string, XLayoutFrameItem> machine in machineGroups)
             {
                 bool machineMatches = XLayoutSelectionFilter.MatchesMachine(
-                    machine.Key, terms);
+                    machine.Key, terms, _knownMachineIds);
                 // 机台 ID 命中时显示它的全部回路；否则只显示命中的回路。
                 List<XLayoutFrameItem> shown = machineMatches
                     ? machine.ToList()
                     : machine.Where(item => XLayoutSelectionFilter.MatchesCircuit(
-                        item.MachineId, item.DeviceName, terms)).ToList();
+                        item.MachineId, item.DeviceName, terms,
+                        _knownMachineIds)).ToList();
                 if (shown.Count == 0) continue;
 
                 var machineNode = new XLayoutSelectionNode(

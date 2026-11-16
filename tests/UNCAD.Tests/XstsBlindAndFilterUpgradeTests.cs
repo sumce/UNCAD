@@ -185,6 +185,38 @@ namespace UNCAD.Tests
             Assert.False(XLayoutSelectionFilter.MatchesMachine("MSRTL04", fullWidth));
         }
 
+        [Fact]
+        public void Filter_KnownMachineIdTerm_MatchesExactly_NotBySubstring()
+        {
+            // 3.2.0.9 现场：粘贴 AMHS 机台清单（含 M651）排版出了 56 台而非 49 台
+            // ——多余的 7 台全是 "PSPM651"/"OHVC-M651" 这类同号异组机台（子串
+            // 包含把双胞胎一起捞进来）。传入已知机台号全集后，完整机台号词按
+            // 精确匹配。
+            string[] known = { "M651", "PSPM651", "OHVC-M651", "M623" };
+            IReadOnlyList<string> terms = XLayoutSelectionFilter.SplitTerms("M651 M623");
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("M651", terms, known));
+            Assert.False(XLayoutSelectionFilter.MatchesMachine("PSPM651", terms, known));
+            Assert.False(XLayoutSelectionFilter.MatchesMachine("OHVC-M651", terms, known));
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("M623", terms, known));
+            // 精确命中的机台，其全部回路可见（与机台节点口径一致）。
+            Assert.True(XLayoutSelectionFilter.MatchesCircuit("M651", "RCM", terms, known));
+            Assert.False(XLayoutSelectionFilter.MatchesCircuit("PSPM651", "RCM", terms, known));
+            // 片段词不是完整机台号，仍走包含（旧交互不变）。
+            IReadOnlyList<string> fragment = XLayoutSelectionFilter.SplitTerms("651");
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("PSPM651", fragment, known));
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("M651", fragment, known));
+            // 混合：精确词 + 片段词 OR 共存。
+            IReadOnlyList<string> mixed = XLayoutSelectionFilter.SplitTerms("M651 OHVC");
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("M651", mixed, known));
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("OHVC-M651", mixed, known));
+            Assert.False(XLayoutSelectionFilter.MatchesMachine("PSPM651", mixed, known));
+            // 不传已知全集 = 旧版纯包含（兼容旧调用方）。
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("PSPM651", terms));
+            // 带通配的词不按精确处理（M651* 是前缀语义）。
+            IReadOnlyList<string> wildcard = XLayoutSelectionFilter.SplitTerms("M651*");
+            Assert.True(XLayoutSelectionFilter.MatchesMachine("M6519", wildcard, known));
+        }
+
         // ---------------- ④ U1U 复制框两跑修复（源码契约） ----------------
 
         [Fact]

@@ -40,14 +40,76 @@ namespace UNCAD.Core.Dwg
                 .Where(term => term.Length > 0)
                 .ToArray();
 
-        /// <summary>机台ID 是否命中任一关键词（用于判断机台节点是否显示）。</summary>
+        /// <summary>机台ID 是否命中任一关键词（用于判断机台节点是否显示）。
+        /// 3.2.0.9：传入 knownMachineIds（选择窗的机台号全集）后，**恰好等于某个
+        /// 完整机台号**的筛选词升级为精确匹配——粘贴机台ID 清单时 "M651" 不再把
+        /// "PSPM651"/"OHVC-M651" 这类同号异组机台按子串一起捞进来（现场：AMHS
+        /// 清单 49 台排出了 56 台，多的 7 台全是双胞胎）。敲片段（"pump"/"M6"）
+        /// 不是完整机台号，仍走子串包含。</summary>
         public static bool MatchesMachine(string machineId, IReadOnlyList<string> terms)
-            => MatchesAny(machineId, terms);
+            => MatchesMachine(machineId, terms, null);
+
+        public static bool MatchesMachine(string machineId, IReadOnlyList<string> terms,
+            IReadOnlyList<string> knownMachineIds)
+        {
+            List<string> remainder = SplitOutExactIdTerms(terms, knownMachineIds,
+                machineId, out bool exactHit, out bool hadExactTerms);
+            if (exactHit) return true;
+            // 全部正向词都是精确词且都没命中：不能把"剩余池空"当"无筛选"全放行。
+            if (hadExactTerms && remainder.Count == 0) return false;
+            return MatchesAny(machineId, remainder);
+        }
 
         /// <summary>回路是否命中任一关键词（机台ID 与回路名称都参与匹配）。</summary>
         public static bool MatchesCircuit(string machineId, string deviceName,
             IReadOnlyList<string> terms)
-            => MatchesAny((machineId ?? "") + " " + (deviceName ?? ""), terms);
+            => MatchesCircuit(machineId, deviceName, terms, null);
+
+        public static bool MatchesCircuit(string machineId, string deviceName,
+            IReadOnlyList<string> terms, IReadOnlyList<string> knownMachineIds)
+        {
+            // 机台号被精确词命中 → 该机台全部回路可见（与机台节点口径一致）。
+            List<string> remainder = SplitOutExactIdTerms(terms, knownMachineIds,
+                machineId, out bool exactHit, out bool hadExactTerms);
+            if (exactHit) return true;
+            if (hadExactTerms && remainder.Count == 0) return false;
+            return MatchesAny((machineId ?? "") + " " + (deviceName ?? ""), remainder);
+        }
+
+        /// <summary>把"恰好等于已知完整机台号"的正向词从包含池里拆出来按精确
+        /// 语义处理（命中即 exactHit=true）；带 * 的前缀词/区间词/排除词不受影响。
+        /// 不传 knownMachineIds 时行为与旧版完全一致（全部走包含）。</summary>
+        private static List<string> SplitOutExactIdTerms(IReadOnlyList<string> terms,
+            IReadOnlyList<string> knownMachineIds, string machineId,
+            out bool exactHit, out bool hadExactTerms)
+        {
+            exactHit = false;
+            hadExactTerms = false;
+            var remainder = new List<string>();
+            if (terms == null) return remainder;
+            if (knownMachineIds == null)
+            {
+                remainder.AddRange(terms);
+                return remainder;
+            }
+            var knownKeys = new HashSet<string>(
+                knownMachineIds.Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Select(IdentityTextNormalizer.Key),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (string raw in terms)
+            {
+                string term = (raw ?? "").Trim();
+                if (term.Length > 0 && term.IndexOf('*') < 0
+                    && knownKeys.Contains(IdentityTextNormalizer.Key(term)))
+                {
+                    hadExactTerms = true;
+                    if (IdentityTextNormalizer.Equals(term, machineId)) exactHit = true;
+                    continue;   // 精确词已按精确语义处理，不再参与包含
+                }
+                remainder.Add(raw);
+            }
+            return remainder;
+        }
 
         public static bool MatchesCircuit(string machineId, string deviceName, string filterText)
             => MatchesCircuit(machineId, deviceName, SplitTerms(filterText));
