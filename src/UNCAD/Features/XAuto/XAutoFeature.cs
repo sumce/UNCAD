@@ -20,8 +20,10 @@ namespace UNCAD.Features.XAuto
     /// Xauto：框选完整图框，按毫米标注自动重排等测草图比例并自动开拱桥。
     ///
     /// 重排：复用 3D 预览的等测重建链路，把显示距离换成真实毫米值重新
-    /// 展开，再投影回草图平面；草图整体铺满图框可用空间并联合居中
-    /// （3.2.0.1 D-053 修订），短段钳到"洞+毫米标文字都放得下"的下限。
+    /// 展开，再投影回草图平面；草图整体按占用率铺进图框可用空间并联合
+    /// 居中（3.2.0.1 D-053 修订；3.2.0.11 起占用率默认 0.65，
+    /// UNC_XAUTO_FILL_RATIO 可调，1.0 恢复旧"铺满"），短段钳到"洞+毫米标
+    /// 文字都放得下"的下限，占位标只跟缩不跟涨（防棘轮）。
     /// 拱桥：交叉处靠近相机的一侧开半圆洞（直径沿用 U1SET 的 U1R 设置），
     /// 无法判定深度的交叉跳过并点名。整个命令一个写事务，一次 U 全回退。
     /// </summary>
@@ -104,11 +106,15 @@ namespace UNCAD.Features.XAuto
                     EstimateLabelWidthUnits(item.LabelText, textHeight)))
                     .ToList();
                 // 3.2.0.1（D-053 修订）：重排目标 = 图框可用空间——草图整体按
-                // 毫米比例铺满该空间并联合居中，分量相对位置不变；3.2.0.3 起
+                // 毫米比例铺进该空间并联合居中，分量相对位置不变；3.2.0.3 起
                 // 可用空间扣除框内表格占位，Planner 装后校验保证最终几何不超。
+                // 3.2.0.11：按占用率缩放（默认 0.65，UNC_XAUTO_FILL_RATIO 可
+                // 调，1.0 恢复旧"铺满"）——横幅图框里 k 由宽度决定，2m 竖管
+                // 铺满时占半框高（现场"拉的太长了"）。
                 frame.Proportion = SketchProportionPlanner.Plan(inputs,
                     minFinalUnits, 1.0,
-                    BuildFrameTarget(frame.Boundary, frame.TableRects, diameter));
+                    BuildFrameTarget(frame.Boundary, frame.TableRects, diameter),
+                    Settings.GetDouble(ConfigKeys.XAutoFillRatio, 0.65));
                 foreach (SketchSegmentMove move in frame.Proportion.Moves)
                     frame.MovesById[move.Id] = move;
                 frame.MovedCount = frame.Proportion.Moves.Count;
@@ -204,9 +210,9 @@ namespace UNCAD.Features.XAuto
 
         /// <summary>
         /// 图框可用空间（3.2.0.3）：FrameUsableArea.Compute——边界内缩一个洞径
-        /// 并扣除框内表格占位（右列/左列裁横向、上下条裁纵向）；草图重排铺满
-        /// 扣除后的矩形并按它居中。图框/可用区非正回退 null（旧行为：原图包络
-        /// 内重排），不抛错。
+        /// 并扣除框内表格占位（右列/左列裁横向、上下条裁纵向）；草图重排铺进
+        /// 扣除后的矩形（按占用率，见 UNC_XAUTO_FILL_RATIO）并按它居中。
+        /// 图框/可用区非正回退 null（旧行为：原图包络内重排），不抛错。
         /// </summary>
         private static SketchProportionTarget BuildFrameTarget(
             FrameRectangle boundary, List<FrameRectangle> tableRects,

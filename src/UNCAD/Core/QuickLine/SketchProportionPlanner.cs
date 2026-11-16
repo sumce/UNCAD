@@ -42,8 +42,9 @@ namespace UNCAD.Core.QuickLine
 
     /// <summary>
     /// 3.2.0.1（D-053 修订）：重排目标空间——图框的可用内部矩形。给了 target，
-    /// 整个草图（全部连通分量共用一个比例系数）按毫米比例铺开到用满该空间并
-    /// 联合居中；没给 target 保持旧行为（包络不超过原图范围、原位锚定）。
+    /// 整个草图（全部连通分量共用一个比例系数）按毫米比例铺开到该空间的
+    /// fillRatio 占用（3.2.0.11 起，默认 0.65；fillRatio=1 即旧"用满"语义）
+    /// 并联合居中；没给 target 保持旧行为（包络不超过原图范围、原位锚定）。
     /// </summary>
     public sealed class SketchProportionTarget
     {
@@ -135,9 +136,12 @@ namespace UNCAD.Core.QuickLine
     ///   height) keeps the component's 2D bounding box inside its current
     ///   envelope; the box centre is anchored so the sketch stays put;
     /// - target != null（D-053 修订，3.2.0.1）：全部分量共用一个 k，二分求
-    ///   最大的 k 使"各分量按当前中心 ± k×投影半幅"的联合包络落在目标
-    ///   矩形内（草图整体铺开用满图框可用空间，例如 75000×7500 的图框），
-    ///   再统一平移使联合包络居中于目标中心——分量之间的相对位置不变；
+    ///   最大的 k_fit 使"各分量按当前中心 ± k×投影半幅"的联合包络落在目标
+    ///   矩形内，再统一平移使联合包络居中于目标中心——分量之间的相对位置
+    ///   不变。3.2.0.11（D-053 修订）：最终 k = k_fit × fillRatio（默认
+    ///   0.65）——旧"用满图框可用空间"在横幅图框（如 75000×7500）里 k 完全
+    ///   由宽度决定，一条 2m 竖管画出来占半框高（现场"拉的太长了"）；
+    ///   fillRatio=1 恢复旧"用满"行为，最终几何仍保证落在目标矩形内；
     /// - a component containing any unlabelled or unclassifiable line is
     ///   skipped and named, never partially moved (a half-moved sketch would
     ///   tear endpoint connections).
@@ -149,13 +153,19 @@ namespace UNCAD.Core.QuickLine
 
         public static SketchProportionPlan Plan(
             IReadOnlyList<SketchProportionInput> segments, double minFinalUnits,
-            double endpointTolerance = 1.0, SketchProportionTarget target = null)
+            double endpointTolerance = 1.0, SketchProportionTarget target = null,
+            double fillRatio = 0.65)
         {
             if (segments == null)
                 throw new ArgumentNullException("segments");
             if (double.IsNaN(minFinalUnits) || double.IsInfinity(minFinalUnits)
                 || minFinalUnits <= 0)
                 throw new ArgumentOutOfRangeException("minFinalUnits");
+            // 3.2.0.11（D-053 修订）：占用率合法域 [0.2, 1.0]——太小草图挤在
+            // 图框中心没法读，大于 1 违背"最终几何落在目标矩形内"的承诺。
+            if (double.IsNaN(fillRatio) || double.IsInfinity(fillRatio)
+                || fillRatio < 0.2 || fillRatio > 1.0)
+                throw new ArgumentOutOfRangeException("fillRatio");
 
             var inputs = new List<SketchProportionInput>();
             var inputsById = new Dictionary<string, SketchProportionInput>(
@@ -194,7 +204,11 @@ namespace UNCAD.Core.QuickLine
                 return new SketchProportionPlan(moves, depths, diagnostics);
             }
 
-            double scale = ResolveTargetScale(prepared, target);
+            // 3.2.0.11（D-053 修订）：最终 scale = k_fit × fillRatio——二分拟合
+            // 出的 k_fit 只解决"塞得下"，占用率解决"画多大"（默认 0.65，
+            // UNC_XAUTO_FILL_RATIO 可调；fillRatio=1 恢复旧"铺满"行为）。
+            // 下面的钳位撑爆→收缩重装校验环不变：最终几何仍必须落在目标内。
+            double scale = ResolveTargetScale(prepared, target) * fillRatio;
             if (!IsUsableScale(scale))
             {
                 diagnostics.Add("目标空间内放不下重排草图（k="
@@ -265,6 +279,9 @@ namespace UNCAD.Core.QuickLine
             public Dictionary<string, double> Display;
             public Dictionary<string, double> LabelWidths;
             public HashSet<string> Completed;
+            /// <summary>占位标段（PlaceholderLabel && !Completed，Display 来自
+            /// 当前画长而非真实毫米）——3.2.0.11 防棘轮约束只作用于它们。</summary>
+            public HashSet<string> Placeholder;
             public string RootId;
             public QuickLineIsometricScene FirstPass;
             /// <summary>Current drawn bbox centre — per-component anchor.</summary>
@@ -296,6 +313,8 @@ namespace UNCAD.Core.QuickLine
             var labelWidths = new Dictionary<string, double>(
                 StringComparer.OrdinalIgnoreCase);
             var completed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var placeholder = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
             foreach (QuickLineSegment segment in component)
             {
                 SketchProportionInput input = inputsById[segment.Id];
@@ -307,6 +326,8 @@ namespace UNCAD.Core.QuickLine
                     ? input.Length : real;
                 labelWidths[segment.Id] = input.LabelWidthUnits;
                 if (input.Completed) completed.Add(segment.Id);
+                if (input.PlaceholderLabel && !input.Completed)
+                    placeholder.Add(segment.Id);
             }
 
             string rootId = component[0].Id;
@@ -355,6 +376,7 @@ namespace UNCAD.Core.QuickLine
                 Display = display,
                 LabelWidths = labelWidths,
                 Completed = completed,
+                Placeholder = placeholder,
                 RootId = rootId,
                 FirstPass = firstPass,
                 CurrentCentre = new QuickLinePoint(
@@ -388,7 +410,20 @@ namespace UNCAD.Core.QuickLine
                 double floor = Math.Max(minFinalUnits,
                     labelWidth > 0 ? labelWidth * LabelWidthPaddingFactor : 0);
                 double minEff = floor / scale;
-                clamped[segment.Id] = Math.Max(prepared.Display[segment.Id], minEff);
+                double display = prepared.Display[segment.Id];
+                double distance = Math.Max(display, minEff);
+                if (prepared.Placeholder.Contains(segment.Id))
+                {
+                    // 3.2.0.11（D-053 修订，防棘轮）：占位标的显示距离=当前
+                    // 画长，若随 k>1 一起放大，下一次 Xauto 会把拉长后的长度
+                    // 当基线——越跑越长回不来。占位段只跟缩不跟涨：第二遍距离
+                    // 再钳到 max(当前画长/k, 可读下限)，k>1 时最终画长不超过
+                    // max(原画长, 下限)；k≤1 时该上限不约束，行为与旧版一致。
+                    // 已确认真实毫米的段不受此约束，行为完全不变。
+                    distance = Math.Min(distance,
+                        Math.Max(display / scale, minEff));
+                }
+                clamped[segment.Id] = distance;
             }
             QuickLineIsometricScene secondPass = QuickLineIsometricSceneBuilder
                 .Build(graph, prepared.RootId, prepared.Distances, clamped,
@@ -458,8 +493,9 @@ namespace UNCAD.Core.QuickLine
         }
 
         /// <summary>
-        /// 目标空间模式：二分求最大 k，使各分量「当前中心 ± k×投影半幅」的
-        /// 联合包络仍落在目标矩形内（包络宽高对 k 单调不减，二分收敛即最优）。
+        /// 目标空间模式：二分求最大 k_fit，使各分量「当前中心 ± k×投影半幅」
+        /// 的联合包络仍落在目标矩形内（包络宽高对 k 单调不减，二分收敛即
+        /// 最优）。3.2.0.11 起调用方再乘 fillRatio 得最终 scale（占用率语义）。
         /// </summary>
         private static double ResolveTargetScale(
             IReadOnlyList<PreparedComponent> prepared, SketchProportionTarget target)

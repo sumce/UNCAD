@@ -145,11 +145,13 @@ namespace UNCAD.Tests
             // 包络中心精确落在目标中心（不再是旧的"原图范围内原地不动"）。
             var aEnd = new QuickLinePoint(1000 * Cos30, 1000 * Sin30);
             var target = new SketchProportionTarget(40000.0, 2000.0, 75000.0, 7500.0);
+            // 3.2.0.11 起 Plan 默认 fillRatio=0.65；本组旧断言锚定"铺满"
+            // 行为，显式传 1.0 保持旧期望值（迁移锚点，不改断言意图）。
             var plan = SketchProportionPlanner.Plan(new[]
             {
                 Input("A", new QuickLinePoint(0, 0), aEnd, 3000),
                 Input("B", aEnd, new QuickLinePoint(aEnd.X, aEnd.Y + 1000), 1000)
-            }, 450.0, 1.0, target);
+            }, 450.0, 1.0, target, 1.0);
 
             Assert.Equal(2, plan.RelaidSegmentCount);
             Assert.Equal(9000.0, Length(Move(plan, "A")), 3);
@@ -180,7 +182,7 @@ namespace UNCAD.Tests
                 new SketchProportionInput("B", aEnd,
                     new QuickLinePoint(aEnd.X, aEnd.Y + 200), 200,
                     completed: true, placeholderLabel: false, labelWidthUnits: 1000.0)
-            }, 450.0, 1.0, target);
+            }, 450.0, 1.0, target, 1.0);
 
             Assert.Equal(2, plan.RelaidSegmentCount);
             Assert.Equal(1150.0, Length(Move(plan, "B")), 3);
@@ -201,7 +203,7 @@ namespace UNCAD.Tests
                     new QuickLinePoint(1000 * Cos30, 1000 * Sin30), 1000),
                 Input("Q", new QuickLinePoint(20000.0, 0),
                     new QuickLinePoint(20000.0 + 1000 * Cos30, 1000 * Sin30), 1000)
-            }, 10.0, 1.0, target);
+            }, 10.0, 1.0, target, 1.0);
 
             Assert.Equal(2, plan.RelaidSegmentCount);
             double lengthP = Length(Move(plan, "P"));
@@ -229,7 +231,7 @@ namespace UNCAD.Tests
                 new SketchProportionInput("B", aEnd,
                     new QuickLinePoint(aEnd.X, aEnd.Y + 200), 200,
                     completed: true, placeholderLabel: false, labelWidthUnits: 1000.0)
-            }, 450.0, 1.0, target);
+            }, 450.0, 1.0, target, 1.0);
 
             Assert.Equal(2, plan.RelaidSegmentCount);
             Assert.True(MaxX(plan) - MinX(plan) <= 40000.0 + 0.5,

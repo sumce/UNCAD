@@ -28,6 +28,10 @@ namespace UNCAD.Infra
         // 拱桥开洞（U1R；注册表键名保持不变）
         public const string UnrDiameter = "UNR_DIAMETER";
 
+        // Xauto 目标模式占用率（D-053 修订，3.2.0.11）：最终 scale = k_fit ×
+        // 占用率，合法域 0.2–1.0，默认 0.65；1.0 恢复旧"铺满图框可用空间"行为。
+        public const string XAutoFillRatio = "UNC_XAUTO_FILL_RATIO";
+
         // 统计汇总（传统 UNADD；注册表键名保持不变）
         public const string UnaddHeight = "UNADD_HEIGHT";
         public const string UnaddMmPerGrid = "UNADD_MM_PER_GRID";
