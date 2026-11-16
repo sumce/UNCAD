@@ -173,7 +173,7 @@ namespace UNCAD.Features.PdfExport
                 run = coordinator.Run(targets, (done, total, label) =>
                     renderProgress.Update("出图 " + label, done, total));
             }
-            finally { renderProgress.Close(); }
+            finally { renderProgress.CloseByOwner(); }
             // 操作记录：只登记真正出图成功的回路与 PDF 文件。
             foreach (PdfExportTarget target in rendered)
             {

@@ -188,7 +188,7 @@ namespace UNCAD.Features.XLayout
                 readTransaction.Commit();
             }
             }
-            finally { identityProgress.Close(); }
+            finally { identityProgress.CloseByOwner(); }
 
             long identityMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (identityErrors.Count > 0)
@@ -361,7 +361,7 @@ namespace UNCAD.Features.XLayout
                 commitWatch.Stop();
                 commitMilliseconds = commitWatch.ElapsedMilliseconds;
             }
-            finally { progress.Close(); }
+            finally { progress.CloseByOwner(); }
             }
             long writeMilliseconds = phaseWatch.ElapsedMilliseconds;
             long perfTotal = collectMilliseconds + identityMilliseconds

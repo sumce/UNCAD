@@ -15,14 +15,31 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class ProgressWindow : FluentWindow
     {
+        private bool _closeByOwner;
+
         public ProgressWindow()
         {
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
-            // 3.2.0.6（审计修复）：进度窗不可手动关闭——此前保留标题栏 X，批量
+            // 3.2.0.6（审计修复）：进度窗对用户不可关闭——此前保留标题栏 X，批量
             // 中途点掉后命令继续跑但用户失去进度可见（后续 Update 静默作用于已
             // 关窗口）。进度窗没有取消语义，关闭动作只会制造"卡死了？"的错觉。
-            Closing += (sender, args) => args.Cancel = true;
+            // 3.2.0.8（现场回归修复）：只拦**用户**关闭——3.2.0.7 的无条件
+            // Cancel=true 把命令收尾的 Close() 也取消了，XLAYOUT 排版完成后
+            // 进度窗永久滞留（用户现场报告"都排好了还在显示"）。命令收尾一律
+            // 走 CloseByOwner()。
+            Closing += (sender, args) =>
+            {
+                if (!_closeByOwner) args.Cancel = true;
+            };
+        }
+
+        /// <summary>命令收尾专用关闭：绕过"用户不可关闭"守卫（唯一合法出口）。</summary>
+        public void CloseByOwner()
+        {
+            _closeByOwner = true;
+            try { Close(); }
+            finally { _closeByOwner = false; }
         }
 
         public ProgressWindow(string title) : this()

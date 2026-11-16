@@ -283,7 +283,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ProgressWindow_CannotBeClosedByUser()
+        public void ProgressWindow_CannotBeClosedByUser_ButOwnerCanClose()
         {
             string source = Read("src", "UNCAD", "UI", "Wpf", "ProgressWindow.xaml.cs");
             int closing = source.IndexOf("Closing +=", StringComparison.Ordinal);
@@ -291,6 +291,15 @@ namespace UNCAD.Tests
                 StringComparison.Ordinal);
             Assert.True(closing >= 0 && cancel > closing,
                 "进度窗必须取消用户关闭（无取消语义，点 X 只会制造卡死错觉）");
+            // 3.2.0.8 现场回归锁：用户关闭的拦截必须带"命令收尾出口"——3.2.0.7
+            // 的无条件 Cancel 把 finally 里的 Close() 也取消了，XLAYOUT 排版
+            // 完成后进度窗永久滞留（用户报告"都排好了还在显示"）。
+            int gate = source.IndexOf("if (!_closeByOwner) args.Cancel = true",
+                StringComparison.Ordinal);
+            int ownerClose = source.IndexOf("public void CloseByOwner()",
+                StringComparison.Ordinal);
+            Assert.True(gate > closing && ownerClose > gate,
+                "进度窗必须仅拦用户关闭，命令收尾经 CloseByOwner() 放行");
         }
 
         // ---------------- 帮助 ----------------

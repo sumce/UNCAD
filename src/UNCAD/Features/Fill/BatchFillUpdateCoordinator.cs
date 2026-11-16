@@ -88,7 +88,7 @@ namespace UNCAD.Features.Fill
                 readTransaction.Commit();
             }
             }
-            finally { preflightProgress.Close(); }
+            finally { preflightProgress.CloseByOwner(); }
             perfPreflight = perfPhase.ElapsedMilliseconds;
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
 
@@ -494,7 +494,7 @@ namespace UNCAD.Features.Fill
                         foreach (string note in plan.Notes) machineRow.AddNote(note);
                     }
                     }
-                    finally { writeProgress.Close(); }
+                    finally { writeProgress.CloseByOwner(); }
                     // 提交前只做 CAD：读表会让 AutoCAD 懒重算，提交前先按固定行高回写一次。
                     foreach (BatchFillUpdatePlan plan in plans)
                         CadTableFillWriter.FixGeneratedRowHeights(transaction,
