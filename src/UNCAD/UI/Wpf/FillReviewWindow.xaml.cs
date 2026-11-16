@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.QuickLine;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 using Wpf.Ui.Controls;
@@ -54,6 +55,18 @@ namespace UNCAD.UI
         /// <summary>U1U keeps the persisted machine/device identity fixed while editing quantities.</summary>
         public FillReviewWindow(FillReviewData data, BoqCatalogIndex catalog,
             FillPlanningOptions planningOptions, bool lockIdentity)
+            : this(data, catalog, planningOptions, lockIdentity, null, null)
+        {
+        }
+
+        /// <summary>
+        /// 3.3.0（D-054）：带 3D 路由预览与图层矫正报告的完整构造（U1U 单框链）。
+        /// preview 为 null 时预览区隐藏（U1F/旧行为）；layerCorrectionText 为
+        /// null 时不显示图层矫正行。
+        /// </summary>
+        public FillReviewWindow(FillReviewData data, BoqCatalogIndex catalog,
+            FillPlanningOptions planningOptions, bool lockIdentity,
+            QuickLineOrbitPreviewModel preview, string layerCorrectionText)
         {
             Data = data ?? throw new ArgumentNullException(nameof(data));
             _catalog = catalog ?? new BoqCatalogIndex(null);
@@ -66,6 +79,20 @@ namespace UNCAD.UI
             DataContext = this;
             Title = ProductMetadata.ProductName + " · 清单确认";
             HeaderBar.Title = Title;
+
+            // 特性③：左侧 3D 预览（只绘制传入模型，不重建场景）。
+            if (preview != null)
+            {
+                PreviewColumn.Width = new GridLength(300, GridUnitType.Pixel);
+                PreviewHost.Visibility = Visibility.Visible;
+                OrbitPreview.SetModel(preview);
+            }
+            // 特性①：图层矫正报告（确认窗里列出，动作在写事务里执行）。
+            if (!string.IsNullOrWhiteSpace(layerCorrectionText))
+            {
+                LayerGovernorText.Text = layerCorrectionText;
+                LayerGovernorText.Visibility = Visibility.Visible;
+            }
 
             PanelBox.Items.Add("");
             PanelBox.Items.Add("I-Line盘");

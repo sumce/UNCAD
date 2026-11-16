@@ -119,6 +119,55 @@ namespace UNCAD.Tests
             Assert.Contains(plan.Diagnostics, item => item.Contains("未标注"));
         }
 
+        // 3.3.0（D-054 特性②）：U1R/Xauto 开洞后的开放 Polyline 进入扫描后，
+        // 含它的分量整分量跳过并点名——重排只搬 Line 端点，半搬会撕开草图。
+        [Fact]
+        public void ComponentWithBridgePolyline_IsSkippedAsAWholeAndNamed()
+        {
+            var aEnd = new QuickLinePoint(1000 * Cos30, 1000 * Sin30);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 3000),
+                Polyline("B", aEnd, new QuickLinePoint(aEnd.X, aEnd.Y + 1000),
+                    1000, bridge: true)
+            }, 450.0);
+
+            Assert.Equal(0, plan.RelaidSegmentCount);
+            Assert.Contains(plan.Diagnostics, item =>
+                item.Contains("开洞 Polyline") && item.Contains("B"));
+        }
+
+        [Fact]
+        public void ComponentWithPlainPolyline_IsAlsoSkippedNotTorn()
+        {
+            // 无 bulge 的开放多段线同样不参与重排（Xauto 的 ApplyMoves 只搬
+            // Line）——整分量跳过、点名，避免半搬撕裂；不含多段线的分量照常。
+            var aEnd = new QuickLinePoint(1000 * Cos30, 1000 * Sin30);
+            var plan = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 3000),
+                Polyline("P", aEnd, new QuickLinePoint(aEnd.X, aEnd.Y + 1000),
+                    1000, bridge: false)
+            }, 450.0);
+
+            Assert.Equal(0, plan.RelaidSegmentCount);
+            Assert.Contains(plan.Diagnostics, item =>
+                item.Contains("多段线") && item.Contains("P"));
+
+            var clean = SketchProportionPlanner.Plan(new[]
+            {
+                Input("A", new QuickLinePoint(0, 0), aEnd, 3000)
+            }, 450.0);
+            Assert.Single(clean.Moves);
+        }
+
+        private static SketchProportionInput Polyline(string id,
+            QuickLinePoint start, QuickLinePoint end, double millimetres,
+            bool bridge)
+            => new SketchProportionInput(id, start, end, millimetres,
+                completed: true, placeholderLabel: false, labelWidthUnits: 0.0,
+                isPolyline: true, isBridgePolyline: bridge);
+
         [Fact]
         public void SingleSegment_SnapsToExactAxisAngle()
         {

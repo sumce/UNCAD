@@ -48,6 +48,9 @@ namespace UNCAD.Features.Fill
         /// 先显式清空 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 旧信息再写新数据
         /// （2026-11-06，用户要求 U1F/U1U 定义要清干净）。</summary>
         public bool CopiedFrame { get; set; }
+        /// <summary>3.3.0（D-054）：路由体检（连通性/图层矫正/预览场景），
+        /// 预检阶段构建，确认窗与写事务消费。</summary>
+        public FillRouteInspection RouteInspection { get; set; }
     }
 
     /// <summary>
@@ -75,7 +78,8 @@ namespace UNCAD.Features.Fill
             FillRuntimeOptions options, FillWorkbookSnapshot workbook,
             List<BatchFillUpdatePlan> plans, List<string> errors,
             List<BatchCatalogRequest> catalogRequests,
-            CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings)
+            CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings,
+            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> scanned = null)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
@@ -402,6 +406,23 @@ namespace UNCAD.Features.Fill
                 notes.Add(markerNote);
                 Log.Info("[U1U] " + prefix + markerNote + "。");
             }
+
+            // 3.3.0（D-054）：路由体检（连通性/图层矫正/U1U 预览场景）——批量链
+            // 整图只扫一次，此处按图框范围体检（机台轴位已解析，柱位摘要不猜）。
+            FillRouteInspection routeInspection = scanned == null
+                ? new FillRouteInspection()
+                : FillRouteInspectionStage.Inspect(ctx, readTransaction,
+                    region.EntityIds, scanned,
+                    machine.UpstreamAxis, machine.DownstreamAxis, true);
+            if (routeInspection.Connectivity != null
+                && (routeInspection.Connectivity.IsolatedSegmentIds.Count > 0
+                    || routeInspection.Connectivity.Components.Count > 1))
+                notes.Add("连通性：" + routeInspection.ConnectivityText
+                    + "（报告级，不拦截写入）。");
+            if (routeInspection.LayerCorrectionText != null)
+                notes.Add(routeInspection.LayerCorrectionText
+                    + "；将随本次写入一并执行。");
+
             plans.Add(new BatchFillUpdatePlan
             {
                 Region = region,
@@ -421,6 +442,7 @@ namespace UNCAD.Features.Fill
                 DeviceReserveEraseIds = plan_DeviceReserveEraseIds,
                 CopiedFrame = plan_CopiedFrame,
                 PreviousRecord = previousRecord,
+                RouteInspection = routeInspection,
                 ExistingRows = FillRowDiffBuilder.ReadRows(
                     CadSubmissionReader.Read(readTransaction, selection.TableIds)),
                 LegacyLastUpdated = FrameLegacyInfoReader.ReadLastUpdatedText(

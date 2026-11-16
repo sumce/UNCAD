@@ -9,7 +9,8 @@ namespace UNCAD.Core.QuickLine
     {
         public SketchProportionInput(string id, QuickLinePoint start,
             QuickLinePoint end, double? labelMillimetres, bool completed,
-            bool placeholderLabel, double labelWidthUnits = 0.0)
+            bool placeholderLabel, double labelWidthUnits = 0.0,
+            bool isPolyline = false, bool isBridgePolyline = false)
         {
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("A segment id is required.", "id");
@@ -20,6 +21,8 @@ namespace UNCAD.Core.QuickLine
             Completed = completed;
             PlaceholderLabel = placeholderLabel;
             LabelWidthUnits = labelWidthUnits;
+            IsPolyline = isPolyline;
+            IsBridgePolyline = isBridgePolyline;
         }
 
         public string Id { get; }
@@ -31,6 +34,14 @@ namespace UNCAD.Core.QuickLine
         public bool Completed { get; }
         /// <summary>True for unconfirmed trailing-00mm placeholders.</summary>
         public bool PlaceholderLabel { get; }
+        /// <summary>
+        /// 3.3.0（D-054）：输入是 LWPOLYLINE 而不是 Line。重排只搬 Line 端点，
+        /// 分量含 Polyline（无论是否开洞）一律整分量跳过——否则半搬会撕开草图
+        /// （3.3.0 前这些线根本不进扫描，邻线重排后已经会撕开，现在是显式防守）。
+        /// </summary>
+        public bool IsPolyline { get; }
+        /// <summary>带 bulge 的开洞 Polyline（U1R/Xauto 开洞产物）。</summary>
+        public bool IsBridgePolyline { get; }
         /// <summary>
         /// Estimated final drawn width of this segment's mm label text (drawing
         /// units). 3.2.0.1（D-053 修订）：短段下限除 1.5×洞径外还必须放得下
@@ -296,6 +307,27 @@ namespace UNCAD.Core.QuickLine
             IDictionary<string, SketchProportionInput> inputsById,
             ICollection<string> diagnostics)
         {
+            // 3.3.0（D-054）：分量含 Polyline（U1R/Xauto 开洞线为带 bulge 的开放
+            // LWPOLYLINE，3.3.0 起进入扫描）整分量跳过并点名——重排只搬 Line
+            // 端点，Polyline 搬不动；比 3.3.0 前更安全（此前这些线不进扫描，
+            // 邻线重排后直接把开洞草图撕开）。
+            foreach (QuickLineSegment segment in component)
+            {
+                SketchProportionInput current = inputsById[segment.Id];
+                if (current.IsBridgePolyline)
+                {
+                    diagnostics.Add("分量包含 U1R/Xauto 开洞 Polyline 线段 "
+                        + segment.Id + "，整分量未重排（开洞几何不参与比例重排）。");
+                    return null;
+                }
+                if (current.IsPolyline)
+                {
+                    diagnostics.Add("分量包含多段线 " + segment.Id
+                        + "，整分量未重排（重排只搬独立 Line）。");
+                    return null;
+                }
+            }
+
             // 分量里只要有一条未标注线就整分量跳过，绝不部分移动：
             // 否则该线端点与已移动邻线脱开，草图被撕烂。
             foreach (QuickLineSegment segment in component)

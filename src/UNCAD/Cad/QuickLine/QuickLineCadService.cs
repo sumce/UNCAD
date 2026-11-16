@@ -68,6 +68,8 @@ namespace UNCAD.Cad.QuickLine
         // and non-AutoCAD tooling where AcDbMgd is not loaded.
         private static Autodesk.AutoCAD.Runtime.RXClass LineClass
             => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Line));
+        private static Autodesk.AutoCAD.Runtime.RXClass PolylineClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Polyline));
         private static Autodesk.AutoCAD.Runtime.RXClass DbTextClass
             => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBText));
         private static Autodesk.AutoCAD.Runtime.RXClass MTextClass
@@ -149,12 +151,50 @@ namespace UNCAD.Cad.QuickLine
                             Point3d end = line.EndPoint;
                             if (start.DistanceTo(end) > Epsilon)
                                 lines.Add(new LineSnapshot(id, start, end,
-                                    entityOrder, ReadLayer(line)));
+                                    entityOrder, ReadLayer(line), false, false));
                         }
                         catch
                         {
                             // A damaged line must not hide otherwise usable
                             // U1L segments from the quick-drawing command.
+                        }
+                        continue;
+                    }
+
+                    // 3.3.0（D-054）：U1R/Xauto 开洞后的线是带 bulge 的开放
+                    // LWPOLYLINE——作为一个段返回（起点=首顶点、终点=末顶点，
+                    // 弧段按弦长参与端点连接/交叉检测）。闭合 Polyline 不是
+                    // 电缆路由，跳过；毫米标经既有元数据关联照常取得。
+                    var polyline = entity as Polyline;
+                    if (polyline != null)
+                    {
+                        try
+                        {
+                            if (!polyline.Closed && polyline.NumberOfVertices >= 2)
+                            {
+                                Point3d start = polyline.GetPoint3dAt(0);
+                                Point3d end = polyline.GetPoint3dAt(
+                                    polyline.NumberOfVertices - 1);
+                                if (start.DistanceTo(end) > Epsilon)
+                                {
+                                    bool hasBulge = false;
+                                    for (int vertex = 0;
+                                        vertex < polyline.NumberOfVertices; vertex++)
+                                        if (Math.Abs(polyline.GetBulgeAt(vertex))
+                                            > Epsilon)
+                                        {
+                                            hasBulge = true;
+                                            break;
+                                        }
+                                    lines.Add(new LineSnapshot(id, start, end,
+                                        entityOrder, ReadLayer(polyline), true,
+                                        hasBulge));
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Damaged polyline geometry is isolated to this entity.
                         }
                         continue;
                     }
@@ -335,7 +375,8 @@ namespace UNCAD.Cad.QuickLine
                     label?.Text ?? string.Empty,
                     label?.Millimetres,
                     label?.HasCompletionMarker ?? false,
-                    label?.SourceKind ?? string.Empty));
+                    label?.SourceKind ?? string.Empty,
+                    line.IsPolyline, line.IsBridgePolyline));
             }
             long scanMilliseconds = (long)((Stopwatch.GetTimestamp() - scanStarted)
                 * 1000.0 / Stopwatch.Frequency);
@@ -363,6 +404,7 @@ namespace UNCAD.Cad.QuickLine
             {
                 Autodesk.AutoCAD.Runtime.RXClass cls = id.ObjectClass;
                 return cls == LineClass
+                    || cls == PolylineClass
                     || cls == DbTextClass
                     || cls.IsDerivedFrom(DbTextClass)   // includes AttributeReference
                     || cls == MTextClass
@@ -561,6 +603,11 @@ namespace UNCAD.Cad.QuickLine
                     DBText label = EntityFactory.DBText(ctx,
                         QuickLineMillimeterText.Format(millimetres), midpoint,
                         height, angle, alignment, textStyleId: styleId);
+                    // 3.3.0（D-054 特性①）：U1LX 新生成的毫米标与 U1L 同层
+                    // （U_CABLE，缺则建；建层失败回退当前图层，不阻断标注）。
+                    ObjectId cableLayerId = LayerGovernorService.EnsureLayer(ctx, tr,
+                        UNCAD.Core.Dwg.UncadLayerStandard.CableLayerName);
+                    if (!cableLayerId.IsNull) label.LayerId = cableLayerId;
                     ctx.AddToCurrentSpace(tr, label);
                     // XData is an acceleration/association hint, not a prerequisite for
                     // drawing the label. Restricted or legacy drawings may reject RegApp
@@ -1265,13 +1312,15 @@ namespace UNCAD.Cad.QuickLine
         private sealed class LineSnapshot
         {
             public LineSnapshot(ObjectId id, Point3d start, Point3d end,
-                int order, string layer)
+                int order, string layer, bool isPolyline, bool isBridgePolyline)
             {
                 Id = id;
                 Start = start;
                 End = end;
                 Order = order;
                 Layer = layer ?? string.Empty;
+                IsPolyline = isPolyline;
+                IsBridgePolyline = isBridgePolyline;
                 Handle = ReadHandle(id);
             }
 
@@ -1280,6 +1329,8 @@ namespace UNCAD.Cad.QuickLine
             public Point3d End { get; }
             public int Order { get; }
             public string Layer { get; }
+            public bool IsPolyline { get; }
+            public bool IsBridgePolyline { get; }
             public string Handle { get; }
         }
 

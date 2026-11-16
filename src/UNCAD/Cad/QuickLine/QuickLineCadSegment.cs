@@ -13,7 +13,8 @@ namespace UNCAD.Cad.QuickLine
     {
         public QuickLineCadSegment(ObjectId lineId, Point3d startPoint, Point3d endPoint,
             ObjectId labelId, string labelText, double? labelMillimetres,
-            bool hasCompletionMarker = false, string labelKind = "")
+            bool hasCompletionMarker = false, string labelKind = "",
+            bool isPolyline = false, bool isBridgePolyline = false)
         {
             LineId = lineId;
             StartPoint = startPoint;
@@ -23,6 +24,8 @@ namespace UNCAD.Cad.QuickLine
             LabelMillimetres = labelMillimetres;
             HasCompletionMarker = hasCompletionMarker;
             LabelKind = labelKind ?? string.Empty;
+            IsPolyline = isPolyline;
+            IsBridgePolyline = isBridgePolyline;
         }
 
         public ObjectId LineId { get; }
@@ -35,6 +38,13 @@ namespace UNCAD.Cad.QuickLine
         public string LabelText { get; }
         public double? LabelMillimetres { get; }
         public bool HasMillimetreLabel => !LabelId.IsNull && LabelMillimetres.HasValue;
+        /// <summary>
+        /// 3.3.0（D-054）：实体是开放 LWPOLYLINE 而不是 Line（U1R/Xauto 开洞后
+        /// 的线是带 bulge 的开放 Polyline；起点=首顶点、终点=末顶点）。
+        /// </summary>
+        public bool IsPolyline { get; }
+        /// <summary>带 bulge 的开洞 Polyline（U1R/Xauto 开洞产物）。</summary>
+        public bool IsBridgePolyline { get; }
         /// <summary>
         /// True when U1LX has explicitly confirmed this label. Values ending
         /// in 00mm can still be treated as editable placeholders.

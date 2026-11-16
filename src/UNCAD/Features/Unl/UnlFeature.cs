@@ -69,8 +69,15 @@ namespace UNCAD.Features.Unl
             InteractiveDrawer.Run(ctx, "指定第一点: ", "指定下一点或 [放弃(U)] <结束>:",
                 (p1, p2, tx, segIds) =>
                 {
-                    // 线段（当前图层）
+                    // 3.3.0（D-054 特性①）：U1L 新生成的线+毫米标直接落在
+                    // 法定图层 U_CABLE（缺层则建，色号 7；建层失败回退当前图层，
+                    // 不阻断绘制）。每段事务里调一次幂等检查。
+                    ObjectId cableLayerId = LayerGovernorService.EnsureLayer(ctx, tx,
+                        UNCAD.Core.Dwg.UncadLayerStandard.CableLayerName);
+
+                    // 线段（U_CABLE；回退=当前图层）
                     var line = EntityFactory.Line(ctx, p1, p2);
+                    if (!cableLayerId.IsNull) line.LayerId = cableLayerId;
                     ctx.AddToCurrentSpace(tx, line);
                     segIds.Add(line.Id);
 
@@ -102,6 +109,7 @@ namespace UNCAD.Features.Unl
 
                     var t = EntityFactory.DBText(ctx, txt, txtpt, hgt, ang, align,
                         textStyleId: styleId);
+                    if (!cableLayerId.IsNull) t.LayerId = cableLayerId;
                     ctx.AddToCurrentSpace(tx, t);
                     // Persist the line/label relationship so U1LX does not
                     // have to guess when labels overlap or have been moved.

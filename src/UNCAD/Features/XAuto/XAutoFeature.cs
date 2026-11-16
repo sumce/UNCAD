@@ -103,7 +103,8 @@ namespace UNCAD.Features.XAuto
                     new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y),
                     item.LabelMillimetres, item.HasCompletionMarker,
                     QuickLineMillimeterText.IsPlaceholder(item.LabelText),
-                    EstimateLabelWidthUnits(item.LabelText, textHeight)))
+                    EstimateLabelWidthUnits(item.LabelText, textHeight),
+                    item.IsPolyline, item.IsBridgePolyline))
                     .ToList();
                 // 3.2.0.1（D-053 修订）：重排目标 = 图框可用空间——草图整体按
                 // 毫米比例铺进该空间并联合居中，分量相对位置不变；3.2.0.3 起
@@ -407,6 +408,16 @@ namespace UNCAD.Features.XAuto
             {
                 if (!segmentById.TryGetValue(pair.Key,
                         out QuickLineCadSegment segment)) continue;
+
+                // 3.3.0（D-054）：开洞 Polyline 的弦参与交叉检测，但不在其上
+                // 二次开洞（拱桥几何按直线两端规划，替换会丢失原有洞口）——
+                // 点名跳过，交用户手动处理。
+                if (segment.IsPolyline)
+                {
+                    ctx.Write("\n[Xauto] 线段 " + pair.Key
+                        + " 是开洞多段线，交叉跳过（不在其上二次开洞）。");
+                    continue;
+                }
 
                 var line = tr.GetObject(segment.LineId, OpenMode.ForWrite) as Line;
                 if (line == null || line.IsErased) continue;

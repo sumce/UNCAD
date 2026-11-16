@@ -32,9 +32,9 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.2.0` (Xauto release line, 2026-11-15;
-  full WPF UI since 3.0.0, D-038; patches increment the fourth version part
-  per D-032).
+- Product: `UNCAD Pro`. Stable line: `3.3.0` (governed-layers release line,
+  2026-11-17, D-054; full WPF UI since 3.0.0, D-038; patches increment the
+  fourth version part per D-032).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -42,6 +42,15 @@ when their version numbers or counts are stale.
 
 ## Hard Constraints
 
+- Governed layers (D-054, 3.3.0): `U_CABLE` (cable routes, colour 7), `U_TRAY`
+  (U1Q output, colour 1), `U_CONDUIT` (U1C output, colour 4) — names verbatim,
+  no spaces. Layer correction runs inside the U1U/U1F write transaction
+  (`UNC_FILL_LAYER_GOVERNOR`, default on); outputs are classified by the
+  parallel-annotation KIND only (`U1Q`/`U1C`). Unknown or metadata-less outputs
+  are never moved and never guessed from colour/text. Connectivity reporting
+  is report-level only (never blocks a write); open holed polylines from
+  U1R/Xauto are scanned as single segments and whole components containing
+  them are never relaid by Xauto.
 - Machine workbooks are selected by the user: local/UNC paths or HTTP/HTTPS
   URLs (download-only, D-041). Refresh is explicit in U1SET/U1DATA; drawing
   commands never touch the network, and startup auto-refresh stays removed.

@@ -165,6 +165,12 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] " + redefineNote);
 
+            // 3.3.0（D-054）路由体检：连通性（报告级）+ 图层矫正计划 + U1U 3D
+            // 路由预览；阶段逻辑在 FillRouteInspectionStage（轴位取自机台行）。
+            FillRouteInspection routeInspection =
+                FillRouteInspectionStage.InspectSelectionAndReport(ctx, selection,
+                    picked, updateMode);
+
             // 整机回路校验（U1SET 可关闭）。D-034：部分回路的 BOQ 会丢掉未选
             // 回路的工程量，宁可少生成也不能写错数。D-044（2026-11-03）：U1F 与
             // U1U 同口径——缺回路时图纸照常填写（每框只依赖自己的统计与机台行），
@@ -244,7 +250,7 @@ namespace UNCAD.Features.Fill
             string updateDeviceName = picked.CircuitName;
             Log.Info("U1F 审阅窗前清单: " + Describe(plan.Review));
             if (!FillReviewStage.ShowReview(plan.Review, catalog, options.Planning,
-                    updateMode, out FillReviewData review)) return;
+                    updateMode, out FillReviewData review, routeInspection)) return;
             if (cableReserve != null)
                 CableReserveReview.ApplyReviewReserve(statistics, cableReserve, review);
             Log.Info("U1F 审阅窗后清单: " + Describe(review));
@@ -313,7 +319,7 @@ namespace UNCAD.Features.Fill
             }
 
             int filled;
-            int migratedBridgeLabels;
+            int migratedBridgeLabels, layerGovernorMoved = 0;
             XFrameMigrationResult xframeMigration;
             FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
                 upstreamInfoResult;
@@ -342,6 +348,8 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         new[] { selection });
+                    // 3.3.0（D-054 特性①）：图层矫正进既有写事务（一次 U 连同填充一起回退）。
+                    layerGovernorMoved = LayerGovernorService.Apply(ctx, transaction, routeInspection.LayerPlan);
                     // D-043：删除已吸收的老版设备预留横排标注（吸收判定在读阶段）。
                     DeviceReserveMarkerReader.EraseAbsorbed(transaction,
                         deviceReserveEraseIds.ToArray(),
@@ -518,6 +526,7 @@ namespace UNCAD.Features.Fill
                     + "] 已处理 " + migratedBridgeLabels
                     + " 个旧桥架标注（升级 BOQ 两行样式或修复角度）；格数按 "
                     + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格换算。");
+            FillRouteInspectionStage.WriteWriteResult(ctx, command, routeInspection, layerGovernorMoved);
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 颜色已校正：设备端 " + deviceColorBlocks

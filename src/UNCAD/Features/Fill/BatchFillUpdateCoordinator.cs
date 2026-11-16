@@ -57,6 +57,10 @@ namespace UNCAD.Features.Fill
             long perfPreflight = 0, perfWrite = 0, perfBoq = 0;
             ctx.Write("\n[U1U] 正在批量预检 " + regions.Count + " 个图框，请稍候...");
             var perfPhase = System.Diagnostics.Stopwatch.StartNew();
+            // 3.3.0（D-054）：整图只扫一次 U1L 线段（含开洞 Polyline），供逐框
+            // 连通性/图层矫正/预览场景体检——逐框各扫一遍是 O(图框×实体)。
+            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> routeScanned =
+                FillRouteInspectionStage.Scan(ctx);
             // 千/万级图框：进度窗让用户看到进展，不再“无响应”。
             var preflightProgress = new ProgressWindow("U1U 批量预检");
             preflightProgress.Show();
@@ -72,7 +76,7 @@ namespace UNCAD.Features.Fill
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
                         options, workbook, plans, errors, catalogRequests,
-                        definitions, statisticsSettings);
+                        definitions, statisticsSettings, routeScanned);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
@@ -323,9 +327,39 @@ namespace UNCAD.Features.Fill
             }
             var confirmationRows = plans.Select(plan => new BatchFillConfirmationRow(
                 plan.Region.Handle, plan.Machine.MachineId, plan.Machine.CircuitName,
-                plan.DeviceState, plan.Rows.Count)).ToList();
+                plan.DeviceState, plan.Rows.Count,
+                plan.RouteInspection?.ConnectivityText)).ToList();
+            // 3.3.0（D-054 特性③）：窗开前按框预建场景，选中行切到该框预览；
+            // 特性①：整批图层矫正汇总进底部报告行。
+            var previewsByFrame = new Dictionary<string,
+                UNCAD.Core.QuickLine.QuickLineOrbitPreviewModel>(
+                StringComparer.OrdinalIgnoreCase);
+            var layerCounters = new UNCAD.Core.Dwg.UncadLayerCorrectionCounters();
+            foreach (BatchFillUpdatePlan plan in plans)
+            {
+                if (plan.RouteInspection?.Preview != null
+                    && !previewsByFrame.ContainsKey(plan.Region.Handle))
+                    previewsByFrame.Add(plan.Region.Handle,
+                        plan.RouteInspection.Preview);
+                if (plan.RouteInspection?.LayerPlan != null)
+                {
+                    layerCounters.CableEntities +=
+                        plan.RouteInspection.LayerPlan.Counters.CableEntities;
+                    layerCounters.TrayEntities +=
+                        plan.RouteInspection.LayerPlan.Counters.TrayEntities;
+                    layerCounters.ConduitEntities +=
+                        plan.RouteInspection.LayerPlan.Counters.ConduitEntities;
+                    layerCounters.UndeterminableEntities +=
+                        plan.RouteInspection.LayerPlan.Counters.UndeterminableEntities;
+                    layerCounters.UndeterminableHandles.AddRange(
+                        plan.RouteInspection.LayerPlan.UndeterminableHandles);
+                }
+            }
+            string layerCorrectionText = layerCounters.IsEmpty
+                ? null : layerCounters.Describe();
             // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达，取消/关闭/Esc 一律 false。
-            var confirmationWindow = new BatchFillConfirmationWindow(confirmationRows);
+            var confirmationWindow = new BatchFillConfirmationWindow(confirmationRows,
+                previewsByFrame, layerCorrectionText);
             AcApplication.ShowModalWindow(confirmationWindow);
             if (!confirmationWindow.Confirmed) return;
 
@@ -348,6 +382,7 @@ namespace UNCAD.Features.Fill
             int frameBlocks = 0;
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
+            int layerGovernorMoved = 0;
             XFrameMigrationResult xframeMigration = new XFrameMigrationResult(0, 0, 0);
             int deviceColorBlocks = 0;
             int upstreamColorBlocks = 0;
@@ -368,6 +403,11 @@ namespace UNCAD.Features.Fill
                 {
                     xframeMigration = XFrameMigrationService.Migrate(ctx, transaction,
                         plans.Select(plan => plan.Selection));
+                    // 3.3.0（D-054 特性①）：各框图层矫正放进这一个写事务——
+                    // 一次 U 连同整批填充一起回退；单框失败不阻断批次。
+                    foreach (BatchFillUpdatePlan plan in plans)
+                        layerGovernorMoved += LayerGovernorService.Apply(ctx,
+                            transaction, plan.RouteInspection?.LayerPlan);
                     foreach (BatchFillUpdatePlan plan in plans)
                     {
                         int migratedCapacity = FillFeature.ResolveTableWriteCapacity(
@@ -592,6 +632,14 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[U1U] 图框已升级：xframe_v2 " + xframeMigration.Frames
                     + " 个，BOQ 表替换 " + xframeMigration.BoqTables
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
+            if (layerGovernorMoved > 0)
+                ctx.Write("\n[U1U] 图层矫正完成：" + layerGovernorMoved
+                    + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT）。");
+            foreach (BatchFillUpdatePlan plan in plans)
+                foreach (string handle in plan.RouteInspection?.LayerPlan
+                    ?.UndeterminableHandles ?? new List<string>())
+                    ctx.Write("\n[U1U] 图框 " + plan.Region.Handle + " 实体 " + handle
+                        + " 带平行标注元数据但种类无法判定（非 U1Q/U1C），未移动。");
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[U1U] 颜色已校正：设备端 " + deviceColorBlocks
                     + " 个块，上游端 " + upstreamColorBlocks + " 个块。");

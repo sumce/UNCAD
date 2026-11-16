@@ -936,3 +936,71 @@ rewrite an existing entry.
   placeholder's final drawn length is capped at max(current drawn length,
   readability floor); only the readability floor may raise it. Segments with
   confirmed real millimetres are untouched by this cap.
+
+## D-054: Governed Layers, Route Connectivity Report, U1U 3D Preview Pane, Polyline Scan (2026-11-17)
+
+- Status: accepted (user-decided layer names; 3.3.0 feature pack, four clauses)
+- Decision:
+  1. **Governed layers + auto-correction.** Three statutory layer names,
+     verbatim and all-uppercase, no spaces: `U_CABLE` (cable routes — U1L
+     segments + millimetre labels, ACI colour 7), `U_TRAY` (tray — U1Q
+     output, ACI colour 1 red), `U_CONDUIT` (conduit — U1C output, ACI
+     colour 4 cyan). Missing layers are created with those colour indices.
+     Identification: cable lines are the U1L segment entities recognized by
+     the scanner; millimetre labels are texts associated via
+     QuickLineMetadataStore or matched by the scanner → `U_CABLE`. Entities
+     carrying ParallelAnnotationMetadata are outputs resolved by the
+     existing KIND field: `U1Q` → `U_TRAY`, `U1C` → `U_CONDUIT` (KIND has
+     been written unconditionally since the metadata was introduced —
+     D-018/D-050 — so there is no "has-metadata-but-no-kind" state). An
+     output whose KIND is neither U1Q nor U1C is **not moved and named
+     "无法判定"**; an output without metadata cannot be identified as a
+     plugin entity at all and is likewise never moved — the repository
+     philosophy is to never guess. New U1L/U1LX lines and labels land
+     directly on `U_CABLE`. U1U/U1F list "图层矫正：N 个实体移正（电缆
+     x/桥架 y/线管 z/无法判定 w）" in the confirmation window / batch
+     preflight remarks, and the correction runs inside the existing write
+     transaction (one U undoes it together with the fill). Toggle
+     `UNC_FILL_LAYER_GOVERNOR` (default on).
+  2. **Connectivity check, report-level only.** A pure Core analyzer
+     (`CircuitConnectivityAnalyzer`, endpoint tolerance identical to
+     U1LX) reports, per frame bucket: connected components, isolated
+     segments (degree 0 at both ends) and the "every segment should touch
+     at least one neighbour" violation list. The batch U1U confirmation
+     window gains a 连通性 column (✔ N 段一条链 / ⚠ 孤立段：句柄…), the
+     batch preflight copies the same text into the result-window remarks,
+     and single-frame U1F/U1U print it on the command line. **Report only,
+     never an abort** — escalate only after field feedback.
+  3. **U1U 3D preview pane.** The U1U confirmation windows (single-frame
+     review window and the batch confirmation window) gain a left preview:
+     the frame's U1L routes are rebuilt with `QuickLineIsometricSceneBuilder
+     .BuildAll` from the millimetre labels, ground-normalized (all node Z
+     minus min Z — the lowest segment endpoint sits at 0), and drawn on a
+     WPF Canvas with a pure-math orthogonal orbit camera (azimuth/elevation
+     + zoom; drag to orbit, wheel to zoom, double-click to reset). Axis
+     summary parses the workbook axes tolerantly (`48/V`, `48-V`, `48`,
+     `V`; failures show the original text — no guessing) and renders like
+     "上游 48/V ↔ 下游 37/V · Δ11 跨 × 4.8m ≈ 52.8m". In the batch window
+     the preview follows the selected row (scenes are pre-built per frame
+     before the window opens). Windows only draw the passed-in model;
+     scene/camera models are built in the Features stage (layer rules).
+     No third-party 3D library (HelixToolkit etc.).
+  4. **Open polylines enter the scan.** `QuickLineCadService.Scan` accepts
+     open LWPOLYLINEs (U1R/Xauto holed lines carry bulges) as single
+     segments — start = first vertex, end = last vertex; the chord
+     participates in endpoint connection and crossing detection, and the
+     millimetre label is picked up through the existing metadata
+     association. Closed polylines are never cable routes and are skipped.
+     `SketchProportionPlanner` skips any component containing a polyline
+     (bridge-holed ones are named explicitly) — strictly safer than
+     before, when such lines were invisible to the scan and neighbouring
+     relayouts tore the sketch open. U1Q/U1C attribution (SOURCE/RUN →
+     host cable segments) is exposed as `ParallelAnnotationOwnership` and
+     consumed by the layer governor; the preview deliberately does not
+     draw tray/conduit overlays (deferred).
+- Consequence: do not reintroduce per-output layer guessing from colour or
+  text heuristics; do not make the connectivity report block a write; do
+  not build scenes inside windows; do not scan closed polylines as route
+  segments. Entity colours are untouched by the governor — only layer
+  membership changes (U1C keeps its explicit magenta 6 entity colour on
+  the cyan U_CONDUIT layer).

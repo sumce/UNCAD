@@ -5,8 +5,9 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.2.0` (2026-11-15; Xauto release line with patches
-  through 3.2.0.6 — future fixes increment the fourth version part per D-032).
+- Current stable release: `3.3.0` (2026-11-17; D-054 feature pack — governed
+  layers, route connectivity report, U1U 3D preview pane, polyline scan.
+  Future fixes increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -18,7 +19,7 @@ shorter than the historical release notes.
 | --- | --- | --- |
 | Fill | `Features/Fill/FillFeature.cs` | U1F/U1U selection, planning, review, and one CAD transaction |
 | Excel/Core | `Core/Excel/ExcelMachineReader.cs`, `Core/Fill/` | U_ workbook parsing, BOQ matching, fill planning and diffing |
-| QuickLine | `Features/Unl/`, `Core/QuickLine/`, `Cad/QuickLine/` | U1L/U1LX line creation, graph traversal, and millimeter labels |
+| QuickLine | `Features/Unl/`, `Core/QuickLine/`, `Cad/QuickLine/` | U1L/U1LX line creation, graph traversal, millimeter labels, and route connectivity (open polylines from U1R/Xauto hops enter the scan as single segments, D-054) |
 | Marking | `Features/Unq/`, `Features/Conduit/`, `Features/Unr/` | U1Q1/U1Q2/U1Q4, U1C, and U1R annotations |
 | Layout | `Features/XLayout/`, `Core/Dwg/` | XLAYOUT arrangement, duplicate markers, and Xmerge |
 | Statistics | `Features/Stat/`, `Features/Unadd/`, `Core/Stat/` | XSTS and legacy UNADD reports |
@@ -130,6 +131,14 @@ XLAYOUT/XSTS
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is
   revisited.
+- Governed layers (D-054, 3.3.0): `U_CABLE` (U1L lines + mm labels, colour 7),
+  `U_TRAY` (U1Q output, colour 1), `U_CONDUIT` (U1C output, colour 4). New
+  U1L/U1LX output lands on `U_CABLE`; U1U/U1F correct misplaced plugin
+  entities inside the existing write transaction (`UNC_FILL_LAYER_GOVERNOR`,
+  default on) and report counts. KIND on parallel annotations decides tray vs
+  conduit; unknown or metadata-less outputs are never moved (no guessing).
+  The U1U confirmation windows show a Canvas-drawn 3D route preview and a
+  report-only connectivity column (isolated segments are named, never a block).
 
 ## Performance Rules
 

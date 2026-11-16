@@ -2,8 +2,9 @@
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:local="clr-namespace:UNCAD.UI"
                  Title="U1U 批量确认"
-                 Width="980" Height="640" MinWidth="820" MinHeight="500"
+                 Width="1180" Height="680" MinWidth="900" MinHeight="520"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -17,30 +18,50 @@
 
         <ui:TitleBar Grid.Row="0" Title="U1U 批量确认" />
 
-        <Grid Grid.Row="1" Margin="24,12,24,8">
+        <Grid x:Name="BodyGrid" Grid.Row="1" Margin="24,12,24,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" FontSize="22" FontWeight="SemiBold"
+            <Grid.ColumnDefinitions>
+                <!-- 3.3.0（D-054 特性③）：左侧 3D 路由预览，选中行切换场景。 -->
+                <ColumnDefinition x:Name="PreviewColumn" Width="0" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontSize="22" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                        Text="{Binding Heading, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
-            <TextBlock Grid.Row="1" Margin="0,6,0,12" FontSize="12" TextWrapping="Wrap"
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,12" FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="所有图框将在一个事务中写入，任一失败则整批回滚；请逐行核对机台和回路。" />
-            <DataGrid x:Name="BatchGrid" Grid.Row="2"
+                       Text="所有图框将在一个事务中写入，任一失败则整批回滚；请逐行核对机台和回路。选中一行，左侧预览该图框的 U1L 路由（拖动旋转/滚轮缩放/双击复位）。" />
+            <Border x:Name="PreviewHost" Grid.Row="2" Grid.Column="0" Width="320"
+                    Margin="0,0,12,0" Visibility="Collapsed"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="6">
+                <local:QuickLineOrbitPreviewControl x:Name="OrbitPreview" />
+            </Border>
+            <DataGrid x:Name="BatchGrid" Grid.Row="2" Grid.Column="1"
                       AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" BorderThickness="0"
                       RowHeight="32" FontSize="13"
                       SelectionMode="Single" SelectionUnit="FullRow"
+                      SelectionChanged="OnGridSelectionChanged"
                       Background="{DynamicResource ControlFillColorDefaultBrush}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="图框" Binding="{Binding FrameHandle}" Width="90" />
                     <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
                     <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DeviceName}" Width="*" />
-                    <DataGridTextColumn Header="Device" Binding="{Binding DeviceState}" Width="130" />
+                    <DataGridTextColumn Header="Device" Binding="{Binding DeviceState}" Width="120" />
+                    <DataGridTextColumn Header="连通性" Binding="{Binding ConnectivityText}" Width="190">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding ConnectivityText}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="清单项" Binding="{Binding RowCount}" Width="70">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
@@ -58,9 +79,15 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock VerticalAlignment="Center" FontSize="12"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="{Binding Footer, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding Footer, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+                <!-- 3.3.0（D-054 特性①）：图层矫正报告（有计划才显示）。 -->
+                <TextBlock x:Name="LayerGovernorText" FontSize="12" Margin="0,2,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
             <ui:Button x:Name="CancelButton" Grid.Column="1" Content="取消" MinWidth="110"
                        Margin="0,0,12,0" IsCancel="True" Click="OnCancel" />
             <ui:Button x:Name="ConfirmButton" Grid.Column="2" Content="确认更新" MinWidth="110"

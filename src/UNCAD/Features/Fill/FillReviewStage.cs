@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using UNCAD.Cad;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.QuickLine;
 using UNCAD.Core.Text;
 using UNCAD.UI;
 
@@ -18,14 +19,21 @@ namespace UNCAD.Features.Fill
     /// </summary>
     internal static class FillReviewStage
     {
-        /// <summary>弹清单确认窗；取消返回 false（confirmed 为 null）。</summary>
+        /// <summary>
+        /// 弹清单确认窗；取消返回 false（confirmed 为 null）。
+        /// 3.3.0（D-054）：routeInspection（U1F/U1U 路由体检）非空时——U1U 的
+        /// 3D 路由预览显示在左侧（U1F 不带预览），两者的图层矫正报告都列出。
+        /// </summary>
         internal static bool ShowReview(FillReviewData review, BoqCatalogIndex catalog,
             FillPlanningOptions planning, bool updateMode,
-            out FillReviewData confirmed)
+            out FillReviewData confirmed,
+            FillRouteInspection routeInspection = null)
         {
             confirmed = null;
             // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达，Data 在确认后读取。
-            var window = new FillReviewWindow(review, catalog, planning, updateMode);
+            var window = new FillReviewWindow(review, catalog, planning, updateMode,
+                updateMode ? routeInspection?.Preview : null,
+                routeInspection?.LayerCorrectionText);
             Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
             if (!window.Confirmed) return false;
             confirmed = window.Data;
