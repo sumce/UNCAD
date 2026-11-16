@@ -121,20 +121,22 @@ namespace UNCAD.Core.Report
                     + "）", workbook, true);
                 IRow blindHeader = blind.CreateRow(1);
                 Set(blindHeader, 0, "机台 ID", workbook, true);
-                Set(blindHeader, 1, "批次", workbook, true);
-                Set(blindHeader, 2, "序号", workbook, true);
-                Set(blindHeader, 3, "近名提示", workbook, true);
+                Set(blindHeader, 1, "区域", workbook, true);
+                Set(blindHeader, 2, "批次", workbook, true);
+                Set(blindHeader, 3, "序号", workbook, true);
+                Set(blindHeader, 4, "近名提示", workbook, true);
                 for (int index = 0; index < report.BlindMachines.Count; index++)
                 {
                     XstsBlindMachine item = report.BlindMachines[index];
                     IRow blindRow = blind.CreateRow(index + 2);
                     Set(blindRow, 0, item.MachineId);
-                    Set(blindRow, 1, item.Batch);
-                    Set(blindRow, 2, item.Seq);
-                    Set(blindRow, 3, item.NearNameNote);
+                    Set(blindRow, 1, item.Region);
+                    Set(blindRow, 2, item.Batch);
+                    Set(blindRow, 3, item.Seq);
+                    Set(blindRow, 4, item.NearNameNote);
                 }
-                for (int i = 0; i < 4; i++)
-                    blind.SetColumnWidth(i, (i == 3 ? 52 : i == 0 ? 18 : 10) * 256);
+                for (int i = 0; i < 5; i++)
+                    blind.SetColumnWidth(i, (i == 4 ? 52 : i == 0 ? 18 : 10) * 256);
             }
             for (int i = 0; i < 7; i++)
                 sheet.SetColumnWidth(i, (i >= 5 ? 38 : i == 0 ? 18 : 14) * 256);

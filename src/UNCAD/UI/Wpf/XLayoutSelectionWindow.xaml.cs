@@ -131,13 +131,19 @@ namespace UNCAD.UI
         //（粘贴 ID 清单不再把同号异组的 PSP/OHVC 双胞胎按子串捞进来）。
         private readonly IReadOnlyList<string> _knownMachineIds;
         private bool _suppressCascade;
+        private readonly IReadOnlyDictionary<string, string> _regionByMachine;
+        private string _selectedRegion = "";
 
         public XLayoutSelectionWindow(IReadOnlyList<XLayoutFrameItem> items,
             Core.Dwg.XLayoutArrangeMode arrangeMode
-                = Core.Dwg.XLayoutArrangeMode.MachineReadiness)
+                = Core.Dwg.XLayoutArrangeMode.MachineReadiness,
+            IReadOnlyDictionary<string, string> regionByMachine = null)
         {
             _items = (items ?? Array.Empty<XLayoutFrameItem>())
                 .Where(item => item != null).ToList();
+            // 3.2.0.10：按台账 U_区域 筛选（key=归一化机台号）。无区域数据时
+            // 区域下拉整体隐藏，窗口行为与旧版完全一致。
+            _regionByMachine = regionByMachine;
             _knownMachineIds = _items
                 .Select(item => (item.MachineId ?? "").Trim())
                 .Where(id => id.Length > 0).Distinct()
@@ -155,6 +161,7 @@ namespace UNCAD.UI
             ArrangeModeBox.SelectedIndex = arrangeMode
                 == Core.Dwg.XLayoutArrangeMode.MachineIdOrder ? 1
                 : arrangeMode == Core.Dwg.XLayoutArrangeMode.Upstream ? 2 : 0;
+            PopulateRegionBox();
             RebuildTree("");
             UpdateSelectionCount();
             Loaded += (sender, args) => FilterBox.Focus();
@@ -166,8 +173,78 @@ namespace UNCAD.UI
         public IReadOnlyList<XLayoutFrameItem> ComputeSelectedItems()
         {
             return _items.Where(item => _checked.Contains(item)
+                && RegionAllows(item.MachineId)
                 && XLayoutSelectionFilter.MatchesCircuit(item.MachineId,
                     item.DeviceName, _terms, _knownMachineIds)).ToList();
+        }
+
+        // ---------- 区域筛选（3.2.0.10，台账 U_区域） ----------
+
+        private void PopulateRegionBox()
+        {
+            if (_regionByMachine == null || _regionByMachine.Count == 0) return;
+            var counts = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (XLayoutFrameItem item in _items)
+            {
+                if (!TryGetRegion(item.MachineId, out string region)
+                    || region.Length == 0) continue;
+                counts[region] = counts.TryGetValue(region, out int value) ? value + 1 : 1;
+            }
+            if (counts.Count == 0) return;
+            RegionBox.Items.Add("全部区域");
+            foreach (KeyValuePair<string, int> pair in
+                     counts.OrderByDescending(pair => pair.Value))
+                RegionBox.Items.Add(pair.Key + " (" + pair.Value + ")");
+            RegionBox.SelectedIndex = 0;
+            RegionBox.Visibility = System.Windows.Visibility.Visible;
+        }
+
+        private bool TryGetRegion(string machineId, out string region)
+        {
+            region = "";
+            if (_regionByMachine == null) return false;
+            return _regionByMachine.TryGetValue(
+                Core.Text.IdentityTextNormalizer.Key(machineId ?? ""), out region);
+        }
+
+        /// <summary>区域是否放行该机台：未选区域（=全部）放行；选了区域则要求
+        /// 台账登记一致（未登记/空区域的机台在选择具体区域时隐藏）。</summary>
+        internal bool RegionAllows(string machineId)
+        {
+            if (_regionByMachine == null || _selectedRegion.Length == 0) return true;
+            return TryGetRegion(machineId, out string region)
+                && string.Equals(region, _selectedRegion, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void OnRegionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (RegionBox.SelectedItem is string choice)
+            {
+                int cut = choice.IndexOf(" (", StringComparison.Ordinal);
+                _selectedRegion = choice == "全部区域" || cut <= 0
+                    ? "" : choice.Substring(0, cut);
+            }
+            RebuildTree(FilterBox.Text);
+            UpdateSelectionCount();
+        }
+
+        /// <summary>测试/外部驱动：直接选择区域（值形如 "AMHS" 或 "全部区域"）。</summary>
+        internal void ApplyRegion(string regionName)
+        {
+            if (RegionBox.Items.Count == 0) return;
+            for (int index = 0; index < RegionBox.Items.Count; index++)
+            {
+                if (!(RegionBox.Items[index] is string choice)) continue;
+                int cut = choice.IndexOf(" (", StringComparison.Ordinal);
+                string value = cut <= 0 ? choice : choice.Substring(0, cut);
+                if (string.Equals(value, regionName,
+                        StringComparison.OrdinalIgnoreCase)
+                    || choice == regionName)
+                {
+                    RegionBox.SelectedIndex = index;
+                    return;
+                }
+            }
         }
 
         /// <summary>把筛选框文本直接应用到树（跳过 250ms 防抖；测试与回车用）。</summary>
@@ -218,6 +295,8 @@ namespace UNCAD.UI
                 .ToList();
             foreach (IGrouping<string, XLayoutFrameItem> machine in machineGroups)
             {
+                // 区域闸门在关键词之前：区域不放行的机台整组隐藏。
+                if (!RegionAllows(machine.Key)) continue;
                 bool machineMatches = XLayoutSelectionFilter.MatchesMachine(
                     machine.Key, terms, _knownMachineIds);
                 // 机台 ID 命中时显示它的全部回路；否则只显示命中的回路。
@@ -228,8 +307,12 @@ namespace UNCAD.UI
                         _knownMachineIds)).ToList();
                 if (shown.Count == 0) continue;
 
+                TryGetRegion(machine.Key, out string regionLabel);
+                string header = (regionLabel ?? "").Length == 0
+                    ? machine.Key + "（" + shown.Count + " 个回路）"
+                    : regionLabel + " · " + machine.Key + "（" + shown.Count + " 个回路）";
                 var machineNode = new XLayoutSelectionNode(
-                    machine.Key + "（" + shown.Count + " 个回路）",
+                    header,
                     machine.Key, "", false);
                 foreach (XLayoutFrameItem item in shown)
                 {

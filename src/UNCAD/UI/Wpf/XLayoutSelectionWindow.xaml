@@ -52,21 +52,25 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="筛选" VerticalAlignment="Center"
                        FontSize="13" Margin="0,0,10,0" />
             <ui:TextBox x:Name="FilterBox" Grid.Column="1" TextChanged="OnFilterTextChanged"
                         KeyDown="OnFilterKeyDown" />
-            <ui:Button x:Name="CheckAllButton" Grid.Column="2" Content="全选"
+            <ComboBox x:Name="RegionBox" Grid.Column="2" MinWidth="140" Margin="14,0,0,0"
+                      Visibility="Collapsed"
+                      SelectionChanged="OnRegionChanged" ToolTip="按台账 U_区域 筛选机台（与关键词同时生效）" />
+            <ui:Button x:Name="CheckAllButton" Grid.Column="3" Content="全选"
                        Margin="14,0,0,0" Click="OnCheckAll" />
-            <ui:Button x:Name="UncheckAllButton" Grid.Column="3" Content="全不选"
+            <ui:Button x:Name="UncheckAllButton" Grid.Column="4" Content="全不选"
                        Margin="8,0,0,0" Click="OnUncheckAll" />
-            <ui:Button x:Name="InvertButton" Grid.Column="4" Content="反选"
+            <ui:Button x:Name="InvertButton" Grid.Column="5" Content="反选"
                        Margin="8,0,0,0" Click="OnInvert" />
-            <ui:Button x:Name="ExpandAllButton" Grid.Column="5" Content="展开全部"
+            <ui:Button x:Name="ExpandAllButton" Grid.Column="6" Content="展开全部"
                        Margin="14,0,0,0" Click="OnExpandAll" />
-            <ui:Button x:Name="CollapseAllButton" Grid.Column="6" Content="折叠全部"
+            <ui:Button x:Name="CollapseAllButton" Grid.Column="7" Content="折叠全部"
                        Margin="8,0,0,0" Click="OnCollapseAll" />
         </Grid>
 

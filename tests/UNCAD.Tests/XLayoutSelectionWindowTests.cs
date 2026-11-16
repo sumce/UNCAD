@@ -209,6 +209,74 @@ namespace UNCAD.Tests
             });
         }
 
+        [Fact]
+        public void Region_NarrowsTreeSelection_AndCombinesWithKeywordFilter()
+        {
+            RunSta(() =>
+            {
+                var region = new Dictionary<string, string>(
+                    UNCAD.Core.Text.IdentityTextNormalizer.Comparer)
+                {
+                    ["M651"] = "AMHS",
+                    ["PSPM651"] = "Litho",
+                    ["OHVC-M651"] = "Metal"
+                };
+                var window = new XLayoutSelectionWindow(RegionItems(),
+                    Core.Dwg.XLayoutArrangeMode.MachineReadiness, region);
+                window.Show();
+                Pump(2);
+
+                // 全部区域：三台都在，节点标题带区域前缀。
+                Assert.Equal(3, window.Roots.Count);
+                Assert.Contains("AMHS · M651", window.Roots[0].Header,
+                    StringComparison.Ordinal);
+
+                // 选 AMHS：只剩 M651，其余（含同号双胞胎）整组隐藏。
+                window.ApplyRegion("AMHS");
+                Assert.Single(window.Roots);
+                Assert.Equal("M651", window.Roots[0].MachineId);
+                Assert.Equal(2, window.ComputeSelectedItems().Count);
+
+                // 区域 + 关键词 AND：AMHS 里再按回路名筛。
+                window.ApplyFilter("RCM");
+                Assert.Single(window.ComputeSelectedItems());
+
+                // 换 Litho：PSPM651 出现，M651 隐藏。
+                window.ApplyFilter("");
+                window.ApplyRegion("Litho");
+                Assert.Single(window.Roots);
+                Assert.Equal("PSPM651", window.Roots[0].MachineId);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void Region_WithoutRegionData_HidesComboBoxAndKeepsLegacyBehaviour()
+        {
+            RunSta(() =>
+            {
+                var window = new XLayoutSelectionWindow(RegionItems());
+                window.Show();
+                Pump(2);
+
+                // 没传区域映射：下拉隐藏（不可用），全部机台可见。
+                Assert.Equal(System.Windows.Visibility.Collapsed,
+                    window.RegionBox.Visibility);
+                Assert.Equal(0, window.RegionBox.Items.Count);
+                Assert.Equal(3, window.Roots.Count);
+                Assert.DoesNotContain("·", window.Roots[0].Header, StringComparison.Ordinal);
+                window.Close();
+            });
+        }
+
+        private static IReadOnlyList<XLayoutFrameItem> RegionItems() => new[]
+        {
+            Item("M651", "RCM", 0),
+            Item("M651", "PUMP", 1),
+            Item("PSPM651", "RCM", 2),
+            Item("OHVC-M651", "RCM", 3)
+        };
+
         private static IEnumerable<XLayoutSelectionNode> MachineAndCircuits(
             XLayoutSelectionNode machine)
         {

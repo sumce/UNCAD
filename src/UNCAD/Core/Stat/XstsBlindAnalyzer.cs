@@ -10,6 +10,9 @@ namespace UNCAD.Core.Stat
     public sealed class XstsBlindMachine
     {
         public string MachineId { get; set; } = "";
+        /// <summary>台账 U_区域（3.2.0.10）——盲区名单按区域看结构（AMHS 剩多少
+        /// 台没画一目了然），区域空=台账未登记。</summary>
+        public string Region { get; set; } = "";
         public string Batch { get; set; } = "";
         public string Seq { get; set; } = "";
         /// <summary>近名提示：图上存在仅一字母之差的机台号（疑似笔误/画错）。</summary>
@@ -77,6 +80,7 @@ namespace UNCAD.Core.Stat
                 var entry = new XstsBlindMachine
                 {
                     MachineId = row.MachineId.Trim(),
+                    Region = (row.Region ?? "").Trim(),
                     Batch = row.Batch ?? "",
                     Seq = row.Seq ?? ""
                 };

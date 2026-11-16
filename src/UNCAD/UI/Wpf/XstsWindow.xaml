@@ -108,6 +108,7 @@
                           Background="{DynamicResource ControlFillColorDefaultBrush}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130" />
+                        <DataGridTextColumn Header="区域" Binding="{Binding Region}" Width="90" />
                         <DataGridTextColumn Header="批次" Binding="{Binding Batch}" Width="90" />
                         <DataGridTextColumn Header="序号" Binding="{Binding Seq}" Width="70" />
                         <DataGridTextColumn Header="近名提示（疑似画错名）" Binding="{Binding NearNameNote}" Width="*">

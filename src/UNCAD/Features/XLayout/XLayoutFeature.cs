@@ -100,6 +100,36 @@ namespace UNCAD.Features.XLayout
             }
             return context;
         }
+        /// <summary>
+        /// 机台号（归一化）→ 台账 U_区域。失败返回 null：选择窗隐藏区域下拉，
+        /// 行为与旧版一致（3.2.0.10）。
+        /// </summary>
+        private static IReadOnlyDictionary<string, string> LoadRegionByMachine(
+            IReadOnlyList<Core.Dwg.XLayoutFrameItem> items)
+        {
+            try
+            {
+                string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+                if (configured.Length == 0) return null;
+                if (!MachineWorkbookSource.TryGetSnapshot(configured, out _)) return null;
+                var region = new Dictionary<string, string>(
+                    Core.Text.IdentityTextNormalizer.Comparer);
+                foreach (MachineRow row in MachineWorkbookSnapshotStore.Default
+                    .ReadRowsForMachines(configured, items.Select(item => item.MachineId)))
+                {
+                    string key = Core.Text.IdentityTextNormalizer.Key(row.MachineId ?? "");
+                    if (key.Length == 0 || region.ContainsKey(key)) continue;
+                    region[key] = (row.Region ?? "").Trim();
+                }
+                return region.Count > 0 ? region : null;
+            }
+            catch (System.Exception ex)
+            {
+                Log.Info("[XLAYOUT] 区域信息读取失败（区域筛选不可用）: " + ex.Message);
+                return null;
+            }
+        }
+
         private const short DuplicateMarkerColorIndex = 2;
         // 只在明显变慢时输出一行 [PERF]；用户交互/对话框时间不计入。
         private const long PerfThresholdMilliseconds = 500;
@@ -229,7 +259,10 @@ namespace UNCAD.Features.XLayout
             if (items.Count > 1)
             {
                 // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达，取消/关闭/Esc 一律 false。
-                var selector = new XLayoutSelectionWindow(items, _arrangeMode);
+                // 3.2.0.10：带上台账区域（U_区域）→ 选择窗可按区域筛选（现场：
+                // 手拼 AMHS 机台清单防不住同号/近名混入，区域才是可靠口径）。
+                var selector = new XLayoutSelectionWindow(items, _arrangeMode,
+                    LoadRegionByMachine(items));
                 Autodesk.AutoCAD.ApplicationServices.Application
                     .ShowModalWindow(selector);
                 if (!selector.Confirmed)
