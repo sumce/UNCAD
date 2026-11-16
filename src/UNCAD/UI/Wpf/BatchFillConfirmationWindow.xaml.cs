@@ -41,6 +41,10 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class BatchFillConfirmationWindow : FluentWindow
     {
+        /// <summary>3.3.1（D-054 Amendment）：对半分列的最小宽度保护（窗口
+        /// MinWidth=900 的约 30%——GridSplitter 拖不穿，两侧内容始终可用）。</summary>
+        internal const double PreviewMinimumPixels = 250.0;
+
         /// <summary>用户点了“确认更新”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
 
@@ -70,8 +74,12 @@ namespace UNCAD.UI
             }
             if (_previews.Count > 0)
             {
-                PreviewColumn.Width = new GridLength(320, GridUnitType.Pixel);
+                // 3.3.1（D-054 Amendment）：预览与清单对半分——两个 Star 列 +
+                // GridSplitter 可拖（最小宽度保护），不再固定 320px 窄条。
+                PreviewColumn.Width = new GridLength(1, GridUnitType.Star);
+                PreviewColumn.MinWidth = PreviewMinimumPixels;
                 PreviewHost.Visibility = Visibility.Visible;
+                PreviewSplitter.Visibility = Visibility.Visible;
                 // 默认选中第一行：预览开窗即有内容，点行切换。
                 if (_rowCount > 0) BatchGrid.SelectedIndex = 0;
                 ShowPreviewForSelectedRow();

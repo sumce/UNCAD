@@ -25,23 +25,30 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <!-- 3.3.0（D-054 特性③）：左侧 3D 路由预览，选中行切换场景。 -->
-                <ColumnDefinition x:Name="PreviewColumn" Width="0" />
-                <ColumnDefinition Width="*" />
+                <!-- 3.3.1（D-054 Amendment）：预览与清单对半分（两个 Star 列 +
+                     GridSplitter 可拖，最小宽度保护）；无预建场景时预览列宽回
+                     0、分隔条隐藏。3.3.0 的固定 320px 窄条已废弃。 -->
+                <ColumnDefinition x:Name="PreviewColumn" Width="0" MinWidth="0" />
+                <ColumnDefinition x:Name="PreviewSplitterColumn" Width="Auto" />
+                <ColumnDefinition x:Name="ReviewColumn" Width="*" MinWidth="250" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" FontSize="22" FontWeight="SemiBold"
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="3" FontSize="22" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                        Text="{Binding Heading, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
-            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,12" FontSize="12" TextWrapping="Wrap"
+            <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Margin="0,6,0,12" FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Text="所有图框将在一个事务中写入，任一失败则整批回滚；请逐行核对机台和回路。选中一行，左侧预览该图框的 U1L 路由（拖动旋转/滚轮缩放/双击复位）。" />
-            <Border x:Name="PreviewHost" Grid.Row="2" Grid.Column="0" Width="320"
-                    Margin="0,0,12,0" Visibility="Collapsed"
+            <Border x:Name="PreviewHost" Grid.Row="2" Grid.Column="0" Margin="0,0,6,0"
+                    Visibility="Collapsed"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="6">
                 <local:QuickLineOrbitPreviewControl x:Name="OrbitPreview" />
             </Border>
-            <DataGrid x:Name="BatchGrid" Grid.Row="2" Grid.Column="1"
+            <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" Grid.Column="1" Width="6"
+                          Visibility="Collapsed" Background="Transparent"
+                          HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                          ResizeBehavior="PreviousAndNext" Cursor="SizeWE" />
+            <DataGrid x:Name="BatchGrid" Grid.Row="2" Grid.Column="2"
                       AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" BorderThickness="0"

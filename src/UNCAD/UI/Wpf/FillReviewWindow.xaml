@@ -43,17 +43,25 @@
 
         <Grid x:Name="BodyGrid" Grid.Row="2" Margin="24,10,24,4">
             <Grid.ColumnDefinitions>
-                <!-- 3.3.0（D-054 特性③）：U1U 左侧 3D 路由预览（有场景才显示）。 -->
-                <ColumnDefinition x:Name="PreviewColumn" Width="0" />
-                <ColumnDefinition Width="*" />
+                <!-- 3.3.1（D-054 Amendment）：预览与清单对半分（两个 Star 列 +
+                     GridSplitter 可拖，最小宽度保护）；无预览（U1F/旧行为）
+                     预览列宽回 0、分隔条隐藏。3.3.0 的固定 300px 窄条已废弃。 -->
+                <ColumnDefinition x:Name="PreviewColumn" Width="0" MinWidth="0" />
+                <ColumnDefinition x:Name="PreviewSplitterColumn" Width="Auto" />
+                <ColumnDefinition x:Name="ReviewColumn" Width="*" MinWidth="250" />
             </Grid.ColumnDefinitions>
-            <Border x:Name="PreviewHost" Grid.Column="0" Width="300"
-                    Margin="0,0,12,0" Padding="0" Visibility="Collapsed"
+            <Border x:Name="PreviewHost" Grid.Column="0" Margin="0,0,6,0"
+                    Padding="0" Visibility="Collapsed"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="6">
                 <local:QuickLineOrbitPreviewControl x:Name="OrbitPreview" />
             </Border>
-            <TabControl x:Name="ReviewTabs" Grid.Column="1" Background="Transparent"
+            <GridSplitter x:Name="PreviewSplitter" Grid.Column="1" Width="6"
+                          Margin="0,0,0,0" Visibility="Collapsed"
+                          Background="Transparent" HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                          Cursor="SizeWE" />
+            <TabControl x:Name="ReviewTabs" Grid.Column="2" Background="Transparent"
                         BorderThickness="0">
             <TabItem Header="基础信息">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

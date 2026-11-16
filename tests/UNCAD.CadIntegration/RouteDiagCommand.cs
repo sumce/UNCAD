@@ -250,6 +250,17 @@ namespace UNCAD.CadIntegration
                 if (inspection.Preview.Segments.Count != 3)
                     failures.Add("预览段数 " + inspection.Preview.Segments.Count
                         + " ≠ 3");
+                // 3.3.1（D-054 Amendment）：逐段毫米标原文（特性B）与上下游
+                // 轴位原文（特性C）必须从 BuildPreview 带进模型。
+                int labelled = inspection.Preview.Segments.Count(
+                    segment => segment.LabelText.Length > 0);
+                if (labelled != 3)
+                    failures.Add("预览段毫米标原文 " + labelled + " ≠ 3");
+                if (inspection.Preview.UpstreamAxisLabel != "48/V"
+                    || inspection.Preview.DownstreamAxisLabel != "37/V")
+                    failures.Add("预览轴位原文未带入: "
+                        + inspection.Preview.UpstreamAxisLabel + " / "
+                        + inspection.Preview.DownstreamAxisLabel);
             }
             Info("连通性: " + inspection.ConnectivityText);
             if (inspection.Connectivity == null

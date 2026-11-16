@@ -5,9 +5,11 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.0` (2026-11-17; D-054 feature pack — governed
-  layers, route connectivity report, U1U 3D preview pane, polyline scan.
-  Future fixes increment the fourth version part per D-032).
+- Current stable release: `3.3.1` (2026-11-17; D-054 amendment — U1U 3D
+  preview enhancements: half-and-half window split with GridSplitter,
+  per-segment millimetre labels, column grid + endpoint axis pins +
+  interpolated numeric ticks, tray/conduit dual-line channels. Future fixes
+  increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -139,6 +141,14 @@ XLAYOUT/XSTS
   conduit; unknown or metadata-less outputs are never moved (no guessing).
   The U1U confirmation windows show a Canvas-drawn 3D route preview and a
   report-only connectivity column (isolated segments are named, never a block).
+  3.3.1 preview enhancements (D-054 amendment): preview and list split 50/50
+  with a draggable GridSplitter (collapsed to zero when no preview), each
+  segment shows its millimetre label at the midpoint (hidden below a 24px
+  projected span), a ground column grid (4800 mm bays, toggleable, default on)
+  with endpoint axis pins and interpolated numeric axis ticks, and tray
+  (red dual lines + translucent fill, width from the U1Q label, 200 default
+  when unparsed) / conduit (cyan dual lines) channel overlays from
+  ParallelAnnotationOwnership host attribution.
 
 ## Performance Rules
 

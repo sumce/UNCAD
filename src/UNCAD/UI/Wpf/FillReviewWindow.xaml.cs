@@ -28,6 +28,10 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class FillReviewWindow : FluentWindow
     {
+        /// <summary>3.3.1（D-054 Amendment）：对半分列的最小宽度保护（窗口
+        /// MinWidth=900 的约 30%——GridSplitter 拖不穿，两侧内容始终可用）。</summary>
+        internal const double PreviewMinimumPixels = 250.0;
+
         /// <summary>用户点了“确认填充”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
 
@@ -81,10 +85,14 @@ namespace UNCAD.UI
             HeaderBar.Title = Title;
 
             // 特性③：左侧 3D 预览（只绘制传入模型，不重建场景）。
+            // 3.3.1（D-054 Amendment）：预览与清单对半分——两个 Star 列 +
+            // GridSplitter 可拖（最小宽度保护），不再固定 300px 窄条。
             if (preview != null)
             {
-                PreviewColumn.Width = new GridLength(300, GridUnitType.Pixel);
+                PreviewColumn.Width = new GridLength(1, GridUnitType.Star);
+                PreviewColumn.MinWidth = PreviewMinimumPixels;
                 PreviewHost.Visibility = Visibility.Visible;
+                PreviewSplitter.Visibility = Visibility.Visible;
                 OrbitPreview.SetModel(preview);
             }
             // 特性①：图层矫正报告（确认窗里列出，动作在写事务里执行）。

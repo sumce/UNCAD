@@ -36,8 +36,12 @@ namespace UNCAD.Tests
                         FillPlanningOptions.Default, true);
                     plain.Show();
                     Pump(2);
-                    // 无预览/无报告（U1F/旧行为）：两侧附加区都隐藏。
+                    // 无预览/无报告（U1F/旧行为）：两侧附加区都隐藏；预览列
+                    // 宽回 0、分隔条隐藏（清单独占整行）。
                     Assert.Equal(Visibility.Collapsed, plain.PreviewHost.Visibility);
+                    Assert.Equal(Visibility.Collapsed,
+                        plain.PreviewSplitter.Visibility);
+                    Assert.Equal(0.0, plain.PreviewColumn.Width.Value);
                     Assert.Equal(Visibility.Collapsed,
                         plain.LayerGovernorText.Visibility);
                     plain.Close();
@@ -50,6 +54,20 @@ namespace UNCAD.Tests
                     withPreview.Show();
                     Pump(3);
                     Assert.Equal(Visibility.Visible, withPreview.PreviewHost.Visibility);
+                    // 3.3.1（D-054 Amendment）：预览与清单对半分——两个 Star 列 +
+                    // GridSplitter（可拖），最小宽度保护约 30%。
+                    Assert.Equal(Visibility.Visible,
+                        withPreview.PreviewSplitter.Visibility);
+                    Assert.Equal(GridUnitType.Star,
+                        withPreview.PreviewColumn.Width.GridUnitType);
+                    Assert.Equal(GridUnitType.Star,
+                        withPreview.ReviewColumn.Width.GridUnitType);
+                    Assert.True(withPreview.PreviewColumn.MinWidth >= 250.0,
+                        "预览列最小宽度保护（拖不穿）");
+                    Assert.True(withPreview.ReviewColumn.MinWidth >= 250.0,
+                        "清单列最小宽度保护（拖不穿）");
+                    Assert.True(double.IsNaN(withPreview.PreviewHost.Width),
+                        "预览宿主不再固定 300px 窄条（Fill 占满左列）");
                     Assert.Equal(Visibility.Visible,
                         withPreview.LayerGovernorText.Visibility);
                     Assert.Contains("Δ11 跨", withPreview.OrbitPreview.Model.AxisSummary,
@@ -92,6 +110,15 @@ namespace UNCAD.Tests
                     Pump(3);
 
                     Assert.Equal(Visibility.Visible, window.PreviewHost.Visibility);
+                    // 3.3.1（D-054 Amendment）：对半分布局（Star 列 + Splitter）。
+                    Assert.Equal(Visibility.Visible,
+                        window.PreviewSplitter.Visibility);
+                    Assert.Equal(GridUnitType.Star,
+                        window.PreviewColumn.Width.GridUnitType);
+                    Assert.Equal(GridUnitType.Star,
+                        window.ReviewColumn.Width.GridUnitType);
+                    Assert.True(double.IsNaN(window.PreviewHost.Width),
+                        "预览宿主不再固定 320px 窄条");
                     Assert.Contains("图层矫正", window.LayerGovernorText.Text,
                         StringComparison.Ordinal);
                     Assert.Equal("✔ 5 段一条链",
@@ -139,8 +166,12 @@ namespace UNCAD.Tests
                     window.Show();
                     Pump(2);
                     // 没有预建场景（如整批图纸都没有带毫米标的线段）→ 预览区隐藏，
-                    // 行为与旧版一致；连通性列默认「—」。
+                    // 行为与旧版一致；连通性列默认「—」。3.3.1：预览列宽回 0、
+                    // 分隔条隐藏，清单独占整行。
                     Assert.Equal(Visibility.Collapsed, window.PreviewHost.Visibility);
+                    Assert.Equal(Visibility.Collapsed,
+                        window.PreviewSplitter.Visibility);
+                    Assert.Equal(0.0, window.PreviewColumn.Width.Value);
                     Assert.Equal(Visibility.Collapsed,
                         window.LayerGovernorText.Visibility);
                     Assert.Equal("—",
@@ -198,6 +229,89 @@ namespace UNCAD.Tests
                     Pump(2);
                     Assert.Equal(0, control.RenderedSegmentCount);
                     Assert.Null(control.Model);
+                    host.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void OrbitControl_RendersPreviewEnhancementsAndTogglesGrid()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    // 3.3.1（D-054 Amendment）四特性齐备的模型：段毫米标（B）+
+                    // 柱网/端点轴位/刻度（C）+ 桥架/线管通道（D）。
+                    var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
+                    {
+                        new QuickLineOrbitPreviewSegment("s1",
+                            new QuickLineSpatialPoint(0, 0, 0),
+                            new QuickLineSpatialPoint(4000, 0, 0),
+                            QuickLineSpatialAxis.X, 4000, true,
+                            "4000mm",
+                            new QuickLineOrbitPreviewChannel(400.0, false, false)),
+                        new QuickLineOrbitPreviewSegment("s2",
+                            new QuickLineSpatialPoint(4000, 0, 0),
+                            new QuickLineSpatialPoint(4000, 0, 2500),
+                            QuickLineSpatialAxis.Z, 2500, true,
+                            "2500mm",
+                            new QuickLineOrbitPreviewChannel(null, false, true))
+                    }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
+                    var control = new QuickLineOrbitPreviewControl();
+                    control.Width = 320;
+                    control.Height = 260;
+                    var host = new Window
+                    {
+                        Content = control,
+                        Width = 360,
+                        Height = 320,
+                        WindowStyle = WindowStyle.ToolWindow
+                    };
+                    host.Show();
+                    Pump(3);
+
+                    control.SetModel(model);
+                    Pump(2);
+                    Assert.Equal(2, control.RenderedSegmentCount);
+                    // 特性B：两条长段的毫米标都画出（投影远超 24px 阈值）。
+                    Assert.Equal(2, control.RenderedLabelCount);
+                    // 特性C：柱网线 + 数字轴刻度 + 端点轴位原文（48/V→37/V 可插值）。
+                    Assert.True(control.RenderedColumnGridLineCount >= 3,
+                        "柱网线至少覆盖包络（X/Y 两向）");
+                    Assert.True(control.RenderedAxisTickCount >= 1,
+                        "两端数字轴可解析时刻度要画");
+                    // 特性D：桥架双线 1 段 + 线管双线 1 段。
+                    Assert.Equal(1, control.RenderedTrayChannelCount);
+                    Assert.Equal(1, control.RenderedConduitChannelCount);
+
+                    // 柱网开关：关掉只影响柱网/刻度，路由与标签照常。
+                    Assert.True(control.ColumnGridEnabled);
+                    control.ToggleColumnGrid();
+                    Pump(2);
+                    Assert.False(control.ColumnGridEnabled);
+                    Assert.Equal(0, control.RenderedColumnGridLineCount);
+                    Assert.Equal(0, control.RenderedAxisTickCount);
+                    Assert.Equal(2, control.RenderedSegmentCount);
+                    Assert.Equal(2, control.RenderedLabelCount);
+                    Assert.Equal(1, control.RenderedTrayChannelCount);
+
+                    // 缩得很小：段投影长度低于 24px → 标签隐藏（防糊成一片），
+                    // 通道/柱网仍在。复位后标签回来。
+                    control.Camera.ZoomBy(0.001);
+                    control.RenderNow();
+                    Pump(2);
+                    Assert.Equal(0, control.RenderedLabelCount);
+                    Assert.Equal(2, control.RenderedSegmentCount);
+                    control.ResetCamera();
+                    Pump(2);
+                    Assert.Equal(2, control.RenderedLabelCount);
                     host.Close();
                 }
                 catch (Exception ex) { failure = ex; }

@@ -135,25 +135,32 @@ namespace UNCAD.Features.Fill
                     1.0);
             }
 
-            // ① 图层矫正计划（特性①）：识别依据=扫描器认出的线段+匹配到的毫米标、
-            // ParallelAnnotationMetadata 输出（KIND=U1Q/U1C，特性④归属）。
-            // 3.3.0.1：只喂本框的线段（绝不动图框外的图形）；输出全图收集后
-            // 按宿主段过滤到本框（Plan 的 scope 传 null——列表已预过滤）。
-            if (Settings.GetBool(ConfigKeys.FillLayerGovernor, true))
+            // ① 图层矫正计划（特性①）+ 特性D 通道归属共用一次归属收集：
+            // 识别依据=扫描器认出的线段+匹配到的毫米标、ParallelAnnotationMetadata
+            // 输出（KIND=U1Q/U1C，特性④归属）。3.3.0.1：只喂本框的线段（绝不
+            // 动图框外的图形）；输出全图收集后按宿主段过滤到本框（Plan 的 scope
+            // 传 null——列表已预过滤）。
+            List<ParallelAnnotationOwnershipEntry> frameOutputs = null;
+            bool governorEnabled =
+                Settings.GetBool(ConfigKeys.FillLayerGovernor, true);
+            if (governorEnabled || buildPreview)
             {
                 List<ParallelAnnotationOwnershipEntry> outputs =
                     ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
                 if (boundary != null)
-                    outputs = FilterOutputsByHostFrame(outputs, inScope);
+                    frameOutputs = FilterOutputsByHostFrame(outputs, inScope);
                 else
                 {
                     var scopeOnly = new HashSet<ObjectId>(scope
                         ?? Enumerable.Empty<ObjectId>());
-                    outputs = outputs.Where(entry => entry != null
+                    frameOutputs = outputs.Where(entry => entry != null
                         && scopeOnly.Contains(entry.EntityId)).ToList();
                 }
+            }
+            if (governorEnabled && frameOutputs != null)
+            {
                 inspection.LayerPlan = LayerGovernorService.Plan(ctx, readTransaction,
-                    inScope, outputs, null);
+                    inScope, frameOutputs, null);
                 if (inspection.LayerPlan != null && !inspection.LayerPlan.IsEmpty)
                     inspection.LayerCorrectionText =
                         inspection.LayerPlan.Counters.Describe();
@@ -162,12 +169,17 @@ namespace UNCAD.Features.Fill
             // ③ 预览（特性③）：带毫米标的线段重建等测场景并整体地面归零。
             // 3.3.0.1：包裹 try/catch——场景构建对方向不可分类的草图会抛
             // ArgumentException，预览是展示件，绝不能把 U1U 主流程炸掉。
+            // 3.3.1（D-054 Amendment）：逐段带入毫米标原文（特性B）、上下游
+            // 轴位原文（特性C 端点钉标签）、桥架/线管通道归属（特性D 双线）。
             if (buildPreview)
             {
                 try
                 {
+                    Dictionary<string, QuickLineOrbitPreviewChannel> channels =
+                        BuildChannels(readTransaction, frameOutputs, inScope);
                     inspection.Preview = BuildPreview(inScope,
-                        QuickLineAxisSpan.Describe(upstreamAxis, downstreamAxis));
+                        QuickLineAxisSpan.Describe(upstreamAxis, downstreamAxis),
+                        upstreamAxis, downstreamAxis, channels);
                 }
                 catch (System.Exception ex)
                 {
@@ -215,10 +227,14 @@ namespace UNCAD.Features.Fill
 
         /// <summary>
         /// 场景构建与 QuickLine3dPreviewFeature.BuildAll 同口径：真实毫米做距离、
-        /// 未确认占位标按当前画长、COMPLETED 标记保留。
+        /// 未确认占位标按当前画长、COMPLETED 标记保留。3.3.1：毫米标原文按段
+        /// 句柄带入（特性B），上下游轴位原文带入（特性C），桥架/线管通道归属
+        /// 带入（特性D）。
         /// </summary>
         private static QuickLineOrbitPreviewModel BuildPreview(
-            IReadOnlyList<QuickLineCadSegment> inScope, string axisSummary)
+            IReadOnlyList<QuickLineCadSegment> inScope, string axisSummary,
+            string upstreamAxis, string downstreamAxis,
+            Dictionary<string, QuickLineOrbitPreviewChannel> channels)
         {
             List<QuickLineCadSegment> labelled = inScope
                 .Where(item => item.HasMillimetreLabel).ToList();
@@ -237,13 +253,115 @@ namespace UNCAD.Features.Fill
                 .Where(item => item.HasCompletionMarker)
                 .Select(item => item.LineId.Handle.ToString()),
                 StringComparer.OrdinalIgnoreCase);
+            var labelTexts = labelled.ToDictionary(
+                item => item.LineId.Handle.ToString(),
+                item => item.LabelText ?? string.Empty,
+                StringComparer.OrdinalIgnoreCase);
             QuickLineGraph graph = QuickLineGraph.Build(labelled.Select(item =>
                 new QuickLineSegment(item.LineId.Handle.ToString(),
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                     new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))), 1.0);
             QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder.BuildAll(
                 graph, distances, displayDistances, completed);
-            return QuickLineOrbitPreviewModel.FromScene(scene, axisSummary);
+            return QuickLineOrbitPreviewModel.FromScene(scene, axisSummary,
+                upstreamAxis, downstreamAxis, labelTexts, channels);
+        }
+
+        /// <summary>3.3.1（特性D）：U1Q 标注文本解析不出宽度时的缺省桥架宽（图例注明）。</summary>
+        private const double DefaultTrayWidthMillimetres = 200.0;
+
+        /// <summary>
+        /// 3.3.1（D-054 Amendment，特性D）：归属输出 → 宿主段通道字典（键=宿主
+        /// 段句柄）。KIND=U1Q→桥架（宽度从 U1Q 标注文本解析，解析不出用 200
+        /// 缺省并标记 AssumedDefault 供图例注明）；KIND=U1C→线管（无宽度语义
+        /// 不标数）。同一宿主多条输出时桥架取最宽（顺序无关，确定性），宽度
+        /// 平手时解析值优先于缺省值；桥架与线管互斥（D-050 Amendment），万一
+        /// 同段两者都有，桥架优先绘制、并存不做叠加猜测。只有归属解析到本框
+        /// 宿主段的输出才参与（宿主删了的没有——与图层矫正同口径不猜）。
+        /// </summary>
+        private static Dictionary<string, QuickLineOrbitPreviewChannel>
+            BuildChannels(Transaction readTransaction,
+                List<ParallelAnnotationOwnershipEntry> outputs,
+                List<QuickLineCadSegment> inScope)
+        {
+            var result = new Dictionary<string, QuickLineOrbitPreviewChannel>(
+                StringComparer.OrdinalIgnoreCase);
+            if (outputs == null || outputs.Count == 0) return result;
+            Dictionary<string, List<QuickLineCadSegment>> hostMap =
+                ParallelAnnotationOwnership.MapHostSegments(outputs, inScope);
+            // 宿主句柄 → 桥架宽（Item1=宽度，Item2=是否缺省值）/ 是否有线管。
+            var trayByHost = new Dictionary<string,
+                Tuple<double, bool>>(StringComparer.OrdinalIgnoreCase);
+            var conduitHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ParallelAnnotationOwnershipEntry entry in outputs)
+            {
+                if (entry == null || entry.EntityId.IsNull) continue;
+                bool isTray = string.Equals(entry.Kind, "U1Q",
+                    StringComparison.OrdinalIgnoreCase);
+                bool isConduit = string.Equals(entry.Kind, "U1C",
+                    StringComparison.OrdinalIgnoreCase);
+                if (!isTray && !isConduit) continue;
+                if (!hostMap.TryGetValue(entry.EntityId.Handle.ToString(),
+                        out List<QuickLineCadSegment> hosts) || hosts.Count == 0)
+                    continue;
+                if (isConduit)
+                {
+                    foreach (QuickLineCadSegment host in hosts)
+                        conduitHosts.Add(host.LineId.Handle.ToString());
+                    continue;
+                }
+                string text = TryReadOutputText(readTransaction, entry.EntityId);
+                double width;
+                bool assumed;
+                if (text != null && UNCAD.Core.Text.BridgeLabelFormatter
+                        .TryParseTrayWidthMillimetres(text, out double parsed))
+                {
+                    width = parsed;
+                    assumed = false;
+                }
+                else
+                {
+                    width = DefaultTrayWidthMillimetres;
+                    assumed = true;
+                }
+                foreach (QuickLineCadSegment host in hosts)
+                {
+                    string key = host.LineId.Handle.ToString();
+                    if (!trayByHost.TryGetValue(key,
+                        out Tuple<double, bool> existing)
+                        || width > existing.Item1
+                        || (width == existing.Item1 && !assumed))
+                        trayByHost[key] = Tuple.Create(width, assumed);
+                }
+            }
+            foreach (string hostHandle in trayByHost.Keys
+                .Concat(conduitHosts).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                trayByHost.TryGetValue(hostHandle,
+                    out Tuple<double, bool> tray);
+                result[hostHandle] = new QuickLineOrbitPreviewChannel(
+                    tray?.Item1, tray?.Item2 ?? false,
+                    conduitHosts.Contains(hostHandle));
+            }
+            return result;
+        }
+
+        /// <summary>读输出实体的标注文本（DBText 直取；MText 清格式码）。</summary>
+        private static string TryReadOutputText(Transaction transaction,
+            ObjectId entityId)
+        {
+            try
+            {
+                if (transaction == null || entityId.IsNull) return null;
+                if (!(transaction.GetObject(entityId, OpenMode.ForRead, true)
+                        is Entity entity) || entity.IsErased) return null;
+                if (entity is Autodesk.AutoCAD.DatabaseServices.DBText text)
+                    return text.TextString;
+                if (entity is Autodesk.AutoCAD.DatabaseServices.MText mtext)
+                    return UNCAD.Core.Text.TextParser.CleanMText(mtext.Contents);
+                return null;
+            }
+            catch { return null; }
         }
     }
 }

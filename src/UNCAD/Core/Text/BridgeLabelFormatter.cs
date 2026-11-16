@@ -63,6 +63,26 @@ namespace UNCAD.Core.Text
             => Format(millimetres) + "mm";
 
         /// <summary>
+        /// 3.3.1（D-054 Amendment，特性D）：从 U1Q 标注文本拆桥架宽度（规格里
+        /// 首个尺寸，如「桥架200*100 2500mm」→200；旧格数写法「桥架200*100
+        /// 10格」同样收）。解析失败返回 false——调用方（U1U 预览的桥架双线通道）
+        /// 用 200 缺省并在图例注明，不猜。
+        /// </summary>
+        public static bool TryParseTrayWidthMillimetres(string value,
+            out double widthMillimetres)
+        {
+            widthMillimetres = 0;
+            string text = (value ?? "").Trim();
+            Match match = MillimetreLabel.Match(text);
+            if (!match.Success) match = GridLabel.Match(text);
+            if (!match.Success
+                || !TryNumber(match, 1, out double width)
+                || width <= 0) return false;
+            widthMillimetres = width;
+            return true;
+        }
+
+        /// <summary>
         /// Converts only the legacy grid-count form. Current millimetre labels
         /// deliberately return false so U1F/U1U can migrate old CAD text without
         /// rewriting already-current annotations.

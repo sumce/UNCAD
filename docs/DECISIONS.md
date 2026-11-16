@@ -1029,3 +1029,55 @@ rewrite an existing entry.
   membership yields a 3-segment preview, one chain, and all three lines
   planned into U_CABLE); `UNCAD_ROUTE_DIAG` kept as an on-drawing
   per-stage counter dump.
+- Amendment (2026-11-17, 3.3.1 — U1U 3D preview enhancements; user field
+  feedback "3D预览内展示柱位 你没展示"、"不要跟清单确认挤到一块 相当于一个
+  窗口分成两半"、"3D预览没有展示桥架"、"每条线也没有米数标记"):
+  1. **Half-and-half window split.** The single-frame review window and the
+     batch confirmation window lay the preview and the list as two `*`
+     columns split by a draggable `GridSplitter` (both columns keep a ~250px
+     minimum so the splitter cannot be dragged through; ~30% of the 900px
+     window minimum). The fixed 300/320px preview strips are gone; the
+     preview host fills its column. No preview (U1F / legacy) collapses the
+     preview column back to width 0 and hides the splitter.
+  2. **Per-segment millimetre labels.** Every segment's label text (from the
+     CAD millimetre label) is drawn at its projected midpoint at a fixed
+     screen font size (12px), on a light backing for readability; a label
+     hides when the segment's projected span falls below 24px (policy is a
+     pure Core predicate `QuickLineOrbitLabelPolicy`).
+  3. **Column grid in the scene.** The ground (Z=0) shows a 4800mm-bay
+     column grid covering the scene envelope (light thin lines, toggleable,
+     default on), the route's two X-extreme endpoints are pinned with the
+     upstream/downstream axis text verbatim from the workbook (parse
+     failures show the original text), and numeric axis ticks are
+     interpolated linearly over the route's X span between the two endpoint
+     numbers (48, 47, 46 …; out-of-range or duplicate rounded numbers are
+     skipped). When either endpoint lacks a parseable numeric axis only the
+     grid is drawn. The upstream endpoint is the envelope's minimum-X node
+     (ties: min Y, then min Z) and the number mapping is aligned so the
+     upstream number sits at the upstream pin. This replaces no persisted
+     geometry — preview only.
+  4. **Tray/conduit dual-line channels** (this clause **supersedes the D-054
+     clause "the preview deliberately does not draw tray/conduit overlays
+     (deferred)"**). U1Q/U1C outputs attributed to a frame's host cable
+     segments (via `ParallelAnnotationOwnership`, the same host-based
+     attribution as the layer governor; outputs whose host is deleted or
+     unknown never appear) are drawn as: tray — two red (#E8443C) parallel
+     lines offset by tray width/2 from the cable line (offset floors at 6px
+     projected, zoom-adaptive) with a translucent red fill band between
+     them; conduit — cyan (#2EA8C0) dual lines at a small fixed offset, no
+     fill. Tray width parses from the U1Q annotation text
+     (`BridgeLabelFormatter.TryParseTrayWidthMillimetres`); unparsable
+     widths use the 200mm default and the legend says so. A legend corner
+     names all five colours (orange X / green Y / blue Z / red = tray
+     (width) / cyan = conduit). Tray and conduit are mutually exclusive
+     per D-050; if both were ever attributed to one segment the tray wins
+     (no stacked guessing).
+  5. **Zoom actually zooms.** The 3.3.0 autofit recomputed the fit from the
+     zoomed projection envelope each render, which cancelled the camera
+     zoom entirely (the wheel was a visual no-op). The fit is now computed
+     zoom-neutrally and the zoom factor applied after it; at reset the
+     picture is pixel-identical to 3.3.0.
+- Consequence (3.3.1): do not reintroduce fixed-pixel preview strips; do
+  not draw tray/conduit channels from colour/text guessing (only host
+  attribution); do not invent axis numbers when either endpoint fails to
+  parse; the column grid is a preview aid, never written to the drawing.
