@@ -409,11 +409,14 @@ namespace UNCAD.Features.Fill
 
             // 3.3.0（D-054）：路由体检（连通性/图层矫正/U1U 预览场景）——批量链
             // 整图只扫一次，此处按图框范围体检（机台轴位已解析，柱位摘要不猜）。
+            // 3.3.0.1：传 region.Boundary——EntityIds 严格模式不含 Line 电缆线，
+            // 线段归属按边界几何判定（单框同根因）。
             FillRouteInspection routeInspection = scanned == null
                 ? new FillRouteInspection()
                 : FillRouteInspectionStage.Inspect(ctx, readTransaction,
                     region.EntityIds, scanned,
-                    machine.UpstreamAxis, machine.DownstreamAxis, true);
+                    machine.UpstreamAxis, machine.DownstreamAxis, true,
+                    region.Boundary);
             if (routeInspection.Connectivity != null
                 && (routeInspection.Connectivity.IsolatedSegmentIds.Count > 0
                     || routeInspection.Connectivity.Components.Count > 1))

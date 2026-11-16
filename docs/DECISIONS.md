@@ -999,8 +999,33 @@ rewrite an existing entry.
      consumed by the layer governor; the preview deliberately does not
      draw tray/conduit overlays (deferred).
 - Consequence: do not reintroduce per-output layer guessing from colour or
-  text heuristics; do not make the connectivity report block a write; do
-  not build scenes inside windows; do not scan closed polylines as route
+  text heuristics; do not make the connectivity report block a write; do not
+  build scenes inside windows; do not scan closed polylines as route
   segments. Entity colours are untouched by the governor — only layer
   membership changes (U1C keeps its explicit magenta 6 entity colour on
   the cyan U_CONDUIT layer).
+- Amendment (2026-11-17, 3.3.0.1 — route-inspection scope): the inspection
+  stage originally filtered scanned segments by the frame's `EntityIds`.
+  That set never contains Line/LWPolyline cable segments —
+  `FrameRegionCollector.Collect` (the strict mode U1U single-frame and the
+  batch preflight use) anchors only tables, text and blocks into
+  `EntityIds`; that is the historical fill-statistics design and stays
+  unchanged (Xauto's `CollectForLayout` full-entity mode is unaffected).
+  Field symptom (user report on 3.3.0: "U1U 没有 3D 预览、桥架/线的图层
+  没变"), reproduced on a real drawing via `UNCAD_ROUTE_DIAG`: scan 24
+  segments, 17 labelled, zero inside `EntityIds`. Fix: segment membership
+  is geometric — a segment belongs to the frame when its midpoint lies in
+  the frame `Boundary` rectangle (`EntityIds` remains the fallback when no
+  boundary exists, e.g. U1F explicit picks). Parallel-annotation outputs
+  are attributed per host cable segment (an output belongs to the frame
+  that contains its host; outputs whose host is deleted or unknown belong
+  to no frame and are skipped — still no guessing). The governor is fed
+  only the frame's own segments; it never touches geometry outside the
+  frame. Preview scene construction is wrapped in try/catch (a sketch
+  with unclassifiable directions downgrades to "no preview", it can no
+  longer abort U1U). Regression lock: `UNCAD_ROUTE_INSPECT_SELFTEST`
+  (real frame definition + 3-segment orthogonal chain + 3 mm labels:
+  asserts EntityIds hit = 0 documenting the root cause, boundary
+  membership yields a 3-segment preview, one chain, and all three lines
+  planned into U_CABLE); `UNCAD_ROUTE_DIAG` kept as an on-drawing
+  per-stage counter dump.
