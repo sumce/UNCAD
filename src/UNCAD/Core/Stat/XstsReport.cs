@@ -63,6 +63,11 @@ namespace UNCAD.Core.Stat
     {
         public List<XstsMachineSummary> Machines { get; } = new List<XstsMachineSummary>();
         public List<XstsFrameIssue> Issues { get; } = new List<XstsFrameIssue>();
+        /// <summary>未上图机台（档案有、全图无，3.2.0.7 盲区名单）；档案不可用
+        /// 或全图扫描失败时为空列表。</summary>
+        public List<XstsBlindMachine> BlindMachines { get; } = new List<XstsBlindMachine>();
+        /// <summary>盲区分组摘要（"PSP×10、OHVC×10…"），空名单返回空串。</summary>
+        public string BlindMachineSummary => XstsBlindAnalyzer.GroupSummary(BlindMachines);
         /// <summary>Physical selected frame count; machines are reported separately.</summary>
         public int FrameCount { get; set; }
         public XstsExpectedDataStatus ExpectedDataStatus { get; set; }

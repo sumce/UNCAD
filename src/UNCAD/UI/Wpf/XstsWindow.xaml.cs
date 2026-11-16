@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UNCAD.Core.Stat;
 using Wpf.Ui.Controls;
 
@@ -51,6 +52,17 @@ namespace UNCAD.UI
             MachineGrid.ItemsSource = report.Machines;
             IssueGrid.ItemsSource = report.Issues;
             IssueTab.Header = "异常图框 (" + report.Issues.Count + ")";
+            // 3.2.0.7：未上图机台页（档案有、全图无的盲区名单）；名单为空时
+            // 整页隐藏，避免无档案/扫描失败时多一个空页签。
+            if (report.BlindMachines.Count == 0)
+            {
+                BlindTab.Visibility = System.Windows.Visibility.Collapsed;
+            }
+            else
+            {
+                BlindGrid.ItemsSource = report.BlindMachines;
+                BlindTab.Header = "未上图 (" + report.BlindMachines.Count + ")";
+            }
             BuildBadges();
             Loaded += (sender, args) => CloseButton.Focus();
         }
@@ -58,7 +70,7 @@ namespace UNCAD.UI
         /// <summary>机台状态徽章：全局分布一眼可见（口径与命令行摘要一致）。</summary>
         internal void BuildBadges()
         {
-            StatusBadgeBar.Build(BadgeBar, new[]
+            var badges = new List<StatusBadge>
             {
                 new StatusBadge("完整 " + _report.CompleteMachineCount + " 台", "success"),
                 new StatusBadge("缺回路 " + _report.MachinesWithMissingCount + " 台",
@@ -67,7 +79,11 @@ namespace UNCAD.UI
                     _report.MachinesWithExtraOnlyCount > 0 ? "caution" : "neutral"),
                 new StatusBadge("无基准 " + _report.UnknownMachineCount + " 台",
                     _report.UnknownMachineCount > 0 ? "caution" : "neutral")
-            });
+            };
+            if (_report.BlindMachines.Count > 0)
+                badges.Add(new StatusBadge(
+                    "未上图 " + _report.BlindMachines.Count + " 台", "caution"));
+            StatusBadgeBar.Build(BadgeBar, badges);
         }
 
         private void OnClose(object sender, System.Windows.RoutedEventArgs e) => Close();

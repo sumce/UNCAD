@@ -188,6 +188,38 @@ namespace UNCAD.Features.Stat
             report.FrameCount = regions.SelectedFrameCount;
             foreach (string error in regions.Errors)
                 report.Issues.Add(new XstsFrameIssue { Description = error });
+
+            // 3.2.0.7：未上图机台（盲区名单）——全图帧扫描对账档案：档案机台 −
+            // 全图机台 = 还没画的机台（现场此前要手工 VLOOKUP 拼这份名单：清单
+            // 144 台只有 49 台上图）。只读、失败只记日志不影响主报告；顺带把
+            // "图上未入档 + 档案近名（一字母之差）"的疑似笔误并入异常清单。
+            if (expectedStatus == XstsExpectedDataStatus.Available)
+            {
+                try
+                {
+                    phaseWatch.Restart();
+                    List<string> onDrawingIds = ScanWholeDrawingMachineIds(ctx);
+                    List<MachineRow> snapshotRows = MachineWorkbookSnapshotStore.Default
+                        .ReadAllRows(configuredPath);
+                    var nearNameIssues = new List<string>();
+                    report.BlindMachines.AddRange(XstsBlindAnalyzer.Analyze(
+                        snapshotRows, onDrawingIds,
+                        selectedRows.Select(row => row.MachineId)
+                            .Where(id => !string.IsNullOrWhiteSpace(id)),
+                        nearNameIssues));
+                    foreach (string note in nearNameIssues)
+                        report.Issues.Add(new XstsFrameIssue { Description = note });
+                    Log.Info("[XSTS] 未上图机台 " + report.BlindMachines.Count
+                        + " 台（全图扫描 " + phaseWatch.ElapsedMilliseconds + "ms）"
+                        + (report.BlindMachines.Count > 0
+                            ? "；分组：" + report.BlindMachineSummary
+                            : ""));
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Warn("[XSTS] 未上图机台分析失败（不影响本次统计）: " + ex.Message);
+                }
+            }
             // 输出直接放输出根目录（D-035，恢复 2.9.x 现场习惯）：<输出根>\UNCAD_XSTS_<时间>.xlsx。
             // 目录/占用预检在写盘之前完成；输出根为空时默认<我的文档>\UNCAD输出并写回 UNC_SUBMIT_FOLDER。
             string path;
@@ -238,9 +270,55 @@ namespace UNCAD.Features.Stat
                 + report.MachineStatusText + "），"
                 + report.SelectedCircuitCount + " 个有效已选回路，" + coverage
                 + "，异常 " + report.Issues.Count + " 项。Excel: " + path);
+            if (report.BlindMachines.Count > 0)
+                ctx.Write("\n[XSTS] 未上图机台 " + report.BlindMachines.Count
+                    + " 台（档案有、全图扫描无图框；分组：" + report.BlindMachineSummary
+                    + "）——名单见结果窗「未上图」页与 Excel「未上图机台」页。");
             // 3.0 WPF 窗体（D-038）：只读汇报窗，关闭即继续。
             var window = new XstsWindow(report, path);
             Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+        }
+
+        /// <summary>
+        /// 全图帧扫描，收集当前空间里全部可识别图框的机台号（3.2.0.7 盲区名单
+        /// 的"图上"侧）。只读；识别不到机台号或单框读取失败的跳过，不抛错。
+        /// </summary>
+        private static List<string> ScanWholeDrawingMachineIds(CadContext ctx)
+        {
+            var machineIds = new List<string>();
+            var insertIds = new List<ObjectId>();
+            using (Transaction scan = ctx.Db.TransactionManager.StartTransaction())
+            {
+                if (scan.GetObject(ctx.Db.CurrentSpaceId, OpenMode.ForRead, false)
+                        is BlockTableRecord space)
+                    foreach (ObjectId id in space)
+                        try
+                        {
+                            if (id.ObjectClass.IsDerivedFrom(
+                                    RXObject.GetClass(typeof(BlockReference))))
+                                insertIds.Add(id);
+                        }
+                        catch { /* 枚举中的单个实体不影响整体扫描 */ }
+                scan.Commit();
+            }
+            if (insertIds.Count == 0) return machineIds;
+            FrameRegionCollection regions = FrameRegionCollector.Collect(ctx,
+                insertIds.ToArray());
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var definitions = new CadBlockDefinitionReader(transaction);
+                foreach (FrameRegionGroup region in regions.Groups)
+                    try
+                    {
+                        ExistingFillIdentity identity = FrameIdentityReader.ReadIdentity(
+                            transaction, region, definitions, out string _);
+                        if (!string.IsNullOrWhiteSpace(identity.MachineId))
+                            machineIds.Add(identity.MachineId);
+                    }
+                    catch { /* 单框身份读失败不影响名单 */ }
+                transaction.Commit();
+            }
+            return machineIds;
         }
     }
 }

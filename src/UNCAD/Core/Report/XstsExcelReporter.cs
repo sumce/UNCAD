@@ -111,6 +111,31 @@ namespace UNCAD.Core.Report
                 Set(issueRow, 2, issue.CircuitName);
                 Set(issueRow, 3, issue.Description);
             }
+            // 3.2.0.7：未上图机台页（档案有、全图无的盲区名单）——此前用户要靠
+            // 手工 VLOOKUP（清单 144 − 图上命中 49 = 95 台）拼这份名单。
+            if (report.BlindMachines.Count > 0)
+            {
+                ISheet blind = workbook.CreateSheet("未上图机台");
+                Set(blind.CreateRow(0), 0, "未上图机台 " + report.BlindMachines.Count
+                    + " 台（档案有、全图扫描无图框；分组：" + report.BlindMachineSummary
+                    + "）", workbook, true);
+                IRow blindHeader = blind.CreateRow(1);
+                Set(blindHeader, 0, "机台 ID", workbook, true);
+                Set(blindHeader, 1, "批次", workbook, true);
+                Set(blindHeader, 2, "序号", workbook, true);
+                Set(blindHeader, 3, "近名提示", workbook, true);
+                for (int index = 0; index < report.BlindMachines.Count; index++)
+                {
+                    XstsBlindMachine item = report.BlindMachines[index];
+                    IRow blindRow = blind.CreateRow(index + 2);
+                    Set(blindRow, 0, item.MachineId);
+                    Set(blindRow, 1, item.Batch);
+                    Set(blindRow, 2, item.Seq);
+                    Set(blindRow, 3, item.NearNameNote);
+                }
+                for (int i = 0; i < 4; i++)
+                    blind.SetColumnWidth(i, (i == 3 ? 52 : i == 0 ? 18 : 10) * 256);
+            }
             for (int i = 0; i < 7; i++)
                 sheet.SetColumnWidth(i, (i >= 5 ? 38 : i == 0 ? 18 : 14) * 256);
             for (int i = 0; i < 4; i++) issues.SetColumnWidth(i, (i == 3 ? 42 : 18) * 256);

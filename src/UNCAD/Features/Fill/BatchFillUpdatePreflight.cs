@@ -240,10 +240,24 @@ namespace UNCAD.Features.Fill
             else if (reserveMarkers.Hits.Count == 1)
             {
                 markerExcludedIds.AddRange(reserveMarkers.EntityIds);
-                markerNote = "复制图框携带源框的横排毫米标 "
-                    + reserveMarkers.Hits[0].Text
-                    + "，未自动吸收（源框残留，避免静默继承），也不计入米数统计；"
-                    + "图上文字保留，如适用请在弹窗手动填写";
+                // 3.2.0.7（用户报告：同一图框要跑两次 U1U 才正确）：首跑把复制
+                // 残留毫米标值作为设备内预留建议值带出（D-052-B 同语义：预填+
+                // 核对，非静默继承）——首跑即得正确预留，文字仍保留。
+                if (plan_DeviceReserveHintMm == null)
+                {
+                    plan_DeviceReserveHintMm = reserveMarkers.Hits[0].Millimeters;
+                    markerNote = "复制图框携带源框的横排毫米标 "
+                        + reserveMarkers.Hits[0].Text
+                        + "，未自动吸收（源框残留，避免静默继承），也不计入米数统计；"
+                        + "图上文字保留，弹窗已按该值预填（复制残留毫米标），请核对后确认";
+                }
+                else
+                {
+                    markerNote = "复制图框携带源框的横排毫米标 "
+                        + reserveMarkers.Hits[0].Text
+                        + "，未自动吸收（源框残留，避免静默继承），也不计入米数统计；"
+                        + "图上文字保留，如适用请在弹窗手动填写";
+                }
             }
             else if (reserveMarkers.Hits.Count > 1)
             {

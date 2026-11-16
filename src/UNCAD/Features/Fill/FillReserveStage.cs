@@ -173,10 +173,27 @@ namespace UNCAD.Features.Fill
             else if (reserveMarkers.Hits.Count == 1)
             {
                 markerExcludedIds.AddRange(reserveMarkers.EntityIds);
-                ctx.Write("\n[" + command + "] 复制图框携带源框的横排毫米标 "
-                    + reserveMarkers.Hits[0].Text + "，未自动吸收为设备内预留"
-                    + "（源框残留，避免静默继承），也不计入米数统计；图上文字保留，"
-                    + "如适用请在清单确认窗手动填写。");
+                // 3.2.0.7（用户报告：同一图框要跑两次 U1U 才能得到正确结果）：
+                // 复制框首跑因外来 JSON 守卫不吸收毫米标（正确），但首跑写侧会把
+                // JSON 重盖成本框句柄——"外来"信号就此消失，第二跑把同一根残留标
+                // 当"现场意图"吸收。修复：首跑就把残留标值作为设备内预留**建议值**
+                // 带出（与 D-052-B 复制源 CABLE_INFO 预填同语义：预填+核对，不是
+                // 静默继承），首跑即得正确预留；图上文字仍保留给用户对照。
+                if (deviceReserveHintMm == null)
+                {
+                    deviceReserveHintMm = reserveMarkers.Hits[0].Millimeters;
+                    ctx.Write("\n[" + command + "] 复制图框携带源框的横排毫米标 "
+                        + reserveMarkers.Hits[0].Text + "，未自动吸收为设备内预留"
+                        + "（源框残留，避免静默继承），也不计入米数统计；图上文字保留，"
+                        + "清单确认窗已按该值预填（复制残留毫米标），请核对后确认。");
+                }
+                else
+                {
+                    ctx.Write("\n[" + command + "] 复制图框携带源框的横排毫米标 "
+                        + reserveMarkers.Hits[0].Text + "，未自动吸收为设备内预留"
+                        + "（源框残留，避免静默继承），也不计入米数统计；图上文字保留，"
+                        + "如适用请在清单确认窗手动填写。");
+                }
             }
             else if (reserveMarkers.Hits.Count > 1)
             {

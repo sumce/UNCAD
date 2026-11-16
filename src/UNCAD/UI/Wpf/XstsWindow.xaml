@@ -98,6 +98,30 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+            <TabItem x:Name="BlindTab" Header="未上图机台">
+                <DataGrid x:Name="BlindGrid" Margin="0,8,0,0"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" HeadersVisibility="Column"
+                          GridLinesVisibility="Horizontal" BorderThickness="0"
+                          RowHeight="32" FontSize="13"
+                          SelectionMode="Single" SelectionUnit="FullRow"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130" />
+                        <DataGridTextColumn Header="批次" Binding="{Binding Batch}" Width="90" />
+                        <DataGridTextColumn Header="序号" Binding="{Binding Seq}" Width="70" />
+                        <DataGridTextColumn Header="近名提示（疑似画错名）" Binding="{Binding NearNameNote}" Width="*">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                    <Setter Property="ToolTip" Value="{Binding NearNameNote}" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
         </TabControl>
 
         <Grid Grid.Row="3" Margin="24,8,24,20">
