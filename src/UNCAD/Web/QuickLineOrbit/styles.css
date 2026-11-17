@@ -23,3 +23,4 @@ button:focus-visible { outline: 2px solid #79b8ff; outline-offset: 2px; }
 .scene-label.label-mm { border-color: #5b6c80; color: #f0f5fb; font-weight: 700; }
 .scene-label.label-tick { border: none; background: transparent; color: #99a7b8; font-weight: 700; }
 .scene-label.label-pin { border-color: #718399; background: rgba(23,30,40,.92); color: #ffffff; font-weight: 700; }
+.scene-label.label-ref { border-color: #b98a2f; background: rgba(38,31,16,.92); color: #ffe0a6; font-weight: 700; }

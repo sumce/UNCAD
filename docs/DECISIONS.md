@@ -1248,3 +1248,16 @@ rewrite an existing entry.
   page-side window.postMessage injection hook exists for browser smoke
   tests. Do not reintroduce HelixToolkit.Wpf for this pane without a new
   decision.
+- Amendment (2026-11-18, 3.3.6 — U1U 3D preview reference levels; user
+  request "能把这些参照物也附进去吗？3D的页面内" with the building
+  elevation chain 1F..3F and equipment heights): the preview draws amber
+  horizontal reference frames with corner labels ("2F地面 7800" etc.)
+  spanning the scene envelope. The list is data, not code: U1SET
+  `UNC_PREVIEW_REF_LEVELS` ("标签=毫米", semicolon/newline separated;
+  invalid entries skipped, empty = draw none) with the user's 12 levels
+  as the shipped default (floor chain converted to cumulative
+  elevations, equipment heights verbatim). Heights are relative to the
+  scene ground (lowest cable endpoint Z=0, established semantics).
+  Parsing is a pure-Core function (`PreviewReferenceLevels`), carried in
+  the preview envelope, rendered by the page into a toggleable group.
+  Do not hardcode project elevations into the web page.

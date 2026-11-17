@@ -5,12 +5,12 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.5` (2026-11-18; D-054 amendment — the
-  U1U preview kernel switched back to WebView2+three.js after field
-  feedback rejected the 3.3.2 Helix preview; scene semantics are
-  computed in the pure-Core envelope `QuickLineOrbitPreviewEnvelope`
-  and the local page (Web/QuickLineOrbit) is a dumb renderer with
-  HTML-overlay CJK labels. 3.3.4 completed the layer governor for the
+- Current stable release: `3.3.6` (2026-11-18; D-054 amendment — the
+  U1U 3D preview gained reference levels: building-elevation and
+  equipment-height planes (amber frames + labels) configurable via
+  U1SET `UNC_PREVIEW_REF_LEVELS`, computed in the pure-Core envelope
+  and rendered by the local WebView2+three.js page (Web/QuickLineOrbit,
+  dumb renderer with HTML-overlay CJK labels since 3.3.5). 3.3.4 completed the layer governor for the
   new features (U1B boundary direct channel, U1F frame-block boundary,
   batch hose bucket; legacy limitations documented in KNOWN-ISSUES).
   Future fixes increment the fourth version part per D-032).

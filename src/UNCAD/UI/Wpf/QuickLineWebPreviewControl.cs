@@ -110,7 +110,12 @@ namespace UNCAD.UI
         public void SetModel(QuickLineOrbitPreviewModel model)
         {
             _model = model;
-            _envelope = QuickLineOrbitPreviewEnvelope.Build(model);
+            // 3.3.6：参照层清单来自 U1SET（标签=毫米；空=不画）——UI 层读设置、
+            // Core 解析、信封携带，页面只画。
+            string rawLevels = Settings.Get(ConfigKeys.PreviewReferenceLevels,
+                PreviewReferenceLevels.DefaultList);
+            _envelope = QuickLineOrbitPreviewEnvelope.Build(model,
+                PreviewReferenceLevels.Parse(rawLevels));
             RefreshDataCounters();
             if (_envelope == null)
             {

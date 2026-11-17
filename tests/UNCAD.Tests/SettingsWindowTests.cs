@@ -498,7 +498,7 @@ namespace UNCAD.Tests
                     @"ConfigKeys\.(\w+)").Cast<Match>()
                 .Select(match => match.Groups[1].Value));
             // 旧 UnifiedSettingsForm.LoadValues/Save 引用的键零丢失；新增键必须
-            // 带版本注释登记（当前 54 个：53 + 3.3.3 的 HoseDiameter）。
+            // 带版本注释登记（当前 55 个：53 + 3.3.3 HoseDiameter + 3.3.6 PreviewReferenceLevels）。
             string[] expected =
             {
                 "UnlText", "UnlHeight", "UnlPos", "UnlOffset",
@@ -509,6 +509,8 @@ namespace UNCAD.Tests
                 "UnrDiameter",
                 // 3.3.3（D-054 Amendment）：U1B 软管直径（U1SET 绘制标注页）。
                 "HoseDiameter",
+                // 3.3.6：U1U 3D 预览参照层清单（绘制标注页）。
+                "PreviewReferenceLevels",
                 "UnaddHeight", "UnaddMmPerGrid", "UnaddTextEnabled",
                 "UnaddMTextEnabled", "UnaddDimensionEnabled", "UnaddCableEnabled",
                 "UnaddBridgeEnabled", "UnaddConduitEnabled",

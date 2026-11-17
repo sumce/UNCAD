@@ -32,9 +32,10 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.3.5` (U1U preview kernel back to
-  WebView2+three.js, 2026-11-18, D-054 amendment; full WPF UI since 3.0.0,
-  D-038; patches increment the fourth version part per D-032).
+- Product: `UNCAD Pro`. Stable line: `3.3.6` (U1U 3D preview reference
+  levels on the WebView2+three.js kernel, 2026-11-18, D-054 amendment; full
+  WPF UI since 3.0.0, D-038; patches increment the fourth version part per
+  D-032).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from

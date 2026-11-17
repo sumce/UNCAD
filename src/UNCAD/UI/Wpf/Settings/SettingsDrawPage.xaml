@@ -190,6 +190,20 @@
                     </StackPanel>
                 </StackPanel>
             </ui:Card>
+
+            <!-- 3D 预览参照层（U1U，3.3.6） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="3D 预览参照层（U1U）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="U1U 确认窗 3D 预览里画出的水平参照线（建筑标高/设备高度），供电缆爬升高度对照。高度相对场景地面（最低线段端点=0）。格式：标签=毫米，分号或换行分隔；非法条目自动跳过；清空=不画。" />
+                    <ui:TextBox x:Name="PreviewReferenceLevels" x:FieldModifier="internal"
+                                Style="{DynamicResource UncadFieldBox}"
+                                AcceptsReturn="True" TextWrapping="Wrap"
+                                MinHeight="96" MaxHeight="160"
+                                VerticalScrollBarVisibility="Auto" />
+                </StackPanel>
+            </ui:Card>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

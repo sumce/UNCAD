@@ -17,17 +17,19 @@ const el = {
   summary: document.getElementById('summary'),
   legend: document.getElementById('legend'),
   grid: document.getElementById('gridButton'),
+  ref: document.getElementById('refButton'),
   reset: document.getElementById('resetButton')
 };
 
 const color = {
   axisX: 0xe06c00, axisY: 0x2e9e5b, axisZ: 0x3b6ed0,
   grid: 0x55606e, tray: 0xe8443c, trayFill: 0xe8443c,
-  conduit: 0x2ea8c0, pin: 0x99a7b8
+  conduit: 0x2ea8c0, pin: 0x99a7b8, reference: 0xe0a94a
 };
 const state = {
   renderer: null, scene: null, camera: null, controls: null,
-  gridGroup: null, labels: [], diagonal: 1, showGrid: true,
+  gridGroup: null, refGroup: null, labels: [], diagonal: 1,
+  showGrid: true, showReferenceLevels: true, refLevelCount: 0,
   defaultCamera: null, defaultTarget: null
 };
 
@@ -70,6 +72,7 @@ function initRenderer() {
 
 function bindUi() {
   el.grid.addEventListener('click', () => setGridVisible(!state.showGrid));
+  el.ref.addEventListener('click', () => setReferenceVisible(!state.showReferenceLevels));
   el.reset.addEventListener('click', resetCamera);
   window.addEventListener('resize', resize);
 }
@@ -97,11 +100,13 @@ function renderEnvelope(envelope) {
 
   const bounds = measureBounds(envelope);
   addGridLines(envelope, bounds);
+  addReferenceLevels(envelope, bounds, radius);
   addChannels(envelope, radius);
   addRouteLines(envelope, radius);
   collectLabels(envelope, bounds);
   applyDefaultCamera(bounds);
   setGridVisible(true);
+  setReferenceVisible(true);
   updateLegend(envelope);
 }
 
@@ -110,6 +115,8 @@ function clearScene() {
   for (const label of state.labels) label.element.remove();
   state.labels = [];
   state.gridGroup = null;
+  state.refGroup = null;
+  state.refLevelCount = 0;
 }
 
 function measureBounds(envelope) {
@@ -137,6 +144,71 @@ function addGridLines(envelope) {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   const material = new THREE.LineBasicMaterial({ color: color.grid, transparent: true, opacity: 0.75 });
   state.gridGroup.add(new THREE.LineSegments(geometry, material));
+}
+
+// 3.3.6：参照层——建筑标高/设备高度的水平参照框（琥珀色）横贯场景包络，
+// 边角标签「标签 高度mm」（数据来自 U1SET UNC_PREVIEW_REF_LEVELS）。
+function addReferenceLevels(envelope, bounds, radius) {
+  const levels = envelope.ReferenceLevels || [];
+  state.refLevelCount = levels.length;
+  if (levels.length === 0) return;
+  state.refGroup = new THREE.Group();
+  state.scene.add(state.refGroup);
+  const margin = bounds.diagonal * 0.06;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const point of collectHorizontalBounds(envelope)) {
+    minX = Math.min(minX, point[0]); maxX = Math.max(maxX, point[0]);
+    minY = Math.min(minY, point[1]); maxY = Math.max(maxY, point[1]);
+  }
+  minX -= margin; minY -= margin; maxX += margin; maxY += margin;
+  const tubeRadius = radius * 0.9;
+  for (const level of levels) {
+    if (!level || !level.Label || !(level.Z > 0)) continue;
+    const z = level.Z;
+    addTubeTo(state.refGroup, { x: minX, y: minY, z }, { x: maxX, y: minY, z }, color.reference, tubeRadius);
+    addTubeTo(state.refGroup, { x: maxX, y: minY, z }, { x: maxX, y: maxY, z }, color.reference, tubeRadius);
+    addTubeTo(state.refGroup, { x: maxX, y: maxY, z }, { x: minX, y: maxY, z }, color.reference, tubeRadius);
+    addTubeTo(state.refGroup, { x: minX, y: maxY, z }, { x: minX, y: minY, z }, color.reference, tubeRadius);
+    addLabel({ Text: level.Label + ' ' + z, X: minX - margin * 0.35, Y: minY - margin * 0.35, Z: z }, 'label-ref');
+  }
+}
+
+// 水平包络（含通道双线——参照框要框住全部可见几何）。
+function collectHorizontalBounds(envelope) {
+  const points = [];
+  const feed = point => points.push([point.X, point.Y]);
+  for (const segment of envelope.Segments || []) {
+    feed(segment.Start); feed(segment.End);
+    const channel = segment.Channel;
+    if (channel) { feed(channel.A1); feed(channel.A2); feed(channel.B1); feed(channel.B2); }
+  }
+  if (points.length === 0) points.push([0, 0], [1000, 1000]);
+  return points;
+}
+
+// 带目标组的细管（参照层要走 refGroup 才能整组开关）。
+function addTubeTo(group, from, to, tint, radius) {
+  const start = vec(from), end = vec(to);
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = direction.length();
+  if (length < 1e-9) return;
+  const tube = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, length, 6, 1, false),
+    new THREE.MeshBasicMaterial({ color: tint }));
+  tube.position.copy(start).addScaledVector(direction, 0.5);
+  tube.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0), direction.clone().normalize());
+  group.add(tube);
+}
+
+function setReferenceVisible(visible) {
+  state.showReferenceLevels = visible;
+  if (state.refGroup) state.refGroup.visible = visible;
+  for (const label of state.labels) {
+    if (label.group === 'ref') label.element.style.display = visible ? '' : 'none';
+  }
+  el.ref.textContent = visible ? '参照 开' : '参照 关';
+  el.ref.style.display = state.refLevelCount > 0 ? '' : 'none';
 }
 
 function addChannels(envelope, radius) {
@@ -222,7 +294,7 @@ function addLabel(label, cssClass) {
   state.labels.push({
     element,
     position: new THREE.Vector3(x, y, z),
-    group: cssClass === 'label-tick' ? 'grid' : 'route'
+    group: cssClass === 'label-tick' ? 'grid' : cssClass === 'label-ref' ? 'ref' : 'route'
   });
 }
 
@@ -262,6 +334,7 @@ function setGridVisible(visible) {
 
 function updateLegend(envelope) {
   let legend = '橙X 绿Y 蓝Z　红=桥架(宽) 青=线管';
+  if ((envelope.ReferenceLevels || []).length > 0) legend += '　黄=标高参照';
   if (envelope.AnyTrayWidthAssumedDefault) legend += '　桥架宽未标注按 200 显示';
   el.legend.textContent = legend;
   el.summary.textContent = (envelope.AxisSummary ? envelope.AxisSummary + '　' : '')

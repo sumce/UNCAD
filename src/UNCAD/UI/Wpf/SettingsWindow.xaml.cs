@@ -291,6 +291,9 @@ namespace UNCAD.UI
 
             // U1B（3.3.3，D-054 Amendment）：软管直径默认 100；标注字高与 U1L 共用。
             SetNumber(DrawPage.HoseDiameter, Settings.GetDouble(ConfigKeys.HoseDiameter, 100.0));
+            DrawPage.PreviewReferenceLevels.Text = Settings.Get(
+                ConfigKeys.PreviewReferenceLevels,
+                UNCAD.Core.QuickLine.PreviewReferenceLevels.DefaultList);
 
             SetNumber(StatPage.UnaddHeight, Settings.GetDouble(ConfigKeys.UnaddHeight, 180.0));
             SetNumber(StatPage.UnaddMmPerGrid,
@@ -493,6 +496,8 @@ namespace UNCAD.UI
 
             // 软管（U1B）
             Settings.Set(ConfigKeys.HoseDiameter, NumberText(DrawPage.HoseDiameter));
+            Settings.Set(ConfigKeys.PreviewReferenceLevels,
+                DrawPage.PreviewReferenceLevels.Text.Trim());
 
             // 统计
             Settings.Set(ConfigKeys.UnaddHeight, NumberText(StatPage.UnaddHeight));
