@@ -101,13 +101,18 @@ namespace UNCAD.Core.Dwg
         public IDictionary<string, int> ReadinessRank { get; }
             = new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
 
-        /// <summary>机台ID+回路 → Excel 行序（越小越靠前；缺失的回路排在本组末尾）。</summary>
+        /// <summary>机台ID+回路 → Excel 行序（越小越靠前；缺失的回路排在本组末尾）。
+        /// 3.3.3.2（审计修复）：键比较换 IdentityTextNormalizer（D-021——忽略全部
+        /// Unicode 空白与大小写，与 ReadinessRank 同口径）。旧键只 Trim()，图上
+        /// 文字与工作簿存在内部空格/大小写差异时行序静默退回图上序、上游模式
+        /// 错分进"未配上游"行。填充侧仍走 MakeKey，两侧经比较器归一后命中。</summary>
         public IDictionary<string, int> RowOrder { get; }
-            = new Dictionary<string, int>();
+            = new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
 
-        /// <summary>机台ID+回路 → 上游编号（U_上游编号；空白视为未配置）。</summary>
+        /// <summary>机台ID+回路 → 上游编号（U_上游编号；空白视为未配置）。
+        /// 3.3.3.2：同 RowOrder 换 IdentityTextNormalizer（D-021）。</summary>
         public IDictionary<string, string> UpstreamOf { get; }
-            = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            = new Dictionary<string, string>(IdentityTextNormalizer.Comparer);
 
         public static string MakeKey(string machineId, string circuitName)
             => (machineId ?? "").Trim() + "\u001f" + (circuitName ?? "").Trim();

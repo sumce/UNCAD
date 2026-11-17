@@ -79,7 +79,8 @@ namespace UNCAD.Features.Fill
             List<BatchFillUpdatePlan> plans, List<string> errors,
             List<BatchCatalogRequest> catalogRequests,
             CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings,
-            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> scanned = null)
+            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> scanned = null,
+            List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> precollectedOutputs = null)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
@@ -416,7 +417,7 @@ namespace UNCAD.Features.Fill
                 : FillRouteInspectionStage.Inspect(ctx, readTransaction,
                     region.EntityIds, scanned,
                     machine.UpstreamAxis, machine.DownstreamAxis, true,
-                    region.Boundary);
+                    region.Boundary, precollectedOutputs);
             if (routeInspection.Connectivity != null
                 && (routeInspection.Connectivity.IsolatedSegmentIds.Count > 0
                     || routeInspection.Connectivity.Components.Count > 1))

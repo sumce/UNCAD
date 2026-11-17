@@ -132,6 +132,48 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void RowMembers_ExcelOrderMatchesAcrossCaseAndInnerWhitespace()
+        {
+            var context = Context();
+            // D-021（3.3.3.2 回归锁）：工作簿侧身份 "MQ-01"，图上侧
+            // "M Q-01"/"mq-01"（内部空格 + 大小写差异）。行序映射必须照常
+            // 命中——旧比较器只 Trim() 且区分大小写，命中失败会静默退回
+            // 图上位置序。
+            context.RowOrder[XLayoutArrangeContext.MakeKey("MQ-01", "C1")] = 0;
+            context.RowOrder[XLayoutArrangeContext.MakeKey("MQ-01", "C2")] = 1;
+            var items = new[]
+            {
+                Item("M Q-01", "C2", 0, "h1"),   // Excel 第二行，图上最左
+                Item("mq-01", "C1", 2000, "h2")  // Excel 第一行，图上在右
+            };
+
+            var placements = XLayoutLayout.Arrange(items, context,
+                XLayoutArrangeMode.MachineReadiness);
+
+            Assert.Equal("C1", placements[0].Item.DeviceName);
+            Assert.Equal("C2", placements[1].Item.DeviceName);
+        }
+
+        [Fact]
+        public void UpstreamMode_GroupsAcrossCaseAndInnerWhitespace()
+        {
+            var context = Context();
+            // D-021（3.3.3.2 回归锁）：上游映射必须跨内部空格/大小写命中，
+            // 否则该回路被错分进"未配上游"行（旧比较器只忽略大小写）。
+            context.UpstreamOf[XLayoutArrangeContext.MakeKey("MQ-01", "C1")] = "P-01";
+            var items = new[]
+            {
+                Item("M Q-01", "c1", 0, "h1")    // 命中 P-01
+            };
+
+            var placements = XLayoutLayout.Arrange(items, context,
+                XLayoutArrangeMode.Upstream);
+
+            Assert.Single(placements);
+            Assert.Equal("P-01", placements[0].RowLabel);
+        }
+
+        [Fact]
         public void RowMembers_WithoutSnapshotFallbackToDrawingPosition()
         {
             var items = new[]

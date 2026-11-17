@@ -316,6 +316,85 @@ namespace UNCAD.Tests
                 "进度窗必须仅拦用户关闭，命令收尾经 CloseByOwner() 放行");
         }
 
+        [Fact]
+        public void UnrReplaceLine_RetargetsMetadataAfterErase()
+        {
+            // 3.3.3.2（审计 #2）：手工 U1R 开洞换线必须照 Xauto ApplyHops 收尾
+            // 改挂元数据——毫米标 UNCAD_U1LX 关联重挂新 Polyline、U1Q/U1C 输出
+            // UNCAD_PARALLEL SOURCE/RUN 改挂新句柄。旧代码两者都不做，旧句柄
+            // 悬空：重跑 U1Q/U1C 认不到旧输出（重复残留）、3.3.3.1 起横排毫米标
+            // 还会被 U1U/U1F 的 D-043 排除口判"不在役"误当设备预留吸收。
+            // 运行时行为由 UNCAD_UNR_SELFTEST 真机锁死（倒排表命中+改挂+排除）。
+            string source = Read("src", "UNCAD", "Features", "Unr", "UnrFeature.cs");
+            int erase = source.IndexOf("line.Erase()", StringComparison.Ordinal);
+            int retarget = source.IndexOf("ParallelCurveAnnotator.RetargetHandles",
+                StringComparison.Ordinal);
+            int relink = source.IndexOf("QuickLineCadService.TryLinkLineAndLabel",
+                StringComparison.Ordinal);
+            Assert.True(erase >= 0 && retarget > erase && relink > erase,
+                "U1R 换线在擦除旧线后必须改挂平行标注 SOURCE/RUN 与毫米标 U1LX 关联（镜像 Xauto）");
+            // 命令入口必须先一次收集两张倒排表再进点击循环（逐点击全空间走查）。
+            int collect = source.IndexOf(
+                "ParallelCurveAnnotator.CollectBySourceHandle", StringComparison.Ordinal);
+            int labels = source.IndexOf(
+                "QuickLineCadService.CollectLabelsByLineHandle", StringComparison.Ordinal);
+            Assert.True(collect >= 0 && labels >= 0 && collect < erase && labels < erase,
+                "U1R 必须在点击循环前一次收集平行标注与毫米标倒排表");
+        }
+
+        [Fact]
+        public void BatchPreflight_ParallelOwnershipCollectedOncePerBatch()
+        {
+            // 3.3.3.2（审计 #4）：平行标注归属收集是全空间走查，批量 U1U 必须
+            // 整图只收一次下传复用（3.3.0.1 起逐框 Inspect 内各收一遍是
+            // O(图框×实体)，与 routeScanned 提批外同一教训）。
+            string coordinator = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs");
+            string preflight = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdatePreflight.cs");
+            string stage = Read("src", "UNCAD", "Features", "Fill",
+                "FillRouteInspectionStage.cs");
+            Assert.Equal(1, CountOccurrences(coordinator,
+                "ParallelAnnotationOwnership.Collect("));
+            Assert.Equal(0, CountOccurrences(preflight,
+                "ParallelAnnotationOwnership.Collect("));
+            Assert.Contains("precollectedOutputs", preflight,
+                StringComparison.Ordinal);
+            // 单框路径不传时 Inspect 内自收（保持 3.3.0.1 行为）。
+            Assert.Contains("precollectedOutputs", stage, StringComparison.Ordinal);
+            Assert.Contains("?? ParallelAnnotationOwnership.Collect(", stage,
+                StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void MachinePickerPreview_DegradesInsteadOfCrashing()
+        {
+            // 3.3.3.2（审计 #5）：机台选择窗的预览构建链会主动抛（设备块状态
+            // 冲突 InvalidOperationException/软管长度非法 InvalidDataException——
+            // 主流程同因是优雅中止）。预览是展示件：WPF 事件处理器必须包住
+            // 降级成文案，同 3.3.0.1 路由预览口径，绝不炸选择窗。
+            string source = Read("src", "UNCAD", "UI", "Wpf",
+                "MachinePickerWindow.xaml.cs");
+            int call = source.IndexOf("_previewBuilder(row)", StringComparison.Ordinal);
+            int guard = source.IndexOf("catch (Exception ex)", call,
+                StringComparison.Ordinal);
+            int fallback = source.IndexOf("预览生成失败", call, StringComparison.Ordinal);
+            Assert.True(call >= 0 && guard > call && fallback > call,
+                "机台选择窗预览必须 try/catch 降级（构建失败出文案，不炸 WPF 事件）");
+        }
+
+        private static int CountOccurrences(string source, string fragment)
+        {
+            int count = 0, index = 0;
+            while ((index = source.IndexOf(fragment, index,
+                       StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += fragment.Length;
+            }
+            return count;
+        }
+
         // ---------------- 帮助 ----------------
 
         private static string Read(params string[] parts)

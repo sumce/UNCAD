@@ -478,6 +478,49 @@ namespace UNCAD.Cad.QuickLine
             }
         }
 
+        /// <summary>
+        /// 3.3.3.2（审计 #2）：收集当前空间里带 UNCAD_U1LX 线关联的标注实体，
+        /// 按"关联的线句柄"建倒排表。U1R 开洞换线（Line→带洞 Polyline）前收集
+        /// 一次，换线后按旧句柄查到标注，经 TryLinkLineAndLabel 重挂新实体
+        /// （镜像 Xauto ApplyHops 的收尾）。手工 U1R 此前不重挂，关联悬空：
+        /// 扫描器退回几何配对可容忍，但 3.3.3.1 起 U1U/U1F 的 D-043 排除口按
+        /// "关联解析到活线"判——悬空即判不在役，横排毫米标会被当设备预留误吸收。
+        /// </summary>
+        internal static Dictionary<string, List<ObjectId>> CollectLabelsByLineHandle(
+            CadContext ctx, Transaction transaction)
+        {
+            var result = new Dictionary<string, List<ObjectId>>(
+                StringComparer.OrdinalIgnoreCase);
+            if (ctx == null || transaction == null) return result;
+            BlockTableRecord space;
+            try
+            {
+                space = transaction.GetObject(ctx.Db.CurrentSpaceId,
+                    OpenMode.ForRead, false) as BlockTableRecord;
+            }
+            catch { return result; }
+            if (space == null) return result;
+            foreach (ObjectId id in space)
+            {
+                DBObject source;
+                try { source = transaction.GetObject(id, OpenMode.ForRead, true); }
+                catch { continue; }
+                // ReadAssociatedLineHandle 对无该 RegApp 的实体返回空串
+                // （GetXDataForApplication null → string.Empty），任意实体直读安全。
+                string associated = source == null
+                    ? string.Empty
+                    : QuickLineMetadataStore.ReadAssociatedLineHandle(source);
+                if (string.IsNullOrWhiteSpace(associated)) continue;
+                if (!result.TryGetValue(associated, out List<ObjectId> labels))
+                {
+                    labels = new List<ObjectId>();
+                    result[associated] = labels;
+                }
+                if (!labels.Contains(id)) labels.Add(id);
+            }
+            return result;
+        }
+
         /// <summary>Reads a selected Line without retaining an AutoCAD object.</summary>
         public static bool TryReadLine(CadContext ctx, ObjectId lineId,
             out Point3d startPoint, out Point3d endPoint)

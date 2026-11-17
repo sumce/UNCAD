@@ -35,6 +35,26 @@ namespace UNCAD.Features.Unr
             ConfigPrinter.Print(ctx, CommandIds.Arch, ("直径", TextFormatter.FormatNum(diameter0)));
 
             ed.WriteMessage("\n>> 进入连续开洞模式 (按 ESC 或空格键退出)...");
+
+            // 3.3.3.2（审计 #2）：开洞换线会擦掉旧 Line，先一次收集两张元数据
+            // 倒排表（毫米标 UNCAD_U1LX 线关联 / U1Q/U1C 输出 UNCAD_PARALLEL
+            // SOURCE+RUN），换线后照 Xauto ApplyHops 的收尾改挂到新 Polyline。
+            // 此前手工 U1R 两者都不做、旧句柄悬空：重跑 U1Q/U1C 认不到旧输出
+            // （重复残留）、图层矫正永不认领，3.3.3.1 起横排毫米标还会被
+            // U1U/U1F 的 D-043 排除口判"不在役"误当设备预留吸收。
+            // 本命令运行中不新建这两类元数据，命令始收集一次即不失效。
+            Dictionary<string, List<ObjectId>> parallelBySource;
+            Dictionary<string, List<ObjectId>> labelsByLine;
+            using (Transaction readTransaction =
+                ctx.Db.TransactionManager.StartTransaction())
+            {
+                parallelBySource = ParallelCurveAnnotator.CollectBySourceHandle(
+                    ctx, readTransaction);
+                labelsByLine = QuickLineCadService.CollectLabelsByLineHandle(
+                    ctx, readTransaction);
+                readTransaction.Commit();
+            }
+
             while (true)
             {
                 var eopts = new PromptEntityOptions("\n点击直线或已合并线路的直线段开洞: ")
@@ -74,7 +94,7 @@ namespace UNCAD.Features.Unr
                     if (entity is Line line)
                     {
                         updated = TryReplaceLine(ctx, tr, line, sel.PickedPoint,
-                            diameter, out warning);
+                            diameter, parallelBySource, labelsByLine, out warning);
                     }
                     else if (entity is Polyline polyline)
                     {
@@ -98,8 +118,11 @@ namespace UNCAD.Features.Unr
             ed.WriteMessage("\n已退出连续开洞模式。");
         }
 
-        private static bool TryReplaceLine(CadContext ctx, Transaction tr,
-            Line line, Point3d pickedPoint, double diameter, out string warning)
+        // internal：UNCAD_UNR_SELFTEST 直调真实换线路径（元数据改挂断言）。
+        internal static bool TryReplaceLine(CadContext ctx, Transaction tr,
+            Line line, Point3d pickedPoint, double diameter,
+            Dictionary<string, List<ObjectId>> parallelBySource,
+            Dictionary<string, List<ObjectId>> labelsByLine, out string warning)
         {
             warning = string.Empty;
             if (!ArchBridgePolyline.TryPlanOpening(line.StartPoint, line.EndPoint,
@@ -132,8 +155,30 @@ namespace UNCAD.Features.Unr
             }
             owner.AppendEntity(merged);
             tr.AddNewlyCreatedDBObject(merged, true);
+            string oldHandle = line.Id.Handle.ToString();
+            string newHandle = merged.Id.Handle.ToString();
             line.UpgradeOpen();
             line.Erase();
+
+            // 3.3.3.2（审计 #2，镜像 Xauto ApplyHops 收尾）：换线后元数据跟随，
+            // 旧线句柄不悬空。单个输出/标注改挂失败只记日志不阻断开洞。
+            if (parallelBySource != null
+                && parallelBySource.TryGetValue(oldHandle,
+                    out List<ObjectId> hopOutputs))
+                ParallelCurveAnnotator.RetargetHandles(tr, hopOutputs,
+                    oldHandle, newHandle);
+            if (labelsByLine != null
+                && labelsByLine.TryGetValue(oldHandle,
+                    out List<ObjectId> labels))
+            {
+                foreach (ObjectId labelId in labels)
+                {
+                    if (!QuickLineCadService.TryLinkLineAndLabel(ctx, tr,
+                            merged.Id, labelId))
+                        Log.Warn("[U1R] 线段 " + oldHandle
+                            + " 毫米标注重挂失败，其元数据仍指向已删除的线。");
+                }
+            }
             return true;
         }
 

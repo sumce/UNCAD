@@ -252,7 +252,27 @@ namespace UNCAD.UI
                 return;
             }
             CircuitDetailBox.Text = BuildCircuitDetail(row);
-            PreviewBox.Text = _previewBuilder != null ? _previewBuilder(row) : row.ToString();
+            // 3.3.3.2（审计 #5）：预览构建链会主动抛——设备块状态冲突
+            // InvalidOperationException（D-030 口径）/软管长度非法
+            // InvalidDataException，主流程里同因是优雅中止；这里是 WPF 事件
+            // 处理器，裸奔会变成未处理异常。同 3.3.0.1 路由预览的降级口径：
+            // 预览是展示件，包住降级成文案，绝不炸选择窗。
+            if (_previewBuilder != null)
+            {
+                try
+                {
+                    PreviewBox.Text = _previewBuilder(row);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warn("[U1F] 机台选择窗预览构建失败（不影响选择）：" + ex.Message);
+                    PreviewBox.Text = "预览生成失败：" + ex.Message;
+                }
+            }
+            else
+            {
+                PreviewBox.Text = row.ToString();
+            }
         }
 
         private void OnCircuitSelectionChanged(object sender, SelectionChangedEventArgs e)

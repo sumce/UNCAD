@@ -113,7 +113,8 @@ namespace UNCAD.Features.Fill
             Transaction readTransaction, IEnumerable<ObjectId> scopeEntityIds,
             IReadOnlyList<QuickLineCadSegment> scanned,
             string upstreamAxis, string downstreamAxis,
-            bool buildPreview, FrameRectangle boundary = null)
+            bool buildPreview, FrameRectangle boundary = null,
+            List<ParallelAnnotationOwnershipEntry> precollectedOutputs = null)
         {
             var scope = new HashSet<ObjectId>(scopeEntityIds
                 ?? Enumerable.Empty<ObjectId>());
@@ -145,8 +146,12 @@ namespace UNCAD.Features.Fill
                 Settings.GetBool(ConfigKeys.FillLayerGovernor, true);
             if (governorEnabled || buildPreview)
             {
+                // 3.3.3.2（审计 #4）：批量链在预检循环外收一次经参数传入
+                //（逐框各收一遍是 O(图框×实体)——与 routeScanned 同一教训）；
+                // 单框路径不传，此处自收（保持 3.3.0.1 行为）。
                 List<ParallelAnnotationOwnershipEntry> outputs =
-                    ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
+                    precollectedOutputs
+                        ?? ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
                 if (boundary != null)
                     frameOutputs = FilterOutputsByHostFrame(outputs, inScope);
                 else

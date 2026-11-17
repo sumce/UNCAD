@@ -70,13 +70,19 @@ namespace UNCAD.Features.Fill
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 var definitions = new CadBlockDefinitionReader(readTransaction);
+                // 3.3.3.2（审计 #4）：平行标注归属收集同样整图只做一次——
+                // 3.3.0.1 起逐框 Inspect 内部各收一遍是 O(图框×实体)，与上面
+                // routeScanned 提批外是同一教训；逐框经 precollectedOutputs 复用。
+                List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> parallelOutputs =
+                    UNCAD.Cad.ParallelAnnotationOwnership.Collect(
+                        ctx, readTransaction, null);
                 int preflightDone = 0;
                 foreach (FrameRegionGroup region in regions)
                 {
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
                         options, workbook, plans, errors, catalogRequests,
-                        definitions, statisticsSettings, routeScanned);
+                        definitions, statisticsSettings, routeScanned, parallelOutputs);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
