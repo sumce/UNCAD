@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
@@ -223,7 +224,17 @@ namespace UNCAD.UI
                 CoreWebView2Environment environment =
                     await SharedWebView2Environment.GetAsync();
                 if (_closed) return;
-                await _webView.EnsureCoreWebView2Async(environment);
+                // 3.3.7.1：控制器创建也要有超时——环境 attach 到僵尸浏览器时
+                // 这一步会永远挂死并把确认窗拖白；超时走既有降级文案。
+                Task init = _webView.EnsureCoreWebView2Async(environment);
+                Task finished = await Task.WhenAny(init,
+                    Task.Delay(TimeSpan.FromSeconds(20)));
+                if (finished != init)
+                {
+                    SharedWebView2Environment.Invalidate();
+                    throw new InvalidOperationException(
+                        "WebView2 控制器初始化超时（20 秒）。");
+                }
                 if (_closed) return;
                 ConfigureBrowser(_webView.CoreWebView2);
                 Log.Info("[U1U] 3D 预览 WebView2 内核就绪。");

@@ -19,6 +19,10 @@ namespace UNCAD.UI
     /// </summary>
     internal static class SharedWebView2Environment
     {
+        // 3.3.7.1 现场修复：创建必须串行——同数据目录并发 CreateAsync 会互相
+        // 等浏览器进程启动锁（启动预热 + 首个窗口冷启动竞态即挂死）。
+        private static readonly System.Threading.SemaphoreSlim Gate =
+            new System.Threading.SemaphoreSlim(1, 1);
         private static CoreWebView2Environment _cached;
 
         /// <summary>取共享环境；首次调用创建（之后即时返回）。</summary>
@@ -26,17 +30,49 @@ namespace UNCAD.UI
         {
             CoreWebView2Environment cached = _cached;
             if (cached != null) return cached;
-            string userDataFolder = Path.Combine(
-                Environment.GetFolderPath(
-                    Environment.SpecialFolder.LocalApplicationData),
-                "UNCAD", "WebView2");
+            await Gate.WaitAsync();
+            try
+            {
+                if (_cached != null) return _cached;
+                string localAppData = Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData);
+                // 主目录可能被历史会话的孤儿浏览器进程占着僵尸锁：环境创建
+                // 秒回（attach 旧进程）但控制器创建永远挂死（2026-11-18 现场
+                // 05:15 两次 U1U 全挂、确认窗被拖白）。15s 超时后改用按进程号
+                // 隔离的备用目录——独立目录必起全新浏览器进程，绝不碰僵尸。
+                _cached = await CreateWithTimeoutAsync(
+                    Path.Combine(localAppData, "UNCAD", "WebView2"));
+                if (_cached == null)
+                {
+                    Log.Warn("[3D] WebView2 主数据目录无响应（疑似孤儿进程占用），"
+                        + "切换本进程独立备用目录重试。");
+                    _cached = await CreateWithTimeoutAsync(Path.Combine(
+                        localAppData, "UNCAD",
+                        "WebView2-fallback-" + System.Diagnostics.Process
+                            .GetCurrentProcess().Id));
+                }
+                if (_cached == null)
+                    throw new InvalidOperationException(
+                        "WebView2 环境创建超时（主/备用目录均无响应）。");
+                return _cached;
+            }
+            finally
+            {
+                Gate.Release();
+            }
+        }
+
+        private static async Task<CoreWebView2Environment> CreateWithTimeoutAsync(
+            string userDataFolder)
+        {
             Directory.CreateDirectory(userDataFolder);
-            CoreWebView2Environment created =
-                await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-            // 并发兜底：两个窗口同时冷启动时两个环境句柄连的是同一浏览器
-            // 进程（同数据目录），留一个常驻即可。
-            if (_cached == null) _cached = created;
-            return _cached;
+            Task<CoreWebView2Environment> create =
+                CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            Task done = await Task.WhenAny(create,
+                Task.Delay(TimeSpan.FromSeconds(15)));
+            if (done != create) return null;
+            return create.Status == TaskStatus.RanToCompletion
+                ? create.Result : null;
         }
 
         /// <summary>渲染进程崩溃后作废缓存，下一次使用方重建（本方法不碰活窗口）。</summary>
