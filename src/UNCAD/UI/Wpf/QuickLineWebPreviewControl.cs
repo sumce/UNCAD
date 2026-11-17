@@ -55,6 +55,12 @@ namespace UNCAD.UI
         /// </summary>
         internal static bool DefaultAutoInitialize { get; set; } = true;
 
+        /// <summary>
+        /// 页面目录覆盖（测试宿主专用：程序集输出目录没有 Web/，指向源码树
+        /// 的 Web 目录即可跑真页面；生产不设置，按安装布局解析）。
+        /// </summary>
+        internal string WebRootOverride { get; set; }
+
         /// <summary>当前预览的场景（宿主/测试可读；为 null 时显示提示）。</summary>
         public QuickLineOrbitPreviewModel Model => _model;
 
@@ -86,20 +92,27 @@ namespace UNCAD.UI
             {
                 Text = "该图框没有可预览的带毫米标注 U1L 路由",
                 Foreground = HintBrush,
-                FontSize = 12
+                FontSize = 13,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap
             };
-            _hintText.SetValue(MarginProperty, new Thickness(12));
+            // 3.3.6.1：空态/错误态居中醒目——左上角一行小灰字在整舱留白下
+            // 看起来就是"空白"（现场反馈）；居中+可换行，错误文案带指引。
+            _hintText.SetValue(MarginProperty, new Thickness(24));
             _hintText.SetValue(HorizontalAlignmentProperty,
-                HorizontalAlignment.Left);
+                HorizontalAlignment.Center);
             _hintText.SetValue(VerticalAlignmentProperty,
-                VerticalAlignment.Top);
+                VerticalAlignment.Center);
             Children.Add(_hintText);
 
+            // 3.3.6.1：绝不能以 Collapsed 状态经历 Loaded——WebView2 WPF 的
+            // 视觉绑定在 Loaded 时进行，Collapsed 起步的控件白屏（对照实验：
+            // 同宿主里从头 Visible 的 U1L3DPreviewWindow 正常渲染深色页面）。
+            // 空态/致命态用深色 DefaultBackgroundColor 兜底 + 居中提示文字。
             _webView = new WebView2
             {
                 DefaultBackgroundColor =
-                    System.Drawing.Color.FromArgb(0x0D, 0x13, 0x1A),
-                Visibility = Visibility.Collapsed
+                    System.Drawing.Color.FromArgb(0x0D, 0x13, 0x1A)
             };
             Children.Add(_webView);
 
@@ -117,13 +130,9 @@ namespace UNCAD.UI
             _envelope = QuickLineOrbitPreviewEnvelope.Build(model,
                 PreviewReferenceLevels.Parse(rawLevels));
             RefreshDataCounters();
-            if (_envelope == null)
-            {
-                _hintText.Visibility = Visibility.Visible;
-                _webView.Visibility = Visibility.Collapsed;
-                return;
-            }
-            _hintText.Visibility = Visibility.Collapsed;
+            _hintText.Visibility = _envelope == null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             var payload = new System.Collections.Generic.Dictionary<string, object>
             {
                 { "type", "initialize" },
@@ -204,7 +213,7 @@ namespace UNCAD.UI
             try
             {
                 _webRoot = ResolveWebRoot();
-                _webView.Visibility = Visibility.Visible;
+                Log.Info("[U1U] 3D 预览页面目录: " + _webRoot);
                 string userDataFolder = Path.Combine(
                     Environment.GetFolderPath(
                         Environment.SpecialFolder.LocalApplicationData),
@@ -216,10 +225,13 @@ namespace UNCAD.UI
                 await _webView.EnsureCoreWebView2Async(environment);
                 if (_closed) return;
                 ConfigureBrowser(_webView.CoreWebView2);
+                Log.Info("[U1U] 3D 预览 WebView2 内核就绪。");
             }
             catch (Exception ex)
             {
-                ShowFatalError("3D 预览启动失败：" + ex.Message);
+                Log.Warn("[U1U] 3D 预览启动失败: " + ex);
+                ShowFatalError("3D 预览启动失败：" + ex.Message
+                    + "\n（不影响清单写入；可用 U1S/U1F 正常出清单。）");
             }
         }
 
@@ -286,6 +298,7 @@ namespace UNCAD.UI
                 if (string.Equals(type, "ready", StringComparison.Ordinal))
                 {
                     _pageReady = true;
+                    Log.Info("[U1U] 3D 预览页面就绪，发送场景信封。");
                     DeliverEnvelope();
                 }
                 else if (string.Equals(type, "renderError",
@@ -338,7 +351,6 @@ namespace UNCAD.UI
             _fatal = true;
             _hintText.Text = message;
             _hintText.Visibility = Visibility.Visible;
-            _webView.Visibility = Visibility.Collapsed;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs args)
@@ -350,12 +362,16 @@ namespace UNCAD.UI
         }
 
         /// <summary>页面目录：安装形态在程序集旁 Web/QuickLineOrbit。</summary>
-        private static string ResolveWebRoot()
+        private string ResolveWebRoot()
         {
-            string assemblyDirectory = Path.GetDirectoryName(
-                typeof(QuickLineWebPreviewControl).Assembly.Location);
-            string webRoot = Path.Combine(assemblyDirectory ?? "",
-                "Web", "QuickLineOrbit");
+            string webRoot = WebRootOverride;
+            if (string.IsNullOrWhiteSpace(webRoot))
+            {
+                string assemblyDirectory = Path.GetDirectoryName(
+                    typeof(QuickLineWebPreviewControl).Assembly.Location);
+                webRoot = Path.Combine(assemblyDirectory ?? "",
+                    "Web", "QuickLineOrbit");
+            }
             if (!Directory.Exists(webRoot)
                 || !File.Exists(Path.Combine(webRoot, "index.html")))
                 throw new DirectoryNotFoundException(

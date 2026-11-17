@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -359,6 +360,189 @@ namespace UNCAD.Tests
                 Assert.Equal(2, control.BuiltSegmentLineCount);
                 host.Close();
             });
+        }
+
+        [Fact]
+        public void U1L3DProbe_RealWebView2_ControlExperiment()
+        {
+            // 对照实验：同宿主跑生产验证过的 U1L3DPreviewWindow（同为 WebView2、
+            // 同为 Loaded 后初始化）。若它也白屏 → 测试宿主环境本身显示不出
+            // WebView2 合成（控件无缺陷，生产空白另有原因）；若它正常而
+            // Orbit 探针白 → 控件与参考实现的差异是真缺陷。
+            WpfStaRunner.Run(delegate
+            {
+                string repoWeb = Path.GetFullPath(Path.Combine(
+                    AppContext.BaseDirectory, "..", "..", "..", "..",
+                    "..", "src", "UNCAD", "Web"));
+                var window = new U1L3DPreviewWindow(
+                    new System.Collections.Generic.Dictionary<string, object>(),
+                    System.IO.Path.Combine(repoWeb, "QuickLine3D"))
+                {
+                    AutoInitializeWebView = true
+                };
+                window.Show();
+                for (int i = 0; i < 120; i++)
+                {
+                    Pump(1);
+                    Thread.Sleep(100);
+                }
+                string dir = Path.Combine(Path.GetTempPath(), "uncad-orbit-probe");
+                Directory.CreateDirectory(dir);
+                CaptureWindow(window, Path.Combine(dir, "u1l3d.png"));
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void OrbitProbe_RealWebView2_Diagnostic()
+        {
+            // 3.3.6 现场诊断（用户报告"展示3D的区域是空白的"）：真 WebView2 +
+            // 真页面（WebRootOverride 指向源码树 Web/——测试输出目录没有 Web/，
+            // 首版探针正是复现了"找不到页面资源"的致命路径）。控件直挂普通
+            // 窗，转储内部状态并 GDI 截图到 %TEMP%\uncad-orbit-probe\。
+            WpfStaRunner.Run(delegate
+            {
+                QuickLineWebPreviewControl.DefaultAutoInitialize = true;
+                try
+                {
+                    string repoWeb = Path.GetFullPath(Path.Combine(
+                        AppContext.BaseDirectory, "..", "..", "..", "..",
+                        "..", "src", "UNCAD", "Web"));
+                    var control = new QuickLineWebPreviewControl
+                    {
+                        Width = 880,
+                        Height = 600,
+                        WebRootOverride = Path.Combine(repoWeb, "QuickLineOrbit")
+                    };
+                    var window = new Window
+                    {
+                        Title = "orbit-probe",
+                        Content = control,
+                        Width = 920,
+                        Height = 660,
+                        Topmost = true
+                    };
+                    window.Show();
+                    // 变体验证：等窗口 Loaded/布局后再 SetModel（U1L3D 的
+                    // BeginInitialize 挂在 Loaded 上；生产 FillReviewWindow 是
+                    // 构造期 SetModel——预 HWND 初始化疑似白屏根因）。
+                    for (int i = 0; i < 15; i++)
+                    {
+                        Pump(1);
+                        Thread.Sleep(100);
+                    }
+                    control.SetModel(PreviewModel("上游 48/V ↔ 下游 37/V"));
+                    for (int i = 0; i < 120; i++)
+                    {
+                        Pump(1);
+                        Thread.Sleep(100);
+                    }
+                    var flags = System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.NonPublic;
+                    var type = typeof(QuickLineWebPreviewControl);
+                    string State(string field)
+                        => Convert.ToString(type.GetField(field, flags)?.GetValue(control));
+                    var webField = type.GetField("_webView", flags);
+                    var webView = webField?.GetValue(control);
+                    var core = webView?.GetType().GetProperty("CoreWebView2")?.GetValue(webView);
+                    string report = "segments=" + control.BuiltSegmentLineCount
+                        + " labels=" + control.BuiltLabelCount
+                        + " tray=" + control.BuiltTrayChannelCount
+                        + " grid=" + control.BuiltColumnGridLineCount
+                        + "\n_started=" + State("_initializationStarted")
+                        + "\n_pageReady=" + State("_pageReady")
+                        + "\n_fatal=" + State("_fatal")
+                        + "\n_closed=" + State("_closed")
+                        + "\n_core=" + (core != null ? "created" : "null")
+                        + "\n_webVisibility=" + (webView as UIElement)?.Visibility;
+                    string dir = Path.Combine(Path.GetTempPath(), "uncad-orbit-probe");
+                    Directory.CreateDirectory(dir);
+                    File.WriteAllText(Path.Combine(dir, "state.txt"), report);
+                    // 页面内侧探针：DOM 状态/背景/canvas 尺寸/标签数/当前 URL。
+                    if (core != null)
+                    {
+                        try
+                        {
+                            var exec = core.GetType().GetMethod("ExecuteScriptAsync",
+                                new[] { typeof(string) });
+                            var task = (System.Threading.Tasks.Task<string>)exec.Invoke(
+                                core, new object[]
+                                {
+                                    "JSON.stringify({ready: document.readyState," +
+                                    "bg: getComputedStyle(document.body).backgroundColor," +
+                                    "canvas: (function(){var c=document.querySelector('#canvasHost canvas');" +
+                                    "return c ? c.width+'x'+c.height : 'none';})()," +
+                                    "labels: document.querySelectorAll('.scene-label').length," +
+                                    "loading: document.getElementById('loading') ? " +
+                                    "document.getElementById('loading').style.display : 'none'," +
+                                    "host: !!window.chrome && !!window.chrome.webview})"
+                                });
+                            // 边泵边等：ExecuteScriptAsync 的 continuation 要回宿主
+                            // UI 线程，裸 Wait(3000) 会堵死 STA 泵卡住整个测试。
+                            var deadline = Environment.TickCount + 4000;
+                            while (!task.IsCompleted
+                                && Environment.TickCount < deadline)
+                            {
+                                Pump(1);
+                                Thread.Sleep(50);
+                            }
+                            File.WriteAllText(Path.Combine(dir, "page.txt"),
+                                task.IsCompleted
+                                    ? Convert.ToString(task.Result)
+                                    : "SCRIPT-TIMEOUT");
+                            var sourceProp = core.GetType().GetProperty("Source");
+                            File.AppendAllText(Path.Combine(dir, "page.txt"),
+                                "\nsource=" + sourceProp?.GetValue(core));
+                        }
+                        catch (Exception ex)
+                        {
+                            File.WriteAllText(Path.Combine(dir, "page.txt"),
+                                "EXEC-FAIL: " + ex.Message);
+                        }
+                    }
+                    CaptureWindow(window, Path.Combine(dir, "window.png"));
+                    window.Close();
+                }
+                finally
+                {
+                    QuickLineWebPreviewControl.DefaultAutoInitialize = false;
+                }
+            });
+        }
+
+        /// <summary>GDI 屏幕复制抓窗口真实合成画面（含 WebView2 的 HwndHost）。</summary>
+        private static void CaptureWindow(Window window, string path)
+        {
+            var helper = new System.Windows.Interop.WindowInteropHelper(window);
+            if (helper.Handle == IntPtr.Zero) helper.EnsureHandle();
+            Interop.SetForegroundWindow(helper.Handle);
+            Thread.Sleep(300);
+            Interop.RECT rect;
+            if (!Interop.GetWindowRect(helper.Handle, out rect)) return;
+            int width = Math.Max(1, rect.Right - rect.Left);
+            int height = Math.Max(1, rect.Bottom - rect.Top);
+            using (var bitmap = new System.Drawing.Bitmap(width, height,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0,
+                    new System.Drawing.Size(width, height),
+                    System.Drawing.CopyPixelOperation.SourceCopy);
+                bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+            }
+        }
+
+        private static class Interop
+        {
+            [System.Runtime.InteropServices.StructLayout(
+                System.Runtime.InteropServices.LayoutKind.Sequential)]
+            public struct RECT { public int Left, Top, Right, Bottom; }
+
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+            [System.Runtime.InteropServices.DllImport("user32.dll")]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
         }
 
         internal static QuickLineOrbitPreviewModel PreviewModel(string axisSummary)

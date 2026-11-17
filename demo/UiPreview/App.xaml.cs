@@ -29,6 +29,12 @@ namespace UNCAD.UiPreview
                 return;
             }
 
+            if (e.Args.Length > 0 && e.Args[0] == "--orbit")
+            {
+                RunOrbitProbe(e.Args.Length > 1 ? e.Args[1] : "shots");
+                return;
+            }
+
             // 交互模式：双击打开批量确认窗，可逐个查看三个真实窗体。
             new BatchFillConfirmationWindow(SampleBatchRows()).ShowDialog();
             Shutdown();
@@ -182,6 +188,85 @@ namespace UNCAD.UiPreview
             };
 
         /// <summary>把主工程里全部真实窗体逐个 × 深/浅主题截图。</summary>
+        /// <summary>
+        /// 3.3.6 现场回归探针：真实 FillReviewWindow + 真实 QuickLineWebPreviewControl
+        /// （WebView2 真初始化），注入带通道/柱网/参照层的夹具模型，等待页面加载
+        /// 后截图 + 转储控件内部状态——在 AutoCAD 外复现/排除"预览舱空白"。
+        /// </summary>
+        private void RunOrbitProbe(string dir)
+        {
+            Directory.CreateDirectory(dir);
+
+            var preview = new UNCAD.Core.QuickLine.QuickLineOrbitPreviewModel(
+                new List<UNCAD.Core.QuickLine.QuickLineOrbitPreviewSegment>
+                {
+                    new UNCAD.Core.QuickLine.QuickLineOrbitPreviewSegment("s1",
+                        new UNCAD.Core.QuickLine.QuickLineSpatialPoint(0, 0, 0),
+                        new UNCAD.Core.QuickLine.QuickLineSpatialPoint(9600, 0, 0),
+                        UNCAD.Core.QuickLine.QuickLineSpatialAxis.X, 9600, true,
+                        "9600mm",
+                        new UNCAD.Core.QuickLine.QuickLineOrbitPreviewChannel(
+                            400.0, false, false)),
+                    new UNCAD.Core.QuickLine.QuickLineOrbitPreviewSegment("s2",
+                        new UNCAD.Core.QuickLine.QuickLineSpatialPoint(9600, 0, 0),
+                        new UNCAD.Core.QuickLine.QuickLineSpatialPoint(9600, 0, 2500),
+                        UNCAD.Core.QuickLine.QuickLineSpatialAxis.Z, 2500, true,
+                        "2500mm",
+                        new UNCAD.Core.QuickLine.QuickLineOrbitPreviewChannel(
+                            null, false, true))
+                }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
+
+            var data = FillReviewData.Create(
+                new MachineRow { MachineId = "M1", CircuitName = "设备A" },
+                new List<TableFillRow>());
+            var window = new FillReviewWindow(data,
+                new Core.Excel.BoqCatalogIndex(null),
+                FillPlanningOptions.Default, true, preview,
+                "图层矫正：6 个实体移正（电缆 3/桥架 2/线管 1/无法判定 0）");
+            window.Show();
+
+            // 泵消息循环给 WebView2 异步初始化留时间（最多 ~15 秒）。
+            var control = window.OrbitPreview;
+            for (int i = 0; i < 150; i++)
+            {
+                Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                Thread.Sleep(100);
+            }
+
+            ScreenCapture.CaptureWindow(window, Path.Combine(dir, "orbit-probe.png"));
+
+            // 内部状态转储（InternalsVisibleTo + 少量反射）。
+            var report = new System.Text.StringBuilder();
+            report.AppendLine("BuiltSegmentLineCount=" + control.BuiltSegmentLineCount);
+            report.AppendLine("BuiltLabelCount=" + control.BuiltLabelCount);
+            report.AppendLine("BuiltTrayChannelCount=" + control.BuiltTrayChannelCount);
+            report.AppendLine("BuiltColumnGridLineCount=" + control.BuiltColumnGridLineCount);
+            var flags = control.GetType().GetField("_pageReady",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var fatal = control.GetType().GetField("_fatal",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var started = control.GetType().GetField("_initializationStarted",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var closed = control.GetType().GetField("_closed",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var webField = control.GetType().GetField("_webView",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            var webView = webField != null ? webField.GetValue(control) : null;
+            var core = webView != null
+                ? webView.GetType().GetProperty("CoreWebView2")?.GetValue(webView) : null;
+            report.AppendLine("_initializationStarted=" + started?.GetValue(control));
+            report.AppendLine("_pageReady=" + flags?.GetValue(control));
+            report.AppendLine("_fatal=" + fatal?.GetValue(control));
+            report.AppendLine("_closed=" + closed?.GetValue(control));
+            report.AppendLine("CoreWebView2=" + (core != null ? "created" : "null"));
+            report.AppendLine("webViewVisibility=" + (webView as UIElement)?.Visibility);
+            File.WriteAllText(Path.Combine(dir, "orbit-probe-state.txt"),
+                report.ToString());
+
+            window.Close();
+            Shutdown();
+        }
+
         private void RunShots(string dir)
         {
             Directory.CreateDirectory(dir);
