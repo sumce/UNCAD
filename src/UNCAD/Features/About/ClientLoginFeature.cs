@@ -26,7 +26,7 @@ namespace UNCAD.Features.About
         {
             // 3.0 WPF 窗体（D-038，P4 聚焦输入）；结果从公开属性读。
             var window = new ClientLoginWindow();
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
             if (window.Succeeded)
                 ctx.Write("\n[UNC_LOGIN] 本机已上线，账号授权验证成功。");
             else

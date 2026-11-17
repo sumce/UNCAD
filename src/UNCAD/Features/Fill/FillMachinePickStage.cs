@@ -38,7 +38,7 @@ namespace UNCAD.Features.Fill
             // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
             var window = new MachinePickerWindow(workbook.MachineIds,
                 workbook.FindRows, preview);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
             if (!window.Confirmed) return null;
             return window.Selected;
         }

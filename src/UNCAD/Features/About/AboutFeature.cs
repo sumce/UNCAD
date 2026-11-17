@@ -17,7 +17,7 @@ namespace UNCAD.Features.About
         {
             // 3.0 WPF 窗体（D-038，P7 品牌页）；只读展示，无返回结果。
             var window = new AboutWindow();
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
         }
     }
 }

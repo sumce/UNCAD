@@ -190,7 +190,7 @@ namespace UNCAD.Features.PdfExport
                     : ""));
             var resultWindow = new UNCAD.UI.PdfExportResultWindow(targets,
                 run.Rendered, run.Failed, outputDirectory);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(resultWindow);
+            UNCAD.UI.ModalWindowHost.Show(resultWindow);
         }
 
         /// <summary>

@@ -21,7 +21,7 @@ namespace UNCAD.Features.XLayout
 
             // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达，取消/关闭/Esc 一律 false。
             var window = new XmergeWindow();
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
             if (!window.Confirmed) return;
             if (window.Files.Count == 0)
             {

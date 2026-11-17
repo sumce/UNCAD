@@ -88,7 +88,7 @@ namespace UNCAD.Features.Unl
             }
 
             // 3.0 WPF 外壳（D-038 P5）；内容仍是 WebView2（D-025）。
-            AcApplication.ShowModalWindow(new U1L3DPreviewWindow(envelope));
+            UNCAD.UI.ModalWindowHost.Show(new U1L3DPreviewWindow(envelope));
         }
 
         /// <summary>
@@ -331,7 +331,7 @@ namespace UNCAD.Features.Unl
                     + " frames=" + frames.Count
                     + " scanned=" + scanned.Count);
             }
-            AcApplication.ShowModalWindow(new U1L3DPreviewWindow(envelope));
+            UNCAD.UI.ModalWindowHost.Show(new U1L3DPreviewWindow(envelope));
         }
 
         private static QuickLineIsometricScene BuildScene(

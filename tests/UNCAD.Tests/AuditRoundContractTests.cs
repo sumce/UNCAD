@@ -450,6 +450,113 @@ namespace UNCAD.Tests
             return count;
         }
 
+        // ---------------- 源码契约：3.3.6.2 现场反馈（3D 预览时效性/模态窗快关竞态） ----------------
+
+        [Fact]
+        public void WebView2_EnvironmentSharedAcrossHosts_AndWarmedAtStartup()
+        {
+            // 2026-11-18 现场日志：U1U 审阅窗每次开窗各自 CreateAsync 且共用
+            // 同一用户数据目录——上一轮退场进程锁目录、新一轮排队再拉新进程，
+            // 「页面目录→内核就绪」6~10s，用户点确认（5~10s）前 3D 永远起
+            // 不来；同进程存活期间复用 0.5s（日志内证）。三个 WebView2 宿主
+            // （U1U 预览/U1L 3D/登录页）必须走 SharedWebView2Environment，
+            // 且 Bootstrap 启动 Idle 预热——环境回退到每窗自建即复发。
+            string control = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLineWebPreviewControl.cs");
+            string u1l = Read("src", "UNCAD", "UI", "Wpf",
+                "U1L3DPreviewWindow.xaml.cs");
+            string login = Read("src", "UNCAD", "UI", "Wpf",
+                "ClientLoginWindow.xaml.cs");
+            string bootstrap = Read("src", "UNCAD", "Bootstrap.cs");
+            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
+                control, StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
+                u1l, StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
+                login, StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.GetAsync", control,
+                StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.GetAsync", u1l,
+                StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.GetAsync", login,
+                StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.WarmUpForStartup",
+                bootstrap, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WebView2_PreviewSilencesPostCloseInitFailures()
+        {
+            // 同一日志：窗口关闭后 BeginInitialize 收尾摸到已销毁内核抛
+            // InvalidOperationException，被 catch 当「启动失败」WARN 误报
+            //（无人再看）。catch 必须先查 _closed 静默退出，再谈日志/降级。
+            string control = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLineWebPreviewControl.cs");
+            int catchPos = control.IndexOf("catch (Exception ex)",
+                StringComparison.Ordinal);
+            int closedGuard = control.IndexOf("if (_closed) return;",
+                catchPos, StringComparison.Ordinal);
+            int warn = control.IndexOf("[U1U] 3D 预览启动失败",
+                StringComparison.Ordinal);
+            Assert.True(catchPos >= 0 && closedGuard > catchPos,
+                "BeginInitialize 的 catch 里必须有 _closed 静默退出");
+            Assert.True(warn < 0 || closedGuard < warn || warn < catchPos,
+                "关窗后的初始化失败不得再记「启动失败」WARN");
+        }
+
+        [Fact]
+        public void ModalWindowCalls_GoThroughGuardedHost()
+        {
+            // 同一日志：审阅窗 0.4 秒内被关，WPF-UI 4.0.2 TitleBar 的
+            // ContentRendered 回调在句柄销毁后执行，CriticalFromHwnd(0) 抛
+            // ArgumentException 炸穿 ShowDialog 把整条 U1U 变 failed。全部
+            // 模态调用点必须走 ModalWindowHost（竞态按取消处理），不再直呼
+            // ShowModalWindow——漏一处即该命令保留快关炸弹。
+            string root = Repo("src", "UNCAD");
+            string[] offenders = Directory.GetFiles(root, "*.cs",
+                    SearchOption.AllDirectories)
+                .Where(path => Path.GetFileName(path) != "ModalWindowHost.cs")
+                .Where(path => File.ReadAllText(path).Contains(
+                    "Application.ShowModalWindow(")
+                    || File.ReadAllText(path).Contains("AcApplication.ShowModalWindow("))
+                .ToArray();
+            Assert.True(offenders.Length == 0,
+                "模态窗必须经 ModalWindowHost.Show 弹出，直呼残留: "
+                + string.Join(", ", offenders));
+        }
+
+        [Fact]
+        public void ModalWindowHost_RecognizesTitleBarFastCloseRaceOnly()
+        {
+            // 竞态指纹只认「来自 OnWindowContentRendered 的
+            // ArgumentException」：堆栈来自 TitleBar 回调方法名；普通
+            // ArgumentException（含无堆栈/null）一律不吞照常上抛。
+            Assert.True(UNCAD.UI.ModalWindowHost.IsTitleBarFastCloseRace(
+                ThrowFromTitleBarCallback()));
+            Assert.False(UNCAD.UI.ModalWindowHost.IsTitleBarFastCloseRace(
+                new ArgumentException("零的 Hwnd 无效。")));
+            Assert.False(UNCAD.UI.ModalWindowHost.IsTitleBarFastCloseRace(
+                null));
+        }
+
+        private static ArgumentException ThrowFromTitleBarCallback()
+        {
+            try
+            {
+                OnWindowContentRendered();
+            }
+            catch (ArgumentException ex)
+            {
+                return ex;
+            }
+            return null;
+        }
+
+        private static void OnWindowContentRendered()
+        {
+            throw new ArgumentException("零的 Hwnd 无效。");
+        }
+
         // ---------------- 帮助 ----------------
 
         private static string Read(params string[] parts)

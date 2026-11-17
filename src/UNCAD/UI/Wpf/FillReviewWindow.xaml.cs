@@ -286,8 +286,7 @@ namespace UNCAD.UI
             => (ShowNestedPicker ?? DefaultShowPicker)(picker);
 
         private static void DefaultShowPicker(Window picker)
-            => Autodesk.AutoCAD.ApplicationServices.Application
-                .ShowModalWindow(picker);
+            => UNCAD.UI.ModalWindowHost.Show(picker);
 
         // ---- 固定清单添加 / 替换 ----------------------------------------------
 

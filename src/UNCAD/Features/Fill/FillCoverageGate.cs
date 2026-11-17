@@ -135,8 +135,7 @@ namespace UNCAD.Features.Fill
                     MissingNames = result.Missing.ToList()
                 }).OrderBy(choice => choice.MachineId,
                     StringComparer.OrdinalIgnoreCase).ToList());
-            Autodesk.AutoCAD.ApplicationServices.Application
-                .ShowModalWindow(forceWindow);
+            UNCAD.UI.ModalWindowHost.Show(forceWindow);
             if (!forceWindow.Confirmed) return forced;
             forced = new HashSet<string>(forceWindow.ForcedMachineIds,
                 IdentityTextNormalizer.Comparer);

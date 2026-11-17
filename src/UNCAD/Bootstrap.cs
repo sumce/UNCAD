@@ -89,7 +89,7 @@ namespace UNCAD
                 // 3.0 WPF 版（D-038）：原 ShowModalDialog 是模态展示（动画期间
                 // CAD 输入被挡住，更新日志在动画结束后才弹），ShowModalWindow 是
                 // 它的 WPF 等价物 —— 只换皮，不改任何时序。
-                Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(splash);
+                UNCAD.UI.ModalWindowHost.Show(splash);
             }
             catch (System.Exception ex)
             {
@@ -157,7 +157,7 @@ namespace UNCAD
                 {
                     // 3.0 WPF 版（D-038，P5 内容阅读）；无返回结果，看完即关。
                     var window = new UpdateNotesWindow(entries);
-                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+                    UNCAD.UI.ModalWindowHost.Show(window);
                 }
                 finally { _updateNotesDialogOpen = false; }
                 Settings.Set(ConfigKeys.UpdateNotesSeenVersion, ProductMetadata.VersionText);
@@ -230,6 +230,11 @@ namespace UNCAD
                         UNCAD.Core.Fill.FillPlanningOptions.Default));
                 clock.Stop();
                 Log.Info("启动预热完成: " + clock.ElapsedMilliseconds + " ms");
+                // 3.3.6.2：后台拉起共享 WebView2 环境与浏览器进程——U1U 3D
+                // 预览/U1L 3D 首次开窗即 0.5 秒级就绪（此前冷启动 6~10 秒，
+                // 用户在审阅窗点确认之前 3D 永远起不来）。火后不管、失败只
+                // 记日志：预热是优化不是正确性。
+                UNCAD.UI.SharedWebView2Environment.WarmUpForStartup();
             }
             catch (System.Exception ex)
             {
@@ -263,7 +268,7 @@ namespace UNCAD
                     // 周期性心跳不再触发它（见 OnlineLicenseMonitor.Publish 的说明）。
                     _ = reason;
                     var window = new ClientLoginWindow();
-                    Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+                    UNCAD.UI.ModalWindowHost.Show(window);
                 }
                 finally { _licenseDialogOpen = false; }
                 return;

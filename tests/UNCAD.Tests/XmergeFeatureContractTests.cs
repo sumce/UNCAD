@@ -34,7 +34,8 @@ namespace UNCAD.Tests
             string featureXaml = File.ReadAllText(RepoFile("src", "UNCAD", "UI", "Wpf",
                 "XmergeWindow.xaml"));
             Assert.Contains("CommandMethod(CommandIds.Merge)", feature);
-            Assert.Contains("ShowModalWindow", feature);
+            // 3.3.6.2：模态窗统一走 ModalWindowHost（带快关竞态防护）。
+            Assert.Contains("ModalWindowHost.Show", feature);
             Assert.Contains("ctx.Ed.Regen()", feature);
             Assert.Contains("WblockCloneObjects", service);
             Assert.Contains("XLayoutLayout.Arrange", service);

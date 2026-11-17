@@ -318,11 +318,10 @@ namespace UNCAD.UI
             if (!TryCreateWebView()) return;
             try
             {
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "UNCAD", "WebView2");
+                // 3.3.6.2：进程级共享环境（详见 SharedWebView2Environment）——
+                // 与 U1U/U1L 预览共用常驻浏览器进程，登录页开窗即就绪。
                 CoreWebView2Environment environment =
-                    await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+                    await SharedWebView2Environment.GetAsync();
                 if (_closed) return;
                 await _webView.EnsureCoreWebView2Async(environment);
                 if (_closed) return;

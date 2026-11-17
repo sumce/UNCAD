@@ -276,7 +276,7 @@ namespace UNCAD.Features.Stat
                     + "）——名单见结果窗「未上图」页与 Excel「未上图机台」页。");
             // 3.0 WPF 窗体（D-038）：只读汇报窗，关闭即继续。
             var window = new XstsWindow(report, path);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
         }
 
         /// <summary>

@@ -214,13 +214,11 @@ namespace UNCAD.UI
             {
                 _webRoot = ResolveWebRoot();
                 Log.Info("[U1U] 3D 预览页面目录: " + _webRoot);
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(
-                        Environment.SpecialFolder.LocalApplicationData),
-                    "UNCAD", "WebView2");
-                Directory.CreateDirectory(userDataFolder);
+                // 3.3.6.2：进程级共享环境——每窗新建时与上一轮退场进程抢同一
+                // 用户数据目录，现场实测内核就绪要 6~10s，用户确认前 3D 永远
+                // 起不来；共享常驻进程 0.5s 级（2026-11-18 日志）。
                 CoreWebView2Environment environment =
-                    await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+                    await SharedWebView2Environment.GetAsync();
                 if (_closed) return;
                 await _webView.EnsureCoreWebView2Async(environment);
                 if (_closed) return;
@@ -229,6 +227,9 @@ namespace UNCAD.UI
             }
             catch (Exception ex)
             {
+                // 窗口已关时初始化收尾摸到已销毁内核是正常竞态（现场日志
+                // 曾以「启动失败」WARN 误报）：无人再看，静默退出。
+                if (_closed) return;
                 Log.Warn("[U1U] 3D 预览启动失败: " + ex);
                 ShowFatalError("3D 预览启动失败：" + ex.Message
                     + "\n（不影响清单写入；可用 U1S/U1F 正常出清单。）");
@@ -251,8 +252,11 @@ namespace UNCAD.UI
             core.DownloadStarting += (sender, args) => args.Cancel = true;
             core.PermissionRequested += (sender, args) =>
                 args.State = CoreWebView2PermissionState.Deny;
-            core.ProcessFailed += (sender, args) => ShowFatalError(
-                "3D 渲染进程异常终止：" + args.ProcessFailedKind);
+            core.ProcessFailed += (sender, args) =>
+            {
+                SharedWebView2Environment.Invalidate();
+                ShowFatalError("3D 渲染进程异常终止：" + args.ProcessFailedKind);
+            };
             core.WebMessageReceived += OnWebMessageReceived;
             // 虚拟主机根映射到 Web 父目录：页面在 /QuickLineOrbit/，three.js
             // 从 ../QuickLine3D/vendor/ 引用（同主机内，不出网）。

@@ -600,8 +600,7 @@ namespace UNCAD.Features.Fill
                 // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
                 var window = new FillUpdateCompareWindow(
                     new List<FillUpdateCompareItem> { item });
-                Autodesk.AutoCAD.ApplicationServices.Application
-                    .ShowModalWindow(window);
+                UNCAD.UI.ModalWindowHost.Show(window);
                 return window.Confirmed;
             }
             catch (System.Exception ex)

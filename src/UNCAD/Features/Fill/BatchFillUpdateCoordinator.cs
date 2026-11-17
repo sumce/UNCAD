@@ -136,7 +136,7 @@ namespace UNCAD.Features.Fill
                         plan.DeviceReserveHintMm.HasValue ? "复制源预填，请核对" : ""));
                 // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达。
                 var reserveWindow = new DeviceReserveWindow(reserveRows);
-                AcApplication.ShowModalWindow(reserveWindow);
+                UNCAD.UI.ModalWindowHost.Show(reserveWindow);
                 if (!reserveWindow.Confirmed)
                 {
                     ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
@@ -159,7 +159,7 @@ namespace UNCAD.Features.Fill
             {
                 // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
                 var picker = new BatchCatalogSelectionWindow(catalogRequests);
-                AcApplication.ShowModalWindow(picker);
+                UNCAD.UI.ModalWindowHost.Show(picker);
                 if (!picker.Confirmed) return;
                 // D-052-A：把用户的选择逐项应用回各框清单（全类别，不再只回写
                 // 电缆/母线插接箱第一条——其余未匹配项以前落回「未匹配固定清单」
@@ -324,7 +324,7 @@ namespace UNCAD.Features.Fill
             {
                 // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
                 var compareWindow = new FillUpdateCompareWindow(compareItems);
-                AcApplication.ShowModalWindow(compareWindow);
+                UNCAD.UI.ModalWindowHost.Show(compareWindow);
                 if (!compareWindow.Confirmed)
                 {
                     ctx.Write("\n[U1U] 已取消批量更新，图纸未修改。");
@@ -370,7 +370,7 @@ namespace UNCAD.Features.Fill
             // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达，取消/关闭/Esc 一律 false。
             var confirmationWindow = new BatchFillConfirmationWindow(confirmationRows,
                 previewsByFrame, layerCorrectionText);
-            AcApplication.ShowModalWindow(confirmationWindow);
+            UNCAD.UI.ModalWindowHost.Show(confirmationWindow);
             if (!confirmationWindow.Confirmed) return;
 
             try
@@ -692,7 +692,7 @@ namespace UNCAD.Features.Fill
                 tableRows, frameBlocks, attributeValues,
                 automaticExcel?.AddedCount ?? 0, automaticExcel?.ReplacedCount ?? 0,
                 automaticExcelPath);
-            AcApplication.ShowModalWindow(resultWindow);
+            UNCAD.UI.ModalWindowHost.Show(resultWindow);
         }
 
         /// <summary>批量写入时的界面刷新：事务内的改动必须先进图形队列再刷屏，

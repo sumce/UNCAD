@@ -66,12 +66,10 @@ namespace UNCAD.UI
             if (!AutoInitializeWebView) return;
             try
             {
-                string userDataFolder = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "UNCAD", "WebView2");
-                Directory.CreateDirectory(userDataFolder);
+                // 3.3.6.2：进程级共享环境（详见 SharedWebView2Environment）——
+                // 与 U1U 预览/登录页共用常驻浏览器进程，开窗即就绪。
                 CoreWebView2Environment environment =
-                    await CoreWebView2Environment.CreateAsync(null, userDataFolder);
+                    await SharedWebView2Environment.GetAsync();
                 if (_closed) return;
                 await _webView.EnsureCoreWebView2Async(environment);
                 if (_closed) return;
@@ -99,8 +97,11 @@ namespace UNCAD.UI
             core.DownloadStarting += (sender, args) => args.Cancel = true;
             core.PermissionRequested += (sender, args) =>
                 args.State = CoreWebView2PermissionState.Deny;
-            core.ProcessFailed += (sender, args) => ShowFatalError(
-                "3D 渲染进程异常终止：" + args.ProcessFailedKind);
+            core.ProcessFailed += (sender, args) =>
+            {
+                SharedWebView2Environment.Invalidate();
+                ShowFatalError("3D 渲染进程异常终止：" + args.ProcessFailedKind);
+            };
             core.WebMessageReceived += OnWebMessageReceived;
             core.SetVirtualHostNameToFolderMapping(VirtualHostName, _webRoot,
                 CoreWebView2HostResourceAccessKind.Deny);

@@ -34,7 +34,7 @@ namespace UNCAD.Features.Fill
             var window = new FillReviewWindow(review, catalog, planning, updateMode,
                 updateMode ? routeInspection?.Preview : null,
                 routeInspection?.LayerCorrectionText);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(window);
+            UNCAD.UI.ModalWindowHost.Show(window);
             if (!window.Confirmed) return false;
             confirmed = window.Data;
             return true;

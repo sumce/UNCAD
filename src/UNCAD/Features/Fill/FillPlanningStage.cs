@@ -268,7 +268,7 @@ namespace UNCAD.Features.Fill
             // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
             var picker = new CableCatalogSelectionWindow(
                 catalog.Cables, review.BoqCableModel);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(picker);
+            UNCAD.UI.ModalWindowHost.Show(picker);
             if (!picker.Confirmed || picker.SelectedItem == null) return;
             review.SetCableModel(picker.SelectedItem.Alias ?? picker.SelectedItem.Spec,
                 catalog);

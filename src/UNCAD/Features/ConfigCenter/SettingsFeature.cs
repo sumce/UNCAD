@@ -30,7 +30,7 @@ namespace UNCAD.Features.ConfigCenter
                 // 确认与否用 Confirmed 表达，取消/关闭/Esc 一律 false；
                 // 写入仍集中在窗口的 Save()（Features 只读）。
                 var window = new SettingsWindow(0);
-                Application.ShowModalWindow(window);
+                UNCAD.UI.ModalWindowHost.Show(window);
                 if (!window.Confirmed) return false;
                 window.Save();
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\n[U1SET] 配置已保存！");

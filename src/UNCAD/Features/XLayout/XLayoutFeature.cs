@@ -263,8 +263,7 @@ namespace UNCAD.Features.XLayout
                 // 手拼 AMHS 机台清单防不住同号/近名混入，区域才是可靠口径）。
                 var selector = new XLayoutSelectionWindow(items, _arrangeMode,
                     LoadRegionByMachine(items));
-                Autodesk.AutoCAD.ApplicationServices.Application
-                    .ShowModalWindow(selector);
+                UNCAD.UI.ModalWindowHost.Show(selector);
                 if (!selector.Confirmed)
                 {
                     SelectionService.ClearPickFirst(ctx);
@@ -444,7 +443,7 @@ namespace UNCAD.Features.XLayout
             // 3.0 WPF 窗体（D-038）：只读统计窗。
             var summaryWindow = new XLayoutSummaryWindow(arrangedSummaries.Values.ToList(),
                 arrangedItems.Count);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(summaryWindow);
+            UNCAD.UI.ModalWindowHost.Show(summaryWindow);
         }
 
         /// <summary>

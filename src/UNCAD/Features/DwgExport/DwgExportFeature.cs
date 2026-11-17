@@ -90,8 +90,7 @@ namespace UNCAD.Features.DwgExport
                         StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 var selectionWindow = new UNCAD.UI.DwgExportSelectionWindow(choices);
-                Autodesk.AutoCAD.ApplicationServices.Application
-                    .ShowModalWindow(selectionWindow);
+                UNCAD.UI.ModalWindowHost.Show(selectionWindow);
                 if (!selectionWindow.Confirmed)
                 {
                     ctx.Write("\n[U1DWG] 已取消，未生成文件。");
@@ -137,7 +136,7 @@ namespace UNCAD.Features.DwgExport
                 + result.MachineCount + " 个机台；明细见结果窗。");
             var resultWindow = new UNCAD.UI.DwgExportResultWindow(result.Machines,
                 result.FrameCount, outputRoot);
-            Autodesk.AutoCAD.ApplicationServices.Application.ShowModalWindow(resultWindow);
+            UNCAD.UI.ModalWindowHost.Show(resultWindow);
         }
     }
 }
