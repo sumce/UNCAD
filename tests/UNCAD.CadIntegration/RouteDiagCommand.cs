@@ -298,6 +298,210 @@ namespace UNCAD.CadIntegration
                 : "FAIL " + string.Join("；", failures);
         }
 
+        [CommandMethod("UNCAD_MARKER_DIAG")]
+        public void RunMarkerDiag()
+        {
+            string verdict;
+            try { verdict = RunMarkerDiagCore(); }
+            catch (System.Exception ex)
+            {
+                Info("异常: " + ex);
+                verdict = "FAIL " + ex.Message;
+            }
+            Finish("UNCAD_MARKER_DIAG", verdict);
+        }
+
+        /// <summary>
+        /// 毫米标法医（用户报告"识别不到横着的毫米标"）：对每个图框范围内
+        /// 含 mm 的文字逐个过 D-043 三道淘汰口（U1LX 关联活性 / 水平性 /
+        /// 判据正则），报出每个疑似标记的死因。3.3.3.1 起关联口按"解析到
+        /// 活线"判——"0"/悬空/复制残留的陈旧句柄不再一票否决。
+        /// </summary>
+        private static string RunMarkerDiagCore()
+        {
+            Document document = Application.DocumentManager.MdiActiveDocument;
+            var ctx = new CadContext(document);
+            Report.Clear();
+            Info("=== UNCAD_MARKER_DIAG 图纸: " + document.Name + " ===");
+
+            var frameIds = new List<ObjectId>();
+            using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(
+                    ctx.Db.CurrentSpaceId, OpenMode.ForRead);
+                foreach (ObjectId id in space)
+                {
+                    if (tr.GetObject(id, OpenMode.ForRead) is BlockReference block
+                        && !(block is Table))
+                        frameIds.Add(id);
+                }
+                tr.Commit();
+            }
+
+            int frames = 0, candidates = 0;
+            foreach (ObjectId frameId in frameIds)
+            {
+                FrameRegionCollection regions = FrameRegionCollector.Collect(
+                    ctx, new[] { frameId });
+                if (regions.Errors.Count > 0 || regions.Groups.Count != 1) continue;
+                FrameRegionGroup region = regions.Groups[0];
+                frames++;
+                int frameCandidates = 0;
+                using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    foreach (ObjectId id in region.EntityIds)
+                    {
+                        string text;
+                        double rotation;
+                        DBObject source;
+                        try { source = tr.GetObject(id, OpenMode.ForRead); }
+                        catch { continue; }
+                        if (source is DBText dbText)
+                        {
+                            text = dbText.TextString ?? "";
+                            rotation = dbText.Rotation;
+                        }
+                        else if (source is MText mText)
+                        {
+                            text = UNCAD.Core.Text.TextParser.CleanMText(
+                                mText.Contents ?? "");
+                            rotation = mText.Rotation;
+                        }
+                        else continue;
+                        if (!text.ToLowerInvariant().Contains("mm")) continue;
+                        string association = QuickLineMetadataStore
+                            .ReadAssociatedLineHandle(source);
+                        string layer = "?";
+                        try { layer = ((Entity)source).Layer ?? "?"; } catch { }
+                        string rotationNote = (rotation * 180 / Math.PI)
+                            .ToString("0.##") + "°";
+                        string verdict = string.IsNullOrEmpty(association)
+                            ? "无关联"
+                            : "关联=" + association + "（3.3.3.1 按活性判）";
+                        if (!UNCAD.Core.Fill.DeviceReserveMarker
+                            .IsHorizontal(rotation))
+                            verdict += " → ✗ 非水平 " + rotationNote;
+                        else if (!UNCAD.Core.Fill.DeviceReserveMarker
+                            .TryParseMillimeters(text.Trim(), out double mm))
+                            verdict += " → ✗ 判据不过「" + text.Trim() + "」";
+                        else
+                        {
+                            verdict += " → ✔ 候选 " + mm + "mm";
+                            frameCandidates++;
+                        }
+                        Info("  框" + region.Handle + " 文字@" + id.Handle
+                            + " 层=" + layer + " 旋转=" + rotationNote
+                            + " " + verdict);
+                    }
+                    tr.Commit();
+                }
+                candidates += frameCandidates;
+            }
+            Info("体检图框 " + frames + " 个，候选 " + candidates + " 个。");
+            return frames > 0 ? "DONE" : "FAIL no frames";
+        }
+
+        [CommandMethod("UNCAD_MARKER_SELFTEST")]
+        public void RunMarkerSelfTest()
+        {
+            string verdict;
+            try { verdict = RunMarkerSelfTestCore(); }
+            catch (System.Exception ex)
+            {
+                Info("异常: " + ex);
+                verdict = "FAIL " + ex.Message;
+            }
+            Finish("UNCAD_MARKER_SELFTEST", verdict);
+        }
+
+        /// <summary>
+        /// 3.3.3.1 回归锁（用户报告"识别不到横着的毫米标"，现场两日日志版本
+        /// 指纹定位 3.2.0.6 排除口随升级生效）：夹具=真实图框内三根横排毫米标
+        /// ——①垃圾关联 "0"（ObjectId.Null 存出的字面量）必须进吸收候选
+        /// （3.2.0.6 旧判"非空即排除"的现场病灶）；②关联指向活 Line 的
+        /// （真 U1LX 标注）必须被排除（3.2.0.6 的本意不回归）；③无关联的
+        /// 照常进候选。DeviceReserveMarkerReader.CollectInSelection 直调。
+        /// </summary>
+        private static string RunMarkerSelfTestCore()
+        {
+            Document document = Application.DocumentManager.MdiActiveDocument;
+            var ctx = new CadContext(document);
+            Report.Clear();
+            Info("=== UNCAD_MARKER_SELFTEST 图纸: " + document.Name + " ===");
+
+            string frameName = FrameRegionCollector.CurrentFrameName;
+            ObjectId garbageTextId, liveTextId, plainTextId;
+            using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var space = (BlockTableRecord)tr.GetObject(
+                    ctx.Db.CurrentSpaceId, OpenMode.ForWrite);
+                var blockTable = (BlockTable)tr.GetObject(
+                    ctx.Db.BlockTableId, OpenMode.ForRead);
+                if (!blockTable.Has(frameName))
+                    throw new InvalidOperationException(
+                        "模板缺少图框定义 " + frameName + "（必须在 XFrameTemplate.dwg 上跑）");
+                var frame = new BlockReference(new Point3d(BaseX, BaseY, 0),
+                    blockTable[frameName]);
+                space.AppendEntity(frame);
+                tr.AddNewlyCreatedDBObject(frame, true);
+                FrameRegionCollection regions = FrameRegionCollector.Collect(
+                    ctx, new[] { frame.Id });
+                if (regions.Groups.Count != 1)
+                    throw new InvalidOperationException("夹具图框未被识别");
+                var boundary = regions.Groups[0].Boundary;
+                double cx = (boundary.MinX + boundary.MaxX) / 2.0;
+                double cy = (boundary.MinY + boundary.MaxY) / 2.0;
+
+                garbageTextId = AddHorizontalText(tr, space, cx - 6000, cy, "3000mm");
+                liveTextId = AddHorizontalText(tr, space, cx, cy, "5000mm");
+                plainTextId = AddHorizontalText(tr, space, cx + 6000, cy, "2000mm");
+
+                // ①垃圾关联 "0"：模拟 ObjectId.Null 存出的历史脏数据。
+                QuickLineMetadataStore.EnsureApplication(ctx.Db, tr);
+                DBObject garbage = tr.GetObject(garbageTextId, OpenMode.ForWrite);
+                garbage.XData = QuickLineMetadataStore.Build(garbage, "0", false);
+                // ②活关联：真 Line + TryLinkLineAndLabel。
+                var line = new Line(new Point3d(cx - 500, cy - 800, 0),
+                    new Point3d(cx + 500, cy - 800, 0));
+                space.AppendEntity(line);
+                tr.AddNewlyCreatedDBObject(line, true);
+                if (!QuickLineCadService.TryLinkLineAndLabel(ctx, tr, line.Id,
+                        liveTextId))
+                    throw new InvalidOperationException("夹具活关联写入失败");
+                tr.Commit();
+            }
+
+            var failures = new List<string>();
+            DeviceReserveMarkerReader.Result result = DeviceReserveMarkerReader
+                .CollectInSelection(ctx, new[] { garbageTextId, liveTextId, plainTextId });
+            Info("候选数: " + result.Hits.Count + string.Join("", result.Hits
+                .Select(hit => "，" + hit.Text + "=" + hit.Millimeters + "mm")));
+            if (result.Hits.Count != 2)
+                failures.Add("候选数 " + result.Hits.Count + " ≠ 2");
+            if (!result.Hits.Any(hit => hit.Millimeters == 3000))
+                failures.Add("垃圾关联 0 的横标未被收为候选（3.3.3.1 修复无效）");
+            if (!result.Hits.Any(hit => hit.Millimeters == 2000))
+                failures.Add("无关联横标未被收为候选");
+            if (result.Hits.Any(hit => hit.Millimeters == 5000))
+                failures.Add("活关联的真标注被误收（3.2.0.6 本意回归）");
+            return failures.Count == 0 ? "DONE" : "FAIL " + string.Join("；", failures);
+        }
+
+        private static ObjectId AddHorizontalText(Transaction tr,
+            BlockTableRecord space, double x, double y, string text)
+        {
+            var dbText = new DBText
+            {
+                Position = new Point3d(x, y, 0),
+                Height = 300,
+                Rotation = 0,
+                TextString = text
+            };
+            space.AppendEntity(dbText);
+            tr.AddNewlyCreatedDBObject(dbText, true);
+            return dbText.Id;
+        }
+
         private static void Info(string line) => Report.Add(line);
     }
 }

@@ -96,13 +96,27 @@ namespace UNCAD.Tests
             // U1L/U1LX 生成的毫米标（水平线如正交草图 "2000mm"）与 D-043 判据
             // 同形——读侧必须按"带 U1LX 线关联"排除，否则标注被当预留标吸收：
             // 文字被删、长度从米数统计剔除（3.2.0.6）。
+            // 3.3.3.1 双锚定升级（进度窗 3.2.0.8 同款教训：本测试旧版锁的
+            // "非空即排除"正是现场病灶——垃圾关联 "0"/悬空/复制残留把真预留标
+            // 全拦在门外，用户报告"识别不到横着的毫米标"，两日日志版本指纹
+            // 定位 3.2.0.6 排除口随升级生效）：排除口改为 AssociatedLineIsLive
+            // （关联解析到本图活着的 Line/Polyline 才排除），且该判定必须仍在
+            // 判据 switch 之前。运行时行为由 UNCAD_MARKER_SELFTEST 真机锁死
+            // （三种关联状态三根横标）。
             string source = Read("src", "UNCAD", "Features", "Fill",
                 "DeviceReserveMarkerReader.cs");
-            int association = source.IndexOf("QuickLineMetadataStore",
+            int gate = source.IndexOf("if (AssociatedLineIsLive(source, transaction))",
+                StringComparison.Ordinal);
+            int helper = source.IndexOf(
+                "private static bool AssociatedLineIsLive(DBObject source,",
+                StringComparison.Ordinal);
+            int liveness = source.IndexOf("resolved is Line || resolved is Polyline",
                 StringComparison.Ordinal);
             int firstCase = source.IndexOf("case DBText", StringComparison.Ordinal);
-            Assert.True(association >= 0 && firstCase >= 0 && association < firstCase,
-                "读取器必须在判据 switch 之前按 U1LX 线关联排除 UNCAD 自己的毫米标");
+            Assert.True(gate >= 0 && helper > gate && liveness > helper,
+                "排除口必须是 AssociatedLineIsLive（关联解析到活线才排除），实现不得退化回字符串非空判");
+            Assert.True(firstCase < 0 || gate < firstCase,
+                "活性排除必须在判据 switch 之前");
         }
 
         [Fact]
