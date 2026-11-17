@@ -1081,3 +1081,65 @@ rewrite an existing entry.
   not draw tray/conduit channels from colour/text guessing (only host
   attribution); do not invent axis numbers when either endpoint fails to
   parse; the column grid is a preview aid, never written to the drawing.
+- Amendment (2026-11-17, 3.3.2 — preview kernel switched to
+  HelixToolkit.Wpf; supersedes the 3.3.0 clause "No third-party 3D library
+  (HelixToolkit etc.)" and the 3.3.1 Canvas implementation): after seeing
+  the 3.3.1 orthogonal Canvas preview the user reported "轴位不应该这样
+  显示吧" (the axis display is wrong — column positions are a two-way
+  orthogonal grid of numeric × letter axes, and the reconstructed scene X
+  is an abstract axis with no fixed correspondence to the real column
+  grid) and "我旋转的时候明显感觉这不对 这不像是3D的 像是一个伪3D的"
+  (orthographic projection reads as fake 3D). A selection table
+  (HelixToolkit.Wpf / WPF built-in + 3DTools / Canvas with hand-rolled
+  perspective / WebView2 + three.js) was walked through with the user and
+  **HelixToolkit.Wpf** was chosen; the WebView2 plan is abandoned.
+  1. **Rendering kernel.** `HelixToolkit.Wpf` 2.27.0 (NuGet, exact pin,
+     MIT, zero transitive dependencies — only HelixToolkit.Wpf.dll enters
+     the bundle; payload allow-lists in build.ps1/installer.ps1 updated,
+     24 → 25 files). The new control `QuickLineHelixPreviewControl`
+     embeds a `HelixViewport3D`: built-in PerspectiveCamera and orbit
+     interaction (left-drag rotate, wheel zoom, right-drag pan,
+     double-click reset), route lines as constant-width screen-space
+     `LinesVisual3D` (X orange / Y green / Z blue kept), millimetre and
+     axis labels as `BillboardTextVisual3D` (camera-facing, world height
+     proportional to the scene diagonal). The viewport is created lazily
+     on the first non-null model (U1F / no-preview paths never touch 3D).
+     On window Unloaded all scene children are detached so Helix's
+     process-wide weak rendering-event listeners go dormant — a second
+     STA thread rendering a Helix viewport crashes on Helix theme-shared
+     unfrozen Freezables (proven with a standalone minimal repro, an
+     upstream HelixToolkit.Wpf characteristic, irrelevant to production
+     AutoCAD's single UI thread; the xunit harness runs every Helix
+     window on one shared STA dispatcher).
+  2. **Two-way column grid replaces the 3.3.1 single-direction numeric
+     interpolation.** The ground (Z=0) shows a two-way orthogonal grid
+     (numeric × letter axes, 4800mm bays covering the envelope,
+     toggleable, default on). The numeric axis direction is the plan
+     direction with the larger endpoint displacement (ties → X) — the
+     scene X axis is never assumed to be the numeric axis. Numeric ticks
+     interpolate between the two parsed endpoint numbers exactly as in
+     3.3.1 (clamped, deduplicated). Letter labels run on the
+     perpendicular axis: equal endpoint letters → anchored at the
+     upstream letter and extended along the grid at 4800 bays
+     (U/V/W…; +coordinate is the documented A→Z direction); different
+     letters → linear interpolation clamped between the endpoints;
+     coincident positions or unparsable letters → that direction is not
+     labelled (no guessing). Endpoint pins keep the verbatim workbook
+     axis text. The downstream endpoint tie-break changes to max-Y/then
+     max-Z (3.3.1's min-Y collapsed both pins of a pure-Y route onto one
+     node). `QuickLineColumnGridPlanner` gained `LetterLabels`,
+     `NumericAxisIsX` and the envelope; `InterpolateTicks` math is
+     unchanged.
+  3. **Retirements.** QuickLineOrbitPreviewControl (Canvas),
+     QuickLineOrbitCamera (orthographic math) and
+     QuickLineOrbitLabelPolicy (projected-span label hiding — billboards
+     always face the camera, the concept disappears) are deleted. The
+     data model (QuickLineOrbitPreviewModel/Segment/Channel), the ground
+     normalization, host attribution, the 200mm default tray width, the
+     legend, the half-and-half GridSplitter layout, null-preview
+     fallback and per-row batch switching all carry over unchanged.
+- Consequence (3.3.2): do not reintroduce a hand-rolled projection or a
+  browser-hosted preview for the U1U pane; do not assume the scene X axis
+  is the numeric (or letter) axis; do not extend letter labels beyond the
+  grid anchor rule above; keep Helix viewports on one thread per process
+  (production) or the shared STA runner (tests).

@@ -5,10 +5,11 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.1` (2026-11-17; D-054 amendment — U1U 3D
-  preview enhancements: half-and-half window split with GridSplitter,
-  per-segment millimetre labels, column grid + endpoint axis pins +
-  interpolated numeric ticks, tray/conduit dual-line channels. Future fixes
+- Current stable release: `3.3.2` (2026-11-17; D-054 amendment — U1U 3D
+  preview kernel switched to HelixToolkit.Wpf: perspective camera + orbit
+  interaction, screen-space lines, billboard labels, and a two-way
+  numeric × letter column grid replacing the single-direction numeric
+  interpolation; the Canvas orthographic kernel is retired. Future fixes
   increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
@@ -139,15 +140,19 @@ XLAYOUT/XSTS
   entities inside the existing write transaction (`UNC_FILL_LAYER_GOVERNOR`,
   default on) and report counts. KIND on parallel annotations decides tray vs
   conduit; unknown or metadata-less outputs are never moved (no guessing).
-  The U1U confirmation windows show a Canvas-drawn 3D route preview and a
-  report-only connectivity column (isolated segments are named, never a block).
-  3.3.1 preview enhancements (D-054 amendment): preview and list split 50/50
-  with a draggable GridSplitter (collapsed to zero when no preview), each
-  segment shows its millimetre label at the midpoint (hidden below a 24px
-  projected span), a ground column grid (4800 mm bays, toggleable, default on)
-  with endpoint axis pins and interpolated numeric axis ticks, and tray
-  (red dual lines + translucent fill, width from the U1Q label, 200 default
-  when unparsed) / conduit (cyan dual lines) channel overlays from
+  The U1U confirmation windows show a 3D route preview (HelixToolkit.Wpf
+  perspective viewport since 3.3.2; the 3.3.0/3.3.1 Canvas orthographic
+  kernel is retired) and a report-only connectivity column (isolated
+  segments are named, never a block). Preview and list split 50/50 with a
+  draggable GridSplitter (collapsed to zero when no preview). Each segment
+  shows its millimetre label on a camera-facing billboard; the ground shows
+  a two-way column grid (4800 mm bays, toggleable, default on) with
+  endpoint axis pins (verbatim workbook text) plus numeric ticks along the
+  endpoint-displacement-dominant axis and letter labels (U/V/W…) on the
+  perpendicular axis — the scene X axis is abstract and never assumed to be
+  the numeric axis (D-054 3.3.2 amendment). Tray (red dual lines +
+  translucent fill, width from the U1Q label, 200 default when unparsed) /
+  conduit (cyan dual lines) channel overlays come from
   ParallelAnnotationOwnership host attribution.
 
 ## Performance Rules

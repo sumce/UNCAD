@@ -68,6 +68,11 @@ namespace UNCAD.CadIntegration
         {
             string text = verdict + Environment.NewLine
                 + string.Join(Environment.NewLine, Report);
+            // run.ps1 门禁按自检约定从 %UNCAD_CAD_INTEGRATION_RESULT% 指向的
+            // **文件**读 PASS（其它自检命令同款）；本命令判定词是 DONE，达标时
+            // 补写 PASS、失败写 FAIL——先读路径再覆盖环境变量（原顺序会把
+            // 路径先冲掉，run.ps1 因此永远读不到结果文件）。
+            string resultPath = Environment.GetEnvironmentVariable(ResultVariable);
             Environment.SetEnvironmentVariable(ResultVariable, text);
             try
             {
@@ -76,6 +81,16 @@ namespace UNCAD.CadIntegration
                     text, Encoding.UTF8);
             }
             catch { }
+            if (!string.IsNullOrWhiteSpace(resultPath))
+            {
+                try
+                {
+                    System.IO.File.WriteAllText(resultPath,
+                        verdict.StartsWith("DONE", StringComparison.Ordinal)
+                            ? "PASS" : "FAIL " + verdict);
+                }
+                catch { }
+            }
             Console.WriteLine("[" + command + "] " + verdict);
         }
 

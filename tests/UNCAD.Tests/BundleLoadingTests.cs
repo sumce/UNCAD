@@ -199,6 +199,7 @@ namespace UNCAD.Tests
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
                 "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
+                "HelixToolkit.Wpf.dll",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
                 "Web\\QuickLine3D\\index.html", "Web\\QuickLine3D\\app.js",
                 "Web\\QuickLine3D\\styles.css",

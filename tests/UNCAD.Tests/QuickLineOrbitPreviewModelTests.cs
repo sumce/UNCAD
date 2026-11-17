@@ -7,102 +7,14 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 3.3.0（D-054 特性③）：正交轨道相机的纯数学锁死——方位角 45°/俯仰 30°
-    /// 的三轴单位向量投影期望值、缩放线性、地面归零 minZ=0。
+    /// 3.3.0（D-054 特性③）引入、3.3.2（D-054 Amendment）随渲染内核切换保留的
+    /// 数据模型锁死——FromScene 地面归零（minZ=0、高度差不变、原场景不改）与
+    /// QuickLineAxisSpan 轴位解析/摘要文案。正交轨道相机 QuickLineOrbitCamera
+    /// 的 7 条投影数学测试随 Canvas 内核退役（3.3.2 换 HelixToolkit.Wpf 透视
+    /// 相机，投影由 WPF 3D 管线承担，不再自维护相机数学）。
     /// </summary>
-    public sealed class QuickLineOrbitCameraTests
+    public sealed class QuickLineOrbitPreviewModelTests
     {
-        private const double Tolerance = 1e-6;
-
-        [Fact]
-        public void Basis_AtAzimuth45Elevation30_MatchesHandDerivedValues()
-        {
-            // 手算基准（相机单位方向 E=(0.6123724,0.6123724,0.5)，视线 v=−E）：
-            // 右向 r=normalize(v×ẑ)=(−√2/2, √2/2, 0)；
-            // 上向 u=r×v=(−0.3535534, −0.3535534, 0.8660254)。
-            QuickLineOrbitCamera.CameraBasis basis = QuickLineOrbitCamera
-                .ComputeBasis(45.0, 30.0);
-            Assert.Equal(-Math.Sqrt(2) / 2.0, basis.RightX, 6);
-            Assert.Equal(Math.Sqrt(2) / 2.0, basis.RightY, 6);
-            Assert.Equal(0.0, basis.RightZ, 6);
-            Assert.Equal(-0.35355339, basis.UpX, 6);
-            Assert.Equal(-0.35355339, basis.UpY, 6);
-            Assert.Equal(0.86602540, basis.UpZ, 6);
-            // 基向量必须是单位向量且互相正交。
-            Assert.Equal(1.0, Math.Sqrt(basis.RightX * basis.RightX
-                + basis.RightY * basis.RightY + basis.RightZ * basis.RightZ), 6);
-            Assert.Equal(1.0, Math.Sqrt(basis.UpX * basis.UpX
-                + basis.UpY * basis.UpY + basis.UpZ * basis.UpZ), 6);
-        }
-
-        [Fact]
-        public void Project_AtAzimuth45Elevation30_UnitAxesMatchExpected()
-        {
-            var camera = QuickLineOrbitCamera.Create();
-            camera.SetOrientation(45.0, 30.0);
-
-            QuickLinePoint x = camera.Project(new QuickLineSpatialPoint(1, 0, 0));
-            Assert.Equal(-Math.Sqrt(2) / 2.0, x.X, Tolerance);
-            Assert.Equal(-0.35355339, x.Y, Tolerance);
-
-            QuickLinePoint y = camera.Project(new QuickLineSpatialPoint(0, 1, 0));
-            Assert.Equal(Math.Sqrt(2) / 2.0, y.X, Tolerance);
-            Assert.Equal(-0.35355339, y.Y, Tolerance);
-
-            QuickLinePoint z = camera.Project(new QuickLineSpatialPoint(0, 0, 1));
-            Assert.Equal(0.0, z.X, Tolerance);
-            Assert.Equal(0.86602540, z.Y, Tolerance);
-        }
-
-        [Fact]
-        public void Zoom_IsLinearInProjection()
-        {
-            var camera = QuickLineOrbitCamera.Create();
-            camera.SetOrientation(0.0, 0.0);
-            var point = new QuickLineSpatialPoint(3000, 0, 0);
-
-            QuickLinePoint atOne = camera.Project(point);
-            camera.ZoomBy(2.5);
-            QuickLinePoint atTwoAndHalf = camera.Project(point);
-            camera.ZoomBy(1.0 / 2.5);
-            QuickLinePoint back = camera.Project(point);
-
-            Assert.Equal(QuickLineOrbitCamera.DefaultZoom, camera.Zoom, 6);
-            Assert.Equal(atOne.X * 2.5, atTwoAndHalf.X, Tolerance);
-            Assert.Equal(atOne.Y * 2.5, atTwoAndHalf.Y, Tolerance);
-            Assert.Equal(atOne.X, back.X, Tolerance);
-            Assert.Equal(atOne.Y, back.Y, Tolerance);
-            // 方位 0°/俯仰 0° 时相机在 +X 看 −X：屏幕右 = +Y，上 = +Z，
-            // 3000mm 的 X 向线段垂直屏幕（投影在原点）——顺手锁死基向量朝向。
-            Assert.Equal(0.0, atOne.X, Tolerance);
-            Assert.Equal(0.0, atOne.Y, Tolerance);
-            QuickLinePoint yAxis = camera.Project(new QuickLineSpatialPoint(0, 2000, 0));
-            Assert.Equal(2000.0, yAxis.X, Tolerance);
-            Assert.Equal(0.0, yAxis.Y, Tolerance);
-            QuickLinePoint zAxis = camera.Project(new QuickLineSpatialPoint(0, 0, 1000));
-            Assert.Equal(0.0, zAxis.X, Tolerance);
-            Assert.Equal(1000.0, zAxis.Y, Tolerance);
-        }
-
-        [Fact]
-        public void Orbit_ClampsElevationAndKeepsZoom()
-        {
-            var camera = QuickLineOrbitCamera.Create();
-            camera.SetOrientation(0.0, 30.0);
-            camera.ZoomBy(3.0);
-            camera.Orbit(10.0, 500.0);
-            Assert.Equal(89.9, camera.ElevationDegrees, 6);
-            Assert.Equal(3.0, camera.Zoom, 6);
-            camera.Orbit(0.0, -1000.0);
-            Assert.Equal(-89.9, camera.ElevationDegrees, 6);
-            camera.Reset();
-            Assert.Equal(QuickLineOrbitCamera.DefaultAzimuthDegrees,
-                camera.AzimuthDegrees, 6);
-            Assert.Equal(QuickLineOrbitCamera.DefaultElevationDegrees,
-                camera.ElevationDegrees, 6);
-            Assert.Equal(QuickLineOrbitCamera.DefaultZoom, camera.Zoom, 6);
-        }
-
         [Fact]
         public void FromScene_GroundNormalizesSoMinimumZIsZero()
         {

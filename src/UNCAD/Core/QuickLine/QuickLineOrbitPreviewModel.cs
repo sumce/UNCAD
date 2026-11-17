@@ -1,0 +1,134 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace UNCAD.Core.QuickLine
+{
+    /// <summary>
+    /// 3.3.1（D-054 Amendment，特性D）：一段路由的桥架/线管通道归属。由
+    /// ParallelAnnotationOwnership 把 U1Q/U1C 输出归属到宿主电缆段后带入预览；
+    /// 无归属（普通电缆段）时 Segment.Channel 为 null。
+    /// </summary>
+    public sealed class QuickLineOrbitPreviewChannel
+    {
+        public QuickLineOrbitPreviewChannel(double? trayWidthMillimetres,
+            bool trayWidthAssumedDefault, bool hasConduit)
+        {
+            TrayWidthMillimetres = trayWidthMillimetres;
+            TrayWidthAssumedDefault = trayWidthAssumedDefault;
+            HasConduit = hasConduit;
+        }
+
+        /// <summary>桥架宽度（mm）；解析不出宽度时是 200 缺省值。</summary>
+        public double? TrayWidthMillimetres { get; }
+        /// <summary>宽度是否为缺省值（U1Q 标注文本里解析不出规格）——图例要注明。</summary>
+        public bool TrayWidthAssumedDefault { get; }
+        /// <summary>该段是线管（U1C 归属；无宽度语义）。</summary>
+        public bool HasConduit { get; }
+    }
+
+    /// <summary>3D 预览的一条线段（已地面归零；3.3.0 引入，渲染内核无关）。</summary>
+    public sealed class QuickLineOrbitPreviewSegment
+    {
+        public QuickLineOrbitPreviewSegment(string id, QuickLineSpatialPoint start,
+            QuickLineSpatialPoint end, QuickLineSpatialAxis axis,
+            double distanceMillimetres, bool completed,
+            string labelText = null, QuickLineOrbitPreviewChannel channel = null)
+        {
+            Id = id ?? string.Empty;
+            Start = start;
+            End = end;
+            Axis = axis;
+            DistanceMillimetres = distanceMillimetres;
+            Completed = completed;
+            LabelText = labelText ?? string.Empty;
+            Channel = channel;
+        }
+
+        public string Id { get; }
+        public QuickLineSpatialPoint Start { get; }
+        public QuickLineSpatialPoint End { get; }
+        public QuickLineSpatialAxis Axis { get; }
+        public double DistanceMillimetres { get; }
+        public bool Completed { get; }
+        /// <summary>3.3.1（特性B）：源 CAD 毫米标原文（如「3500mm」），段中点标字用。</summary>
+        public string LabelText { get; }
+        /// <summary>3.3.1（特性D）：桥架/线管通道归属（null=普通电缆段）。</summary>
+        public QuickLineOrbitPreviewChannel Channel { get; }
+    }
+
+    /// <summary>
+    /// U1U 确认窗左侧 3D 预览的场景模型——由 QuickLineIsometricSceneBuilder
+    /// .BuildAll（带毫米标）重建后整体**地面归零**（所有节点 Z 减去最小 Z，
+    /// 「最低的那条线段的端点高度为 0」），附上游/下游轴位摘要文字与轴位原文。
+    /// 3.3.2（D-054 Amendment）：渲染内核从 Canvas 正交投影换为 HelixToolkit.Wpf
+    /// 透视相机，本数据模型与 FromScene 构建链不变（窗体只绘制，不重建场景）。
+    /// </summary>
+    public sealed class QuickLineOrbitPreviewModel
+    {
+        public QuickLineOrbitPreviewModel(
+            IReadOnlyList<QuickLineOrbitPreviewSegment> segments,
+            string axisSummary, IReadOnlyList<string> diagnostics,
+            string upstreamAxisLabel = null, string downstreamAxisLabel = null)
+        {
+            Segments = segments ?? Array.Empty<QuickLineOrbitPreviewSegment>();
+            AxisSummary = axisSummary ?? string.Empty;
+            Diagnostics = diagnostics ?? Array.Empty<string>();
+            UpstreamAxisLabel = upstreamAxisLabel ?? string.Empty;
+            DownstreamAxisLabel = downstreamAxisLabel ?? string.Empty;
+        }
+
+        public IReadOnlyList<QuickLineOrbitPreviewSegment> Segments { get; }
+        /// <summary>上游/下游轴位摘要（如「上游 48/V ↔ 下游 37/V · Δ11 跨 × 4.8m ≈ 52.8m」）。</summary>
+        public string AxisSummary { get; }
+        /// <summary>3.3.1（特性C）：上游轴位原文（QuickLineAxisSpan 解析前的台账原文）。</summary>
+        public string UpstreamAxisLabel { get; }
+        /// <summary>3.3.1（特性C）：下游轴位原文。</summary>
+        public string DownstreamAxisLabel { get; }
+        public IReadOnlyList<string> Diagnostics { get; }
+
+        /// <summary>
+        /// 由等测场景构建预览模型：整体地面归零（minZ→0），段端点取场景节点
+        /// 坐标，毫米值取真实距离（DistanceMillimetres）。scene 为 null 或没有
+        /// 线段时返回 null（调用方隐藏预览区）。labelTexts/channels 按段句柄
+        /// 带入毫米标原文与桥架/线管通道归属（缺省无标签无通道）。
+        /// </summary>
+        public static QuickLineOrbitPreviewModel FromScene(
+            QuickLineIsometricScene scene, string axisSummary,
+            string upstreamAxisLabel = null, string downstreamAxisLabel = null,
+            IReadOnlyDictionary<string, string> labelTexts = null,
+            IReadOnlyDictionary<string, QuickLineOrbitPreviewChannel> channels = null)
+        {
+            if (scene == null || scene.Segments.Count == 0) return null;
+            double minZ = scene.Nodes.Count == 0
+                ? 0.0
+                : scene.Nodes.Min(node => node.Position.Z);
+            if (double.IsNaN(minZ) || double.IsInfinity(minZ)) minZ = 0.0;
+            var positions = scene.Nodes.ToDictionary(node => node.Id,
+                node => new QuickLineSpatialPoint(node.Position.X,
+                    node.Position.Y, node.Position.Z - minZ),
+                StringComparer.OrdinalIgnoreCase);
+            var segments = new List<QuickLineOrbitPreviewSegment>(
+                scene.Segments.Count);
+            foreach (QuickLineIsometricSegment segment in scene.Segments)
+            {
+                if (!positions.TryGetValue(segment.StartNodeId,
+                        out QuickLineSpatialPoint start)
+                    || !positions.TryGetValue(segment.EndNodeId,
+                        out QuickLineSpatialPoint end)) continue;
+                string label = null;
+                if (labelTexts != null
+                    && labelTexts.TryGetValue(segment.Id, out string foundLabel))
+                    label = foundLabel;
+                QuickLineOrbitPreviewChannel channel = null;
+                channels?.TryGetValue(segment.Id, out channel);
+                segments.Add(new QuickLineOrbitPreviewSegment(segment.Id,
+                    start, end, segment.Axis, segment.DistanceMillimetres,
+                    segment.Completed, label, channel));
+            }
+            if (segments.Count == 0) return null;
+            return new QuickLineOrbitPreviewModel(segments, axisSummary,
+                scene.Diagnostics, upstreamAxisLabel, downstreamAxisLabel);
+        }
+    }
+}
