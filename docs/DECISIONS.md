@@ -1194,3 +1194,36 @@ rewrite an existing entry.
   annotation text a statistics source or a reserve marker candidate; do
   not scan U1B outputs as cable routes; one write transaction per U1B
   run (one U undoes outline + leader + text together).
+- Amendment (2026-11-18, 3.3.4 — layer-governor completion for the new
+  features; from the whole-command audit):
+  1. **U1B outputs reach the layer governor via a boundary direct
+     channel.** This supersedes the 3.3.3 sentence "frame-scoped
+     attribution still skips U1B outputs": with the old wiring the
+     HoseEntities counter and the U1B→U_HOSE move branch were
+     unreachable (the outline's self-referenced SOURCE can never resolve
+     to a scanned cable segment), so a manually misplaced hose could
+     never be corrected. `FilterOutputsByHostFrame` now keeps entries
+     whose KIND=U1B when their geometric-extents centre falls inside the
+     frame boundary (`OutputCenterInsideBoundary`; unreadable/erased
+     entities stay excluded). Other KINDs with unknown hosts are still
+     skipped — no guessing (D-054 rule unchanged). Batch U1U summary
+     counters and the closing copy now include the hose bucket and the
+     "非 U1Q/U1C/U1B" undeterminable wording (3.3.3 had only updated the
+     single-frame side).
+  2. **U1F frame-block selections carry the frame boundary.**
+     `FillSelectionCollector.ExpandSingleFrame` attaches the collected
+     region (Boundary) when it expands a lone frame-block selection, so
+     U1F's route inspection / layer governor / connectivity report no
+     longer no-op on frame content (audit B-5; strict EntityIds never
+     contain cable lines). Opportunistic only: partition failure, empty
+     partition, or genuine partial explicit picks keep the established
+     EntityIds fallback. U1U behaviour is unchanged (its own assignment
+     is a same-value overwrite).
+  3. **Legacy metadata-less outputs are documented, not guessed.**
+     Pre-D-018/D-050 U1Q/U1C outputs carry no UNCAD_PARALLEL metadata
+     and cannot be distinguished from hand-drawn cable lines without
+     colour/text guessing (forbidden). On such drawings they are treated
+     as cable segments (moved to U_CABLE, colour kept) and re-running
+     U1Q/U1C cannot collect the stale outputs — recorded in
+     KNOWN-ISSUES (audit Q1), together with the silent circuit-gate
+     skip when no machine snapshot exists (audit B-6).

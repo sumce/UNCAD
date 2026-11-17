@@ -5,13 +5,16 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.3` (2026-11-17; D-054 amendment — new
-  command U1B 绘制软管: LINE-style chained points become a green closed
-  hose outline (double-line offset + corner fillet arcs + semicircle end
-  caps, `HoseOutlinePlanner`, diameter `UNC_HOSE_DIAMETER` default 100),
-  plus a midpoint leader and an editable `100mm软管:…` label on the new
-  statutory layer `U_HOSE` (ACI 3), one write transaction per run.
-  Future fixes increment the fourth version part per D-032).
+- Current stable release: `3.3.4` (2026-11-18; D-054 amendment —
+  layer-governor completion for the new features: U1B outputs reach the
+  governor via a boundary direct channel (`HoseEntities` now live),
+  U1F frame-block selections carry the frame boundary so route
+  inspection/layer correction/connectivity no longer no-op, batch U1U
+  layer summary counts the hose bucket; legacy metadata-less outputs
+  and the snapshot-less circuit gate are documented in KNOWN-ISSUES.
+  3.3.3 added command U1B 绘制软管 (green closed hose outline,
+  `HoseOutlinePlanner`, statutory layer `U_HOSE`, one write transaction
+  per run). Future fixes increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.

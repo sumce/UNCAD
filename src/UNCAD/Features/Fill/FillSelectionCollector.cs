@@ -48,6 +48,13 @@ namespace UNCAD.Features.Fill
         /// A frame is the natural U1F/U1U selection target. Selecting only that block must
         /// still include the table, statistics, Device and Ruanguan objects in the same
         /// frame; otherwise U1U sees zero measurements and cannot read identity.
+        /// 3.3.4（图层收口，审计 B-5）：展开时顺带带上图框边界（Region）——
+        /// 严格分区 EntityIds 从来不含电缆线（TryAnchor 只收表格/文字/块），
+        /// 无边界时路由体检按 EntityIds 包含判归属、对图框内容整体空转
+        ///（连通性无段、图层矫正无目标）。U1F 图框块选集此前正是这种空转
+        ///（U1U 靠自己的分区赋值拿到 Boundary，U1F 没有）。机会式：只在
+        /// "恰好一个图框块"的展开路径设置；分区失败/空分区/部分显式选集不设
+        /// Region，回退既有语义。U1U 后续分区的 Groups==1 赋值是同值覆写。
         /// </summary>
         private static FillSelection ExpandSingleFrame(CadContext ctx, FillSelection selection)
         {
@@ -58,9 +65,11 @@ namespace UNCAD.Features.Fill
             if (regions.Errors.Count > 0 || regions.Groups.Count != 1)
                 return selection;
             FrameRegionGroup group = regions.Groups[0];
-            return group.EntityIds.Count == 0
-                ? selection
-                : Split(ctx, group.EntityIds.ToArray(), true);
+            if (group.EntityIds.Count == 0)
+                return selection;
+            FillSelection expanded = Split(ctx, group.EntityIds.ToArray(), true);
+            expanded.Region = group;
+            return expanded;
         }
 
         public static List<string> ReadStatisticsLines(CadContext ctx, ObjectId[] textIds,

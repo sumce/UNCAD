@@ -27,6 +27,20 @@ deferred, or important for support diagnosis.
   output everywhere.
 - A Base64 config share code never contains licence/account values, so a shared
   profile does not transfer authorization.
+- Legacy parallel-annotation outputs (U1Q/U1C generated before the metadata
+  era, pre-D-018/D-050) carry no `UNCAD_PARALLEL` metadata. They are plain
+  offset lines and cannot be distinguished from hand-drawn cable lines without
+  guessing from colour/text — which D-054 forbids. Consequences on such
+  drawings: the scanner treats those offset lines as cable segments, so the
+  layer governor (3.3.0+) moves them to `U_CABLE` (colour unchanged), they
+  join connectivity reporting, and re-running U1Q/U1C on the base line cannot
+  collect/replace the old outputs (handle-based `CollectPrevious` needs the
+  metadata) — delete the stale outputs manually. Not fixable by identification;
+  recorded 3.3.4 (audit Q1).
+- Without a machine snapshot (no machine source configured, or no successful
+  refresh yet), the whole-machine circuit gate for U1S/U1DWG cannot know the
+  expected circuit set and silently skips the check (log-only). Configure
+  U1DATA and refresh once to enable the gate. Recorded 3.3.4 (audit B-6).
 
 ## Support Notes
 

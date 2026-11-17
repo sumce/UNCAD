@@ -1,8 +1,4 @@
-# UNCAD — AutoCAD 2022 C# 插件集
-
-**UNCAD · AutoCAD Engineering Tools**
-
-Current stable: **3.3.3**（2026-11-17，软管绘制版）：新命令 `U1B`（D-054 Amendment）——像 LINE 一样连续取点，回车后生成绿色平面软管（双线轮廓+拐弯圆弧+首尾半圆端帽，直径 `UNC_HOSE_DIAMETER` 默认 100，法定图层 `U_HOSE`），再点取标注位置即从路径长度中点拉引线并生成 `100mm软管:xxxxmm` 文字（可改），一个事务一次 U 整体撤销。3.3.0–3.3.2 特性包：法定图层规范+自动矫正（U_CABLE/U_TRAY/U_CONDUIT，D-054）、连通性报告级检查、U1U 确认窗 3D 路由预览（HelixToolkit.Wpf 透视内核+两向柱网+桥架/线管双线通道）、U1Q/U1C 归属识别 API。
+Current stable: **3.3.4**（2026-11-18，图层收口版）：新功能图层链补全（审计定案「主要针对新功能/图层问题」）——U1B 软管矫正通道打通（`HoseEntities` 计数与 U1B→U_HOSE 移层从不可达变可用，边界几何直通归属）、U1F 图框块选集带上图框边界（路由体检/图层矫正/连通性对 U1F 不再空转）、批量 U1U 图层汇总补软管列；旧版无元数据输出与无快照门禁登记 KNOWN-ISSUES。3.3.3 软管绘制版：新命令 `U1B`（像 LINE 一样取点画绿色平面软管，法定图层 `U_HOSE`，直径 `UNC_HOSE_DIAMETER`）。3.3.0–3.3.2 特性包：法定图层规范+自动矫正（U_CABLE/U_TRAY/U_CONDUIT，D-054）、连通性报告级检查、U1U 确认窗 3D 路由预览（HelixToolkit.Wpf 透视内核+两向柱网+桥架/线管双线通道）、U1Q/U1C 归属识别 API。
 
 The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 37 commands (including `Xauto`, `U1B`, `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. 3.0 migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding and lives inside the frame block, D-040), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. Machine workbooks accept local/UNC paths and HTTP/HTTPS URLs (download-only, D-041); output lands one folder per machine (D-042); device-reserve markers are auto-absorbed (D-043); U1F fills frames on partial coverage (D-044); XLAYOUT offers three arrange modes (D-045) on the shared WPF design tokens with window adaptation (D-046). `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U1L3D` provides a read-only single-frame preview, while `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook; all cloud uploads stay removed (account validation stays). Older command references below are historical release notes.
 
@@ -460,7 +456,10 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 37 comman
 | --- | --- | --- |
 | `U1L` | `UNL` | 绘制带长度占位标注的线条 |
 | `U1LX` | `UNLX` | 选择已有 U1L 线段，按端点连通顺序逐段填写毫米距离 |
+| `U1L3D` / `U13D` | — | 图框 U1L 路由的 3D 预览窗（U1L3D 单框；U13D 批量多框、选中行切换；透视相机可拖动旋转，3.3.2 起 Helix 内核） |
+| `Xauto` | — | 自动排线：按图框可用区域等比重排 U1L 路由并自动开洞避让交叉（比例系数 U1SET `UNC_XAUTO_FILL_RATIO`，占位标防棘轮） |
 | `U1D` / `U1DWG` | — | 框选多个图框，按机台ID分组并横向导出 DWG |
+| `U1PDF` | — | 按机台导出选中图框的 PDF（同名自动 -2/-3 编号，写到输出目录的机台文件夹） |
 | `U1DT` | — | 将对齐标注文字转换为单行文字，保留原尺寸线 |
 | `U1R` | `UNR` | 开拱桥并截断相交直线 |
 | `U1B` | — | 像 LINE 一样连续取点，绘制绿色平面软管（拐弯圆弧+半圆端帽）并生成软管标注（3.3.3） |
@@ -470,8 +469,13 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 37 comman
 | `U1C` / `U1C20` / `U1C25` / `U1C38` / `U1C51` | — | 使用默认或指定 BOQ 管径绘制线管标注（同时更新图框内 Ruanguan 软管块长度） |
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
+| `XLAYOUT` | — | 图框自动排版：按机台完整性 / 机台 ID / 上游编号分行，行内按机台 Excel 行序（D-045 三模式） |
+| `XSTS` | — | 机台回路统计并导出 xlsx（含「未上图机台」名单与疑似画错名提示） |
+| `Xmerge` | — | DWG 批量合并：拖入文件/文件夹，按 XLAYOUT 排布规则合并到当前图纸，坏文件点名可跳过 |
 | `U1SET` | — | 打开全部功能的统一设置中心 |
 | `U1DATA` | — | 后台刷新配置的机台工作簿（本地/UNC 或网络地址，仅下载） |
+| `U1HELP` | — | 打开命令帮助窗（全部命令的用途与口径说明） |
+| `UNC_LOGIN` | — | 账号登录与授权（授权失效时仍可执行，用于重新登录） |
 | — | `UNADD` | 统计汇总并在图纸中生成 MTEXT |
 
 > Ribbon 只显示新版任务入口；传统命令仅作为键盘兼容入口。统计没有新增 U1 别名，继续使用 `UNADD`。

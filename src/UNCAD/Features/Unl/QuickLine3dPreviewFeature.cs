@@ -163,7 +163,19 @@ namespace UNCAD.Features.Unl
             }
 
             QuickLineGraph routeGraph = BuildRouteGraph(labelled);
-            QuickLineIsometricScene scene = BuildScene(labelled, routeGraph);
+            QuickLineIsometricScene scene;
+            try
+            {
+                scene = BuildScene(labelled, routeGraph);
+            }
+            catch (System.Exception ex)
+            {
+                // 3.3.4（审计 Q6）：方向全不可分类时 BuildAll 抛 ArgumentException
+                // ——批量链逐帧有同款保护（转诊断），单框链此前裸抛成原生
+                // "错误:"。对齐口径：转成礼貌退出文案。
+                issue = "场景构建失败（" + ex.Message + "）。";
+                return null;
+            }
             var anchorDiagnostics = new List<string>();
             IReadOnlyDictionary<string, QuickLineSpatialPoint> routeAnchors =
                 ResolveRouteAnchorPositions(labelled, scene, routeGraph, downstreamAnchor,

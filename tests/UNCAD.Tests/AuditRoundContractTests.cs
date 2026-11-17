@@ -383,6 +383,61 @@ namespace UNCAD.Tests
                 "机台选择窗预览必须 try/catch 降级（构建失败出文案，不炸 WPF 事件）");
         }
 
+        [Fact]
+        public void HoseOutputs_ReachLayerGovernorViaBoundary()
+        {
+            // 3.3.4（图层收口，审计 F-5）：U1B 软管三件套 SOURCE=轮廓自引用，
+            // 轮廓被扫描器按元数据命中跳过、永不进宿主池——按宿主判框必然
+            // 落空，HoseEntities 计数与 U1B→U_HOSE 移层分支在旧接线下不可达
+            //（用户手动挪层后 U1U/U1F 永不纠正软管）。归属消费端必须给
+            // KIND=U1B 留"宿主落空→按图框边界几何直通"的通道；其余 KIND
+            // 宿主未知仍跳过不猜（D-054）。运行时由 UNCAD_ROUTE_INSPECT_SELFTEST
+            // 真机锁死（框内 U1B 实体 HoseEntities 计数 ≥1）。
+            string stage = Read("src", "UNCAD", "Features", "Fill",
+                "FillRouteInspectionStage.cs");
+            int filter = stage.IndexOf("FilterOutputsByHostFrame", StringComparison.Ordinal);
+            int direct = stage.IndexOf("UncadLayerStandard.HoseAnnotationKind",
+                filter, StringComparison.Ordinal);
+            int geometry = stage.IndexOf("OutputCenterInsideBoundary",
+                filter, StringComparison.Ordinal);
+            Assert.True(filter >= 0 && direct > filter && geometry > filter,
+                "FilterOutputsByHostFrame 必须给 KIND=U1B 留边界几何直通通道（宿主判框对自引用 SOURCE 恒落空）");
+        }
+
+        [Fact]
+        public void BatchLayerSummary_CountsHoseAndMentionsAllLayers()
+        {
+            // 3.3.4（审计 B-3/F-4）：批量链图层汇总 3.3.3 漏同步——计数不加
+            // HoseEntities（整批仅软管待矫正时底部报告行消失）、收尾文案缺
+            // U_HOSE、无法判定口径缺 U1B。
+            string coordinator = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCoordinator.cs");
+            Assert.Contains("layerCounters.HoseEntities +=", coordinator,
+                StringComparison.Ordinal);
+            Assert.Contains("（U_CABLE/U_TRAY/U_CONDUIT/U_HOSE）", coordinator,
+                StringComparison.Ordinal);
+            Assert.Contains("（非 U1Q/U1C/U1B）", coordinator,
+                StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void U1F_SingleFrameSelection_GetsFrameBoundary()
+        {
+            // 3.3.4（审计 B-5）：U1F 图框块选集也必须取图框边界——严格分区
+            // EntityIds 从来不含电缆线，无边界时路由体检/图层矫正/连通性对
+            // 图框内容整体空转。实现挂在选集展开路径（ExpandSingleFrame 已
+            // Collect 过分区，顺带设 Region，编排器零增长）；机会式：分区
+            // 失败/空分区/部分显式选集不设 Region 回退既有语义。
+            string collector = Read("src", "UNCAD", "Features", "Fill",
+                "FillSelectionCollector.cs");
+            int expand = collector.IndexOf(
+                "private static FillSelection ExpandSingleFrame", StringComparison.Ordinal);
+            int attach = collector.IndexOf("expanded.Region = group;", expand,
+                StringComparison.Ordinal);
+            Assert.True(expand >= 0 && attach > expand,
+                "图框块选集展开必须顺带带上 Region（U1F 无边界时体检空转）");
+        }
+
         private static int CountOccurrences(string source, string fragment)
         {
             int count = 0, index = 0;

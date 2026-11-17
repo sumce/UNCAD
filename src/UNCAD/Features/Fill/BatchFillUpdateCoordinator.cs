@@ -355,6 +355,10 @@ namespace UNCAD.Features.Fill
                         plan.RouteInspection.LayerPlan.Counters.TrayEntities;
                     layerCounters.ConduitEntities +=
                         plan.RouteInspection.LayerPlan.Counters.ConduitEntities;
+                    // 3.3.4（图层收口）：补软管列——3.3.3 只改了单框侧，批量
+                    // 汇总漏加会让整批仅软管待矫正时底部报告行整体消失。
+                    layerCounters.HoseEntities +=
+                        plan.RouteInspection.LayerPlan.Counters.HoseEntities;
                     layerCounters.UndeterminableEntities +=
                         plan.RouteInspection.LayerPlan.Counters.UndeterminableEntities;
                     layerCounters.UndeterminableHandles.AddRange(
@@ -640,12 +644,12 @@ namespace UNCAD.Features.Fill
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             if (layerGovernorMoved > 0)
                 ctx.Write("\n[U1U] 图层矫正完成：" + layerGovernorMoved
-                    + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT）。");
+                    + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT/U_HOSE）。");
             foreach (BatchFillUpdatePlan plan in plans)
                 foreach (string handle in plan.RouteInspection?.LayerPlan
                     ?.UndeterminableHandles ?? new List<string>())
                     ctx.Write("\n[U1U] 图框 " + plan.Region.Handle + " 实体 " + handle
-                        + " 带平行标注元数据但种类无法判定（非 U1Q/U1C），未移动。");
+                        + " 带平行标注元数据但种类无法判定（非 U1Q/U1C/U1B），未移动。");
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[U1U] 颜色已校正：设备端 " + deviceColorBlocks
                     + " 个块，上游端 " + upstreamColorBlocks + " 个块。");

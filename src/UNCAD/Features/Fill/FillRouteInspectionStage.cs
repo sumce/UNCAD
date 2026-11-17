@@ -153,7 +153,8 @@ namespace UNCAD.Features.Fill
                     precollectedOutputs
                         ?? ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
                 if (boundary != null)
-                    frameOutputs = FilterOutputsByHostFrame(outputs, inScope);
+                    frameOutputs = FilterOutputsByHostFrame(outputs, inScope,
+                        readTransaction, boundary);
                 else
                 {
                     var scopeOnly = new HashSet<ObjectId>(scope
@@ -212,10 +213,17 @@ namespace UNCAD.Features.Fill
         /// 输出按宿主电缆段判框（特性④归属的消费端）：宿主段在框内 → 该输出
         /// 属于本框。红线 Line 与其毫米标一样不在 EntityIds 里，按宿主归属才
         /// 不漏；宿主已删/未知的输出不属于任何框，跳过不猜。
+        /// 3.3.4（图层收口）：U1B 例外直通——软管三件套（轮廓/引线/文字）
+        /// SOURCE=轮廓自引用，而轮廓被扫描器按元数据命中跳过、永不进宿主池，
+        /// 按宿主判框必然落空（旧接线下 HoseEntities 计数与 U1B→U_HOSE 移层
+        /// 分支不可达，用户手动挪层/建层失败回退后 U1U/U1F 永不纠正软管）。
+        /// 软管与电缆无宿主关系，按图框边界几何归属：几何中心在界内即属本框。
+        /// 其余 KIND 宿主未知仍跳过不猜（D-054）。
         /// </summary>
         private static List<ParallelAnnotationOwnershipEntry> FilterOutputsByHostFrame(
             List<ParallelAnnotationOwnershipEntry> outputs,
-            List<QuickLineCadSegment> inScopeSegments)
+            List<QuickLineCadSegment> inScopeSegments,
+            Transaction readTransaction, FrameRectangle boundary)
         {
             // 宿主池=本框线段：解析得到宿主（≥1 条）即属本框；宿主在别的框
             // 或已删（解析不到）都不进本框的计划。
@@ -224,10 +232,39 @@ namespace UNCAD.Features.Fill
             return outputs.Where(entry =>
             {
                 if (entry == null || entry.EntityId.IsNull) return false;
-                return hostMap.TryGetValue(entry.EntityId.Handle.ToString(),
+                if (hostMap.TryGetValue(entry.EntityId.Handle.ToString(),
                         out List<QuickLineCadSegment> hosts)
-                    && hosts.Count > 0;
+                    && hosts.Count > 0) return true;
+                return string.Equals(entry.Kind,
+                        UNCAD.Core.Dwg.UncadLayerStandard.HoseAnnotationKind,
+                        StringComparison.OrdinalIgnoreCase)
+                    && OutputCenterInsideBoundary(readTransaction,
+                        entry.EntityId, boundary);
             }).ToList();
+        }
+
+        /// <summary>U1B 直通归属的几何判：实体几何范围中心是否在图框边界内。
+        /// 打不开/已删/取不到范围（锁定、空几何等）= 不属本框，不猜。</summary>
+        private static bool OutputCenterInsideBoundary(
+            Transaction readTransaction, ObjectId entityId,
+            FrameRectangle boundary)
+        {
+            if (readTransaction == null || boundary == null
+                || entityId.IsNull || !entityId.IsValid) return false;
+            try
+            {
+                Entity entity = readTransaction.GetObject(entityId,
+                    OpenMode.ForRead, true) as Entity;
+                if (entity == null || entity.IsErased) return false;
+                Extents3d extents = entity.GeometricExtents;
+                return boundary.Contains(
+                    (extents.MinPoint.X + extents.MaxPoint.X) / 2.0,
+                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2.0);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>

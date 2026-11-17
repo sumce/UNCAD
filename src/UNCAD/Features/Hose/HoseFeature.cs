@@ -107,12 +107,14 @@ namespace UNCAD.Features.Hose
             ctx.Write("\n[U1B] 软管绘制完成（一次 U 可整体撤销）。");
         }
 
-        /// <summary>读软管直径（UNC_HOSE_DIAMETER，默认 100）：非法/超域回退 100。</summary>
+        /// <summary>读软管直径（UNC_HOSE_DIAMETER，默认 100）：非法/超域回退 100。
+        /// 3.3.4：下界收紧到 1（与提示文案"应在 1–1000"一致；旧判只拒 ≤0，
+        /// 0&lt;d&lt;1 的设置会照画细丝管）。</summary>
         private static double ReadDiameter(CadContext ctx)
         {
             double diameter = Settings.GetDouble(ConfigKeys.HoseDiameter, 100.0);
             if (double.IsNaN(diameter) || double.IsInfinity(diameter)
-                || diameter <= 0 || diameter > ConduitDiameter.MaximumMillimeters)
+                || diameter < 1 || diameter > ConduitDiameter.MaximumMillimeters)
             {
                 ctx.Write("\n[U1B] 软管直径设置无效（应在 1–"
                     + ConduitDiameter.MaximumMillimeters.ToString("0",
@@ -124,8 +126,10 @@ namespace UNCAD.Features.Hose
         }
 
         /// <summary>
-        /// LINE 式连续取点：U 回退上一点（回退到空时重新要起点），回车/空格结束，
-        /// 取消/ESC 结束并返回已取点（数量不足由调用方礼貌退出）。重复点静默忽略。
+        /// LINE 式连续取点：U 回退上一点（回退到空时重新要起点），回车/空格结束
+        /// 取点并返回已取点（数量不足由调用方礼貌退出）。重复点静默忽略。
+        /// ESC=UserBreak 由 CommandBase 静默终止整个命令——此阶段未开事务，
+        /// 零实体残留（不会走到"返回已取点"；3.3.4 注释对齐实际行为）。
         /// </summary>
         private static List<Point3d> CollectPoints(CadContext ctx)
         {

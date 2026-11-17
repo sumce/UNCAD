@@ -181,6 +181,7 @@ namespace UNCAD.CadIntegration
             string frameName = FrameRegionCollector.CurrentFrameName;
             ObjectId frameId;
             var lineIds = new List<ObjectId>();
+            ObjectId hoseId = ObjectId.Null;
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 var space = (BlockTableRecord)tr.GetObject(
@@ -237,6 +238,21 @@ namespace UNCAD.CadIntegration
                     space.AppendEntity(text);
                     tr.AddNewlyCreatedDBObject(text, true);
                 }
+                // 3.3.4（图层收口）：框内补一个 U1B 软管替身——挂
+                // UNCAD_PARALLEL KIND=U1B、SOURCE=自引用句柄（真实软管三件套
+                // 的元数据形状）。带元数据实体被扫描器跳过（不进电缆链/连通
+                // 性），宿主判框必然落空——必须经"边界几何直通"进矫正计划。
+                if (!ParallelAnnotationMetadata.EnsureApplication(ctx.Db, tr))
+                    throw new InvalidOperationException(
+                        "夹具无法注册 UNCAD_PARALLEL RegApp");
+                var hose = new Line(new Point3d(cx - 500, cy - 800, 0),
+                    new Point3d(cx + 500, cy - 800, 0));
+                space.AppendEntity(hose);
+                tr.AddNewlyCreatedDBObject(hose, true);
+                hoseId = hose.Id;
+                ParallelAnnotationMetadata.Set(hose,
+                    UNCAD.Core.Dwg.UncadLayerStandard.HoseAnnotationKind,
+                    hose.Id.Handle.ToString());
                 tr.Commit();
             }
 
@@ -292,6 +308,18 @@ namespace UNCAD.CadIntegration
                     move => lineIds.Contains(move.Key));
                 if (lineMoves != 3)
                     failures.Add("线段移层计划 " + lineMoves + " ≠ 3");
+                // 3.3.4（图层收口）：U1B 直通——框内软管替身（SOURCE=自引用，
+                // 宿主判框必然落空）必须经边界几何归属进 U_HOSE 移层计划；
+                // 旧接线 HoseEntities 恒 0（分支不可达）。
+                if (inspection.LayerPlan.Counters.HoseEntities != 1)
+                    failures.Add("软管直通移层计划 "
+                        + inspection.LayerPlan.Counters.HoseEntities + " ≠ 1");
+                if (!inspection.LayerPlan.Moves.Any(
+                        move => move.Key == hoseId
+                            && string.Equals(move.Value,
+                                UNCAD.Core.Dwg.UncadLayerStandard.HoseLayerName,
+                                StringComparison.OrdinalIgnoreCase)))
+                    failures.Add("软管替身未进 U_HOSE 移层计划");
             }
             return failures.Count == 0
                 ? "DONE"
