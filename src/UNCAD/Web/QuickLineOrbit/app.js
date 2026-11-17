@@ -18,18 +18,33 @@ const el = {
   legend: document.getElementById('legend'),
   grid: document.getElementById('gridButton'),
   ref: document.getElementById('refButton'),
+  detail: document.getElementById('detailButton'),
   reset: document.getElementById('resetButton')
 };
 
 const color = {
   axisX: 0xe06c00, axisY: 0x2e9e5b, axisZ: 0x3b6ed0,
-  grid: 0x55606e, tray: 0xe8443c, trayFill: 0xe8443c,
+  grid: 0x55606e, tray: 0xf2574c, trayFill: 0xf2574c,
   conduit: 0x2ea8c0, pin: 0x99a7b8, reference: 0xe0a94a
+};
+// 3.3.7：参照物实体模型配色（Lambert 材质吃光照，才有立体感）。
+// 两轮视觉实测调优：深底上深灰读作线框→楼板/高架板提亮；设备盒/母线
+// 塔再提亮+自发光（第二轮它们被雾洗进背景）；板边线用中性银灰。
+const refColor = {
+  floor: 0x7d93a6, floorEdge: 0xaab6c2,
+  steel: 0xa5b2c3, grating: 0x94a884, raised: 0x8fadc0,
+  device: 0xd9dfe6, deviceEdge: 0x39424e, deviceGlow: 0x30363d,
+  busGlass: 0xe8b45f, busEdge: 0x7a5426,
+  column: 0x5d6977, columnGlow: 0x181d24,
+  ground: 0x39424e,
+  epoxy: 0x5f9e6e, epoxyEdge: 0x9fd3ab,
+  waffle: 0x8497a8
 };
 const state = {
   renderer: null, scene: null, camera: null, controls: null,
-  gridGroup: null, refGroup: null, labels: [], diagonal: 1,
-  showGrid: true, showReferenceLevels: true, refLevelCount: 0,
+  gridGroup: null, refGroup: null, detailGroup: null, labels: [], diagonal: 1,
+  showGrid: true, showReferenceLevels: true, showDetail: false,
+  refLevelCount: 0, baseFloorZ: 0,
   defaultCamera: null, defaultTarget: null
 };
 
@@ -73,6 +88,9 @@ function initRenderer() {
 function bindUi() {
   el.grid.addEventListener('click', () => setGridVisible(!state.showGrid));
   el.ref.addEventListener('click', () => setReferenceVisible(!state.showReferenceLevels));
+  if (el.detail) {
+    el.detail.addEventListener('click', () => setDetailVisible(!state.showDetail));
+  }
   el.reset.addEventListener('click', resetCamera);
   window.addEventListener('resize', resize);
 }
@@ -93,10 +111,20 @@ function receive(raw) {
 function renderEnvelope(envelope) {
   clearScene();
   state.diagonal = Math.max(Number(envelope.Diagonal) || 1, 1);
-  const radius = state.diagonal * 0.0012;
+  // 3.3.7 第二轮实测：管线半径 0.0012 档在 20m+ 场景被建筑模型+雾衬得
+  // 快看不见——加粗到 0.0019（模型要醒目，路由更是主角）。
+  const radius = state.diagonal * 0.0019;
 
   state.gridGroup = new THREE.Group();
   state.scene.add(state.gridGroup);
+
+  // 3.3.7：参照物用 Lambert 实体材质——两盏定位光（路由管线/线框是
+  // Basic 材质不受影响），楼板/钢梁/设备盒才有明暗立体感。
+  const hemi = new THREE.HemisphereLight(0xe8eef5, 0x141a21, 0.95);
+  state.scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.65);
+  sun.position.set(-0.55, -0.75, 1);
+  state.scene.add(sun);
 
   const bounds = measureBounds(envelope);
   addGridLines(envelope, bounds);
@@ -104,9 +132,16 @@ function renderEnvelope(envelope) {
   addChannels(envelope, radius);
   addRouteLines(envelope, radius);
   collectLabels(envelope, bounds);
-  applyDefaultCamera(bounds);
+  const viewBounds = boundsWithReferenceTop(bounds, envelope);
+  // 轻雾：叠层远近有层次，远处淡入背景色——第二轮实测收紧（near 拉远、
+  // far 放宽），别把近地设备/管线洗进背景。
+  state.scene.fog = new THREE.Fog(0x0d131a,
+    viewBounds.diagonal * 2.4, viewBounds.diagonal * 9);
+  applyDefaultCamera(viewBounds);
   setGridVisible(true);
   setReferenceVisible(true);
+  // 三轮用户口径：工字钢梁阵/葡萄架格栅默认不显示（「结构」开关按需开）。
+  setDetailVisible(false);
   updateLegend(envelope);
 }
 
@@ -116,7 +151,9 @@ function clearScene() {
   state.labels = [];
   state.gridGroup = null;
   state.refGroup = null;
+  state.detailGroup = null;
   state.refLevelCount = 0;
+  state.baseFloorZ = 0;
 }
 
 function measureBounds(envelope) {
@@ -131,7 +168,33 @@ function measureBounds(envelope) {
   if (!isFinite(minX)) { minX = minY = minZ = 0; maxX = maxY = maxZ = 1000; }
   return {
     centre: new THREE.Vector3((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2),
-    diagonal: Math.max(Math.hypot(maxX - minX, maxY - minY, maxZ - minZ), 1)
+    diagonal: Math.max(Math.hypot(maxX - minX, maxY - minY, maxZ - minZ), 1),
+    minZ, maxZ
+  };
+}
+
+// 3.3.7：参照物把模型顶到 15m+——相机取景要把参照层高度算进去，否则
+// 整栋楼被挤到画面上半区、下半截空屏（首轮实测）。
+function boundsWithReferenceTop(bounds, envelope) {
+  const base = Number(envelope.BaseFloorZ) || 0;
+  let refTop = 0;
+  let refBottom = 0;
+  for (const level of envelope.ReferenceLevels || []) {
+    if (!level) continue;
+    const z = level.Z - base;
+    if (z > refTop) refTop = z;
+    if (z < refBottom) refBottom = z;
+  }
+  const minZ = Math.min(bounds.minZ, refBottom);
+  const maxZ = Math.max(bounds.maxZ, refTop + bounds.diagonal * 0.03);
+  if (maxZ <= bounds.maxZ && minZ >= bounds.minZ) return bounds;
+  const diagonal = Math.max(bounds.diagonal,
+    Math.hypot(bounds.diagonal, maxZ - minZ));
+  return {
+    centre: new THREE.Vector3(bounds.centre.x, bounds.centre.y,
+      (minZ + maxZ) / 2),
+    diagonal,
+    minZ, maxZ
   };
 }
 
@@ -146,34 +209,375 @@ function addGridLines(envelope) {
   state.gridGroup.add(new THREE.LineSegments(geometry, material));
 }
 
-// 3.3.6：参照层——建筑标高/设备高度的水平参照框（琥珀色）横贯场景包络，
-// 边角标签「标签 高度mm」（数据来自 U1SET UNC_PREVIEW_REF_LEVELS）。
+// 3.3.7：参照物——按类型画**简化建筑模型**（用户原话「你完全可以自己
+// 做一个模型 包括每层的地面 等 你就光弄个线条」）。类型来自 U1SET
+// UNC_PREVIEW_REF_LEVELS 第三段（信封 Kind）：floor=楼板、steel=工字钢
+// 梁阵、grating=葡萄架格栅、raised=高架地板薄板、device=设备盒（沿底边
+// 排开）、bus=母线塔（右侧两柱+分层横臂）；frame/未知=3.3.6 水平线框。
+// 高度来自清单（准确）；平面位置无数据——板材横贯包络、设备/母线沿边
+// 示意布置（预览是展示件）。
 function addReferenceLevels(envelope, bounds, radius) {
-  const levels = envelope.ReferenceLevels || [];
+  const raw = envelope.ReferenceLevels || [];
+  // 三轮用户口径：机台所在楼层（「本层=2F地面」）——整栋楼按本层重定位，
+  // 本层地面=场景 0（上游就在本层），设备/母线已由信封锚定解析成绝对
+  // 标高，这里统一减基准；标签显示本层起算高度。
+  const base = Number(envelope.BaseFloorZ) || 0;
+  state.baseFloorZ = base;
+  const levels = raw
+    .filter(level => level && level.Label && level.Z > 0)
+    .map(level => ({ Label: level.Label, Z: level.Z - base, Kind: level.Kind }));
   state.refLevelCount = levels.length;
   if (levels.length === 0) return;
   state.refGroup = new THREE.Group();
   state.scene.add(state.refGroup);
-  const margin = bounds.diagonal * 0.06;
+  // 三轮用户口径：空间按推算渲染——量出回路占多大的地，扩到整跨柱网再
+  // 每侧外扩一跨（无柱网退化为 6% 边距）。
+  const extent = horizontalExtent(envelope, bounds.diagonal * 0.06);
+  const diag = bounds.diagonal;
+  const tubeRadius = radius * 0.9;
+  const devices = [];
+  const buses = [];
+  let modelTopZ = 0;
+  let modelBottomZ = 0;
+  let cornerFlip = 0;
+  for (const level of levels) {
+    const kind = String(level.Kind || 'frame').toLowerCase();
+    if (kind !== 'device') {
+      if (level.Z > modelTopZ) modelTopZ = level.Z;
+      if (level.Z < modelBottomZ) modelBottomZ = level.Z;
+    }
+    // 板/梁/格栅的角标签左右交替锚——全锚同一角会在屏幕上叠成一摞
+    //（第二轮实测）。
+    const anchorRight = cornerFlip++ % 2 === 1;
+    if (kind === 'floor') addSlab(level, extent, diag, refColor.floor, refColor.floorEdge, Math.max(220, diag * 0.005), anchorRight);
+    else if (kind === 'epoxy') addEpoxySlab(level, extent, diag, anchorRight);
+    else if (kind === 'waffle') addWafflePlate(level, extent, diag, anchorRight, envelope);
+    else if (kind === 'raised') addSlab(level, extent, diag, refColor.raised, refColor.floorEdge, Math.max(140, diag * 0.003), anchorRight);
+    else if (kind === 'steel') addSteelBeams(level, extent, diag, anchorRight);
+    else if (kind === 'grating') addGrating(level, extent, diag, anchorRight);
+    else if (kind === 'device') devices.push(level);
+    else if (kind === 'bus') buses.push(level);
+    else addRefFrame(level, extent, tubeRadius);
+  }
+  addDevices(devices, extent, diag);
+  // 母线=半透明玻璃层（用户口径：告诉用户这个高度是几层母线——锚定本层
+  // 后正好在本层地面上方 3660/4220/4900）。
+  addBusGlassLevels(buses, extent, diag);
+  // 结构柱按柱网交点（每 ~4.8m 一个柱位，用户口径）落地到最高参照层。
+  if (modelTopZ > 0) addGridColumns(envelope, extent, diag, modelTopZ);
+  // 零平面铺板：有「本层」基准时本层楼板条目已经铺在 0，不再重复铺；
+  // 没有基准（1F 绝对标高口径）时自动铺 1F 地面。
+  if (base === 0) addGroundPlate(extent, diag, '1F地面');
+}
+
+// 环氧地坪：绿色泽面（Phong 高光表达树脂光泽）。
+function addEpoxySlab(level, extent, diag, anchorRight) {
+  const thickness = Math.max(180, diag * 0.004);
+  state.refGroup.add(boxMesh(
+    extent.W, extent.D, thickness,
+    extent.minX + extent.W / 2, extent.minY + extent.D / 2,
+    level.Z - thickness / 2,
+    refColor.epoxy,
+    { transparent: true, opacity: 0.5, edgeTint: refColor.epoxyEdge,
+      phong: true, shininess: 90, specular: 0xa8c8b4 }));
+  addCornerRefLabel(level, extent, level.Z, anchorRight);
+}
+
+// 华夫孔洞板：真圆孔穿透的板（ShapeGeometry 挖孔）。用户口径：**每 4 个
+// 柱位围成的格间里 9 个圆孔（3×3）**——孔位按柱网分间布，无柱网时退化为
+// 均匀阵列兜底。
+function addWafflePlate(level, extent, diag, anchorRight, envelope) {
+  const shape = new THREE.Shape();
+  shape.moveTo(extent.minX, extent.minY);
+  shape.lineTo(extent.maxX, extent.minY);
+  shape.lineTo(extent.maxX, extent.maxY);
+  shape.lineTo(extent.minX, extent.maxY);
+  shape.closePath();
+  const axes = gridAxes(envelope, diag);
+  if (axes.xs.length >= 2 && axes.ys.length >= 2) {
+    for (let i = 0; i + 1 < axes.xs.length; i++) {
+      const x0 = Math.max(axes.xs[i], extent.minX);
+      const x1 = Math.min(axes.xs[i + 1], extent.maxX);
+      for (let j = 0; j + 1 < axes.ys.length; j++) {
+        const y0 = Math.max(axes.ys[j], extent.minY);
+        const y1 = Math.min(axes.ys[j + 1], extent.maxY);
+        const spanX = x1 - x0;
+        const spanY = y1 - y0;
+        if (spanX <= 0 || spanY <= 0) continue;
+        const radius = Math.min(spanX, spanY) / 3 * 0.5 * 0.72;
+        for (let a = 0; a < 3; a++) {
+          for (let b = 0; b < 3; b++) {
+            const hole = new THREE.Path();
+            hole.absarc(x0 + spanX * (a + 0.5) / 3,
+              y0 + spanY * (b + 0.5) / 3, radius, 0, Math.PI * 2, true);
+            shape.holes.push(hole);
+          }
+        }
+      }
+    }
+  } else {
+    const span = Math.min(extent.W, extent.D);
+    const pitch = clamp(span / 7, 900, 2400);
+    const radius = pitch * 0.36;
+    const inset = pitch * 0.8;
+    for (let cx = extent.minX + inset; cx <= extent.maxX - inset; cx += pitch) {
+      for (let cy = extent.minY + inset; cy <= extent.maxY - inset; cy += pitch) {
+        const hole = new THREE.Path();
+        hole.absarc(cx, cy, radius, 0, Math.PI * 2, true);
+        shape.holes.push(hole);
+      }
+    }
+  }
+  const plate = new THREE.Mesh(
+    new THREE.ShapeGeometry(shape),
+    new THREE.MeshLambertMaterial({
+      color: refColor.waffle, transparent: true, opacity: 0.42,
+      depthWrite: false, side: THREE.DoubleSide
+    }));
+  plate.position.z = level.Z;
+  state.refGroup.add(plate);
+  addCornerRefLabel(level, extent, level.Z, anchorRight);
+}
+
+// 母线玻璃层：横贯包络的半透明琥珀玻璃板，每层一块+标签。
+function addBusGlassLevels(levels, extent, diag) {
+  if (levels.length === 0) return;
+  let flip = 0;
+  const thickness = Math.max(70, diag * 0.0018);
+  for (const level of levels.slice().sort((a, b) => a.Z - b.Z)) {
+    state.refGroup.add(boxMesh(
+      extent.W, extent.D, thickness,
+      extent.minX + extent.W / 2, extent.minY + extent.D / 2,
+      level.Z - thickness / 2,
+      refColor.busGlass,
+      { transparent: true, opacity: 0.16, edgeTint: refColor.busEdge,
+        phong: true, shininess: 120, specular: 0xd9c9a0 }));
+    addCornerRefLabel(level, extent, level.Z, flip++ % 2 === 1);
+  }
+}
+
+// 柱网两向轴线集合（X 向线集 + Y 向线集，升序）——结构柱与华夫分间共用。
+function gridAxes(envelope, diag) {
+  const lines = envelope.ColumnGridLines || [];
+  const eps = Math.max(diag * 0.0005, 1);
+  const xs = [];
+  const ys = [];
+  for (let index = 0; index + 1 < lines.length; index += 2) {
+    const a = lines[index];
+    const b = lines[index + 1];
+    if (!a || !b) continue;
+    if (Math.abs(a.X - b.X) < eps) pushUnique(xs, a.X, eps);
+    else if (Math.abs(a.Y - b.Y) < eps) pushUnique(ys, a.Y, eps);
+  }
+  xs.sort((p, q) => p - q);
+  ys.sort((p, q) => p - q);
+  return { xs, ys, eps };
+}
+
+// 结构柱：柱网两向线交点（每 ~4.8m 一个柱位），包络内的交点落地生根。
+function addGridColumns(envelope, extent, diag, topZ) {
+  const axes = gridAxes(envelope, diag);
+  const xs = axes.xs;
+  const ys = axes.ys;
+  const eps = axes.eps;
+  if (xs.length === 0 || ys.length === 0) return;
+  const size = Math.max(350, diag * 0.014);
+  let count = 0;
+  for (const x of xs) {
+    for (const y of ys) {
+      if (x < extent.minX - eps || x > extent.maxX + eps
+          || y < extent.minY - eps || y > extent.maxY + eps) continue;
+      if (++count > 400) return;
+      state.refGroup.add(boxMesh(size, size, topZ, x, y, topZ / 2,
+        refColor.column,
+        { transparent: true, opacity: 0.95, emissive: refColor.columnGlow }));
+    }
+  }
+}
+
+function pushUnique(list, value, eps) {
+  for (const existing of list) {
+    if (Math.abs(existing - value) < eps) return;
+  }
+  list.push(value);
+}
+
+// 零平面铺板：无「本层」基准时自动铺 1F 地面（归零口径：最低线段端点
+// Z=0 即 1F 地面）。
+function addGroundPlate(extent, diag, label) {
+  const thickness = Math.max(60, diag * 0.0015);
+  state.refGroup.add(boxMesh(
+    extent.W, extent.D, thickness,
+    extent.minX + extent.W / 2, extent.minY + extent.D / 2, -thickness / 2,
+    refColor.ground,
+    { transparent: true, opacity: 0.5, edges: false, emissive: 0x10141a }));
+  addLabel({ Text: label + ' 0',
+    X: extent.minX - extent.margin * 0.35,
+    Y: extent.minY - extent.margin * 0.35, Z: 0 }, 'label-ref');
+}
+
+// 楼板/高架地板：横贯包络的半透明板（顶面=标高 Z），双面+边线。
+// 首轮视觉实测：0.3 透明度在深底上读作空线框——提到 0.45 并提亮。
+function addSlab(level, extent, diag, tint, edgeTint, thickness, anchorRight) {
+  state.refGroup.add(boxMesh(
+    extent.W, extent.D, thickness,
+    extent.minX + extent.W / 2, extent.minY + extent.D / 2,
+    level.Z - thickness / 2,
+    tint, { transparent: true, opacity: 0.45, edgeTint }));
+  addCornerRefLabel(level, extent, level.Z, anchorRight);
+}
+
+// 工字钢梁阵：等距工字截面梁横贯 X（上翼缘+腹板+下翼缘，顶面=标高 Z）。
+function addSteelBeams(level, extent, diag, anchorRight) {
+  const z = level.Z;
+  const group = ensureDetailGroup();
+  const height = Math.max(400, diag * 0.014);
+  const flange = Math.max(220, height * 0.6);
+  const flangeT = Math.max(55, height * 0.18);
+  const webT = Math.max(70, height * 0.14);
+  const count = clamp(Math.round(extent.D / (diag * 0.16)), 3, 8);
+  const cx = extent.minX + extent.W / 2;
+  for (let index = 0; index < count; index++) {
+    const y = extent.minY + extent.D * (index + 0.5) / count;
+    group.add(boxMesh(extent.W, flange, flangeT, cx, y, z - flangeT / 2, refColor.steel));
+    group.add(boxMesh(extent.W, webT, height - 2 * flangeT, cx, y,
+      z - flangeT - (height - 2 * flangeT) / 2, refColor.steel, { edges: false }));
+    group.add(boxMesh(extent.W, flange, flangeT, cx, y, z - height + flangeT / 2, refColor.steel, { edges: false }));
+  }
+  addCornerRefLabel(level, extent, z, anchorRight, 'detail');
+}
+
+// 葡萄架格栅：细条阵列横贯 X（顶面=标高 Z），镂空感。
+function addGrating(level, extent, diag, anchorRight) {
+  const z = level.Z;
+  const group = ensureDetailGroup();
+  const barH = Math.max(140, diag * 0.005);
+  const barW = Math.max(110, diag * 0.004);
+  const count = clamp(Math.round(extent.D / (diag * 0.04)), 8, 20);
+  const cx = extent.minX + extent.W / 2;
+  for (let index = 0; index < count; index++) {
+    const y = extent.minY + extent.D * (index + 0.5) / count;
+    group.add(boxMesh(extent.W, barW, barH, cx, y, z - barH / 2,
+      refColor.grating));
+  }
+  addCornerRefLabel(level, extent, z, anchorRight, 'detail');
+}
+
+// 设备盒（I-L盘/插座盘…）：从场景地面立到标高 Z 的实体盒，沿底边排开
+// （平面位置无数据，示意；高度准确）。首轮实测盒体过小读不出——放大。
+function addDevices(levels, extent, diag) {
+  if (levels.length === 0) return;
+  const footX = Math.max(1000, diag * 0.042);
+  const footY = footX * 0.7;
+  for (let index = 0; index < levels.length; index++) {
+    const level = levels[index];
+    const x = extent.minX + extent.W * (index + 1) / (levels.length + 1);
+    const y = extent.minY + extent.margin * 0.22 + footY / 2;
+    state.refGroup.add(boxMesh(footX, footY, level.Z, x, y, level.Z / 2,
+      refColor.device,
+      { edgeTint: refColor.deviceEdge, emissive: refColor.deviceGlow }));
+    addRefLabel(level, x, y, level.Z + diag * 0.014);
+  }
+}
+
+// 3.3.6 兼容：无类型/未知类型的水平线框（琥珀色四边+角标签）。
+function addRefFrame(level, extent, tubeRadius) {
+  const z = level.Z;
+  addTubeTo(state.refGroup, { x: extent.minX, y: extent.minY, z }, { x: extent.maxX, y: extent.minY, z }, color.reference, tubeRadius);
+  addTubeTo(state.refGroup, { x: extent.maxX, y: extent.minY, z }, { x: extent.maxX, y: extent.maxY, z }, color.reference, tubeRadius);
+  addTubeTo(state.refGroup, { x: extent.maxX, y: extent.maxY, z }, { x: extent.minX, y: extent.maxY, z }, color.reference, tubeRadius);
+  addTubeTo(state.refGroup, { x: extent.minX, y: extent.maxY, z }, { x: extent.minX, y: extent.minY, z }, color.reference, tubeRadius);
+  addRefLabel(level, extent.minX - extent.margin * 0.35,
+    extent.minY - extent.margin * 0.35, z);
+}
+
+function addRefLabel(level, x, y, z, group) {
+  addLabel({ Text: level.Label + ' ' + level.Z, X: x, Y: y, Z: z },
+    'label-ref', group);
+}
+
+// 板/梁/格栅的角标签：左右角交替锚（同角全叠在屏幕一摞）。
+function addCornerRefLabel(level, extent, z, anchorRight, group) {
+  addRefLabel(level,
+    anchorRight ? extent.maxX + extent.margin * 0.2
+                : extent.minX - extent.margin * 0.35,
+    extent.minY - extent.margin * 0.35, z, group);
+}
+
+// Lambert 盒子（可选边线）；透明盒双面且不写深度，避免挡死路由。
+function boxMesh(sizeX, sizeY, sizeZ, cx, cy, cz, tint, options) {
+  const settings = options || {};
+  const common = {
+    color: tint,
+    transparent: !!settings.transparent,
+    opacity: settings.opacity === undefined ? 1 : settings.opacity,
+    depthWrite: !settings.transparent,
+    side: settings.transparent ? THREE.DoubleSide : THREE.FrontSide
+  };
+  const material = settings.phong
+    ? new THREE.MeshPhongMaterial(Object.assign(common, {
+        shininess: settings.shininess === undefined ? 60 : settings.shininess,
+        specular: settings.specular === undefined ? 0x9aa8b8 : settings.specular
+      }))
+    : new THREE.MeshLambertMaterial(common);
+  if (settings.emissive) material.emissive.setHex(settings.emissive);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(sizeX, sizeY, sizeZ), material);
+  mesh.position.set(cx, cy, cz);
+  if (settings.edges !== false) {
+    mesh.add(new THREE.LineSegments(
+      new THREE.EdgesGeometry(mesh.geometry),
+      new THREE.LineBasicMaterial({
+        color: settings.edgeTint === undefined ? tint : settings.edgeTint,
+        transparent: true, opacity: 0.85
+      })));
+  }
+  return mesh;
+}
+
+function clamp(value, low, high) {
+  return Math.min(high, Math.max(low, value));
+}
+
+// 水平包络——三轮用户口径「分析回路会占用多大的空间 然后渲染出来更大的
+// 空间」：有柱网时把回路footprint 扩到整跨柱网、每侧再外扩一跨（结构的
+// 房间感来自柱网而不是百分比边距）；无柱网退化为 6% 边距。
+function horizontalExtent(envelope, margin) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const point of collectHorizontalBounds(envelope)) {
     minX = Math.min(minX, point[0]); maxX = Math.max(maxX, point[0]);
     minY = Math.min(minY, point[1]); maxY = Math.max(maxY, point[1]);
   }
-  minX -= margin; minY -= margin; maxX += margin; maxY += margin;
-  const tubeRadius = radius * 0.9;
-  for (const level of levels) {
-    if (!level || !level.Label || !(level.Z > 0)) continue;
-    const z = level.Z;
-    addTubeTo(state.refGroup, { x: minX, y: minY, z }, { x: maxX, y: minY, z }, color.reference, tubeRadius);
-    addTubeTo(state.refGroup, { x: maxX, y: minY, z }, { x: maxX, y: maxY, z }, color.reference, tubeRadius);
-    addTubeTo(state.refGroup, { x: maxX, y: maxY, z }, { x: minX, y: maxY, z }, color.reference, tubeRadius);
-    addTubeTo(state.refGroup, { x: minX, y: maxY, z }, { x: minX, y: minY, z }, color.reference, tubeRadius);
-    addLabel({ Text: level.Label + ' ' + z, X: minX - margin * 0.35, Y: minY - margin * 0.35, Z: z }, 'label-ref');
+  const axes = gridAxes(envelope, margin / 0.06);
+  const xs = axes.xs;
+  const ys = axes.ys;
+  if (xs.length >= 2 && ys.length >= 2) {
+    const gap = values => {
+      let best = 0;
+      for (let i = 1; i < values.length; i++) {
+        best = Math.max(best, values[i] - values[i - 1]);
+      }
+      return best;
+    };
+    const bayX = gap(xs) || margin;
+    const bayY = gap(ys) || margin;
+    const snapOut = (values, lo, hi, bay) => {
+      let below = values[0];
+      let above = values[values.length - 1];
+      for (const value of values) {
+        if (value <= lo) below = value;
+        if (value >= hi && above > value) above = value;
+      }
+      // 兜底：回路超出柱网两端时也要保证至少一跨的裕量。
+      return [Math.min(below - bay, lo - bay), Math.max(above + bay, hi + bay)];
+    };
+    [minX, maxX] = snapOut(xs, minX, maxX, bayX);
+    [minY, maxY] = snapOut(ys, minY, maxY, bayY);
+    return { minX, minY, maxX, maxY, margin, W: maxX - minX, D: maxY - minY };
   }
+  minX -= margin; minY -= margin; maxX += margin; maxY += margin;
+  return { minX, minY, maxX, maxY, margin, W: maxX - minX, D: maxY - minY };
 }
 
-// 水平包络（含通道双线——参照框要框住全部可见几何）。
 function collectHorizontalBounds(envelope) {
   const points = [];
   const feed = point => points.push([point.X, point.Y]);
@@ -201,11 +605,41 @@ function addTubeTo(group, from, to, tint, radius) {
   group.add(tube);
 }
 
+// 结构细节组（工字钢梁阵+葡萄架格栅）：默认隐藏，走独立「结构」开关；
+// 仍挂在 refGroup 之下，参照整组关闭时随组消失。
+function ensureDetailGroup() {
+  if (!state.detailGroup) {
+    state.detailGroup = new THREE.Group();
+    state.detailGroup.visible = state.showDetail;
+    state.refGroup.add(state.detailGroup);
+  }
+  return state.detailGroup;
+}
+
+function setDetailVisible(visible) {
+  state.showDetail = visible;
+  if (state.detailGroup) state.detailGroup.visible = visible;
+  if (el.detail) {
+    el.detail.textContent = visible ? '结构 开' : '结构 关';
+    el.detail.style.display = state.detailGroup ? '' : 'none';
+  }
+  for (const label of state.labels) {
+    if (label.group === 'detail') {
+      label.element.style.display =
+        visible && state.showReferenceLevels ? '' : 'none';
+    }
+  }
+}
+
 function setReferenceVisible(visible) {
   state.showReferenceLevels = visible;
   if (state.refGroup) state.refGroup.visible = visible;
   for (const label of state.labels) {
     if (label.group === 'ref') label.element.style.display = visible ? '' : 'none';
+    if (label.group === 'detail') {
+      label.element.style.display =
+        visible && state.showDetail ? '' : 'none';
+    }
   }
   el.ref.textContent = visible ? '参照 开' : '参照 关';
   el.ref.style.display = state.refLevelCount > 0 ? '' : 'none';
@@ -281,7 +715,7 @@ function collectLabels(envelope) {
   }
 }
 
-function addLabel(label, cssClass) {
+function addLabel(label, cssClass, groupOverride) {
   if (!label || !label.Text) return;
   const element = document.createElement('div');
   element.className = 'scene-label ' + cssClass;
@@ -294,7 +728,9 @@ function addLabel(label, cssClass) {
   state.labels.push({
     element,
     position: new THREE.Vector3(x, y, z),
-    group: cssClass === 'label-tick' ? 'grid' : cssClass === 'label-ref' ? 'ref' : 'route'
+    group: groupOverride
+      || (cssClass === 'label-tick' ? 'grid'
+        : cssClass === 'label-ref' ? 'ref' : 'route')
   });
 }
 
@@ -334,7 +770,21 @@ function setGridVisible(visible) {
 
 function updateLegend(envelope) {
   let legend = '橙X 绿Y 蓝Z　红=桥架(宽) 青=线管';
-  if ((envelope.ReferenceLevels || []).length > 0) legend += '　黄=标高参照';
+  // 3.3.7：参照物按实际出现的类型标注（楼板/钢梁/格栅/高架板/设备/母线/
+  // 线框），没有的不占位。
+  const kinds = new Set((envelope.ReferenceLevels || [])
+    .map(level => String((level && level.Kind) || 'frame').toLowerCase()));
+  const refParts = [];
+  if (kinds.has('floor')) refParts.push('灰=楼板');
+  if (kinds.has('epoxy')) refParts.push('绿=环氧地坪');
+  if (kinds.has('waffle')) refParts.push('华夫=圆孔板');
+  if (kinds.has('steel')) refParts.push('银=钢梁');
+  if (kinds.has('grating')) refParts.push('架=葡萄架');
+  if (kinds.has('raised')) refParts.push('蓝灰=高架板');
+  if (kinds.has('device')) refParts.push('白=设备');
+  if (kinds.has('bus')) refParts.push('琥珀玻璃=母线层');
+  if (kinds.has('frame')) refParts.push('黄=标高线');
+  if (refParts.length > 0) legend += '　参照: ' + refParts.join(' ');
   if (envelope.AnyTrayWidthAssumedDefault) legend += '　桥架宽未标注按 200 显示';
   el.legend.textContent = legend;
   el.summary.textContent = (envelope.AxisSummary ? envelope.AxisSummary + '　' : '')
@@ -360,7 +810,15 @@ function updateLabels() {
     const onScreen = visible.z > -1 && visible.z < 1
       && visible.x > -1.05 && visible.x < 1.05
       && visible.y > -1.05 && visible.y < 1.05;
-    label.element.style.display = onScreen ? '' : 'none';
+    // 开关状态必须在这里再判一遍：本函数每帧重写 display，3.3.5 起它把
+    // 柱网/参照开关藏掉的标签下一帧又放回来（本轮顺手修复）。
+    let shown = onScreen;
+    if (shown && label.group === 'grid') shown = state.showGrid;
+    else if (shown && label.group === 'ref') shown = state.showReferenceLevels;
+    else if (shown && label.group === 'detail') {
+      shown = state.showReferenceLevels && state.showDetail;
+    }
+    label.element.style.display = shown ? '' : 'none';
     if (onScreen) {
       label.element.style.left = ((visible.x * 0.5 + 0.5) * width) + 'px';
       label.element.style.top = ((-visible.y * 0.5 + 0.5) * height) + 'px';

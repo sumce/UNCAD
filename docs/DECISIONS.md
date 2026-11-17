@@ -1261,3 +1261,49 @@ rewrite an existing entry.
   Parsing is a pure-Core function (`PreviewReferenceLevels`), carried in
   the preview envelope, rendered by the page into a toggleable group.
   Do not hardcode project elevations into the web page.
+- Amendment (2026-11-18, 3.3.7 — reference objects become a simplified
+  building model; user feedback "你就光弄个线条" then "3楼地面是华夫孔洞
+  （圆孔） 二楼地面是环氧树脂 一楼应该也有地面 第一层/第二层第三层母线
+  应该用半透明玻璃的 柱子不是每 4.8M 一个柱位吗 4个柱位之间有9个华夫孔"):
+  the entry syntax gains an optional third segment — "标签=毫米=类型".
+  Types (normalized from Chinese/English keywords; unknown or absent =
+  `frame`, the 3.3.6 amber outline, so old lists keep working):
+  `floor` slab, `epoxy` glossy green resin slab, `waffle` plate with real
+  round cutouts (**3×3 = 9 holes per structural bay** between adjacent
+  column grid lines; uniform-array fallback without a grid), `steel`
+  I-beam array, `grating` slat array, `raised` thin raised-floor plate,
+  `device` solid boxes along the bottom edge, `bus` **translucent amber
+  glass plates** marking the three busbar levels. The page draws solid
+  lit geometry (Lambert/Phong + two lights + light fog), structural
+  columns land on the **column-grid intersections** (the U1L grid, i.e.
+  the ~4.8 m pitch) up to the top reference level, and a 1F ground
+  plate is auto-laid at the scene zero plane (labelled "1F地面 0"; the
+  zero-datum semantics make it 1F ground — no config entry needed or
+  possible for Z=0, the parser keeps rejecting ≤0). Heights stay exact
+  from the list; plan positions without data (device row, extents) are
+  indicative — the pane remains a display piece. Defaults encode this
+  project's semantics (2F=环氧地坪, 3F=华夫板); other projects change
+  U1SET, and the page still must not hardcode project elevations or
+  semantics.
+- Amendment (2026-11-18, 3.3.7 round 3 — scene space is inferred, the
+  scene lives on a floor, steel/grating hidden by default; user:
+  "葡萄架和工字钢默认不显示 这个空间默认是通过推算来渲染的 分析回路
+  会占用多大的空间 然后渲染出来更大的空间 上游是有楼层的！如果是2F
+  那上游就在2楼的 第一/2/3层母线放到二层"): (1) the model extent is
+  **inferred**, not a percentage margin — the route footprint is covered
+  by whole structural bays of the column grid and expanded by one extra
+  bay per side (6% margin fallback without a grid). (2) A directive
+  line `本层=2F地面` names the machine's floor; the whole building is
+  rebased so that floor sits at scene Z=0 (upstream lives on that
+  floor; label heights read relative to it; without the directive the
+  3.3.6 absolute-from-1F semantics are kept). (3) Entry heights may be
+  floor-relative via a 4th segment anchor `标签=毫米=类型=锚定标签`
+  (single-hop, resolved in the envelope: 2F地面+3660; unknown anchors
+  keep the raw value — no guessing). The shipped default sets 本层=
+  2F地面 with devices and the three busbar glass levels anchored to
+  2F地面 (3.66/4.22/4.9 m above the machine's own floor). (4) Steel
+  beam arrays and grating default to hidden behind a separate
+  「结构」 toggle (columns/slabs/bus glass stay on); the frame
+  toggle still hides the entire reference model. Also fixed in passing:
+  the per-frame label updater re-showed labels hidden by the
+  grid/reference toggles since 3.3.5.

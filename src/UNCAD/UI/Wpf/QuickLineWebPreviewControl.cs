@@ -124,11 +124,14 @@ namespace UNCAD.UI
         {
             _model = model;
             // 3.3.6：参照层清单来自 U1SET（标签=毫米；空=不画）——UI 层读设置、
-            // Core 解析、信封携带，页面只画。
+            // Core 解析、信封携带，页面只画。3.3.7 三轮：清单可带类型/锚定段
+            // 与「本层=」指令（整栋楼按机台所在楼层重定位）。
             string rawLevels = Settings.Get(ConfigKeys.PreviewReferenceLevels,
                 PreviewReferenceLevels.DefaultList);
+            PreviewReferenceLevels.TryParseBaseFloor(rawLevels,
+                out string baseFloorLabel);
             _envelope = QuickLineOrbitPreviewEnvelope.Build(model,
-                PreviewReferenceLevels.Parse(rawLevels));
+                PreviewReferenceLevels.Parse(rawLevels), baseFloorLabel);
             RefreshDataCounters();
             _hintText.Visibility = _envelope == null
                 ? Visibility.Visible

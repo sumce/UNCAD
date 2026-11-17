@@ -39,7 +39,8 @@ namespace UNCAD.Core.QuickLine
             string axisSummary, string upstreamAxisLabel,
             string downstreamAxisLabel,
             bool anyTrayWidthAssumedDefault,
-            IReadOnlyList<EnvelopeReferenceLevel> referenceLevels)
+            IReadOnlyList<EnvelopeReferenceLevel> referenceLevels,
+            double baseFloorZ)
         {
             Segments = segments;
             ColumnGridLines = columnGridLines;
@@ -53,6 +54,7 @@ namespace UNCAD.Core.QuickLine
             DownstreamAxisLabel = downstreamAxisLabel;
             AnyTrayWidthAssumedDefault = anyTrayWidthAssumedDefault;
             ReferenceLevels = referenceLevels ?? Array.Empty<EnvelopeReferenceLevel>();
+            BaseFloorZ = baseFloorZ;
         }
 
         /// <summary>一条电缆段：中心线端点 + 轴向 + 通道双线（null=普通电缆段）。</summary>
@@ -87,11 +89,19 @@ namespace UNCAD.Core.QuickLine
         /// UNC_PREVIEW_REF_LEVELS 配置；空=不画）。</summary>
         public IReadOnlyList<EnvelopeReferenceLevel> ReferenceLevels { get; }
 
+        /// <summary>
+        /// 3.3.7 三轮：本层基准（「本层=2F地面」指令解析出的绝对标高；0=未
+        /// 指定）。页面用它把整栋楼重定位——本层地面=场景 0（上游就在本层，
+        /// 设备/母线在本层地面上起算）。
+        /// </summary>
+        public double BaseFloorZ { get; }
+
         /// <summary>由预览模型构建信封（model 为 null/空段时返回 null）。
         /// referenceLevels：参照层清单（U1SET 配置解析而来；null=无参照层）。</summary>
         public static QuickLineOrbitPreviewEnvelope Build(
             QuickLineOrbitPreviewModel model,
-            IReadOnlyList<PreviewReferenceLevel> referenceLevels = null)
+            IReadOnlyList<PreviewReferenceLevel> referenceLevels = null,
+            string baseFloorLabel = null)
         {
             if (model == null || model.Segments.Count == 0) return null;
 
@@ -187,12 +197,41 @@ namespace UNCAD.Core.QuickLine
             }
 
             var levels = new List<EnvelopeReferenceLevel>();
-            foreach (PreviewReferenceLevel level
-                in referenceLevels ?? Array.Empty<PreviewReferenceLevel>())
+            IReadOnlyList<PreviewReferenceLevel> source =
+                referenceLevels ?? Array.Empty<PreviewReferenceLevel>();
+            // 3.3.7 三轮：锚定解析（单跳，绝对空间）——设备/母线高度相对本层
+            // 地面条目（如母线 3660 锚 2F地面 → 绝对 11460）；锚定标签按
+            // 包含匹配、自引用排除、找不到保持原值不猜。
+            foreach (PreviewReferenceLevel level in source)
             {
                 if (level == null || level.Label.Length == 0) continue;
-                levels.Add(new EnvelopeReferenceLevel(level.Label,
-                    level.ZMillimetres));
+                double z = level.ZMillimetres;
+                if (level.AnchorLabel.Length > 0)
+                {
+                    for (int index = 0; index < source.Count; index++)
+                    {
+                        if (ReferenceEquals(source[index], level)) continue;
+                        PreviewReferenceLevel candidate = source[index];
+                        if (candidate == null || candidate.Kind == null) continue;
+                        if ((candidate.Label ?? "").IndexOf(level.AnchorLabel,
+                                StringComparison.Ordinal) < 0) continue;
+                        z += candidate.ZMillimetres;
+                        break;
+                    }
+                }
+                levels.Add(new EnvelopeReferenceLevel(level.Label, z,
+                    level.Kind));
+            }
+            double baseFloorZ = 0.0;
+            if (!string.IsNullOrWhiteSpace(baseFloorLabel))
+            {
+                foreach (EnvelopeReferenceLevel level in levels)
+                {
+                    if ((level.Label ?? "").IndexOf(baseFloorLabel,
+                            StringComparison.Ordinal) < 0) continue;
+                    baseFloorZ = level.Z;
+                    break;
+                }
             }
             return new QuickLineOrbitPreviewEnvelope(
                 segments, gridLines, numericTicks, letterLabels,
@@ -200,7 +239,7 @@ namespace UNCAD.Core.QuickLine
                 model.AxisSummary ?? string.Empty,
                 (model.UpstreamAxisLabel ?? string.Empty).Trim(),
                 (model.DownstreamAxisLabel ?? string.Empty).Trim(),
-                anyAssumed, levels);
+                anyAssumed, levels, baseFloorZ);
         }
 
         /// <summary>段方向的水平法向（dir × ẑ 归一化；竖直段回退 ŷ——与
@@ -324,18 +363,22 @@ namespace UNCAD.Core.QuickLine
                 => new EnvelopePoint(point.X, point.Y, point.Z);
         }
 
-        /// <summary>3.3.6：参照层（水平参照线 Z + 标签原文）。</summary>
+        /// <summary>3.3.6：参照层（Z + 标签原文）；3.3.7 起 Kind 告诉页面画哪种几何。</summary>
         public sealed class EnvelopeReferenceLevel
         {
-            public EnvelopeReferenceLevel(string label, double z)
+            public EnvelopeReferenceLevel(string label, double z,
+                string kind = null)
             {
                 Label = label;
                 Z = z;
+                Kind = string.IsNullOrEmpty(kind) ? "frame" : kind;
             }
 
             public string Label { get; }
             /// <summary>相对场景地面的高度（mm）。</summary>
             public double Z { get; }
+            /// <summary>参照物类型（floor/steel/grating/raised/device/bus；缺省 frame=水平线框）。</summary>
+            public string Kind { get; }
         }
 
         /// <summary>场景文字标签（HTML 叠加层渲染；WorldHeight 供字号换算参考）。</summary>
