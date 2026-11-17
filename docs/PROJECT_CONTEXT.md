@@ -5,12 +5,13 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.2` (2026-11-17; D-054 amendment — U1U 3D
-  preview kernel switched to HelixToolkit.Wpf: perspective camera + orbit
-  interaction, screen-space lines, billboard labels, and a two-way
-  numeric × letter column grid replacing the single-direction numeric
-  interpolation; the Canvas orthographic kernel is retired. Future fixes
-  increment the fourth version part per D-032).
+- Current stable release: `3.3.3` (2026-11-17; D-054 amendment — new
+  command U1B 绘制软管: LINE-style chained points become a green closed
+  hose outline (double-line offset + corner fillet arcs + semicircle end
+  caps, `HoseOutlinePlanner`, diameter `UNC_HOSE_DIAMETER` default 100),
+  plus a midpoint leader and an editable `100mm软管:…` label on the new
+  statutory layer `U_HOSE` (ACI 3), one write transaction per run.
+  Future fixes increment the fourth version part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -23,7 +24,7 @@ shorter than the historical release notes.
 | Fill | `Features/Fill/FillFeature.cs` | U1F/U1U selection, planning, review, and one CAD transaction |
 | Excel/Core | `Core/Excel/ExcelMachineReader.cs`, `Core/Fill/` | U_ workbook parsing, BOQ matching, fill planning and diffing |
 | QuickLine | `Features/Unl/`, `Core/QuickLine/`, `Cad/QuickLine/` | U1L/U1LX line creation, graph traversal, millimeter labels, and route connectivity (open polylines from U1R/Xauto hops enter the scan as single segments, D-054) |
-| Marking | `Features/Unq/`, `Features/Conduit/`, `Features/Unr/` | U1Q1/U1Q2/U1Q4, U1C, and U1R annotations |
+| Marking | `Features/Unq/`, `Features/Conduit/`, `Features/Unr/`, `Features/Hose/` | U1Q1/U1Q2/U1Q4, U1C, U1R annotations, and the U1B hose outline (`Core/Geometry/HoseOutlinePlanner` + `Cad/HoseCadService`) |
 | Layout | `Features/XLayout/`, `Core/Dwg/` | XLAYOUT arrangement, duplicate markers, and Xmerge |
 | Statistics | `Features/Stat/`, `Features/Unadd/`, `Core/Stat/` | XSTS and legacy UNADD reports |
 | Export/Submit | `Features/DwgExport/`, `Features/Submit/` | U1DWG and U1S outputs; `Core/Submission/OutputLayout` owns folder layout and write-occupancy precheck |
@@ -38,7 +39,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1PDF` (colour PDF per circuit), `U1SET`, `U1DATA` |
-| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1B` (hose), `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `Xauto`, `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Online account | `UNC_LOGIN` (WebView2 login; account + single-device online) |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
@@ -134,12 +135,16 @@ XLAYOUT/XSTS
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is
   revisited.
-- Governed layers (D-054, 3.3.0): `U_CABLE` (U1L lines + mm labels, colour 7),
-  `U_TRAY` (U1Q output, colour 1), `U_CONDUIT` (U1C output, colour 4). New
-  U1L/U1LX output lands on `U_CABLE`; U1U/U1F correct misplaced plugin
-  entities inside the existing write transaction (`UNC_FILL_LAYER_GOVERNOR`,
-  default on) and report counts. KIND on parallel annotations decides tray vs
-  conduit; unknown or metadata-less outputs are never moved (no guessing).
+- Governed layers (D-054, 3.3.0; hose added 3.3.3): `U_CABLE` (U1L lines + mm
+  labels, colour 7), `U_TRAY` (U1Q output, colour 1), `U_CONDUIT` (U1C output,
+  colour 4), `U_HOSE` (U1B output, colour 3 green). New U1L/U1LX output lands
+  on `U_CABLE`; U1B output (outline/leader/label) lands on `U_HOSE` with
+  `KIND="U1B"` metadata; U1U/U1F correct misplaced plugin entities inside the
+  existing write transaction (`UNC_FILL_LAYER_GOVERNOR`, default on) and
+  report counts. KIND on parallel annotations decides tray vs conduit vs
+  hose; unknown or metadata-less outputs are never moved (no guessing). U1B
+  label text follows the Ruanguan hose format and deliberately joins no
+  statistics sum (hose metres still come from Ruanguan blocks only).
   The U1U confirmation windows show a 3D route preview (HelixToolkit.Wpf
   perspective viewport since 3.3.2; the 3.3.0/3.3.1 Canvas orthographic
   kernel is retired) and a report-only connectivity column (isolated

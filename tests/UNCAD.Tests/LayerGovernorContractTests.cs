@@ -17,27 +17,35 @@ namespace UNCAD.Tests
         [Fact]
         public void GovernedLayerNamesAndColors_AreFrozenVerbatim()
         {
-            // 用户拍板，一字不差全大写、无空格。
+            // 用户拍板，一字不差全大写、无空格。3.3.3（D-054 Amendment）：
+            // U_HOSE=软管（U1B 输出，色号 3 绿）入法定家族。
             Assert.Equal("U_CABLE", UncadLayerStandard.CableLayerName);
             Assert.Equal("U_TRAY", UncadLayerStandard.TrayLayerName);
             Assert.Equal("U_CONDUIT", UncadLayerStandard.ConduitLayerName);
+            Assert.Equal("U_HOSE", UncadLayerStandard.HoseLayerName);
             Assert.Equal((short)7, UncadLayerStandard.CableColorIndex);
             Assert.Equal((short)1, UncadLayerStandard.TrayColorIndex);
             Assert.Equal((short)4, UncadLayerStandard.ConduitColorIndex);
-            Assert.Equal(new[] { "U_CABLE", "U_TRAY", "U_CONDUIT" },
+            Assert.Equal((short)3, UncadLayerStandard.HoseColorIndex);
+            Assert.Equal(new[] { "U_CABLE", "U_TRAY", "U_CONDUIT", "U_HOSE" },
                 UncadLayerStandard.GovernedLayerNames.ToArray());
         }
 
         [Fact]
         public void AnnotationKind_ResolvesLayerAndNeverGuesses()
         {
-            // KIND 自 D-018/D-050 元数据引入起恒写入：U1Q→桥架层、U1C→线管层。
+            // KIND 自 D-018/D-050 元数据引入起恒写入：U1Q→桥架层、U1C→线管层、
+            // U1B→软管层（3.3.3）。
             Assert.Equal(UncadLayerStandard.TrayLayerName,
                 UncadLayerStandard.TryResolveAnnotationLayer("U1Q"));
             Assert.Equal(UncadLayerStandard.TrayLayerName,
                 UncadLayerStandard.TryResolveAnnotationLayer("u1q"));
             Assert.Equal(UncadLayerStandard.ConduitLayerName,
                 UncadLayerStandard.TryResolveAnnotationLayer("U1C"));
+            Assert.Equal(UncadLayerStandard.HoseLayerName,
+                UncadLayerStandard.TryResolveAnnotationLayer("U1B"));
+            Assert.Equal(UncadLayerStandard.HoseLayerName,
+                UncadLayerStandard.TryResolveAnnotationLayer("u1b"));
             // 其它种类（未来/未知）不猜：null = 不移动、点名「无法判定」。
             Assert.Null(UncadLayerStandard.TryResolveAnnotationLayer("U1X"));
             Assert.Null(UncadLayerStandard.TryResolveAnnotationLayer(""));
@@ -45,6 +53,8 @@ namespace UNCAD.Tests
 
             Assert.Equal((short)1,
                 UncadLayerStandard.ColorIndexOf(UncadLayerStandard.TrayLayerName));
+            Assert.Equal((short)3,
+                UncadLayerStandard.ColorIndexOf(UncadLayerStandard.HoseLayerName));
             Assert.Throws<ArgumentException>(() =>
                 UncadLayerStandard.ColorIndexOf("0"));
         }
@@ -56,10 +66,11 @@ namespace UNCAD.Tests
             {
                 CableEntities = 3,
                 TrayEntities = 2,
-                ConduitEntities = 1
+                ConduitEntities = 1,
+                HoseEntities = 4
             };
-            Assert.Equal(6, counters.TotalMoves);
-            Assert.Equal("图层矫正：6 个实体移正（电缆 3/桥架 2/线管 1/无法判定 0）",
+            Assert.Equal(10, counters.TotalMoves);
+            Assert.Equal("图层矫正：10 个实体移正（电缆 3/桥架 2/线管 1/软管 4/无法判定 0）",
                 counters.Describe());
             Assert.True(counters.IsEmpty == false);
 
@@ -68,7 +79,7 @@ namespace UNCAD.Tests
                 UndeterminableEntities = 1
             };
             undeterminable.UndeterminableHandles.Add("2A5F");
-            Assert.Equal("图层矫正：0 个实体移正（电缆 0/桥架 0/线管 0/无法判定 1）；"
+            Assert.Equal("图层矫正：0 个实体移正（电缆 0/桥架 0/线管 0/软管 0/无法判定 1）；"
                 + "无法判定：2A5F", undeterminable.Describe());
             Assert.False(undeterminable.IsEmpty);
             Assert.True(new UncadLayerCorrectionCounters().IsEmpty);

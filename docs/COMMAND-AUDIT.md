@@ -1,10 +1,10 @@
 # UNCAD 命令审计矩阵
 
-> 口径版本：当前 **3.2.0**。矩阵全量审计于 **2.10.0** 时点完成，下文“本轮”均指该轮；
+> 口径版本：当前 **3.3.3**。矩阵全量审计于 **2.10.0** 时点完成，下文“本轮”均指该轮；
 > 3.0 起的行为变更以各命令行内 D-0xx 标注补充，不重写 2.10.0 审计结论。
-> 审计对象：`CommandIds.Registered` 全部 **36 条**公开命令（22 条正式命令 + 1 条别名 + 6 条命令族/扩展命令 + 7 条兼容旧名；3.2.0 新增 `Xauto`，D-053）。
+> 审计对象：`CommandIds.Registered` 全部 **37 条**公开命令（23 条正式命令 + 1 条别名 + 6 条命令族/扩展命令 + 7 条兼容旧名；3.2.0 新增 `Xauto` D-053；3.3.3 新增 `U1B` D-054 Amendment）。
 > 依据：`AGENTS.md`、`docs/PROJECT_CONTEXT.md`、`docs/DECISIONS.md`、`docs/DEVELOPMENT.md`；以源码与测试作为观察实现。
-> 结论：**36/36** 唯一注册、**36/36** 有帮助条目、Ribbon 覆盖全部正式命令（兼容旧名按设计不设 Ribbon 按钮）。
+> 结论：**37/37** 唯一注册、**37/37** 有帮助条目、Ribbon 覆盖全部正式命令（兼容旧名按设计不设 Ribbon 按钮）。
 > 本轮发现并修复 9 项（均在 2.10.0-C 的写 scope 内），上报其它 scope 1 项，明确“不是缺陷”的既有行为 7 项。
 
 ## 1. 审计口径
@@ -33,6 +33,7 @@
 | `U13D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U13D 多图框预览 | 已审计 |
 | `U1DT` | 正式 | `Features/Dimension/DimensionTextFeature.cs` | ✓ | 标注转文字 | 已审计 |
 | `U1R` | 正式 | `Features/Unr/UnrFeature.cs` | ✓ | 开拱桥 | 已审计 |
+| `U1B` | 正式 | `Features/Hose/HoseFeature.cs` | ✓ | 绘制软管 | 已审计（3.3.3，D-054 Amendment） |
 | `Xauto` | 正式 | `Features/XAuto/XAutoFeature.cs` | ✓ | 自动优化 | 已审计 |
 | `U1Q1` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 100 | 已审计 |
 | `U1Q2` | 正式 | `Features/Unq/UnqFeature.cs` | ✓ | 桥架 200 | 已审计 |
@@ -86,6 +87,7 @@ Ribbon 覆盖 29/36：全部 22 条 `CommandIds.Canonical`（3.2.0 起 `Xauto` �
 | `U1L3D` / `U13D` | 无 CAD 写入；只读事务收集 U1L 路由；只读 WebView2 预览（D-024/D-025） | 非完整图框/无 U1L 路由 → 提示；快照缺失时显示诊断；不联网不刷新 Excel | `FillExcelPath`（仅快照路径） | `QuickLine3dPreviewTests` |
 | `U1DT` | 一个事务替换对齐标注文字为单行文字并提交，原尺寸线保留 | 未选择/非对齐标注 → 跳过并统计数量；文字高度取配置默认 | `UnlHeight` | `DimensionTextFeatureContractTests`、`DimensionTextFormatterTests` |
 | `U1R` / `UNR` | 每次点击一个事务（替换 Line 或插入 Polyline 顶点）；Esc 退出但已开洞口保留 | 非 LINE/二维 Polyline、共面、长度不足、靠近端点等情况提示并跳过，不写半成品 | `UnrDiameter` | `GeoMathArchTests` |
+| `U1B` | **一个**事务生成软管（闭合轮廓+可选引线/文字）；取点不足 2 点礼貌退出不画；标注阶段取消=只留管子（3.3.3，D-054 Amendment） | 路径退化（重复/共线点过多）→ 提示并退出；直径/字高非法 → 回退默认并提示；扫描器不认 U1B 实体当电缆路由 | `HoseDiameter`（默认 100）、`UnlHeight` | `HoseOutlinePlannerTests`、`HoseAnnotationDefaultsTests`、`LayerGovernorContractTests` |
 | `UNADD` | 一个事务写入汇总 DBText 行 | 无命中/统计类别全关 → 不生成 0M 文字并提示；字高非法回退默认 | `UnaddHeight` + 统计开关整组 | `SummationModuleTests`、`StatCalculatorTests`、`TextParserTests` |
 | `U1SET` | 无 CAD 写入；点“确定”后由窗体统一 `SetMany` 保存（失败按快照回滚并提示） | 取消不保存；路径/数值校验失败切页签并保留输入；保存异常写日志+命令行 | 全配置键（含 `LogLevel`、`LogRetentionDays`、`HistoryRetentionMonths`、输出结构、预留值） | `UnifiedSettingsFormTests`、`ConfigKeysTests` |
 | `U1DATA` | 无 CAD 写入；后台刷新一次，失败保留旧 SQLite 快照 | 未配置数据源/已在刷新 → 明确提示；解析失败保留旧快照并提示 | `FillExcelPath` | `MachineDataRefreshCoordinatorTests`、`MachineWorkbookSourceTests` |

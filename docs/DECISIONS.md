@@ -1143,3 +1143,54 @@ rewrite an existing entry.
   is the numeric (or letter) axis; do not extend letter labels beyond the
   grid anchor rule above; keep Helix viewports on one thread per process
   (production) or the shared STA runner (tests).
+- Amendment (2026-11-17, 3.3.3 — U1B hose command, U_HOSE layer; user
+  request "绘制软管 输入 U1B…注意需要处理好拐弯处 和首尾端"):
+  1. **U_HOSE joins the statutory layer family.** `U_HOSE` (hose — U1B
+     output, ACI colour 3 green) is added verbatim to
+     `UncadLayerStandard.GovernedLayerNames`/`ColorIndexOf`/
+     `TryResolveAnnotationLayer`. Missing layers are still created
+     idempotently; the correction report text gains a hose bucket
+     ("电缆 x/桥架 y/线管 z/软管 h/无法判定 w").
+  2. **Command U1B and KIND=U1B.** LINE-style chained point collection
+     (U undoes the last picked point, Enter/Space finishes, duplicate
+     points are ignored; fewer than 2 points exits politely drawing
+     nothing), then the hose is drawn immediately inside the single write
+     transaction: a closed LWPolyline outline built analytically by the
+     pure-Core `HoseOutlinePlanner` — centred double-line offset
+     ±diameter/2 (NEVER LWPolyline ConstantWidth), outer corners are
+     radius=pipe-radius fillet arcs (tangent points are the offset
+     endpoints), inner corners are offset-line intersections (miter; a
+     near-reversal spike whose miter leg exceeds 4×radius degrades to a
+     bevel — bounded, no crash), and both ends get semicircle caps of the
+     same radius. Degenerate inputs (duplicate/collinear points) are
+     collapsed. Diameter comes from `UNC_HOSE_DIAMETER` (default 100,
+     U1SET draw page). The centreline itself is not kept. All outputs
+     (outline / leader / text) carry `ParallelAnnotationMetadata` with
+     `KIND="U1B"` (SOURCE = the outline's own handle), ACI 3 entity
+     colour, layer U_HOSE.
+  3. **Annotation.** After the outline the user picks a label point; a
+     thin leader is drawn from the path's by-length midpoint to it and a
+     single-line DBText (height = the UNL_HEIGHT family) is created. The
+     default text reuses the existing hose-chain format
+     (`RuanguanLabelFormatter` → `100mm软管:2500mm`, length rounded to
+     the nearest 10) and is user-editable at the prompt. No new text
+     format is invented: the whole line matches neither the cable
+     (`^\d+0mm$`), bridge, conduit statistics patterns nor the D-043
+     device-reserve marker pattern, so it never leaks into the cable sum
+     and is never absorbed as a reserve. Hose statistics keep reading
+     only Ruanguan block attributes — U1B standalone text deliberately
+     does not join that sum (the SUM-STAT engine has no hose text
+     category; do not add one without a new decision).
+  4. **Scan exclusion, same rule as U1Q/U1C.** `QuickLineCadService.Scan`
+     skips any entity carrying ParallelAnnotationMetadata (TryRead hit) —
+     the U1B outline (also closed, which is never a cable route anyway),
+     leader and label can never be picked up as cable routes. Layer
+     governance resolves KIND U1B → U_HOSE automatically; frame-scoped
+     attribution still skips U1B outputs because their SOURCE never
+     resolves to a scanned cable segment (host unknown → skip, no
+     guessing).
+- Consequence (3.3.3): do not "simplify" U1B to a ConstantWidth polyline
+  (the outline is real geometry with arcs and caps); do not make U1B
+  annotation text a statistics source or a reserve marker candidate; do
+  not scan U1B outputs as cable routes; one write transaction per U1B
+  run (one U undoes outline + leader + text together).

@@ -94,10 +94,10 @@ namespace UNCAD.Features.Fill
             if (inspection?.LayerPlan == null || inspection.LayerPlan.IsEmpty)
                 return;
             ctx.Write("\n[" + command + "] 图层矫正完成：" + movedCount
-                + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT）。");
+                + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT/U_HOSE）。");
             foreach (string handle in inspection.LayerPlan.UndeterminableHandles)
                 ctx.Write("\n[" + command + "] 实体 " + handle
-                    + " 带平行标注元数据但种类无法判定（非 U1Q/U1C），未移动。");
+                    + " 带平行标注元数据但种类无法判定（非 U1Q/U1C/U1B），未移动。");
         }
 
         /// <summary>

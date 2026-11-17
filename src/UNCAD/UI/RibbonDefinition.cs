@@ -91,6 +91,8 @@ namespace UNCAD.UI
                             "使用 400 mm 桥架规格")),
                     RibbonItemDefinition.Button("绘制线条", CommandIds.Line,
                         "连续绘制线段并自动生成长度文字"),
+                    RibbonItemDefinition.Button("绘制软管", CommandIds.Hose,
+                        "像 LINE 一样连续取点，生成绿色平面软管（默认直径 100）并标注"),
                     RibbonItemDefinition.Button("快速标注距离", CommandIds.LineQuick,
                         "点选线段后逐段快速填写毫米标注（兼容命令 UNLX）"),
                     RibbonItemDefinition.Button("U1L 三维预览", CommandIds.Line3dPreview,

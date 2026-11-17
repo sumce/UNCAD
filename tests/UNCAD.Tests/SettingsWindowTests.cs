@@ -497,7 +497,8 @@ namespace UNCAD.Tests
             var found = new SortedSet<string>(Regex.Matches(source,
                     @"ConfigKeys\.(\w+)").Cast<Match>()
                 .Select(match => match.Groups[1].Value));
-            // 旧 UnifiedSettingsForm.LoadValues/Save 引用的 53 个键一个不增、一个不减。
+            // 旧 UnifiedSettingsForm.LoadValues/Save 引用的键零丢失；新增键必须
+            // 带版本注释登记（当前 54 个：53 + 3.3.3 的 HoseDiameter）。
             string[] expected =
             {
                 "UnlText", "UnlHeight", "UnlPos", "UnlOffset",
@@ -506,6 +507,8 @@ namespace UNCAD.Tests
                 // 改为与桥架同车道（上侧 15），独立键本身不变。
                 "ConduitDiameter", "ConduitLineOff", "ConduitTextOff", "ConduitSide",
                 "UnrDiameter",
+                // 3.3.3（D-054 Amendment）：U1B 软管直径（U1SET 绘制标注页）。
+                "HoseDiameter",
                 "UnaddHeight", "UnaddMmPerGrid", "UnaddTextEnabled",
                 "UnaddMTextEnabled", "UnaddDimensionEnabled", "UnaddCableEnabled",
                 "UnaddBridgeEnabled", "UnaddConduitEnabled",

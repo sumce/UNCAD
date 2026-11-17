@@ -32,9 +32,9 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.3.2` (HelixToolkit.Wpf 3D preview
-  kernel line, 2026-11-17, D-054 amendment; full WPF UI since 3.0.0, D-038;
-  patches increment the fourth version part per D-032).
+- Product: `UNCAD Pro`. Stable line: `3.3.3` (U1B hose-drawing release,
+  2026-11-17, D-054 amendment; full WPF UI since 3.0.0, D-038; patches
+  increment the fourth version part per D-032).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from
@@ -42,12 +42,16 @@ when their version numbers or counts are stale.
 
 ## Hard Constraints
 
-- Governed layers (D-054, 3.3.0): `U_CABLE` (cable routes, colour 7), `U_TRAY`
-  (U1Q output, colour 1), `U_CONDUIT` (U1C output, colour 4) — names verbatim,
+- Governed layers (D-054, 3.3.0; `U_HOSE` added 3.3.3): `U_CABLE` (cable
+  routes, colour 7), `U_TRAY` (U1Q output, colour 1), `U_CONDUIT` (U1C
+  output, colour 4), `U_HOSE` (U1B hose output, colour 3) — names verbatim,
   no spaces. Layer correction runs inside the U1U/U1F write transaction
   (`UNC_FILL_LAYER_GOVERNOR`, default on); outputs are classified by the
-  parallel-annotation KIND only (`U1Q`/`U1C`). Unknown or metadata-less outputs
-  are never moved and never guessed from colour/text. Connectivity reporting
+  parallel-annotation KIND only (`U1Q`/`U1C`/`U1B`). Unknown or metadata-less
+  outputs are never moved and never guessed from colour/text. U1B label text
+  follows the Ruanguan hose format and never joins a statistics sum. U1B hose
+  outlines/leaders are never scanned as cable routes (metadata hit skips).
+  Connectivity reporting
   is report-level only (never blocks a write); open holed polylines from
   U1R/Xauto are scanned as single segments and whole components containing
   them are never relaid by Xauto.

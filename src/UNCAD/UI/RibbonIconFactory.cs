@@ -107,6 +107,7 @@ namespace UNCAD.UI
                 || string.Equals(command, CommandIds.DimensionText, StringComparison.OrdinalIgnoreCase))
                 return "line";
             if (string.Equals(command, CommandIds.Arch, StringComparison.OrdinalIgnoreCase)) return "arch";
+            if (string.Equals(command, CommandIds.Hose, StringComparison.OrdinalIgnoreCase)) return "hose";
             if (string.Equals(command, CommandIds.LegacyStatistics, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Statistics, StringComparison.OrdinalIgnoreCase))
                 return "stat";

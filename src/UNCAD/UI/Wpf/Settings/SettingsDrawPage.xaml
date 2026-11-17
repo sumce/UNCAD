@@ -175,6 +175,21 @@
                     </StackPanel>
                 </StackPanel>
             </ui:Card>
+
+            <!-- 绘制软管（U1B，3.3.3） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="绘制软管（U1B）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
+                               Text="管子绿色绘制在 U_HOSE 图层，拐弯圆弧过渡、首尾半圆端帽；标注文字高度与线段文字共用。" />
+                    <StackPanel>
+                        <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="软管直径" />
+                        <ui:NumberBox x:Name="HoseDiameter" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadNumberBox}"
+                                      Minimum="1" Maximum="1000" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -31,17 +31,19 @@ namespace UNCAD.Cad
     }
 
     /// <summary>
-    /// 3.3.0（D-054 特性①）：图层规范服务——确保 U_CABLE/U_TRAY/U_CONDUIT
-    /// 三图层存在（缺则建，色号 7/1/4），识别插件实体并移正图层。识别依据
-    /// （本仓库哲学：不猜测）：
+    /// 3.3.0（D-054 特性①）：图层规范服务——确保 U_CABLE/U_TRAY/U_CONDUIT/
+    /// U_HOSE 图层存在（缺则建，色号 7/1/4/3），识别插件实体并移正图层。
+    /// 识别依据（本仓库哲学：不猜测）：
     /// - 电缆线 = 扫描器（QuickLineCadService.Scan）认出的 U1L 线段实体；
     ///   毫米标 = QuickLineMetadataStore 关联或扫描器匹配到的标注文本 → U_CABLE；
     /// - 带 ParallelAnnotationMetadata 的输出：KIND=U1Q → U_TRAY、KIND=U1C →
-    ///   U_CONDUIT（KIND 自 D-018/D-050 元数据引入起恒写入；KIND 既非 U1Q
-    ///   也非 U1C 的输出不移动、点名「无法判定」）。无元数据的旧输出无法
-    ///   识别为插件实体——同样不移动、不猜测（D-054）。
+    ///   U_CONDUIT、KIND=U1B → U_HOSE（3.3.3，D-054 Amendment；KIND 自
+    ///   D-018/D-050 元数据引入起恒写入；KIND 既非 U1Q/U1C/U1B 的输出不移动、
+    ///   点名「无法判定」）。无元数据的旧输出无法识别为插件实体——同样
+    ///   不移动、不猜测（D-054）。
     /// U1L 今后新生成的线+毫米标直接落在 U_CABLE（UnlFeature/U1LX 写入路径
-    /// 调 EnsureLayer）。矫正动作放进 U1U/U1F 的既有写事务（一次 U 可回退），
+    /// 调 EnsureLayer）；U1B 输出（轮廓/引线/文字）直接落在 U_HOSE。
+    /// 矫正动作放进 U1U/U1F 的既有写事务（一次 U 可回退），
     /// 开关 UNC_FILL_LAYER_GOVERNOR 默认开。
     /// </summary>
     public static class LayerGovernorService
@@ -80,7 +82,7 @@ namespace UNCAD.Cad
             }
         }
 
-        /// <summary>确保三个法定图层全部存在（建层只做一次幂等检查）。</summary>
+        /// <summary>确保全部法定图层存在（建层只做一次幂等检查）。</summary>
         public static bool EnsureGovernedLayers(CadContext ctx,
             Transaction transaction)
         {
@@ -130,6 +132,9 @@ namespace UNCAD.Cad
                     if (string.Equals(layer, UncadLayerStandard.TrayLayerName,
                             StringComparison.OrdinalIgnoreCase))
                         counters.TrayEntities++;
+                    else if (string.Equals(layer, UncadLayerStandard.HoseLayerName,
+                            StringComparison.OrdinalIgnoreCase))
+                        counters.HoseEntities++;
                     else
                         counters.ConduitEntities++;
                 }

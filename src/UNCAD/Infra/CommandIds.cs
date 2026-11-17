@@ -40,6 +40,8 @@ namespace UNCAD.Infra
         public const string Line3dBatchPreview = "U13D";
         public const string DimensionText = "U1DT";
         public const string Arch = "U1R";
+        /// <summary>绘制软管（3.3.3，D-054 Amendment）：LINE 式连线生成平面管子+标注。</summary>
+        public const string Hose = "U1B";
 
         public const string LegacyLine = "UNL";
         public const string LegacyLineQuick = "UNLX";
@@ -66,6 +68,7 @@ namespace UNCAD.Infra
         public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
         public const string PdfExportFeatureCommands = PdfExport;
         public const string ArchFeatureCommands = Arch + ";" + LegacyArch;
+        public const string HoseFeatureCommands = Hose;
         public const string StatisticsFeatureCommands = LegacyStatistics;
         public const string XLayoutFeatureCommands = XLayout;
         public const string XstsFeatureCommands = Statistics;
@@ -76,7 +79,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto, Help
         };
 
@@ -93,7 +96,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
             About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto,
             Help, ClientLogin,
