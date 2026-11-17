@@ -42,7 +42,7 @@
                     Visibility="Collapsed"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="6">
-                <local:QuickLineHelixPreviewControl x:Name="OrbitPreview" />
+                <local:QuickLineWebPreviewControl x:Name="OrbitPreview" />
             </Border>
             <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" Grid.Column="1" Width="6"
                           Visibility="Collapsed" Background="Transparent"

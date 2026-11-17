@@ -1,0 +1,25 @@
+:root {
+  color-scheme: dark;
+  font-family: "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  color: #e8edf3;
+  background: #0d131a;
+}
+* { box-sizing: border-box; }
+html, body, #pane { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+#viewport { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0d131a; }
+#canvasHost, #canvasHost canvas { display: block; width: 100%; height: 100%; }
+#loading { position: absolute; inset: 0; display: grid; place-items: center; color: #8e9aaa; background: #0d131a; font-size: 12px; }
+#labelLayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+.overlay-text { position: absolute; left: 10px; color: #8e9aaa; font-size: 11px; pointer-events: none; white-space: nowrap; }
+.overlay-bottom-left { bottom: 2px; }
+.overlay-stacked { bottom: 18px; }
+.overlay-actions { position: absolute; top: 8px; right: 10px; display: flex; gap: 6px; }
+.overlay-actions button { border: 1px solid #344352; border-radius: 6px; color: #dbe5ef; background: rgba(24,34,45,.9); padding: 4px 9px; cursor: pointer; font-size: 11px; }
+.overlay-actions button:hover { border-color: #6684a1; background: #202e3b; }
+button:focus-visible { outline: 2px solid #79b8ff; outline-offset: 2px; }
+
+.scene-label { position: absolute; transform: translate(-50%, -50%); padding: 2px 5px; border: 1px solid #3a4857; border-radius: 4px; background: rgba(17,24,33,.88); color: #d7e1ec; font-size: 10px; white-space: nowrap; }
+.scene-label.label-mm { border-color: #5b6c80; color: #f0f5fb; font-weight: 700; }
+.scene-label.label-tick { border: none; background: transparent; color: #99a7b8; font-weight: 700; }
+.scene-label.label-pin { border-color: #718399; background: rgba(23,30,40,.92); color: #ffffff; font-weight: 700; }

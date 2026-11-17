@@ -34,7 +34,7 @@ namespace UNCAD.Infra
         /// 客户）；去掉 `-dev` 后缀即为正式版。3.0.0 于 2026-11-03 转正（3.0 迭代
         /// 收官）；3.2.0 新增 Xauto 自动优化；后续修补按 D-032 递增第四位。
         /// </summary>
-        public const string VersionLabel = "3.3.4";
+        public const string VersionLabel = "3.3.5";
         /// <summary>同版本内的功能修补标记(SP1/SP2/...),每加一个功能必须递增;空=无。</summary>
         public const string VersionSuffix = "";
 

@@ -14,11 +14,12 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 3.3.0（D-054 特性③）STA 实窗测试、3.3.2（D-054 Amendment）随渲染内核
-    /// 换 HelixToolkit.Wpf 调整断言口径：窗口宿主存在、模型数据正确传入、
-    /// 布局回退保持。**不在 xunit 里断言真实 3D 渲染结果**（Helix 视口在无
-    /// 显卡环境可能飘）——对控件的断言降为数据级：SetModel 后构建的 3D 子元素
-    /// 计数（CPU 侧建 Visual，不依赖 GPU 光栅化）。
+    /// 3.3.0（D-054 特性③）STA 实窗测试、3.3.5（D-054 Amendment）随渲染内核
+    /// 换 WebView2+three.js 调整断言口径：窗口宿主存在、模型数据正确传入、
+    /// 布局回退保持。**不在 xunit 里断言真实 3D 渲染结果**——对控件的断言
+    /// 全部是数据级：SetModel 同步构建的信封计数（柱网/标签/通道在 Core 侧
+    /// 算死，与 WebView2 初始化、GPU 光栅化完全解耦；测试进程关闭
+    /// QuickLineWebPreviewControl.DefaultAutoInitialize，页面永不加载）。
     /// </summary>
     [Collection("WpfUiSerial")]
     public sealed class FillOrbitPreviewWindowTests
@@ -26,7 +27,7 @@ namespace UNCAD.Tests
         [Fact]
         public void FillReviewWindow_ShowsPreviewAndLayerTextOnlyWhenProvided()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
                     var data = FillReviewData.Create(
                         new MachineRow { MachineId = "M1", CircuitName = "设备A" },
@@ -84,7 +85,7 @@ namespace UNCAD.Tests
         [Fact]
         public void BatchWindow_PreviewFollowsSelectedRowAndShowsColumns()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
                     var previewByHandle = new Dictionary<string, QuickLineOrbitPreviewModel>
                     {
@@ -140,7 +141,7 @@ namespace UNCAD.Tests
         [Fact]
         public void BatchWindow_WithoutPreviews_KeepsLegacyLayout()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
                     var window = new BatchFillConfirmationWindow(
                         new List<BatchFillConfirmationRow>
@@ -167,11 +168,11 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void HelixControl_HostsViewportBuildsSceneAndFallsBackToHint()
+        public void WebControl_HostsEnvelopeAndFallsBackToHint()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
-                    var control = new QuickLineHelixPreviewControl();
+                    var control = new QuickLineWebPreviewControl();
                     control.Width = 320;
                     control.Height = 260;
                     var host = new Window
@@ -184,7 +185,8 @@ namespace UNCAD.Tests
                     host.Show();
                     Pump(3);
 
-                    // 无模型：提示文字可见、无 3D 场景子元素（数据级断言）。
+                    // 无模型：提示文字可见、信封不构建（数据级断言——与
+                    // WebView2 初始化完全解耦，无头宿主不装运行时不开页面）。
                     Assert.Null(control.Model);
                     Assert.Equal(0, control.BuiltSegmentLineCount);
 
@@ -192,11 +194,8 @@ namespace UNCAD.Tests
                     Pump(2);
                     Assert.NotNull(control.Model);
                     Assert.Equal(2, control.BuiltSegmentLineCount);
-                    // 内嵌 Helix 视口（透视相机——真正的 3D，不再是正交伪 3D）。
-                    Assert.IsType<System.Windows.Media.Media3D.PerspectiveCamera>(
-                        control.Viewport.Camera);
 
-                    // 切回空场景 → 提示回退、场景清空。
+                    // 切回空场景 → 提示回退、信封清空。
                     control.SetModel(null);
                     Pump(2);
                     Assert.Null(control.Model);
@@ -206,13 +205,14 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void HelixControl_BuildsPreviewEnhancementsAndTogglesGrid()
+        public void WebControl_BuildsPreviewEnhancementsAndTogglesGrid()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
                     // 3.3.1（D-054 Amendment）四特性齐备的模型：段毫米标（B）+
                     // 柱网/端点轴位/两向标签（C，3.3.2 数字轴×字母轴）+
-                    // 桥架/线管通道（D）。
+                    // 桥架/线管通道（D）。3.3.5：全部经 Core 信封算好，控件
+                    // 计数器取信封（渲染内核无关）。
                     var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
                     {
                         new QuickLineOrbitPreviewSegment("s1",
@@ -228,7 +228,7 @@ namespace UNCAD.Tests
                             "2500mm",
                             new QuickLineOrbitPreviewChannel(null, false, true))
                     }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
-                    var control = new QuickLineHelixPreviewControl();
+                    var control = new QuickLineWebPreviewControl();
                     control.Width = 320;
                     control.Height = 260;
                     var host = new Window
@@ -283,19 +283,19 @@ namespace UNCAD.Tests
 
 
     /// <summary>
-    /// 3.3.2：Helix 视口共享单 STA 线程运行器。HelixToolkit.Wpf 的主题字典
-    /// 含跨线程共享的未冻结 Freezable、Billboard 视觉订阅进程级弱渲染事件
-    /// ——同一进程第二个 STA 线程渲染视口会拿异线程 Transform3D 直接炸测试
-    /// 宿主（已用最小复现独立证实，与 UNCAD 代码无关）。生产 AutoCAD 只有
-    /// 一个 UI 线程不受影响；测试侧把全部 Helix 视口收敛到本运行器的单一
-    /// STA 线程上（WpfUiSerial 集合内串行复用，主题资源全线程一致）。
+    /// 共享单 STA 线程运行器（3.3.2 为 Helix 视口而立，3.3.5 内核换 WebView2
+    /// 后保留）：WPF 窗体/主题资源在同一进程多 STA 线程间复用会炸测试宿主，
+    /// WpfUiSerial 集合内全部窗体测试收敛到本运行器的单一 STA 线程。运行器
+    /// 同时关掉 QuickLineWebPreviewControl.DefaultAutoInitialize——无头测试
+    /// 不装 WebView2 运行时、不真开页面（数据级断言不需要渲染）。
     /// </summary>
-    internal static class HelixStaRunner
+    internal static class WpfStaRunner
     {
         private static Dispatcher _dispatcher;
 
         private static void Ensure()
         {
+            QuickLineWebPreviewControl.DefaultAutoInitialize = false;
             if (_dispatcher != null) return;
             using (var ready = new ManualResetEvent(false))
             {
@@ -326,11 +326,11 @@ namespace UNCAD.Tests
     }
 
         [Fact]
-        public void HelixControl_CreatesViewportLazilyOnlyWithModel()
+        public void WebControl_ComputesEnvelopeOnlyWithModel()
         {
-            HelixStaRunner.Run(delegate
+            WpfStaRunner.Run(delegate
             {
-                var control = new QuickLineHelixPreviewControl();
+                var control = new QuickLineWebPreviewControl();
                 control.Width = 320;
                 control.Height = 260;
                 var host = new Window
@@ -342,22 +342,21 @@ namespace UNCAD.Tests
                 };
                 host.Show();
                 Pump(2);
-                // 无模型（U1F/无预览路径）：视口完全不建——Helix 主题资源与
-                // 3D 渲染链一概不碰。
-                Assert.Null(control.Viewport);
+                // 无模型（U1F/无预览路径）：信封不构建、WebView2 不启动
+                //（测试进程 DefaultAutoInitialize=false；真机的惰性初始化
+                // 同样以首个非 null SetModel 为触发点）。
+                Assert.Null(control.Model);
+                Assert.Equal(0, control.BuiltSegmentLineCount);
                 control.SetModel(null);
                 Pump(1);
-                Assert.Null(control.Viewport);
+                Assert.Null(control.Model);
+                Assert.Equal(0, control.BuiltSegmentLineCount);
 
-                // 首个非 null 模型：视口惰性创建，透视相机（DefaultCamera 与
-                // 当前相机是独立实例——复位语义的前提）。
+                // 首个非 null 模型：信封同步构建（数据级，不等页面）。
                 control.SetModel(PreviewModel("摘要"));
                 Pump(2);
-                Assert.NotNull(control.Viewport);
-                Assert.IsType<System.Windows.Media.Media3D.PerspectiveCamera>(
-                    control.Viewport.Camera);
-                Assert.NotSame(control.Viewport.DefaultCamera,
-                    control.Viewport.Camera);
+                Assert.NotNull(control.Model);
+                Assert.Equal(2, control.BuiltSegmentLineCount);
                 host.Close();
             });
         }

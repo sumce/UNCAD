@@ -61,8 +61,9 @@ namespace UNCAD.Core.QuickLine
     /// U1U 确认窗左侧 3D 预览的场景模型——由 QuickLineIsometricSceneBuilder
     /// .BuildAll（带毫米标）重建后整体**地面归零**（所有节点 Z 减去最小 Z，
     /// 「最低的那条线段的端点高度为 0」），附上游/下游轴位摘要文字与轴位原文。
-    /// 3.3.2（D-054 Amendment）：渲染内核从 Canvas 正交投影换为 HelixToolkit.Wpf
-    /// 透视相机，本数据模型与 FromScene 构建链不变（窗体只绘制，不重建场景）。
+    /// 3.3.5（D-054 Amendment）：渲染内核换 WebView2+three.js（3.3.2 曾换
+    /// HelixToolkit.Wpf，现场反馈不可用后退役），本数据模型与 FromScene 构建
+    /// 链始终不变（窗体只绘制，不重建场景——几何推导在信封构建器）。
     /// </summary>
     public sealed class QuickLineOrbitPreviewModel
     {

@@ -1227,3 +1227,24 @@ rewrite an existing entry.
      U1Q/U1C cannot collect the stale outputs — recorded in
      KNOWN-ISSUES (audit Q1), together with the silent circuit-gate
      skip when no machine snapshot exists (audit B-6).
+- Amendment (2026-11-18, 3.3.5 — U1U preview kernel switched back to
+  WebView2+three.js; user field feedback "这生成的 3D 有严重问题！放弃这个
+  方案转 WebV 吧" after seeing the 3.3.2/3.3.4 Helix preview): this
+  supersedes the 3.3.2 kernel-selection amendment (HelixToolkit.Wpf is
+  retired and its package reference removed from csproj/build/installer/
+  bundle contracts). The U1U preview pane hosts a local read-only WebView2
+  page (Web/QuickLineOrbit) reusing the three.js + OrbitControls already
+  vendored for U1L3D; wiring and security match U1L3DPreviewWindow (D-025:
+  virtual host maps only the local Web directory, non-local navigation is
+  cancelled, no host objects/downloads/permissions, render-process failure
+  degrades to an inline message). Scene semantics stay out of the renderer:
+  a pure-Core envelope builder (`QuickLineOrbitPreviewEnvelope`) computes
+  the column-grid plan, tray/conduit rail offsets, and label anchors (same
+  ratios as the retired Helix control), serializes them as JSON
+  (PascalCase property names are the C#/JS contract, locked by tests), and
+  the page is a dumb renderer (perspective camera, HTML overlay labels —
+  CJK text rendered by Chromium). The data-level window tests now assert
+  envelope-derived counters and run with WebView2 auto-init disabled; a
+  page-side window.postMessage injection hook exists for browser smoke
+  tests. Do not reintroduce HelixToolkit.Wpf for this pane without a new
+  decision.

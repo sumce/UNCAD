@@ -10,7 +10,7 @@ namespace UNCAD.Tests
     /// 3.3.0（D-054 特性③）引入、3.3.2（D-054 Amendment）随渲染内核切换保留的
     /// 数据模型锁死——FromScene 地面归零（minZ=0、高度差不变、原场景不改）与
     /// QuickLineAxisSpan 轴位解析/摘要文案。正交轨道相机 QuickLineOrbitCamera
-    /// 的 7 条投影数学测试随 Canvas 内核退役（3.3.2 换 HelixToolkit.Wpf 透视
+    /// 的 7 条投影数学测试随 Canvas 内核退役（3.3.2 换 Helix、3.3.5 换 WebView2 透视
     /// 相机，投影由 WPF 3D 管线承担，不再自维护相机数学）。
     /// </summary>
     public sealed class QuickLineOrbitPreviewModelTests
