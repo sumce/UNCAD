@@ -67,21 +67,9 @@ namespace UNCAD.UI
             if (!AutoInitializeWebView) return;
             try
             {
-                // 3.3.6.2：进程级共享环境（详见 SharedWebView2Environment）——
-                // 与 U1U 预览/登录页共用常驻浏览器进程，开窗即就绪。
-                CoreWebView2Environment environment =
-                    await SharedWebView2Environment.GetAsync();
-                if (_closed) return;
-                // 3.3.7.1：控制器创建超时保护（僵尸浏览器会把这一步挂死）。
-                Task init = _webView.EnsureCoreWebView2Async(environment);
-                Task finished = await Task.WhenAny(init,
-                    Task.Delay(TimeSpan.FromSeconds(20)));
-                if (finished != init)
-                {
-                    SharedWebView2Environment.Invalidate();
-                    throw new InvalidOperationException(
-                        "WebView2 控制器初始化超时（20 秒）。");
-                }
+                // 3.3.7.2：环境+控制器统一入口（超时判定数据目录被僵尸锁住，
+                // 本会话自动换独立目录）。
+                await SharedWebView2Environment.EnsureControllerAsync(_webView);
                 if (_closed) return;
                 ConfigureBrowser(_webView.CoreWebView2);
             }

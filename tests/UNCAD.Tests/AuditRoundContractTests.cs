@@ -458,9 +458,11 @@ namespace UNCAD.Tests
             // 2026-11-18 现场日志：U1U 审阅窗每次开窗各自 CreateAsync 且共用
             // 同一用户数据目录——上一轮退场进程锁目录、新一轮排队再拉新进程，
             // 「页面目录→内核就绪」6~10s，用户点确认（5~10s）前 3D 永远起
-            // 不来；同进程存活期间复用 0.5s（日志内证）。三个 WebView2 宿主
-            // （U1U 预览/U1L 3D/登录页）必须走 SharedWebView2Environment，
-            // 且 Bootstrap 启动 Idle 预热——环境回退到每窗自建即复发。
+            // 不来。三个 WebView2 宿主（U1U 预览/U1L 3D/登录页）必须走
+            // SharedWebView2Environment（3.3.7.2 起=EnsureControllerAsync 统一
+            // 入口：超时判僵尸锁、本会话换独立目录）；Bootstrap 启动 Idle 走
+            // OrbitPrewarmHost 全量预热（环境+控制器+页面常驻——环境级预热
+            // 是空转，审计 R3）。环境回退到每窗自建/预热回退到环境级即复发。
             string control = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLineWebPreviewControl.cs");
             string u1l = Read("src", "UNCAD", "UI", "Wpf",
@@ -474,14 +476,33 @@ namespace UNCAD.Tests
                 u1l, StringComparison.Ordinal);
             Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
                 login, StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.GetAsync", control,
+            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
+                control, StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
+                u1l, StringComparison.Ordinal);
+            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
+                login, StringComparison.Ordinal);
+            Assert.Contains("OrbitPrewarmHost.WarmUp", bootstrap,
                 StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.GetAsync", u1l,
+        }
+
+        [Fact]
+        public void WebView2_FatalStateCollapsesBrowser_SoHintTextIsVisible()
+        {
+            // 审计 R2（用户「等 1 分钟也是白色」的直接原因）：未初始化的
+            // WebView2 原生 hwnd 是白色的且经 airspace 压住控件全部 WPF 内容
+            // ——旧 ShowFatalError 只改文字=用户永远看不见降级文案。致命态
+            // 必须 Collapsed 收起 WebView2（安全：控件已经历 Loaded）。
+            string control = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLineWebPreviewControl.cs");
+            int fatal = control.IndexOf("internal void ShowFatalError",
                 StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.GetAsync", login,
-                StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.WarmUpForStartup",
-                bootstrap, StringComparison.Ordinal);
+            Assert.True(fatal >= 0, "ShowFatalError 必须存在");
+            int collapse = control.IndexOf(
+                "_webView.Visibility = Visibility.Collapsed;",
+                fatal, StringComparison.Ordinal);
+            Assert.True(collapse > fatal,
+                "ShowFatalError 必须收起 WebView2，否则提示文字被白色 hwnd 永久遮盖");
         }
 
         [Fact]

@@ -230,11 +230,11 @@ namespace UNCAD
                         UNCAD.Core.Fill.FillPlanningOptions.Default));
                 clock.Stop();
                 Log.Info("启动预热完成: " + clock.ElapsedMilliseconds + " ms");
-                // 3.3.6.2：后台拉起共享 WebView2 环境与浏览器进程——U1U 3D
-                // 预览/U1L 3D 首次开窗即 0.5 秒级就绪（此前冷启动 6~10 秒，
-                // 用户在审阅窗点确认之前 3D 永远起不来）。火后不管、失败只
-                // 记日志：预热是优化不是正确性。
-                UNCAD.UI.SharedWebView2Environment.WarmUpForStartup();
+                // 3.3.7.2（审计 R3）：全量预热——环境级预热(3.3.6.2)是空转
+                // （CreateAsync 不拉浏览器，锁在控制器创建才生效）。改为：
+                // 清扫历史孤儿浏览器 + 屏幕外常驻真页面（环境+控制器+
+                // three.js+握手全链路），首个真实审阅窗 0.5 秒级。
+                UNCAD.UI.OrbitPrewarmHost.WarmUp();
             }
             catch (System.Exception ex)
             {

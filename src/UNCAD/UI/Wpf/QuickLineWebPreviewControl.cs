@@ -117,6 +117,13 @@ namespace UNCAD.UI
             };
             Children.Add(_webView);
 
+            // 3.3.7.2（审计 R5）：初始化对齐能正常渲染的 U1L3DPreviewWindow
+            // ——挂 Loaded（hwnd 已存在后）再启动；生产 FillReviewWindow 在
+            // ctor 期（窗口 Show 前）就 SetModel，此前是预 HWND 调
+            // EnsureCoreWebView2Async（探针作者早就标注过「疑似白屏根因」但
+            // 生产从未改）。SetModel 的入口保留（幂等）覆盖已 Loaded 的复用
+            // 场景（批量窗换选行）。
+            Loaded += (sender, args) => BeginInitialize();
             Unloaded += OnUnloaded;
         }
 
@@ -148,8 +155,10 @@ namespace UNCAD.UI
                 MaxJsonLength = 16 * 1024 * 1024,
                 RecursionLimit = 64
             }.Serialize(payload);
+            // 3.3.7.2（审计 R5）：null 模型（批量窗选中无预览行）不启动
+            // WebView——注释宣称「首个非 null 才启动」而旧实现无此判断。
             if (_pageReady) DeliverEnvelope();
-            else BeginInitialize();
+            else if (model != null) BeginInitialize();
         }
 
         /// <summary>复位视角（页面消息驱动；页面未就绪时静默——页面自身有复位按钮/双击）。</summary>
@@ -218,23 +227,9 @@ namespace UNCAD.UI
             {
                 _webRoot = ResolveWebRoot();
                 Log.Info("[U1U] 3D 预览页面目录: " + _webRoot);
-                // 3.3.6.2：进程级共享环境——每窗新建时与上一轮退场进程抢同一
-                // 用户数据目录，现场实测内核就绪要 6~10s，用户确认前 3D 永远
-                // 起不来；共享常驻进程 0.5s 级（2026-11-18 日志）。
-                CoreWebView2Environment environment =
-                    await SharedWebView2Environment.GetAsync();
-                if (_closed) return;
-                // 3.3.7.1：控制器创建也要有超时——环境 attach 到僵尸浏览器时
-                // 这一步会永远挂死并把确认窗拖白；超时走既有降级文案。
-                Task init = _webView.EnsureCoreWebView2Async(environment);
-                Task finished = await Task.WhenAny(init,
-                    Task.Delay(TimeSpan.FromSeconds(20)));
-                if (finished != init)
-                {
-                    SharedWebView2Environment.Invalidate();
-                    throw new InvalidOperationException(
-                        "WebView2 控制器初始化超时（20 秒）。");
-                }
+                // 3.3.7.2（审计 R1）：环境+控制器统一走共享入口——控制器超时
+                // = 数据目录被僵尸浏览器锁住的信号，本会话自动改用独立目录。
+                await SharedWebView2Environment.EnsureControllerAsync(_webView);
                 if (_closed) return;
                 ConfigureBrowser(_webView.CoreWebView2);
                 Log.Info("[U1U] 3D 预览 WebView2 内核就绪。");
@@ -355,7 +350,14 @@ namespace UNCAD.UI
             }
         }
 
-        /// <summary>致命错误路径：WebView2 隐藏为提示文字（计数器不受影响）。</summary>
+        /// <summary>
+        /// 致命错误路径：收起 WebView2、亮出提示文字（计数器不受影响）。
+        /// 3.3.7.2（审计 R2）：必须真的 Collapsed——未初始化的 WebView2
+        /// 原生 hwnd 本身是白色的且压住本控件全部 WPF 内容（airspace，
+        /// SetZIndex 救不了），旧实现只改文字等于没改（3.3.6.1 起的降级
+        /// 文案在生产从未被看见过）。此处收起安全：控件已经历 Loaded 完成
+        /// 视觉绑定（3.3.6.1 教训是**以 Collapsed 起步**经历 Loaded）。
+        /// </summary>
         internal void ShowFatalError(string message)
         {
             if (_fatal || _closed) return;
@@ -369,6 +371,7 @@ namespace UNCAD.UI
             _fatal = true;
             _hintText.Text = message;
             _hintText.Visibility = Visibility.Visible;
+            _webView.Visibility = Visibility.Collapsed;
         }
 
         private void OnUnloaded(object sender, RoutedEventArgs args)
