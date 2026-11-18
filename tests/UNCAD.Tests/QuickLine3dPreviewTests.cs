@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -201,46 +201,50 @@ namespace UNCAD.Tests
         [Fact]
         public void PreviewPayloadNamesCircuitsAndDirectionMarkers()
         {
+            // 3.4.0：页面退役后，契约落在 feature（数据面）+ 原生适配器
+            //（渲染面）两处源文件上——retired Web/QuickLine3D/app.js 不回魂。
             string feature = File.ReadAllText(PathOf("src", "UNCAD", "Features",
                 "Unl", "QuickLine3dPreviewFeature.cs"));
-            string app = File.ReadAllText(PathOf("src", "UNCAD", "Web",
-                "QuickLine3D", "app.js"));
+            string adapter = File.ReadAllText(PathOf("src", "UNCAD", "UI",
+                "Wpf", "QuickLine3dBatchScene.cs"));
 
             Assert.Contains("[\"circuitName\"]", feature);
             Assert.Contains("[\"directionMarkers\"]", feature);
-            Assert.Contains("下游", app);
-            Assert.Contains("上游", app);
-            Assert.Contains("南北字母轴（向北 +1）", app);
-            Assert.Contains("东西数字轴（向东 +1）", app);
-            Assert.DoesNotContain("const colors = { X:", app);
+            Assert.Contains("下游", feature);
+            Assert.Contains("上游", feature);
+            Assert.Contains("南北字母轴（向北 +1）", adapter);
+            Assert.Contains("东西数字轴（向东 +1）", adapter);
+            Assert.DoesNotContain("const colors = { X:", adapter);
         }
 
         [Fact]
         public void PreviewDecluttersDenseRouteLabels()
         {
+            // 3.4.0：防重叠/批量标签阈值契约落在原生适配器+视口+窗口源文件
+            //（退役页面的 showRouteLabels/occupied/routeGroups 语义随内核
+            // 搬进 QuickLine3dBatchScene 与 QuickLine3dViewportControl）。
             string feature = File.ReadAllText(PathOf("src", "UNCAD", "Features",
                 "Unl", "QuickLine3dPreviewFeature.cs"));
-            string app = File.ReadAllText(PathOf("src", "UNCAD", "Web",
-                "QuickLine3D", "app.js"));
-            string html = File.ReadAllText(PathOf("src", "UNCAD", "Web",
-                "QuickLine3D", "index.html"));
+            string adapter = File.ReadAllText(PathOf("src", "UNCAD", "UI",
+                "Wpf", "QuickLine3dBatchScene.cs"));
+            string viewport = File.ReadAllText(PathOf("src", "UNCAD", "UI",
+                "Wpf", "QuickLine3dViewportControl.cs"));
+            string window = File.ReadAllText(PathOf("src", "UNCAD", "UI",
+                "Wpf", "QuickLine3dWindow.xaml.cs"));
 
-            Assert.Contains("showRouteLabels", app);
-            Assert.Contains("occupied", app);
-            Assert.Contains("data.segments || []).length <= 24", app);
-            Assert.Contains(">路线标签</button>", html);
-            Assert.Contains("new THREE.BoxGeometry", app);
-            Assert.Contains("new THREE.SphereGeometry", app);
-            Assert.Contains("routeGroupId", app);
-            Assert.Contains("const routeGroups = new Map()", app);
-            Assert.Contains("directionLabelsButton", File.ReadAllText(PathOf("src",
-                "UNCAD", "Web", "QuickLine3D", "index.html")));
+            Assert.Contains("segments.Count <= 24", adapter);
+            Assert.Contains("markers.Count <= 24", adapter);
+            Assert.Contains("ShowRouteLabels", adapter);
+            Assert.Contains("routeGroupId", adapter);
+            Assert.Contains("_occupied", viewport);
+            Assert.Contains("PlaceWithoutOverlap", viewport);
+            Assert.Contains("LabelsButton", window);
+            Assert.Contains("DirectionButton", window);
             Assert.Contains("PlanCombined", feature);
             Assert.Contains("sceneOffsetX -= downstreamPoint.X", feature);
             Assert.Contains("sceneOffsetY -= downstreamPoint.Y", feature);
-            Assert.Contains("selectedRouteIds", app);
-            Assert.Contains("applyRouteSelection", app);
-            Assert.DoesNotContain("new THREE.ArrowHelper", app);
+            Assert.DoesNotContain("ArrowHelper", adapter);
+            Assert.DoesNotContain("ArrowHelper", viewport);
         }
 
         private static QuickLineSegment Polar(string id, QuickLinePoint start,

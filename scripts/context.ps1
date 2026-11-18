@@ -78,10 +78,13 @@ switch ($Area) {
         Add-SourceDirectory "src\UNCAD\Features\Unl"
         Add-SourceDirectory "src\UNCAD\Core\QuickLine"
         Add-SourceDirectory "src\UNCAD\Cad\QuickLine"
-        Add-RelativeFile "src\UNCAD\UI\Wpf\U1L3DPreviewWindow.xaml.cs"
-        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\index.html"
-        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\app.js"
-        Add-RelativeFile "src\UNCAD\Web\QuickLine3D\styles.css"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLine3dWindow.xaml"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLine3dWindow.xaml.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLine3dBatchScene.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLine3dScene.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLine3dViewportControl.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLineOrbitPreviewControl.cs"
+        Add-RelativeFile "src\UNCAD\UI\Wpf\QuickLineOrbitSceneBuilder.cs"
         Add-RelativeFile "src\UNCAD\UI\UiTheme.cs"
     }
     "Layout" {
@@ -118,7 +121,10 @@ if ($IncludeTests) {
     switch ($Area) {
         "All" { Add-TestMatches @("*Tests.cs") }
         "Fill" { Add-TestMatches @("*Fill*Tests.cs", "*Boq*Tests.cs", "*Excel*Tests.cs", "*Frame*Tests.cs", "*Outlet*Tests.cs") }
-        "QuickLine" { Add-TestMatches @("*QuickLine*Tests.cs") }
+        "QuickLine" {
+            Add-TestMatches @("*QuickLine*Tests.cs", "FillOrbitPreviewWindowTests.cs",
+                "AuditRoundContractTests.cs", "BundleLoadingTests.cs")
+        }
         "Layout" { Add-TestMatches @("*Layout*Tests.cs", "*Dwg*Tests.cs", "*Frame*Tests.cs") }
         "Stats" { Add-TestMatches @("*Stat*Tests.cs", "*Xsts*Tests.cs", "*Summation*Tests.cs") }
         "Settings" { Add-TestMatches @("*Config*Tests.cs", "*Settings*Tests.cs") }

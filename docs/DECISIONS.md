@@ -1,4 +1,4 @@
-# Product Decisions
+﻿# Product Decisions
 
 This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
@@ -1307,3 +1307,34 @@ rewrite an existing entry.
   toggle still hides the entire reference model. Also fixed in passing:
   the per-frame label updater re-showed labels hidden by the
   grid/reference toggles since 3.3.5.
+- Amendment (2026-11-18, 3.4.0 — preview kernel switched to the in-box WPF
+  Viewport3D; user instruction "算了 用 Viewport3D吧" after the WebView2
+  kernel kept white-screening on the dev machine — the field log shows the
+  3.3.8 mitigations working (10:32 controller-creation 30s timeout fired,
+  15:02 prewarm window built in 123ms) yet the pane still failed, because
+  the browser-kernel pathology class has no root cure: external
+  msedgewebview2 processes holding the user-data-directory lock,
+  synchronous STA blocking at controller creation, the white pre-init
+  airspace hwnd, and browsers exiting when the last controller closes):
+  this supersedes the 3.3.5 kernel-selection amendment for both preview
+  hosts (the U1U pane and the U13D batch window). The WebView2 3D stack
+  is retired and deleted: QuickLineWebPreviewControl, OrbitPrewarmHost
+  (prewarm + orphan sweep), and the Web page trees with the vendored
+  three.js (payload allow-list 26 to 16 files; csproj drops System.Management;
+  Bootstrap drops the prewarm hook). The new kernel is the in-box
+  Viewport3D over a QuickLine3dScene primitive layer (builder-computed
+  geometry, group toggles, hand-rolled view-projection label overlay):
+  SetModel and the window constructor build the scene synchronously, so
+  the "starting renderer" state no longer exists. The retired pages'
+  visual formulas (tube radii, tray/conduit dual rails and fill band,
+  waffle 3x3 holes per structural bay, steel/grating/ground slabs, bus
+  glass, grid columns, base-floor rebasing, grid-bay extents, the U13D
+  orthographic camera and info panel) are ported verbatim into
+  QuickLineOrbitSceneBuilder and QuickLine3dBatchScene. The login window
+  keeps WebView2 via SharedWebView2Environment (D-025 unchanged —
+  account/licence validation stays the only network feature). Still no
+  third-party 3D library (the 3.3.2 in-box option realized; the
+  "do not reintroduce HelixToolkit" rule stands). D-025's local read-only
+  posture transfers trivially: the preview now has no web surface at all
+  — it cannot navigate, download, or script, and it still never writes
+  CAD entities, never refreshes workbooks, never touches the network.

@@ -230,11 +230,7 @@ namespace UNCAD
                         UNCAD.Core.Fill.FillPlanningOptions.Default));
                 clock.Stop();
                 Log.Info("启动预热完成: " + clock.ElapsedMilliseconds + " ms");
-                // 3.3.7.2（审计 R3）：全量预热——环境级预热(3.3.6.2)是空转
-                // （CreateAsync 不拉浏览器，锁在控制器创建才生效）。改为：
-                // 清扫历史孤儿浏览器 + 屏幕外常驻真页面（环境+控制器+
-                // three.js+握手全链路），首个真实审阅窗 0.5 秒级。
-                UNCAD.UI.OrbitPrewarmHost.WarmUp();
+                // 3.4.0：3D 预览改原生 Viewport3D，不再依赖浏览器进程。
             }
             catch (System.Exception ex)
             {

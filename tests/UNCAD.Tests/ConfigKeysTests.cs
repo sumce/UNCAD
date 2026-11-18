@@ -35,11 +35,15 @@ namespace UNCAD.Tests
         public void AboutInfo_ExposesVersionBuildAndOwnershipMetadata()
         {
             AboutInfo info = AboutInfo.Current();
+            string productVersion = FileVersionInfo.GetVersionInfo(
+                typeof(AboutInfo).Assembly.Location).ProductVersion ?? "";
             // 3.2.0 起展示一律详细四段号（用户要求）：关于页/启动动画/更新弹窗/
             // 心跳 UA 都是 X.Y.Z.第四段；更新日志比较与“已看版本”存储仍三段。
             // 第四段随补丁递增（D-032），这里只锁格式与前缀，不锁死字面量。
             Assert.Matches(@"^\d+\.\d+\.\d+\.\d+$", info.Version);
             Assert.StartsWith(ProductMetadata.VersionLabel + ".", info.Version);
+            Assert.StartsWith(ProductMetadata.VersionLabel + "+build.",
+                productVersion);
             Assert.NotEqual("未知", info.BuildTime);
             Assert.Equal(AboutInfoTestBuildDate(), info.UpdatedOn);
             Assert.Equal("UNCAD Pro", info.ProductName);

@@ -15,11 +15,11 @@
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
     <AssemblyCompany>UNSIAO.Ltd</AssemblyCompany>
-    <AssemblyVersion>3.3.8.0</AssemblyVersion>
-    <FileVersion>3.3.8.0</FileVersion>
-    <Version>3.3.8</Version>
+    <AssemblyVersion>3.4.0.0</AssemblyVersion>
+    <FileVersion>3.4.0.0</FileVersion>
+    <Version>3.4.0</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
-    <InformationalVersion>3.0.0+build.$(BuildTimestampCompact)</InformationalVersion>
+    <InformationalVersion>$(Version)+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
     <!-- VS 调试：F5 启动 AutoCAD 2022 并附加调试器 -->
@@ -32,7 +32,6 @@
     <None Update="BOQ模板.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="BOQ_Template.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="Resources\XFrameTemplate.dwg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Web\QuickLine3D\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -60,8 +59,6 @@
     <Reference Include="System.Security" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
-    <!-- 3.3.7.2：OrbitPrewarmHost 启动清扫孤儿 WebView2（命令行判数据目录+父进程存活）。 -->
-    <Reference Include="System.Management" />
   </ItemGroup>
 
   <ItemGroup>
@@ -69,7 +66,7 @@
     <PackageReference Include="NPOI" Version="2.5.6" />
     <!-- 3.0 UI（D-038）：全部窗体迁 WPF + WPF-UI Fluent 库 -->
     <PackageReference Include="WPF-UI" Version="4.0.2" />
-    <!-- 3.3.5（D-054 Amendment）：U1U 3D 预览内核换 WebView2+three.js（HelixToolkit 引用随 QuickLineHelixPreviewControl 退役移除）。 -->
+    <!-- WebView2 remains for the online login window; 3D previews use WPF Viewport3D. -->
   </ItemGroup>
 
   <PropertyGroup>

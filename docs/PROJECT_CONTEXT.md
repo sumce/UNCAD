@@ -5,20 +5,17 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.8` (2026-11-18; D-054 amendments — the
-  U1U 3D preview reference objects became a simplified building model:
-  typed entries "标签=毫米=类型" in U1SET `UNC_PREVIEW_REF_LEVELS`
-  (floor/epoxy resin/waffle plate with 3x3 round holes per structural
-  bay/steel I-beams/grating/raised floor/device boxes/translucent
-  busbar glass levels; untyped entries keep the 3.3.6 amber frames),
-  structural columns land on the U1L column-grid intersections, and the
-  1F ground plate is auto-laid at the scene zero plane; heights exact,
-  plan positions indicative. 3.3.6 added the reference levels; 3.3.5 is
-  the WebView2+three.js kernel (Web/QuickLineOrbit, dumb renderer with
-  HTML-overlay CJK labels). 3.3.4 completed the layer governor for the
-  new features (U1B boundary direct channel, U1F frame-block boundary,
-  batch hose bucket; legacy limitations documented in KNOWN-ISSUES).
-  Future fixes increment the fourth version part per D-032).
+- Current stable release: `3.4.0` (2026-11-18; D-054 amendment — the U1U
+  and U13D 3D preview kernel is the in-box WPF Viewport3D: SetModel builds
+  the scene synchronously (no browser process, no WebView2 data-directory
+  lock, no white airspace window, no "starting renderer" state), the
+  reference building model formulas (floor/epoxy/waffle holes/steel/grating/
+  devices/busbar glass/columns/1F ground, base-floor rebasing, grid-bay
+  extents) were ported verbatim from the retired three.js page, and U13D
+  keeps its orthographic camera, axis grid, compass, and info panel. The
+  WebView2 3D stack (web pages, prewarm host, orphan sweep) is retired;
+  the login page WebView2 stays. Future fixes increment the fourth version
+  part per D-032).
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -46,7 +43,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1PDF` (colour PDF per circuit), `U1SET`, `U1DATA` |
-| Drawing helpers | `U1L`, `U1LX`, `U1L3D`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1B` (hose), `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1B` (hose), `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `Xauto`, `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Online account | `UNC_LOGIN` (WebView2 login; account + single-device online) |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
@@ -75,15 +72,10 @@ U1F/U1U/U1S/U1DWG output gate
 U1L/U1LX
   select or create lines -> build endpoint graph -> read/write millimeter labels
 
-U1L3D
-  select one complete frame -> collect contained U1L routes -> reconstruct
-  isometric 3D branches -> read axis positions from the last successful SQLite
-  snapshot -> show a read-only local WebView2 preview (4800 mm per grid step)
-
 U13D
   select multiple complete frames -> collect each frame's U1L routes and U1Q
-  bridge metadata -> align frames by workbook downstream axis -> show one
-  read-only WebView2 scene with route/bridge meters and unassociated diagnostics
+  bridge metadata -> align frames by workbook downstream axis -> synchronously
+  build a read-only WPF Viewport3D scene with route/bridge meters and diagnostics
 
 U1PDF
   select frames -> resolve machine/circuit identity (same resolver as U1F/U1U)
@@ -152,12 +144,11 @@ XLAYOUT/XSTS
   hose; unknown or metadata-less outputs are never moved (no guessing). U1B
   label text follows the Ruanguan hose format and deliberately joins no
   statistics sum (hose metres still come from Ruanguan blocks only).
-  The U1U confirmation windows show a 3D route preview (HelixToolkit.Wpf
-  perspective viewport since 3.3.2; the 3.3.0/3.3.1 Canvas orthographic
-  kernel is retired) and a report-only connectivity column (isolated
+  The U1U confirmation windows show a 3D route preview (WPF Viewport3D
+  perspective camera since 3.4.0) and a report-only connectivity column (isolated
   segments are named, never a block). Preview and list split 50/50 with a
   draggable GridSplitter (collapsed to zero when no preview). Each segment
-  shows its millimetre label on a camera-facing billboard; the ground shows
+  shows its millimetre label in a camera-facing overlay; the ground shows
   a two-way column grid (4800 mm bays, toggleable, default on) with
   endpoint axis pins (verbatim workbook text) plus numeric ticks along the
   endpoint-displacement-dominant axis and letter labels (U/V/W…) on the

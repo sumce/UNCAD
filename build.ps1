@@ -48,16 +48,7 @@ if (-not $SkipBundle) {
     New-Item (Split-Path -Parent $bundleWebViewLoader) -ItemType Directory -Force | Out-Null
     Copy-Item -LiteralPath $webViewLoader -Destination $bundleWebViewLoader -Force
 
-    $webSource = Join-Path $root "src\UNCAD\Web"
-    if (-not (Test-Path -LiteralPath (Join-Path $webSource "QuickLine3D") -PathType Container) -or
-        -not (Test-Path -LiteralPath (Join-Path $webSource "QuickLineOrbit") -PathType Container)) {
-        throw "Web sources are missing under: $webSource"
-    }
-    $bundleWebRoot = Join-Path $bundleDir "Web"
-    if (Test-Path -LiteralPath $bundleWebRoot) {
-        Remove-Item -LiteralPath $bundleWebRoot -Recurse -Force
-    }
-    Copy-Item -LiteralPath $webSource -Destination $bundleDir -Recurse -Force
+    # 3.4.0：3D 预览改原生 Viewport3D——Web 页面树不再构建进包。
 
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
@@ -74,13 +65,6 @@ if (-not $SkipBundle) {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
-        "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
-        "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\app.js",
-        "Web\QuickLineOrbit\styles.css",
-        "Web\QuickLine3D\styles.css", "Web\QuickLineOrbit\vendor\three\OrbitControls.js",
-        "Web\QuickLineOrbit\vendor\three\three.core.min.js",
-        "Web\QuickLineOrbit\vendor\three\three.module.min.js",
-        "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"

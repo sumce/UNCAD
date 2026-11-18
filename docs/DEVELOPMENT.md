@@ -1,4 +1,4 @@
-# UNCAD 开发一致性标准
+﻿# UNCAD 开发一致性标准
 
 ## 模块边界
 
@@ -33,7 +33,7 @@
   `Cad/QuickLine/ArchBridgePolyline.cs`（与 U1R 共享的半圆洞几何）。
 - 等测约定：`Core/QuickLine/IsometricProjection.cs` 是 3D→草图的逆映射
   （X=30°/Z=90°/Y=150°），相机深度 = z−x−y（视线零向量 (1,1,−1)），与
-  U1L3D/U13D 的场景分类共用同一套轴测方向。
+  U13D 的场景分类共用同一套轴测方向。
 - 整分量跳过的点名原因（未标注/不可分类/包络退化）都出现在命令行报告里；
   语义边界见 `docs/DECISIONS.md` D-053 与 `docs/KNOWN-ISSUES.md` Xauto 一节。
 
@@ -85,13 +85,12 @@
 4. 点击线段端点时从对应端开始；点击中部时确认方向询问只影响本次遍历，端点容差范围内的线段可连通，交叉但端点不相接的线段不得串入。
 5. 至少输入一次真实的 `2000mm`；对带 U1L 关联的复合文字确认只替换唯一 `mm` 数值且保留前后说明。
 
-### QuickLine3D 布局健壮性脚本（quickline3d-layout.cjs）
+### 3D 预览
 
-- `tests/quickline3d-layout.cjs`：Playwright 脚本，本地起静态服务加载 QuickLine3D 页面，
-  跑 4 组视口/DPR × 基准/稠密载荷，断言分组行数一致、无横向溢出、3D canvas 非空、零 pageerror。
-- 运行：本机装好 Playwright 后 `node tests/quickline3d-layout.cjs`；设
-  `UNCAD_LAYOUT_SCREENSHOT`（值作为截图路径，按视口追加宽度后缀）可输出截图。
-- 当前为手动运行的手工检查项，不在任何发布门禁内。
+- 3.4.0 起预览内核为 WPF 原生 Viewport3D（无浏览器、无 Web 页面树）；
+  场景构建与分组开关由 `QuickLine3dScene` 图元层与两个构建器承担，
+  数据级与窗口行为断言见 `QuickLine3dPreviewTests` 和
+  `FillOrbitPreviewWindowTests`；在线登录页仍使用 WebView2。
 
 ## AutoCAD 写入
 

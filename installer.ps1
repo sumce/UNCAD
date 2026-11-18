@@ -145,13 +145,6 @@ function Get-PackageInfo {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
-        "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
-        "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\app.js",
-        "Web\QuickLineOrbit\styles.css",
-        "Web\QuickLine3D\styles.css", "Web\QuickLineOrbit\vendor\three\OrbitControls.js",
-        "Web\QuickLineOrbit\vendor\three\three.core.min.js",
-        "Web\QuickLineOrbit\vendor\three\three.module.min.js",
-        "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $payloadFiles) {

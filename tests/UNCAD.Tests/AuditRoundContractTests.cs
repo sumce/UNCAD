@@ -453,76 +453,61 @@ namespace UNCAD.Tests
         // ---------------- 源码契约：3.3.6.2 现场反馈（3D 预览时效性/模态窗快关竞态） ----------------
 
         [Fact]
-        public void WebView2_EnvironmentSharedAcrossHosts_AndWarmedAtStartup()
+        public void NativePreview3d_BrowserKernelFullyRetiredFromScenePath()
         {
-            // 2026-11-18 现场日志：U1U 审阅窗每次开窗各自 CreateAsync 且共用
-            // 同一用户数据目录——上一轮退场进程锁目录、新一轮排队再拉新进程，
-            // 「页面目录→内核就绪」6~10s，用户点确认（5~10s）前 3D 永远起
-            // 不来。三个 WebView2 宿主（U1U 预览/U1L 3D/登录页）必须走
-            // SharedWebView2Environment（3.3.7.2 起=EnsureControllerAsync 统一
-            // 入口：超时判僵尸锁、本会话换独立目录）；Bootstrap 启动 Idle 走
-            // OrbitPrewarmHost 全量预热（环境+控制器+页面常驻——环境级预热
-            // 是空转，审计 R3）。环境回退到每窗自建/预热回退到环境级即复发。
-            string control = Read("src", "UNCAD", "UI", "Wpf",
-                "QuickLineWebPreviewControl.cs");
-            string u1l = Read("src", "UNCAD", "UI", "Wpf",
+            // 3.4.0（用户指令「算了 用 Viewport3D吧」——3.3.5~3.3.8 的
+            // WebView2 3D 内核在本机被用户数据目录锁同步阻塞 STA 线程，
+            // 「正在启动三维渲染器」白屏反复复发，2026-11-18 日志在案）：
+            // 3D 预览换 WPF 原生 Viewport3D。浏览器内核只允许活在登录页
+            //（账户/许可校验，D-025 唯一网络功能）；3D 路径里一个不留，
+            // 预热窗/孤儿清扫亦随内核退役。这一套东西回魂即复发。
+            string orbit = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLineOrbitPreviewControl.cs");
+            string u13d = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLine3dWindow.xaml.cs");
+            string viewport = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLine3dViewportControl.cs");
+            string bootstrap = Read("src", "UNCAD", "Bootstrap.cs");
+            string csproj = Read("src", "UNCAD", "UNCAD.csproj");
+            // 断言代码标记而非注释文本——文件头的历史描述里可以提旧内核，
+            // 代码里不许再碰它（类型/共享环境入口/异步初始化三针全禁）。
+            Assert.DoesNotContain("Microsoft.Web.WebView2", orbit,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2", orbit, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureControllerAsync", orbit,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("Microsoft.Web.WebView2", u13d,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2", u13d, StringComparison.Ordinal);
+            Assert.DoesNotContain("EnsureControllerAsync", u13d,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2", viewport,
+                StringComparison.Ordinal);
+            // 无任何异步初始化——SetModel/构造当场建场景，
+            // 「正在启动三维渲染器」这个状态在原生内核里不存在。
+            Assert.DoesNotContain("async", orbit, StringComparison.Ordinal);
+            Assert.DoesNotContain("async", u13d, StringComparison.Ordinal);
+            // 登录页是 WebView2 的唯一合法消费者（继续走共享环境）。
             string login = Read("src", "UNCAD", "UI", "Wpf",
                 "ClientLoginWindow.xaml.cs");
-            string bootstrap = Read("src", "UNCAD", "Bootstrap.cs");
-            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
-                control, StringComparison.Ordinal);
-            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
-                u1l, StringComparison.Ordinal);
-            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync",
-                login, StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
-                control, StringComparison.Ordinal);
-            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
-                u1l, StringComparison.Ordinal);
             Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
                 login, StringComparison.Ordinal);
-            Assert.Contains("OrbitPrewarmHost.WarmUp", bootstrap,
+            // 3D 侧退役文件不得回魂；预热挂钩与孤儿清扫依赖一并退役。
+            Assert.False(File.Exists(Repo("src", "UNCAD", "UI", "Wpf",
+                "QuickLineWebPreviewControl.cs")),
+                "QuickLineWebPreviewControl 已随 WebView2 3D 内核退役");
+            Assert.False(File.Exists(Repo("src", "UNCAD", "UI", "Wpf",
+                "OrbitPrewarmHost.cs")),
+                "OrbitPrewarmHost 已随 WebView2 3D 内核退役");
+            Assert.False(Directory.Exists(Repo("src", "UNCAD", "Web")),
+                "Web 页面树已随 3D 内核退役（three.js 不再进包）");
+            Assert.DoesNotContain("OrbitPrewarmHost", bootstrap,
                 StringComparison.Ordinal);
-        }
-
-        [Fact]
-        public void WebView2_FatalStateCollapsesBrowser_SoHintTextIsVisible()
-        {
-            // 审计 R2（用户「等 1 分钟也是白色」的直接原因）：未初始化的
-            // WebView2 原生 hwnd 是白色的且经 airspace 压住控件全部 WPF 内容
-            // ——旧 ShowFatalError 只改文字=用户永远看不见降级文案。致命态
-            // 必须 Collapsed 收起 WebView2（安全：控件已经历 Loaded）。
-            string control = Read("src", "UNCAD", "UI", "Wpf",
-                "QuickLineWebPreviewControl.cs");
-            int fatal = control.IndexOf("internal void ShowFatalError",
+            Assert.DoesNotContain("System.Management", csproj,
                 StringComparison.Ordinal);
-            Assert.True(fatal >= 0, "ShowFatalError 必须存在");
-            int collapse = control.IndexOf(
-                "_webView.Visibility = Visibility.Collapsed;",
-                fatal, StringComparison.Ordinal);
-            Assert.True(collapse > fatal,
-                "ShowFatalError 必须收起 WebView2，否则提示文字被白色 hwnd 永久遮盖");
-        }
-
-        [Fact]
-        public void WebView2_PreviewSilencesPostCloseInitFailures()
-        {
-            // 同一日志：窗口关闭后 BeginInitialize 收尾摸到已销毁内核抛
-            // InvalidOperationException，被 catch 当「启动失败」WARN 误报
-            //（无人再看）。catch 必须先查 _closed 静默退出，再谈日志/降级。
-            string control = Read("src", "UNCAD", "UI", "Wpf",
-                "QuickLineWebPreviewControl.cs");
-            int catchPos = control.IndexOf("catch (Exception ex)",
-                StringComparison.Ordinal);
-            int closedGuard = control.IndexOf("if (_closed) return;",
-                catchPos, StringComparison.Ordinal);
-            int warn = control.IndexOf("[U1U] 3D 预览启动失败",
-                StringComparison.Ordinal);
-            Assert.True(catchPos >= 0 && closedGuard > catchPos,
-                "BeginInitialize 的 catch 里必须有 _closed 静默退出");
-            Assert.True(warn < 0 || closedGuard < warn || warn < catchPos,
-                "关窗后的初始化失败不得再记「启动失败」WARN");
+            // U13D 场景必须同步装载（无 Loaded 挂钩等异步时序）。
+            Assert.Contains("LoadScene(scene);", u13d, StringComparison.Ordinal);
+            Assert.Contains("SetScene", orbit, StringComparison.Ordinal);
         }
 
         [Fact]

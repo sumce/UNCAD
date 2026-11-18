@@ -1,205 +1,223 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
-using Microsoft.Web.WebView2.Core;
-using Microsoft.Web.WebView2.Wpf;
 using UNCAD.Infra;
 using Wpf.Ui.Controls;
 
 namespace UNCAD.UI
 {
     /// <summary>
-    /// 本地只读 U13D 场景宿主（3.0 WPF 外壳，D-038 P5；WebView2 内容按 D-025 维持）。
-    /// 行为与迁移前的 WinForms 预览窗逐条对齐：虚拟主机只映射本地 Web/QuickLine3D
-    /// 目录，非本地页面导航一律取消；不写 CAD、不刷新工作簿、不访问网络。
+    /// 本地只读 U13D 场景宿主（3.0 WPF 外壳，D-038 P5）。3.4.0 起渲染内核为
+    /// **WPF 原生 Viewport3D**（用户指令「算了 用 Viewport3D吧」——WebView2
+    /// 用户数据目录锁在本机同步阻塞 STA 线程，「正在启动三维渲染器」白屏
+    /// 反复复发，浏览器内核整条路退役；D-025 的本地只读安全口径不变：
+    /// 不写 CAD、不刷新工作簿、不访问网络——原生渲染反而连本地页面加载
+    /// 都没有了）。行为对齐退役页面：柱网开关、路线/端点标签开关、适配
+    /// 复位；右侧信息面板为只读数据。
     /// </summary>
     public sealed partial class QuickLine3dWindow : FluentWindow
     {
-        private const string VirtualHostName = "u1l3d.uncad.invalid";
-        private readonly string _webRoot;
-        private readonly string _sceneJson;
-        private readonly WebView2 _webView = new WebView2
-        {
-            DefaultBackgroundColor = System.Drawing.Color.FromArgb(11, 15, 20)
-        };
-        private bool _initializationStarted;
-        private bool _fatal;
-
-        /// <summary>
-        /// 无头测试用：false 时不自动初始化 WebView2（避免无头环境装运行时/真开页面）。
-        /// 真机调用方永远不要设置。
-        /// </summary>
-        internal bool AutoInitializeWebView { get; set; } = true;
-
-        /// <summary>等价于旧 Form 的 IsDisposed：Closed 之后异步回调一律退出。</summary>
-        private bool _closed;
+        private QuickLine3dBatchScene _scene;
 
         public QuickLine3dWindow(IDictionary<string, object> scene)
-            : this(scene, ResolveDefaultWebRoot())
-        {
-        }
-
-        internal QuickLine3dWindow(IDictionary<string, object> scene, string webRoot)
         {
             if (scene == null) throw new ArgumentNullException(nameof(scene));
-            _sceneJson = new JavaScriptSerializer
-            {
-                MaxJsonLength = 16 * 1024 * 1024,
-                RecursionLimit = 64
-            }.Serialize(scene);
-            _webRoot = ValidateWebRoot(webRoot);
-
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
-            BrowserHost.Children.Add(_webView);
-            Loaded += (sender, args) => BeginInitialize();
-            Closed += OnClosed;
+            ToolBarStyle.ApplySceneButtons(FitButton, GridButton, LabelsButton,
+                DirectionButton);
+            // 同步装载（无任何异步初始化——这正是换原生内核的意义）。
+            LoadScene(scene);
         }
 
-        private async void BeginInitialize()
+        private void LoadScene(IDictionary<string, object> envelope)
         {
-            if (_initializationStarted) return;
-            _initializationStarted = true;
-            if (!AutoInitializeWebView) return;
             try
             {
-                // 3.3.7.2：环境+控制器统一入口（超时判定数据目录被僵尸锁住，
-                // 本会话自动换独立目录）。
-                await SharedWebView2Environment.EnsureControllerAsync(_webView);
-                if (_closed) return;
-                ConfigureBrowser(_webView.CoreWebView2);
+                QuickLine3dBatchScene batch = QuickLine3dBatchScene.Build(envelope);
+                if (batch == null)
+                {
+                    ShowFatalError("没有可预览的路由场景（图框内未识别到带毫米标注的 U1L 路由）。");
+                    return;
+                }
+                _scene = batch;
+                Viewport.SetScene(batch.Scene);
+                Viewport.SetLabelKindVisible("route", batch.ShowRouteLabels);
+                Viewport.SetLabelKindVisible("directionDown",
+                    batch.ShowDirectionLabels);
+                Viewport.SetLabelKindVisible("directionUp",
+                    batch.ShowDirectionLabels);
+                LabelsButton.Content = batch.ShowRouteLabels
+                    ? "隐藏路线标签" : "显示路线标签";
+                DirectionButton.Content = batch.ShowDirectionLabels
+                    ? "隐藏端点标签" : "显示端点标签";
+                GridButton.Visibility = Viewport.HasGroup(
+                    QuickLine3dSceneGroupKind.Grid)
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+                StatusText.Text = batch.StatusText;
+                FillInfoPanel(batch);
             }
             catch (Exception ex)
             {
-                ShowFatalError("3D 预览启动失败：" + ex.Message);
+                Log.Warn("U13D 场景装载失败: " + ex);
+                ShowFatalError("3D 场景装载失败：" + ex.Message);
             }
         }
 
-        private void ConfigureBrowser(CoreWebView2 core)
+        private void FillInfoPanel(QuickLine3dBatchScene batch)
         {
-            core.Settings.AreDefaultContextMenusEnabled = false;
-            core.Settings.AreDevToolsEnabled = false;
-            core.Settings.AreHostObjectsAllowed = false;
-            core.Settings.IsBuiltInErrorPageEnabled = false;
-            core.Settings.IsStatusBarEnabled = false;
-            core.Settings.IsZoomControlEnabled = false;
-            core.Settings.IsScriptEnabled = true;
-            core.Settings.IsWebMessageEnabled = true;
-            core.NavigationStarting += OnNavigationStarting;
-            core.NavigationCompleted += OnNavigationCompleted;
-            core.NewWindowRequested += (sender, args) => args.Handled = true;
-            core.DownloadStarting += (sender, args) => args.Cancel = true;
-            core.PermissionRequested += (sender, args) =>
-                args.State = CoreWebView2PermissionState.Deny;
-            core.ProcessFailed += (sender, args) =>
+            MachineText.Text = Text(batch.MachineId);
+            DeviceText.Text = Text(batch.DeviceName);
+            FrameCountText.Text = "图框数 " + Text(batch.FrameCount);
+            StatsText.Text = string.Join(
+                "\n",
+                new[]
+                {
+                    "设备楼层：" + Text(batch.DeviceFloor),
+                    "盘箱楼层：" + Text(batch.PanelFloor),
+                    "投影模式：" + Text(batch.ProjectionMode),
+                    Text(batch.DownstreamAxis) + " → " + Text(batch.UpstreamAxis),
+                    batch.Spacing,
+                    "段数 " + Text(batch.SegmentCount)
+                        + "　路由 " + Text(batch.RouteLength)
+                        + " mm（" + Text(batch.RouteMeters) + " m）"
+                });
+            AxisNumericText.Text = batch.AxisNumericLine;
+            AxisAlphabeticText.Text = batch.AxisAlphabeticLine;
+
+            RouteListPanel.Children.Clear();
+            BridgeListPanel.Children.Clear();
+            FrameListPanel.Children.Clear();
+            DiagnosticsPanel.Children.Clear();
+            SetSectionVisibility(RouteTitle, RouteListPanel,
+                batch.Routes.Count > 0);
+            SetSectionVisibility(BridgeTitle, BridgeListPanel,
+                batch.Bridges.Count > 0);
+            SetSectionVisibility(FrameTitle, FrameListPanel,
+                batch.Frames.Count > 0);
+            SetSectionVisibility(DiagnosticsTitle, DiagnosticsPanel,
+                batch.Diagnostics.Count > 0);
+
+            foreach (QuickLine3dBatchScene.RouteRow row in batch.Routes)
+                AddInfoRow(RouteListPanel, row.Title, row.Detail, row.Distance);
+            foreach (QuickLine3dBatchScene.BridgeRow row in batch.Bridges)
+                AddInfoRow(BridgeListPanel,
+                    row.Spec + " · " + (row.Associated ? "已关联" : "未关联"),
+                    "", row.Length);
+            foreach (QuickLine3dBatchScene.FrameRow row in batch.Frames)
+                AddInfoRow(FrameListPanel, Text(row.MachineId),
+                    row.Circuit, row.Axis + "　" + row.Offset);
+            foreach (string diagnostic in batch.Diagnostics)
             {
-                SharedWebView2Environment.Invalidate();
-                ShowFatalError("3D 渲染进程异常终止：" + args.ProcessFailedKind);
+                DiagnosticsPanel.Children.Add(new System.Windows.Controls.TextBlock
+                {
+                    Text = "• " + diagnostic,
+                    FontSize = 11,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x8F, 0xA0, 0xB3)),
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 1, 0, 1)
+                });
+            }
+        }
+
+        private static void SetSectionVisibility(
+            System.Windows.Controls.TextBlock title, Panel panel, bool visible)
+        {
+            Visibility state = visible ? Visibility.Visible : Visibility.Collapsed;
+            title.Visibility = state;
+            panel.Visibility = state;
+        }
+
+        private static void AddInfoRow(StackPanel panel, string title,
+            string detail, string distance)
+        {
+            var row = new System.Windows.Controls.TextBlock
+            {
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xC7, 0xD3, 0xDF)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 2, 0, 2)
             };
-            core.WebMessageReceived += OnWebMessageReceived;
-            // 3.3.8：three.js vendor 已随 U1L3D 摘除搬到 QuickLineOrbit——
-            // 主机根映射到 Web 父目录（与 U1U 预览同法），页面从兄弟目录引库。
-            core.SetVirtualHostNameToFolderMapping(VirtualHostName,
-                System.IO.Path.GetDirectoryName(_webRoot),
-                CoreWebView2HostResourceAccessKind.Deny);
-            _webView.Source = new Uri("https://" + VirtualHostName
-                + "/QuickLine3D/index.html");
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(title)) parts.Add(title);
+            if (!string.IsNullOrEmpty(detail)) parts.Add(detail);
+            if (!string.IsNullOrEmpty(distance)) parts.Add(distance);
+            row.Text = string.Join("　", parts.ToArray());
+            panel.Children.Add(row);
         }
 
-        private void OnNavigationStarting(object sender,
-            CoreWebView2NavigationStartingEventArgs e)
+        private static string Text(string value)
         {
-            if (!Uri.TryCreate(e.Uri, UriKind.Absolute, out Uri uri)
-                || !string.Equals(uri.Scheme, Uri.UriSchemeHttps,
-                    StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(uri.Host, VirtualHostName,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                e.Cancel = true;
-                ShowFatalError("3D 预览已阻止非本地页面导航。");
-            }
+            return string.IsNullOrEmpty(value) || value.Trim().Length == 0
+                ? "-" : value;
         }
 
-        private void OnNavigationCompleted(object sender,
-            CoreWebView2NavigationCompletedEventArgs e)
-        {
-            if (!e.IsSuccess) ShowFatalError("3D 预览页面加载失败：" + e.WebErrorStatus);
-        }
-
-        private void OnWebMessageReceived(object sender,
-            CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            if (_fatal) return;
-            try
-            {
-                var message = new JavaScriptSerializer().DeserializeObject(e.WebMessageAsJson)
-                    as Dictionary<string, object>;
-                if (message == null || !message.TryGetValue("type", out object rawType)) return;
-                string type = Convert.ToString(rawType);
-                if (string.Equals(type, "ready", StringComparison.Ordinal))
-                    _webView.CoreWebView2.PostWebMessageAsJson(_sceneJson);
-                else if (string.Equals(type, "close", StringComparison.Ordinal))
-                    Close();
-                else if (string.Equals(type, "renderError", StringComparison.Ordinal))
-                    Log.Warn("U13D 页面渲染失败: " + Convert.ToString(
-                        message.TryGetValue("message", out object detail) ? detail : ""));
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("U13D 页面消息读取失败: " + ex.Message);
-            }
-        }
-
-        /// <summary>致命错误路径：WebView2 整块替换为错误说明（无头测试直接驱动验证）。</summary>
+        /// <summary>致命错误路径：整块替换为错误说明（无头测试直接驱动验证）。</summary>
         internal void ShowFatalError(string message)
         {
-            if (_fatal || _closed) return;
             if (!Dispatcher.CheckAccess())
             {
                 Dispatcher.BeginInvoke(
-                    (Action<string>)ShowFatalError, DispatcherPriority.Normal, message);
+                    (Action<string>)ShowFatalError, DispatcherPriority.Normal,
+                    message);
                 return;
             }
-            _fatal = true;
             ErrorMessage.Text = message;
-            _webView.Visibility = Visibility.Collapsed;
             ErrorPanel.Visibility = Visibility.Visible;
             System.Windows.Controls.Panel.SetZIndex(ErrorPanel, 1);
         }
 
-        private void OnClose(object sender, RoutedEventArgs e)
+        private void OnFit(object sender, RoutedEventArgs args)
+        {
+            Viewport.ResetCamera();
+        }
+
+        private void OnGridToggle(object sender, RoutedEventArgs args)
+        {
+            bool visible = !Viewport.IsGroupVisible(
+                QuickLine3dSceneGroupKind.Grid);
+            Viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Grid, visible);
+            GridButton.Content = visible ? "柱网 开" : "柱网 关";
+        }
+
+        private void OnRouteLabelsToggle(object sender, RoutedEventArgs args)
+        {
+            bool visible = LabelsButton.Content as string == "显示路线标签";
+            Viewport.SetLabelKindVisible("route", visible);
+            LabelsButton.Content = visible ? "隐藏路线标签" : "显示路线标签";
+        }
+
+        private void OnDirectionLabelsToggle(object sender, RoutedEventArgs args)
+        {
+            bool visible = DirectionButton.Content as string == "显示端点标签";
+            Viewport.SetLabelKindVisible("directionDown", visible);
+            Viewport.SetLabelKindVisible("directionUp", visible);
+            DirectionButton.Content = visible ? "隐藏端点标签" : "显示端点标签";
+        }
+
+        private void OnClose(object sender, RoutedEventArgs args)
         {
             Close();
         }
 
-        private void OnClosed(object sender, EventArgs e)
+        private static class ToolBarStyle
         {
-            _closed = true;
-            if (_webView.CoreWebView2 != null)
-                _webView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
-            _webView.Dispose();
-        }
-
-        private static string ResolveDefaultWebRoot()
-        {
-            string assemblyDirectory = Path.GetDirectoryName(
-                typeof(QuickLine3dWindow).Assembly.Location);
-            return Path.Combine(assemblyDirectory ?? "", "Web", "QuickLine3D");
-        }
-
-        private static string ValidateWebRoot(string webRoot)
-        {
-            if (string.IsNullOrWhiteSpace(webRoot))
-                throw new ArgumentException("3D 页面目录不能为空。", nameof(webRoot));
-            string fullPath = Path.GetFullPath(webRoot);
-            if (!Directory.Exists(fullPath)
-                || !File.Exists(Path.Combine(fullPath, "index.html")))
-                throw new DirectoryNotFoundException("找不到 U1L3D 页面资源：" + fullPath);
-            return fullPath;
+            internal static void ApplySceneButtons(
+                params System.Windows.Controls.Button[] buttons)
+            {
+                foreach (System.Windows.Controls.Button button in buttons)
+                {
+                    button.FontSize = 12;
+                    button.Padding = new Thickness(8, 2, 8, 2);
+                    button.Margin = new Thickness(4, 0, 0, 0);
+                    button.Focusable = false;
+                }
+            }
         }
     }
 }

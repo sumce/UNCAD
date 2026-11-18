@@ -1,4 +1,4 @@
-<ui:FluentWindow x:Class="UNCAD.UI.BatchFillConfirmationWindow"
+﻿<ui:FluentWindow x:Class="UNCAD.UI.BatchFillConfirmationWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -42,7 +42,7 @@
                     Visibility="Collapsed"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="6">
-                <local:QuickLineWebPreviewControl x:Name="OrbitPreview" />
+                <local:QuickLineOrbitPreviewControl x:Name="OrbitPreview" />
             </Border>
             <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" Grid.Column="1" Width="6"
                           Visibility="Collapsed" Background="Transparent"

@@ -2,6 +2,7 @@
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:local="clr-namespace:UNCAD.UI"
                  Title="U13D 三维预览"
                  Width="1180" Height="760" MinWidth="900" MinHeight="600"
                  ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
@@ -18,15 +19,69 @@
         </Grid.RowDefinitions>
         <ui:TitleBar Grid.Row="0" Title="U13D 三维预览" ShowMinimize="False" />
 
-        <!-- WebView2（WPF 控件）在代码里挂载；致命错误时整块替换为错误说明。 -->
-        <Grid Grid.Row="1" x:Name="BrowserHost" ClipToBounds="True">
-            <Border x:Name="ErrorPanel" Visibility="Collapsed"
-                    Background="{DynamicResource ApplicationBackgroundBrush}">
-                <TextBlock x:Name="ErrorMessage" FontSize="14" TextWrapping="Wrap"
-                           TextAlignment="Center" Margin="32"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            </Border>
+        <!-- 3.4.0：原生 Viewport3D 视口（代码里 SetScene 装载）；致命错误时整块替换为错误说明。 -->
+        <Grid Grid.Row="1" x:Name="SceneHost" ClipToBounds="True">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="360" MinWidth="280" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 左：三维视口 + 悬浮工具条 -->
+                <Grid Grid.Column="0" Background="#0D131A">
+                    <local:QuickLine3dViewportControl x:Name="Viewport" />
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,8,8,0">
+                        <Button x:Name="FitButton" Content="适配" Click="OnFit" />
+                        <Button x:Name="GridButton" Content="柱网 开" Click="OnGridToggle" />
+                        <Button x:Name="LabelsButton" Content="隐藏路线标签" Click="OnRouteLabelsToggle" />
+                        <Button x:Name="DirectionButton" Content="隐藏端点标签" Click="OnDirectionLabelsToggle" />
+                    </StackPanel>
+                    <TextBlock x:Name="StatusText" HorizontalAlignment="Left"
+                               VerticalAlignment="Bottom" Margin="10,0,0,6"
+                               FontSize="12" Foreground="#8FA0B3" IsHitTestVisible="False" />
+                    <Border x:Name="ErrorPanel" Visibility="Collapsed" Background="#0D131A">
+                        <TextBlock x:Name="ErrorMessage" FontSize="14" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="32"
+                                   VerticalAlignment="Center" Foreground="#C7D3DF" />
+                    </Border>
+                </Grid>
+
+                <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center"
+                              VerticalAlignment="Stretch" Background="Transparent" />
+
+                <!-- 右：信息面板（原页面侧栏的只读数据） -->
+                <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="InfoPanel" Margin="16,12,16,16">
+                        <TextBlock x:Name="MachineText" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="#E8EEF5" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DeviceText" FontSize="13" Margin="0,4,0,0"
+                                   Foreground="#C7D3DF" TextWrapping="Wrap" />
+                        <TextBlock x:Name="FrameCountText" FontSize="12" Margin="0,2,0,8"
+                                   Foreground="#8FA0B3" />
+                        <TextBlock x:Name="StatsText" FontSize="12" Foreground="#C7D3DF"
+                                   TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <TextBlock x:Name="AxisNumericText" FontSize="11" Foreground="#8FA0B3"
+                                   TextWrapping="Wrap" Margin="0,0,0,2" />
+                        <TextBlock x:Name="AxisAlphabeticText" FontSize="11" Foreground="#8FA0B3"
+                                   TextWrapping="Wrap" Margin="0,0,0,10" />
+                        <TextBlock x:Name="RouteTitle" Text="回路" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#E8EEF5" Margin="0,0,0,4" />
+                        <StackPanel x:Name="RouteListPanel" Margin="0,0,0,10" />
+                        <TextBlock x:Name="BridgeTitle" Text="桥架" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#E8EEF5" Margin="0,0,0,4" />
+                        <StackPanel x:Name="BridgeListPanel" Margin="0,0,0,10" />
+                        <TextBlock x:Name="FrameTitle" Text="图框" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#E8EEF5" Margin="0,0,0,4" />
+                        <StackPanel x:Name="FrameListPanel" Margin="0,0,0,10" />
+                        <TextBlock x:Name="DiagnosticsTitle" Text="诊断" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#E8EEF5" Margin="0,0,0,4" />
+                        <StackPanel x:Name="DiagnosticsPanel" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
 
         <Grid Grid.Row="2" Margin="24,8,24,16">

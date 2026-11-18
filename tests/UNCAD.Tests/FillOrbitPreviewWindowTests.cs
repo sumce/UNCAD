@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -15,12 +14,13 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 3.3.0（D-054 特性③）STA 实窗测试、3.3.5（D-054 Amendment）随渲染内核
-    /// 换 WebView2+three.js 调整断言口径：窗口宿主存在、模型数据正确传入、
-    /// 布局回退保持。**不在 xunit 里断言真实 3D 渲染结果**——对控件的断言
-    /// 全部是数据级：SetModel 同步构建的信封计数（柱网/标签/通道在 Core 侧
-    /// 算死，与 WebView2 初始化、GPU 光栅化完全解耦；测试进程关闭
-    /// QuickLineWebPreviewControl.DefaultAutoInitialize，页面永不加载）。
+    /// 3.4.0：U1U/U13D 3D 预览内核换 **WPF 原生 Viewport3D**（用户指令
+    /// 「算了 用 Viewport3D吧」——WebView2 用户数据目录锁在本机同步阻塞
+    /// STA 线程，「正在启动三维渲染器」白屏反复复发；浏览器内核整条路
+    /// 退役，D-054 3.3.5 的 WebView2 选型一并作废）。断言口径随内核调整：
+    /// 窗口宿主存在、模型数据正确传入、布局回退保持，**全部数据级**——
+    /// SetModel 同步建场景（无任何异步初始化，「启动中」这个状态不存在），
+    /// 场景构建与 GPU 光栅化解耦；新增场景构建器/批量适配器的图元级断言。
     /// </summary>
     [Collection("WpfUiSerial")]
     public sealed class FillOrbitPreviewWindowTests
@@ -169,11 +169,11 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void WebControl_HostsEnvelopeAndFallsBackToHint()
+        public void OrbitControl_HostsEnvelopeAndFallsBackToHint()
         {
             WpfStaRunner.Run(delegate
             {
-                    var control = new QuickLineWebPreviewControl();
+                    var control = new QuickLineOrbitPreviewControl();
                     control.Width = 320;
                     control.Height = 260;
                     var host = new Window
@@ -186,8 +186,8 @@ namespace UNCAD.Tests
                     host.Show();
                     Pump(3);
 
-                    // 无模型：提示文字可见、信封不构建（数据级断言——与
-                    // WebView2 初始化完全解耦，无头宿主不装运行时不开页面）。
+                    // 无模型：提示文字可见、信封不构建（SetModel 同步，无任何
+                    // 异步初始化——「正在启动三维渲染器」这个状态不存在了）。
                     Assert.Null(control.Model);
                     Assert.Equal(0, control.BuiltSegmentLineCount);
 
@@ -206,14 +206,12 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void WebControl_BuildsPreviewEnhancementsAndTogglesGrid()
+        public void OrbitControl_BuildsPreviewEnhancementsAndTogglesGrid()
         {
             WpfStaRunner.Run(delegate
             {
-                    // 3.3.1（D-054 Amendment）四特性齐备的模型：段毫米标（B）+
-                    // 柱网/端点轴位/两向标签（C，3.3.2 数字轴×字母轴）+
-                    // 桥架/线管通道（D）。3.3.5：全部经 Core 信封算好，控件
-                    // 计数器取信封（渲染内核无关）。
+                    // 3.3.1 四特性齐备的模型：段毫米标（B）+ 柱网/端点轴位/两向
+                    // 标签（C）+ 桥架/线管通道（D）。计数器取信封（渲染内核无关）。
                     var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
                     {
                         new QuickLineOrbitPreviewSegment("s1",
@@ -229,7 +227,7 @@ namespace UNCAD.Tests
                             "2500mm",
                             new QuickLineOrbitPreviewChannel(null, false, true))
                     }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
-                    var control = new QuickLineWebPreviewControl();
+                    var control = new QuickLineOrbitPreviewControl();
                     control.Width = 320;
                     control.Height = 260;
                     var host = new Window
@@ -245,10 +243,9 @@ namespace UNCAD.Tests
                     control.SetModel(model);
                     Pump(2);
                     Assert.Equal(2, control.BuiltSegmentLineCount);
-                    // 特性B：两条段毫米标都构建（Billboard 世界尺寸，无 2D 阈值）。
+                    // 特性B：两条段毫米标都构建。
                     Assert.Equal(2, control.BuiltLabelCount);
-                    // 特性C：柱网线（X/Y 两向覆盖包络）+ 数字轴刻度（48→37 沿 X
-                    // 可插值）+ 字母轴标签（V 锚定）+ 两端端点轴位钉。
+                    // 特性C：柱网线 + 数字轴刻度 + 字母轴标签 + 两端端点轴位钉。
                     Assert.True(control.BuiltColumnGridLineCount >= 3,
                         "柱网线至少覆盖包络（X/Y 两向）");
                     Assert.True(control.BuiltAxisTickCount >= 2,
@@ -282,13 +279,387 @@ namespace UNCAD.Tests
             });
         }
 
+        [Fact]
+        public void OrbitControl_BuildsNativeSceneSynchronously()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                // 3.4.0 内核换血的核心契约：SetModel 当场把场景画进 Viewport3D
+                // （网格/标签同步可见），不存在任何「启动中」中间态。
+                var control = new QuickLineOrbitPreviewControl();
+                control.Width = 640;
+                control.Height = 480;
+                var host = new Window
+                {
+                    Content = control,
+                    Width = 680,
+                    Height = 540,
+                    WindowStyle = WindowStyle.ToolWindow
+                };
+                host.Show();
+                Pump(3);
+                control.SetModel(PreviewModel("原生内核 48/V"));
+                Pump(2);
+                QuickLine3dViewportControl viewport = FindViewport(control);
+                Assert.NotNull(viewport);
+                Assert.True(viewport.MeshCount > 0, "路由网格必须同步建好");
+                Assert.True(viewport.TriangleCount > 0);
+                Assert.True(viewport.LabelCount >= 4,
+                    "毫米标+刻度+钉标签必须同步进叠加层");
+                // 双击复位口径：复位后相机仍在（复位是纯数学，不出异常即通）。
+                viewport.ResetCamera();
+                Pump(1);
+                host.Close();
+            });
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_TypedReferenceModelBuildsGroups()
+        {
+            // 3.3.7 三轮的建筑模型公式随内核延续：typed 参照层必须产出参照组
+            //（楼板/环氧/华夫/设备/母线玻璃）+ 结构组（工字钢/葡萄架，默认藏）
+            // + 结构柱；「本层=2F地面」基准重定位后地面铺板只在基准=0 时画。
+            var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(4800, 0, 0),
+                    QuickLineSpatialAxis.X, 4800, true)
+            }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
+            // 分隔符是**半角分号**——DefaultList 原文如此（全角「；」不在
+            // 切分集里，抄摘要时带进来的全角会让整串变一个条目）。
+            string rawLevels =
+                "本层=2F地面;1F工字钢顶面=2850=工字钢;2F地面=7800=环氧地坪"
+                + ";3F地面=15000=华夫板;第一层母线=3660=母线=2F地面"
+                + ";I-L盘顶面=2200=设备=2F地面;2F葡萄架顶面=13300=葡萄架";
+            // 生产路径：TryParseBaseFloor 从「本层=2F地面」指令解析出要匹配
+            // 的标高标签（2F地面），不是字面量「本层」。
+            Assert.True(PreviewReferenceLevels.TryParseBaseFloor(rawLevels,
+                out string baseFloorLabel));
+            Assert.Equal("2F地面", baseFloorLabel);
+            IReadOnlyList<PreviewReferenceLevel> levels =
+                PreviewReferenceLevels.Parse(rawLevels);
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model, levels,
+                    baseFloorLabel);
+            Assert.NotNull(envelope);
+            Assert.Equal(7800.0, envelope.BaseFloorZ);
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            Assert.NotNull(scene);
+            Assert.Contains(scene.Primitives,
+                primitive => primitive.Group == QuickLine3dSceneGroupKind.Reference);
+            Assert.Contains(scene.Primitives,
+                primitive => primitive.Group == QuickLine3dSceneGroupKind.Detail);
+            // 本层基准非 0 → 不自动铺 1F 地面（本层楼板条目已在 0）。
+            Assert.DoesNotContain(scene.Labels,
+                label => label.Text.StartsWith("1F地面", StringComparison.Ordinal));
+            // 信封保留锚定后的绝对标高；场景构建阶段再减本层基准。
+            Assert.Contains(envelope.ReferenceLevels,
+                level => level.Kind == "bus" && Math.Abs(level.Z - 11460.0) < 0.5);
+            Assert.Contains(scene.Labels,
+                label => label.Text == "第一层母线 3660");
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_NoBaseFloorLaysGroundPlate()
+        {
+            var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(4000, 0, 0),
+                    QuickLineSpatialAxis.X, 4000, true)
+            }, "摘要", new List<string>());
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model, null, null);
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            // 无「本层」基准（1F 绝对标高口径）→ 自动铺 1F 地面。
+            Assert.Contains(scene.Labels,
+                label => label.Text.StartsWith("1F地面", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void BatchSceneAdapter_BuildsSceneAndPanelFromFeatureEnvelope()
+        {
+            // U13D 字典信封（QuickLine3dPreviewFeature 构造形态）→ 原生场景：
+            // 路由管/节点球/方向标记/轴位线齐备；面板数据（回路/桥架/图框/诊断）
+            // 与标签自动显隐口径（批量 ≤24 段显示）对齐退役页面。
+            var envelope = new Dictionary<string, object>
+            {
+                ["type"] = "initialize",
+                ["schemaVersion"] = 2,
+                ["mode"] = "batch",
+                ["scene"] = new Dictionary<string, object>
+                {
+                    ["rootNodeId"] = "F1_N1",
+                    ["projectionMode"] = "Auto",
+                    ["nodes"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["id"] = "F1_N1",
+                            ["position"] = new Dictionary<string, object>
+                                { ["x"] = 0.0, ["y"] = 0.0, ["z"] = 0.0 }
+                        },
+                        new Dictionary<string, object>
+                        {
+                            ["id"] = "F1_N2",
+                            ["position"] = new Dictionary<string, object>
+                                { ["x"] = 4800.0, ["y"] = 0.0, ["z"] = 0.0 }
+                        }
+                    },
+                    ["segments"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["id"] = "F1_s1", ["frameLabel"] = "M1",
+                            ["circuitName"] = "设备A",
+                            ["startNodeId"] = "F1_N1", ["endNodeId"] = "F1_N2",
+                            ["routeGroupId"] = "F1_R0", ["axis"] = "X",
+                            ["distanceMm"] = 4800.0
+                        }
+                    },
+                    ["directionMarkers"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["kind"] = "downstream", ["title"] = "下游",
+                            ["axis"] = "48/W",
+                            ["position"] = new Dictionary<string, object>
+                                { ["x"] = 0.0, ["y"] = 0.0, ["z"] = 0.0 }
+                        },
+                        new Dictionary<string, object>
+                        {
+                            ["kind"] = "upstream", ["title"] = "上游",
+                            ["axis"] = "49/X",
+                            ["position"] = new Dictionary<string, object>
+                                { ["x"] = 0.0, ["y"] = 4800.0, ["z"] = 0.0 }
+                        }
+                    },
+                    ["diagnostics"] = new object[] { "测试诊断" }
+                },
+                ["frames"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F1", ["machineId"] = "M1",
+                        ["deviceName"] = "设备A",
+                        ["upstreamAxis"] = "49/X", ["downstreamAxis"] = "48/W",
+                        ["offsetXMillimetres"] = 0.0, ["offsetYMillimetres"] = 0.0
+                    }
+                },
+                ["bridges"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["frameId"] = "F1", ["spec"] = "梯形桥架200Wx100H",
+                        ["lengthMm"] = 9600.0, ["lengthM"] = 9.6,
+                        ["associated"] = true
+                    }
+                },
+                ["axisGrid"] = new Dictionary<string, object>
+                {
+                    ["upstreamAxis"] = "49/X", ["downstreamAxis"] = "48/W",
+                    ["spacingMillimetres"] = 4800.0,
+                    ["numericMarks"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                            { ["label"] = "48", ["offsetMillimetres"] = 0.0 },
+                        new Dictionary<string, object>
+                            { ["label"] = "49", ["offsetMillimetres"] = 4800.0 }
+                    },
+                    ["alphabeticMarks"] = new object[]
+                    {
+                        new Dictionary<string, object>
+                            { ["label"] = "W", ["offsetMillimetres"] = 0.0 },
+                        new Dictionary<string, object>
+                            { ["label"] = "X", ["offsetMillimetres"] = 4800.0 }
+                    },
+                    ["diagnostics"] = new object[0]
+                },
+                ["metadata"] = new Dictionary<string, object>
+                {
+                    ["frameCount"] = 1, ["routeFrameCount"] = 1
+                },
+                ["diagnostics"] = new object[] { "测试诊断" }
+            };
+
+            QuickLine3dBatchScene batch = QuickLine3dBatchScene.Build(envelope);
+            Assert.NotNull(batch);
+            Assert.True(batch.BatchMode);
+            QuickLine3dScene scene = batch.Scene;
+            Assert.True(scene.Orthographic, "U13D 批量页是正交投影");
+            Assert.Contains(scene.Primitives,
+                primitive => primitive.Group == QuickLine3dSceneGroupKind.Routes);
+            Assert.Contains(scene.Primitives,
+                primitive => primitive.Group == QuickLine3dSceneGroupKind.Direction);
+            Assert.Contains(scene.Primitives,
+                primitive => primitive.Group == QuickLine3dSceneGroupKind.Grid);
+            // 路由聚合标签（1 条路由）+ 端点方向标签×2 + 轴位标签 + 罗盘×4。
+            Assert.Equal(1, scene.Labels.Count(label => label.Kind == "route"));
+            Assert.Equal(2, scene.Labels.Count(label =>
+                label.Kind == "directionDown" || label.Kind == "directionUp"));
+            Assert.True(scene.Labels.Count(label => label.Kind == "axis") >= 4);
+            Assert.Equal(4, scene.Labels.Count(label => label.Kind == "compass"));
+            // 面板：回路/桥架/图框各 1 行 + 诊断文案。
+            Assert.Equal("多图框", batch.MachineId);
+            Assert.Single(batch.Routes);
+            Assert.Contains("设备A", batch.Routes[0].Title, StringComparison.Ordinal);
+            Assert.Contains("4800", batch.Routes[0].Distance, StringComparison.Ordinal);
+            Assert.Single(batch.Bridges);
+            Assert.True(batch.Bridges[0].Associated);
+            Assert.Single(batch.Frames);
+            Assert.Contains("测试诊断", batch.Diagnostics);
+            Assert.Equal("已载入多图框只读预览", batch.StatusText);
+            // 批量且 ≤24 段 → 标签默认显示。
+            Assert.True(batch.ShowRouteLabels);
+            Assert.True(batch.ShowDirectionLabels);
+        }
+
+        [Fact]
+        public void BatchSceneAdapter_NullAndEmptyInputsReturnNull()
+        {
+            Assert.Null(QuickLine3dBatchScene.Build(null));
+            Assert.Null(QuickLine3dBatchScene.Build(
+                new Dictionary<string, object>()));
+            Assert.Null(QuickLine3dBatchScene.Build(
+                new Dictionary<string, object>
+                {
+                    ["scene"] = new Dictionary<string, object>
+                    {
+                        ["nodes"] = new object[0]
+                    }
+                }));
+        }
+
+        [Fact]
+        public void BatchWindow_HidesEmptyInformationSections()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                var window = new QuickLine3dWindow(new Dictionary<string, object>
+                {
+                    ["mode"] = "batch",
+                    ["scene"] = new Dictionary<string, object>
+                    {
+                        ["nodes"] = new object[]
+                        {
+                            new Dictionary<string, object>
+                            {
+                                ["id"] = "N1",
+                                ["position"] = new Dictionary<string, object>
+                                {
+                                    ["x"] = 0.0, ["y"] = 0.0, ["z"] = 0.0
+                                }
+                            }
+                        },
+                        ["segments"] = new object[0],
+                        ["directionMarkers"] = new object[0],
+                        ["diagnostics"] = new object[0]
+                    },
+                    ["axisGrid"] = new Dictionary<string, object>(),
+                    ["metadata"] = new Dictionary<string, object>(),
+                    ["bridges"] = new object[0],
+                    ["frames"] = new object[0],
+                    ["diagnostics"] = new object[0]
+                });
+                window.Show();
+                Pump(2);
+
+                Assert.Equal(Visibility.Collapsed, FindTextBlock(window, "回路").Visibility);
+                Assert.Equal(Visibility.Collapsed, FindTextBlock(window, "桥架").Visibility);
+                Assert.Equal(Visibility.Collapsed, FindTextBlock(window, "图框").Visibility);
+                Assert.Equal(Visibility.Collapsed, FindTextBlock(window, "诊断").Visibility);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void ViewportControl_TogglesGroupsAndLabelKinds()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                var scene = new QuickLine3dScene { Diagonal = 4000.0 };
+                scene.AddTube(QuickLine3dSceneGroupKind.Routes,
+                    0, 0, 0, 4000, 0, 0, 10.0,
+                    Color_FromRgb(0xE0, 0x6C, 0x00));
+                scene.AddTube(QuickLine3dSceneGroupKind.Grid,
+                    0, -500, 0, 0, 500, 0, 8.0,
+                    Color_FromRgb(0x55, 0x60, 0x6E));
+                scene.AddBox(QuickLine3dSceneGroupKind.Reference,
+                    2000, 0, 0, 4000, 1000, 200, Color_FromRgb(0x7D, 0x93, 0xA6),
+                    0.45, Color_FromRgb(0xAA, 0xB6, 0xC2));
+                scene.AddTube(QuickLine3dSceneGroupKind.Detail,
+                    0, 0, -400, 4000, 0, -400, 60.0,
+                    Color_FromRgb(0xA5, 0xB2, 0xC3));
+                scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "mm",
+                    "4000mm", 2000, 0, 100);
+                scene.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
+                    "48", 0, -500, 0);
+                scene.Centerx = 2000;
+                scene.CameraDistance = 10000.0;
+                scene.Near = 1.0;
+                scene.Far = 1000000.0;
+
+                var viewport = new QuickLine3dViewportControl();
+                viewport.SetScene(scene);
+                Assert.True(viewport.MeshCount >= 4, "四组网格全建");
+                Assert.Equal(2, viewport.LabelCount);
+                Assert.True(viewport.IsGroupVisible(
+                    QuickLine3dSceneGroupKind.Routes));
+                // 结构组默认藏。
+                Assert.False(viewport.IsGroupVisible(
+                    QuickLine3dSceneGroupKind.Detail));
+                viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Grid, false);
+                Assert.False(viewport.IsGroupVisible(
+                    QuickLine3dSceneGroupKind.Grid));
+                viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Grid, true);
+                Assert.True(viewport.IsGroupVisible(
+                    QuickLine3dSceneGroupKind.Grid));
+                // 标签种类过滤（U13D 路线/端点标签开关用同一入口）。
+                viewport.SetLabelKindVisible("mm", false);
+                viewport.SetLabelKindVisible("mm", true);
+                viewport.ResetCamera();
+            });
+        }
+
+        private static System.Windows.Media.Color Color_FromRgb(byte r, byte g,
+            byte b)
+        {
+            return System.Windows.Media.Color.FromRgb(r, g, b);
+        }
+
+        /// <summary>从宿主控件里取出视口（模板树直达）。</summary>
+        private static QuickLine3dViewportControl FindViewport(
+            QuickLineOrbitPreviewControl control)
+        {
+            foreach (object child in LogicalTreeHelper.GetChildren(control))
+            {
+                if (child is QuickLine3dViewportControl viewport) return viewport;
+            }
+            return null;
+        }
+
+        private static TextBlock FindTextBlock(DependencyObject control,
+            string text)
+        {
+            foreach (object child in LogicalTreeHelper.GetChildren(control))
+            {
+                if (child is TextBlock block && block.Text == text) return block;
+                if (child is DependencyObject nested)
+                {
+                    TextBlock match = FindTextBlock(nested, text);
+                    if (match != null) return match;
+                }
+            }
+            return null;
+        }
 
     /// <summary>
-    /// 共享单 STA 线程运行器（3.3.2 为 Helix 视口而立，3.3.5 内核换 WebView2
+    /// 共享单 STA 线程运行器（3.3.2 为 Helix 视口而立，3.3.5/3.4.0 两换内核
     /// 后保留）：WPF 窗体/主题资源在同一进程多 STA 线程间复用会炸测试宿主，
-    /// WpfUiSerial 集合内全部窗体测试收敛到本运行器的单一 STA 线程。运行器
-    /// 同时关掉 QuickLineWebPreviewControl.DefaultAutoInitialize——无头测试
-    /// 不装 WebView2 运行时、不真开页面（数据级断言不需要渲染）。
+    /// WpfUiSerial 集合内全部窗体测试收敛到本运行器的单一 STA 线程。
+    /// 3.4.0 起没有 WebView2 自启开关可关——原生场景构建天然无头安全。
     /// </summary>
     internal static class WpfStaRunner
     {
@@ -296,7 +667,6 @@ namespace UNCAD.Tests
 
         private static void Ensure()
         {
-            QuickLineWebPreviewControl.DefaultAutoInitialize = false;
             if (_dispatcher != null) return;
             using (var ready = new ManualResetEvent(false))
             {
@@ -326,175 +696,6 @@ namespace UNCAD.Tests
         }
     }
 
-        [Fact]
-        public void WebControl_ComputesEnvelopeOnlyWithModel()
-        {
-            WpfStaRunner.Run(delegate
-            {
-                var control = new QuickLineWebPreviewControl();
-                control.Width = 320;
-                control.Height = 260;
-                var host = new Window
-                {
-                    Content = control,
-                    Width = 360,
-                    Height = 320,
-                    WindowStyle = WindowStyle.ToolWindow
-                };
-                host.Show();
-                Pump(2);
-                // 无模型（U1F/无预览路径）：信封不构建、WebView2 不启动
-                //（测试进程 DefaultAutoInitialize=false；真机的惰性初始化
-                // 同样以首个非 null SetModel 为触发点）。
-                Assert.Null(control.Model);
-                Assert.Equal(0, control.BuiltSegmentLineCount);
-                control.SetModel(null);
-                Pump(1);
-                Assert.Null(control.Model);
-                Assert.Equal(0, control.BuiltSegmentLineCount);
-
-                // 首个非 null 模型：信封同步构建（数据级，不等页面）。
-                control.SetModel(PreviewModel("摘要"));
-                Pump(2);
-                Assert.NotNull(control.Model);
-                Assert.Equal(2, control.BuiltSegmentLineCount);
-                host.Close();
-            });
-        }
-
-        // 3.3.8：本探针是**装机门禁**（真 WebView2+真像素），不在常规全量里跑
-        // ——本机 WebView2 数据目录被锁时会同步阻塞 STA 线程，窗口挂在用户
-        // 桌面（2026-11-18 用户截图在案）。装机前手动去掉 Skip 跑一次。
-        [Fact(Skip = "装机门禁探针：出包前手动启用一次（真窗口真像素，常规全量禁跑）")]
-        public void ProductionSequence_CtorSetModel_ThenShow_RendersDarkScene()
-        {
-            // 3.3.7.2 终验探针（装机门禁）：完全复刻生产 FillReviewWindow 的
-            // 时序——**构造期（窗口 Show 之前）就 SetModel**，之后才 Show。
-            // 2026-11-18 10:31 现场：旧实现构造期即启动初始化=预 HWND 调
-            // EnsureCoreWebView2Async（审计 R5「疑似白屏根因」）；3.3.7.2 的
-            // Loaded 挂钩被构造期 SetModel 抢先、形同虚设（同日现场再白）。
-            // 本探针锁死新语义：构造期 SetModel 只挂起请求，Loaded（hwnd
-            // 存在）才放行初始化——真 WebView2+真页面+GDI 真像素，非纯白
-            // 才算过。冷启动容忍 45s（本机控制器冷创建实测 33.5s）。
-            WpfStaRunner.Run(delegate
-            {
-                QuickLineWebPreviewControl.DefaultAutoInitialize = true;
-                try
-                {
-                    string repoWeb = Path.GetFullPath(Path.Combine(
-                        AppContext.BaseDirectory, "..", "..", "..", "..",
-                        "..", "src", "UNCAD", "Web"));
-                    var control = new QuickLineWebPreviewControl
-                    {
-                        Width = 880,
-                        Height = 600,
-                        WebRootOverride = Path.Combine(repoWeb, "QuickLineOrbit")
-                    };
-                    // 生产顺序：先 SetModel（此时控件未加载——必须只挂起，
-                    // 不得启动初始化）。
-                    control.SetModel(PreviewModel("生产时序 48/V"));
-                    var window = new Window
-                    {
-                        Title = "orbit-production-sequence",
-                        Content = control,
-                        Width = 920,
-                        Height = 660,
-                        Topmost = false,
-                        // 3.3.8：不再置顶打扰用户；右下角安静自证后即关。
-                        Left = SystemParameters.PrimaryScreenWidth - 940,
-                        Top = SystemParameters.PrimaryScreenHeight - 720
-                    };
-                    window.Show();
-                    string dir = Path.Combine(Path.GetTempPath(),
-                        "uncad-orbit-probe");
-                    Directory.CreateDirectory(dir);
-                    string png = Path.Combine(dir, "production-sequence.png");
-                    bool pageReadySeen = false;
-                    for (int i = 0; i < 450; i++)
-                    {
-                        Pump(1);
-                        Thread.Sleep(100);
-                        if (i == 30) CaptureWindow(window, png + ".early.png");
-                        var flags = System.Reflection.BindingFlags.Instance
-                            | System.Reflection.BindingFlags.NonPublic;
-                        if (Convert.ToString(typeof(QuickLineWebPreviewControl)
-                                .GetField("_pageReady", flags)?.GetValue(control))
-                            .Equals("True"))
-                        {
-                            pageReadySeen = true;
-                            Thread.Sleep(700);
-                            break;
-                        }
-                    }
-                    CaptureWindow(window, png);
-                    window.Close();
-                    Assert.True(pageReadySeen,
-                        "生产时序下页面应就绪（45s 内）——预热/初始化链路不通");
-                    // 真像素门禁：画面不得是纯白（未绑定的 WebView2 hwnd 是
-                    // 255/255/255）。采样中心区域多点。
-                    using (var bitmap = new System.Drawing.Bitmap(png))
-                    {
-                        int whiteish = 0;
-                        int samples = 0;
-                        for (int x = bitmap.Width / 4;
-                             x < bitmap.Width * 3 / 4; x += 24)
-                        {
-                            for (int y = bitmap.Height / 4;
-                                 y < bitmap.Height * 3 / 4; y += 24)
-                            {
-                                var pixel = bitmap.GetPixel(x, y);
-                                samples++;
-                                if (pixel.R > 240 && pixel.G > 240
-                                    && pixel.B > 240) whiteish++;
-                            }
-                        }
-                        Assert.True(samples > 0 && whiteish * 100 / samples < 20,
-                            "中心区域白色占比 " + whiteish + "/" + samples
-                            + " —— 生产时序下预览必须是深色 3D 场景而非白块");
-                    }
-                }
-                finally
-                {
-                    QuickLineWebPreviewControl.DefaultAutoInitialize = false;
-                }
-            });
-        }
-
-        /// <summary>GDI 屏幕复制抓窗口真实合成画面（含 WebView2 的 HwndHost）。</summary>
-        private static void CaptureWindow(Window window, string path)
-        {
-            var helper = new System.Windows.Interop.WindowInteropHelper(window);
-            if (helper.Handle == IntPtr.Zero) helper.EnsureHandle();
-            Interop.SetForegroundWindow(helper.Handle);
-            Thread.Sleep(300);
-            Interop.RECT rect;
-            if (!Interop.GetWindowRect(helper.Handle, out rect)) return;
-            int width = Math.Max(1, rect.Right - rect.Left);
-            int height = Math.Max(1, rect.Bottom - rect.Top);
-            using (var bitmap = new System.Drawing.Bitmap(width, height,
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb))
-            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
-            {
-                graphics.CopyFromScreen(rect.Left, rect.Top, 0, 0,
-                    new System.Drawing.Size(width, height),
-                    System.Drawing.CopyPixelOperation.SourceCopy);
-                bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-            }
-        }
-
-        private static class Interop
-        {
-            [System.Runtime.InteropServices.StructLayout(
-                System.Runtime.InteropServices.LayoutKind.Sequential)]
-            public struct RECT { public int Left, Top, Right, Bottom; }
-
-            [System.Runtime.InteropServices.DllImport("user32.dll")]
-            public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-
-            [System.Runtime.InteropServices.DllImport("user32.dll")]
-            public static extern bool SetForegroundWindow(IntPtr hWnd);
-        }
-
         internal static QuickLineOrbitPreviewModel PreviewModel(string axisSummary)
             => new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
             {
@@ -513,7 +714,10 @@ namespace UNCAD.Tests
             for (var i = 0; i < rounds; i++)
             {
                 var frame = new DispatcherFrame();
-                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Loaded,
+                // WPF-UI TitleBar handles ContentRendered; drain it before tests
+                // close a shown window, or its callback can target a dead HWND.
+                Dispatcher.CurrentDispatcher.BeginInvoke(
+                    DispatcherPriority.ApplicationIdle,
                     new Action(() => frame.Continue = false));
                 Dispatcher.PushFrame(frame);
                 Thread.Sleep(30);

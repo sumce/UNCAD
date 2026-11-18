@@ -200,14 +200,7 @@ namespace UNCAD.Tests
                 "Microsoft.Web.WebView2.Wpf.dll",
                 "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
-                "Web\\QuickLine3D\\index.html", "Web\\QuickLine3D\\app.js",
-                "Web\\QuickLine3D\\styles.css",
-                "Web\\QuickLineOrbit\\index.html", "Web\\QuickLineOrbit\\app.js",
-                "Web\\QuickLineOrbit\\styles.css",
-                "Web\\QuickLineOrbit\\vendor\\three\\OrbitControls.js",
-                "Web\\QuickLineOrbit\\vendor\\three\\three.core.min.js",
-                "Web\\QuickLineOrbit\\vendor\\three\\three.module.min.js",
-                "Web\\QuickLineOrbit\\vendor\\three\\LICENSE.txt",
+                // 3.4.0：Web 页面树随 3D 内核换原生 Viewport3D 退役。
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
             };
             string build = File.ReadAllText(RepoFile("build.ps1"));
@@ -226,21 +219,24 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void PackagePipeline_IncludesLocal3DWebAssets()
+        public void PackagePipeline_LocalAssetsAfterNative3DKernel()
         {
+            // 3.4.0：3D 预览换 WPF 原生 Viewport3D——Web 页面树不再构建进包
+            //（登录页仍用 WebView2，loader 照常携带）。3D 渲染路径里不得再
+            // 有任何浏览器资产或 System.Management（孤儿清扫已随预热退役）。
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
             string csproj = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
 
             Assert.Contains("WebView2Loader.dll", build);
-            Assert.Contains("Web\\QuickLine3D", build);
             Assert.Contains("WebView2Loader.dll", installer);
-            Assert.Contains("Web\\QuickLine3D", installer);
             Assert.Contains("Microsoft.Web.WebView2", csproj);
-            Assert.Contains("Content Include=\"Web\\QuickLine3D", csproj);
-            Assert.Contains("SetVirtualHostNameToFolderMapping", File.ReadAllText(
-                RepoFile("src", "UNCAD", "UI", "Wpf", "QuickLine3dWindow.xaml.cs")));
-            // 3.1.0.1 启动动画单路径化：网页动画资源随 WebView2 换手机制一并移除。
+            Assert.DoesNotContain("QuickLine3D", build);
+            Assert.DoesNotContain("QuickLineOrbit", build);
+            Assert.DoesNotContain("QuickLine3D", installer);
+            Assert.DoesNotContain("QuickLineOrbit", installer);
+            Assert.DoesNotContain("QuickLine3D", csproj);
+            Assert.DoesNotContain("System.Management", csproj);
             Assert.DoesNotContain("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);
             Assert.DoesNotContain("OpenTK", installer);
