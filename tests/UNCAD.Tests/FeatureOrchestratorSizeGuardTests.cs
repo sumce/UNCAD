@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -23,7 +23,7 @@ namespace UNCAD.Tests
         private static readonly Dictionary<string, string> OversizeWhitelist =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                // U1L3D/U13D：单/批两套 payload 序列化高度重复，待合并后拆分。
+                // U13D：批量 payload 序列化（U1L3D 已于 3.3.8 摘除）。
                 { "QuickLine3dPreviewFeature.cs",
                     "3D 预览装配：单/批 payload 序列化重复，待合并拆分" },
                 // XLAYOUT 合并服务：多排布模式 + 机台标签，待按模式拆分。

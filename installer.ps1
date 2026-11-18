@@ -123,7 +123,7 @@ function Get-PackageInfo {
     # keyboard compatibility commands may trigger package loading. Keep this list in exact
     # sync with CommandIds.Registered; BundleLoadingTests enforces that contract.
     $expectedCommands = @(
-        "U1L", "U1LX", "U1L3D", "U13D", "U1D", "U1DT", "U1R", "U1B", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1C20", "U1C25", "U1C38", "U1C51", "U1A", "U1SET", "U1DATA", "U1DWG", "U1PDF", "XLAYOUT", "XSTS", "Xmerge", "Xauto", "U1HELP", "UNC_LOGIN",
+        "U1L", "U1LX", "U13D", "U1D", "U1DT", "U1R", "U1B", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U", "U1S", "U1C", "U1C20", "U1C25", "U1C38", "U1C51", "U1A", "U1SET", "U1DATA", "U1DWG", "U1PDF", "XLAYOUT", "XSTS", "Xmerge", "Xauto", "U1HELP", "UNC_LOGIN",
         "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD")
     foreach ($requiredCommand in $expectedCommands) {
         if ($declaredCommands -notcontains $requiredCommand) {
@@ -148,10 +148,10 @@ function Get-PackageInfo {
         "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
         "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\app.js",
         "Web\QuickLineOrbit\styles.css",
-        "Web\QuickLine3D\styles.css", "Web\QuickLine3D\vendor\three\OrbitControls.js",
-        "Web\QuickLine3D\vendor\three\three.core.min.js",
-        "Web\QuickLine3D\vendor\three\three.module.min.js",
-        "Web\QuickLine3D\vendor\three\LICENSE.txt",
+        "Web\QuickLine3D\styles.css", "Web\QuickLineOrbit\vendor\three\OrbitControls.js",
+        "Web\QuickLineOrbit\vendor\three\three.core.min.js",
+        "Web\QuickLineOrbit\vendor\three\three.module.min.js",
+        "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $payloadFiles) {

@@ -204,10 +204,10 @@ namespace UNCAD.Tests
                 "Web\\QuickLine3D\\styles.css",
                 "Web\\QuickLineOrbit\\index.html", "Web\\QuickLineOrbit\\app.js",
                 "Web\\QuickLineOrbit\\styles.css",
-                "Web\\QuickLine3D\\vendor\\three\\OrbitControls.js",
-                "Web\\QuickLine3D\\vendor\\three\\three.core.min.js",
-                "Web\\QuickLine3D\\vendor\\three\\three.module.min.js",
-                "Web\\QuickLine3D\\vendor\\three\\LICENSE.txt",
+                "Web\\QuickLineOrbit\\vendor\\three\\OrbitControls.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\three.core.min.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\three.module.min.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\LICENSE.txt",
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
             };
             string build = File.ReadAllText(RepoFile("build.ps1"));
@@ -226,7 +226,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void PackagePipeline_IncludesLocalU1L3DWebAssets()
+        public void PackagePipeline_IncludesLocal3DWebAssets()
         {
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
@@ -239,7 +239,7 @@ namespace UNCAD.Tests
             Assert.Contains("Microsoft.Web.WebView2", csproj);
             Assert.Contains("Content Include=\"Web\\QuickLine3D", csproj);
             Assert.Contains("SetVirtualHostNameToFolderMapping", File.ReadAllText(
-                RepoFile("src", "UNCAD", "UI", "Wpf", "U1L3DPreviewWindow.xaml.cs")));
+                RepoFile("src", "UNCAD", "UI", "Wpf", "QuickLine3dWindow.xaml.cs")));
             // 3.1.0.1 启动动画单路径化：网页动画资源随 WebView2 换手机制一并移除。
             Assert.DoesNotContain("UNCAD.Assets.StartupSplash.html", csproj);
             Assert.DoesNotContain("OpenTK", csproj);

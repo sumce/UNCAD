@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UNCAD.Core.QuickLine;
@@ -7,7 +7,7 @@ using Xunit;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// U1L3D/U13D 场景关键路径的性能回归：端点图连接视图必须复用
+    /// U13D 场景关键路径的性能回归：端点图连接视图必须复用
     /// （遍历算法每次调用不再新建集合），并且大规模场景输出与
     /// 单组件构建完全等价。
     /// </summary>

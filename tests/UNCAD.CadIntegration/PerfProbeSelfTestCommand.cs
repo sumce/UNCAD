@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -13,7 +13,7 @@ using UNCAD.Infra;
 namespace UNCAD.CadIntegration
 {
     /// <summary>
-    /// 只读性能探针（UNCAD_PERF_SELFTEST）：量出 U1L3D/U13D 的整图扫描成本
+    /// 只读性能探针（UNCAD_PERF_SELFTEST）：量出 U13D 的整图扫描成本
     /// 与 SQLite 按机台查询成本。不改图纸；报告写到 %UNCAD_PERF_REPORT%。
     /// </summary>
     public sealed class PerfProbeSelfTestCommand
@@ -59,7 +59,7 @@ namespace UNCAD.CadIntegration
             }
             Info("模型空间实体: " + entities + "，块参照: " + inserts);
 
-            // 1) QuickLineCadService.Scan：U1L3D/U13D 每条命令一次的全图扫描。
+            // 1) QuickLineCadService.Scan：U13D 命令的全图扫描。
             Info("");
             Info("=== 1) QuickLineCadService.Scan（整图扫描一次）===");
             var watch = Stopwatch.StartNew();

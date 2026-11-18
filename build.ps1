@@ -77,10 +77,10 @@ if (-not $SkipBundle) {
         "Web\QuickLine3D\index.html", "Web\QuickLine3D\app.js",
         "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\app.js",
         "Web\QuickLineOrbit\styles.css",
-        "Web\QuickLine3D\styles.css", "Web\QuickLine3D\vendor\three\OrbitControls.js",
-        "Web\QuickLine3D\vendor\three\three.core.min.js",
-        "Web\QuickLine3D\vendor\three\three.module.min.js",
-        "Web\QuickLine3D\vendor\three\LICENSE.txt",
+        "Web\QuickLine3D\styles.css", "Web\QuickLineOrbit\vendor\three\OrbitControls.js",
+        "Web\QuickLineOrbit\vendor\three\three.core.min.js",
+        "Web\QuickLineOrbit\vendor\three\three.module.min.js",
+        "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"

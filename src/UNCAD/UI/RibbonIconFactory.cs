@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -99,8 +99,7 @@ namespace UNCAD.UI
             if (string.Equals(command, CommandIds.Tray100, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Tray200, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.Tray400, StringComparison.OrdinalIgnoreCase)) return "tray";
-            if (string.Equals(command, CommandIds.Line3dPreview, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(command, CommandIds.Line3dBatchPreview, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(command, CommandIds.Line3dBatchPreview, StringComparison.OrdinalIgnoreCase))
                 return "line3d";
             if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.LineQuick, StringComparison.OrdinalIgnoreCase)

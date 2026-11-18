@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -466,7 +466,7 @@ namespace UNCAD.Tests
             string control = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLineWebPreviewControl.cs");
             string u1l = Read("src", "UNCAD", "UI", "Wpf",
-                "U1L3DPreviewWindow.xaml.cs");
+                "QuickLine3dWindow.xaml.cs");
             string login = Read("src", "UNCAD", "UI", "Wpf",
                 "ClientLoginWindow.xaml.cs");
             string bootstrap = Read("src", "UNCAD", "Bootstrap.cs");

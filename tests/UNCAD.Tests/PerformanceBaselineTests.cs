@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,7 +14,7 @@ using Xunit.Abstractions;
 namespace UNCAD.Tests
 {
     /// <summary>
-    /// 关键路径性能基线/回归测量（U1L3D 场景、XSTS 报告、XLAYOUT 编排）。
+    /// 关键路径性能基线/回归测量（U13D 场景、XSTS 报告、XLAYOUT 编排）。
     ///
     /// 该测试只打印测量值，不做脆弱的时间断言：耗时随机器变化，真正防止
     /// 算法退化的是同一文件里的调用次数/复杂度不变量测试。基线命令：

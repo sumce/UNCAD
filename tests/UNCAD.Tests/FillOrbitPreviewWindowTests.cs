@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -362,155 +362,10 @@ namespace UNCAD.Tests
             });
         }
 
-        [Fact]
-        public void U1L3DProbe_RealWebView2_ControlExperiment()
-        {
-            // 对照实验：同宿主跑生产验证过的 U1L3DPreviewWindow（同为 WebView2、
-            // 同为 Loaded 后初始化）。若它也白屏 → 测试宿主环境本身显示不出
-            // WebView2 合成（控件无缺陷，生产空白另有原因）；若它正常而
-            // Orbit 探针白 → 控件与参考实现的差异是真缺陷。
-            WpfStaRunner.Run(delegate
-            {
-                string repoWeb = Path.GetFullPath(Path.Combine(
-                    AppContext.BaseDirectory, "..", "..", "..", "..",
-                    "..", "src", "UNCAD", "Web"));
-                var window = new U1L3DPreviewWindow(
-                    new System.Collections.Generic.Dictionary<string, object>(),
-                    System.IO.Path.Combine(repoWeb, "QuickLine3D"))
-                {
-                    AutoInitializeWebView = true
-                };
-                window.Show();
-                for (int i = 0; i < 120; i++)
-                {
-                    Pump(1);
-                    Thread.Sleep(100);
-                }
-                string dir = Path.Combine(Path.GetTempPath(), "uncad-orbit-probe");
-                Directory.CreateDirectory(dir);
-                CaptureWindow(window, Path.Combine(dir, "u1l3d.png"));
-                window.Close();
-            });
-        }
-
-        [Fact]
-        public void OrbitProbe_RealWebView2_Diagnostic()
-        {
-            // 3.3.6 现场诊断（用户报告"展示3D的区域是空白的"）：真 WebView2 +
-            // 真页面（WebRootOverride 指向源码树 Web/——测试输出目录没有 Web/，
-            // 首版探针正是复现了"找不到页面资源"的致命路径）。控件直挂普通
-            // 窗，转储内部状态并 GDI 截图到 %TEMP%\uncad-orbit-probe\。
-            WpfStaRunner.Run(delegate
-            {
-                QuickLineWebPreviewControl.DefaultAutoInitialize = true;
-                try
-                {
-                    string repoWeb = Path.GetFullPath(Path.Combine(
-                        AppContext.BaseDirectory, "..", "..", "..", "..",
-                        "..", "src", "UNCAD", "Web"));
-                    var control = new QuickLineWebPreviewControl
-                    {
-                        Width = 880,
-                        Height = 600,
-                        WebRootOverride = Path.Combine(repoWeb, "QuickLineOrbit")
-                    };
-                    var window = new Window
-                    {
-                        Title = "orbit-probe",
-                        Content = control,
-                        Width = 920,
-                        Height = 660,
-                        Topmost = true
-                    };
-                    window.Show();
-                    // 变体验证：等窗口 Loaded/布局后再 SetModel（U1L3D 的
-                    // BeginInitialize 挂在 Loaded 上；生产 FillReviewWindow 是
-                    // 构造期 SetModel——预 HWND 初始化疑似白屏根因）。
-                    for (int i = 0; i < 15; i++)
-                    {
-                        Pump(1);
-                        Thread.Sleep(100);
-                    }
-                    control.SetModel(PreviewModel("上游 48/V ↔ 下游 37/V"));
-                    for (int i = 0; i < 120; i++)
-                    {
-                        Pump(1);
-                        Thread.Sleep(100);
-                    }
-                    var flags = System.Reflection.BindingFlags.Instance
-                        | System.Reflection.BindingFlags.NonPublic;
-                    var type = typeof(QuickLineWebPreviewControl);
-                    string State(string field)
-                        => Convert.ToString(type.GetField(field, flags)?.GetValue(control));
-                    var webField = type.GetField("_webView", flags);
-                    var webView = webField?.GetValue(control);
-                    var core = webView?.GetType().GetProperty("CoreWebView2")?.GetValue(webView);
-                    string report = "segments=" + control.BuiltSegmentLineCount
-                        + " labels=" + control.BuiltLabelCount
-                        + " tray=" + control.BuiltTrayChannelCount
-                        + " grid=" + control.BuiltColumnGridLineCount
-                        + "\n_started=" + State("_initializationStarted")
-                        + "\n_pageReady=" + State("_pageReady")
-                        + "\n_fatal=" + State("_fatal")
-                        + "\n_closed=" + State("_closed")
-                        + "\n_core=" + (core != null ? "created" : "null")
-                        + "\n_webVisibility=" + (webView as UIElement)?.Visibility;
-                    string dir = Path.Combine(Path.GetTempPath(), "uncad-orbit-probe");
-                    Directory.CreateDirectory(dir);
-                    File.WriteAllText(Path.Combine(dir, "state.txt"), report);
-                    // 页面内侧探针：DOM 状态/背景/canvas 尺寸/标签数/当前 URL。
-                    if (core != null)
-                    {
-                        try
-                        {
-                            var exec = core.GetType().GetMethod("ExecuteScriptAsync",
-                                new[] { typeof(string) });
-                            var task = (System.Threading.Tasks.Task<string>)exec.Invoke(
-                                core, new object[]
-                                {
-                                    "JSON.stringify({ready: document.readyState," +
-                                    "bg: getComputedStyle(document.body).backgroundColor," +
-                                    "canvas: (function(){var c=document.querySelector('#canvasHost canvas');" +
-                                    "return c ? c.width+'x'+c.height : 'none';})()," +
-                                    "labels: document.querySelectorAll('.scene-label').length," +
-                                    "loading: document.getElementById('loading') ? " +
-                                    "document.getElementById('loading').style.display : 'none'," +
-                                    "host: !!window.chrome && !!window.chrome.webview})"
-                                });
-                            // 边泵边等：ExecuteScriptAsync 的 continuation 要回宿主
-                            // UI 线程，裸 Wait(3000) 会堵死 STA 泵卡住整个测试。
-                            var deadline = Environment.TickCount + 4000;
-                            while (!task.IsCompleted
-                                && Environment.TickCount < deadline)
-                            {
-                                Pump(1);
-                                Thread.Sleep(50);
-                            }
-                            File.WriteAllText(Path.Combine(dir, "page.txt"),
-                                task.IsCompleted
-                                    ? Convert.ToString(task.Result)
-                                    : "SCRIPT-TIMEOUT");
-                            var sourceProp = core.GetType().GetProperty("Source");
-                            File.AppendAllText(Path.Combine(dir, "page.txt"),
-                                "\nsource=" + sourceProp?.GetValue(core));
-                        }
-                        catch (Exception ex)
-                        {
-                            File.WriteAllText(Path.Combine(dir, "page.txt"),
-                                "EXEC-FAIL: " + ex.Message);
-                        }
-                    }
-                    CaptureWindow(window, Path.Combine(dir, "window.png"));
-                    window.Close();
-                }
-                finally
-                {
-                    QuickLineWebPreviewControl.DefaultAutoInitialize = false;
-                }
-            });
-        }
-
-        [Fact]
+        // 3.3.8：本探针是**装机门禁**（真 WebView2+真像素），不在常规全量里跑
+        // ——本机 WebView2 数据目录被锁时会同步阻塞 STA 线程，窗口挂在用户
+        // 桌面（2026-11-18 用户截图在案）。装机前手动去掉 Skip 跑一次。
+        [Fact(Skip = "装机门禁探针：出包前手动启用一次（真窗口真像素，常规全量禁跑）")]
         public void ProductionSequence_CtorSetModel_ThenShow_RendersDarkScene()
         {
             // 3.3.7.2 终验探针（装机门禁）：完全复刻生产 FillReviewWindow 的
@@ -544,7 +399,10 @@ namespace UNCAD.Tests
                         Content = control,
                         Width = 920,
                         Height = 660,
-                        Topmost = true
+                        Topmost = false,
+                        // 3.3.8：不再置顶打扰用户；右下角安静自证后即关。
+                        Left = SystemParameters.PrimaryScreenWidth - 940,
+                        Top = SystemParameters.PrimaryScreenHeight - 720
                     };
                     window.Show();
                     string dir = Path.Combine(Path.GetTempPath(),

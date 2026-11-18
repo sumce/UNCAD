@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -38,63 +38,23 @@ namespace UNCAD.Features.Unl
             new Lazy<AnnotationModelIndex>(
                 () => AnnotationModelIndex.Build(ListItemReader.ReadEmbedded()), true);
 
-        [CommandMethod(CommandIds.Line3dPreview, CommandFlags.UsePickSet)]
-        public void Preview() => Run();
-
+        // 3.3.8（用户指令「U1L3D 这个删掉 一个也不留」）：单图框预览命令
+        // U1L3D 已整体摘除；本特性只保留批量 U13D（逐图框预览）。场景构建
+        /// 与 U1F/U1U 上传共用的链路全部保留。
         [CommandMethod(CommandIds.Line3dBatchPreview, CommandFlags.UsePickSet)]
         public void BatchPreview() => Run(true);
 
         protected override void Execute(CadContext ctx)
         {
-            ProductMetadata.EnsureCommandAllowed(CommandIds.Line3dPreview);
-            ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
-                "\n[U1L3D] 框选一个完整图框: ", new TypedValue(0, "INSERT"));
-            if (selected == null || selected.Length == 0)
-            {
-                ctx.Write("\n[U1L3D] 未选择图框，未生成预览。");
-                return;
-            }
-
-            var perfWatch = Stopwatch.StartNew();
-            FrameRegionCollection regions = FrameRegionCollector.CollectForLayout(ctx,
-                selected);
-            long collectMilliseconds = perfWatch.ElapsedMilliseconds;
-            if (regions.Errors.Count > 0)
-                throw new InvalidOperationException(string.Join("\n", regions.Errors));
-            if (regions.SelectedFrameCount != 1 || regions.Groups.Count != 1)
-            {
-                ctx.Write("\n[U1L3D] 请只框选一个完整的 frame/frame_20260812/xframe/xframe_v2 图框，"
-                    + "并确保图框块本身包含在选择集中。");
-                return;
-            }
-
-            FrameRegionGroup region = regions.Groups[0];
-            perfWatch.Restart();
-            Dictionary<string, object> envelope = BuildRegionEnvelope(ctx, region,
-                out string sceneIssue);
-            long sceneMilliseconds = perfWatch.ElapsedMilliseconds;
-            if (envelope == null)
-            {
-                ctx.Write("\n[U1L3D] " + sceneIssue);
-                return;
-            }
-            long perfTotal = collectMilliseconds + sceneMilliseconds;
-            if (perfTotal >= PerfThresholdMilliseconds)
-            {
-                Log.Info("[PERF] U1L3D total=" + perfTotal + "ms"
-                    + " collect=" + collectMilliseconds + "ms"
-                    + " scan+scene=" + sceneMilliseconds + "ms"
-                    + " frameEntities=" + (region.EntityIds?.Count ?? 0));
-            }
-
-            // 3.0 WPF 外壳（D-038 P5）；内容仍是 WebView2（D-025）。
-            UNCAD.UI.ModalWindowHost.Show(new U1L3DPreviewWindow(envelope));
+            // U1L3D 已于 3.3.8 摘除：无状态 Run() 入口不复存在，此重写只为
+            // 满足抽象基类（不可达）。
+            ctx.Write("\n[U13D] 请使用 U13D 框选图框批量预览。");
         }
 
         /// <summary>
         /// 由**已解析的图框**构建等轴测 envelope。
         ///
-        /// U1L3D 的本地预览与 U1F/U1U 的**自动上传**共用这一份逻辑，避免出现
+        /// U13D 的本地预览与 U1F/U1U 的**自动上传**共用这一份逻辑，避免出现
         /// "网页里看到的 3D 与客户端看到的不是同一份"。失败返回 null 并给出中文原因
         /// （图框内没有带毫米标注的 U1L 线段属正常情况，不是错误）。
         /// </summary>
@@ -331,7 +291,7 @@ namespace UNCAD.Features.Unl
                     + " frames=" + frames.Count
                     + " scanned=" + scanned.Count);
             }
-            UNCAD.UI.ModalWindowHost.Show(new U1L3DPreviewWindow(envelope));
+            UNCAD.UI.ModalWindowHost.Show(new QuickLine3dWindow(envelope));
         }
 
         private static QuickLineIsometricScene BuildScene(

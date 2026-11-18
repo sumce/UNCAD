@@ -13,11 +13,11 @@ using Wpf.Ui.Controls;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// 本地只读 U1L3D 场景宿主（3.0 WPF 外壳，D-038 P5；WebView2 内容按 D-025 维持）。
+    /// 本地只读 U13D 场景宿主（3.0 WPF 外壳，D-038 P5；WebView2 内容按 D-025 维持）。
     /// 行为与迁移前的 WinForms 预览窗逐条对齐：虚拟主机只映射本地 Web/QuickLine3D
     /// 目录，非本地页面导航一律取消；不写 CAD、不刷新工作簿、不访问网络。
     /// </summary>
-    public sealed partial class U1L3DPreviewWindow : FluentWindow
+    public sealed partial class QuickLine3dWindow : FluentWindow
     {
         private const string VirtualHostName = "u1l3d.uncad.invalid";
         private readonly string _webRoot;
@@ -38,12 +38,12 @@ namespace UNCAD.UI
         /// <summary>等价于旧 Form 的 IsDisposed：Closed 之后异步回调一律退出。</summary>
         private bool _closed;
 
-        public U1L3DPreviewWindow(IDictionary<string, object> scene)
+        public QuickLine3dWindow(IDictionary<string, object> scene)
             : this(scene, ResolveDefaultWebRoot())
         {
         }
 
-        internal U1L3DPreviewWindow(IDictionary<string, object> scene, string webRoot)
+        internal QuickLine3dWindow(IDictionary<string, object> scene, string webRoot)
         {
             if (scene == null) throw new ArgumentNullException(nameof(scene));
             _sceneJson = new JavaScriptSerializer
@@ -101,9 +101,13 @@ namespace UNCAD.UI
                 ShowFatalError("3D 渲染进程异常终止：" + args.ProcessFailedKind);
             };
             core.WebMessageReceived += OnWebMessageReceived;
-            core.SetVirtualHostNameToFolderMapping(VirtualHostName, _webRoot,
+            // 3.3.8：three.js vendor 已随 U1L3D 摘除搬到 QuickLineOrbit——
+            // 主机根映射到 Web 父目录（与 U1U 预览同法），页面从兄弟目录引库。
+            core.SetVirtualHostNameToFolderMapping(VirtualHostName,
+                System.IO.Path.GetDirectoryName(_webRoot),
                 CoreWebView2HostResourceAccessKind.Deny);
-            _webView.Source = new Uri("https://" + VirtualHostName + "/index.html");
+            _webView.Source = new Uri("https://" + VirtualHostName
+                + "/QuickLine3D/index.html");
         }
 
         private void OnNavigationStarting(object sender,
@@ -141,12 +145,12 @@ namespace UNCAD.UI
                 else if (string.Equals(type, "close", StringComparison.Ordinal))
                     Close();
                 else if (string.Equals(type, "renderError", StringComparison.Ordinal))
-                    Log.Warn("U1L3D 页面渲染失败: " + Convert.ToString(
+                    Log.Warn("U13D 页面渲染失败: " + Convert.ToString(
                         message.TryGetValue("message", out object detail) ? detail : ""));
             }
             catch (Exception ex)
             {
-                Log.Warn("U1L3D 页面消息读取失败: " + ex.Message);
+                Log.Warn("U13D 页面消息读取失败: " + ex.Message);
             }
         }
 
@@ -183,7 +187,7 @@ namespace UNCAD.UI
         private static string ResolveDefaultWebRoot()
         {
             string assemblyDirectory = Path.GetDirectoryName(
-                typeof(U1L3DPreviewWindow).Assembly.Location);
+                typeof(QuickLine3dWindow).Assembly.Location);
             return Path.Combine(assemblyDirectory ?? "", "Web", "QuickLine3D");
         }
 

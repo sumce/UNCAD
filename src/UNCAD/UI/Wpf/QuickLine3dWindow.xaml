@@ -1,8 +1,8 @@
-<ui:FluentWindow x:Class="UNCAD.UI.U1L3DPreviewWindow"
+﻿<ui:FluentWindow x:Class="UNCAD.UI.QuickLine3dWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                 Title="U1L3D 三维预览"
+                 Title="U13D 三维预览"
                  Width="1180" Height="760" MinWidth="900" MinHeight="600"
                  ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
                  ShowInTaskbar="False"
@@ -16,7 +16,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <ui:TitleBar Grid.Row="0" Title="U1L3D 三维预览" ShowMinimize="False" />
+        <ui:TitleBar Grid.Row="0" Title="U13D 三维预览" ShowMinimize="False" />
 
         <!-- WebView2（WPF 控件）在代码里挂载；致命错误时整块替换为错误说明。 -->
         <Grid Grid.Row="1" x:Name="BrowserHost" ClipToBounds="True">

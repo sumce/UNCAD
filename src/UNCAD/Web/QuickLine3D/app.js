@@ -1,5 +1,5 @@
-import * as THREE from './vendor/three/three.module.min.js';
-import { OrbitControls } from './vendor/three/OrbitControls.js';
+﻿import * as THREE from '../QuickLineOrbit/vendor/three/three.module.min.js';
+import { OrbitControls } from '../QuickLineOrbit/vendor/three/OrbitControls.js';
 
 const el = {
   viewport: document.getElementById('viewport'), canvasHost: document.getElementById('canvasHost'),

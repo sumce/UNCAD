@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace UNCAD.Infra
 {
@@ -36,7 +36,6 @@ namespace UNCAD.Infra
         public const string Tray400 = "U1Q4";
         public const string Line = "U1L";
         public const string LineQuick = "U1LX";
-        public const string Line3dPreview = "U1L3D";
         public const string Line3dBatchPreview = "U13D";
         public const string DimensionText = "U1DT";
         public const string Arch = "U1R";
@@ -62,7 +61,7 @@ namespace UNCAD.Infra
             + ";" + LegacyTray100 + ";" + LegacyTray200 + ";" + LegacyTray400;
         public const string LineFeatureCommands = Line + ";" + LegacyLine;
         public const string QuickLineFeatureCommands = LineQuick + ";" + LegacyLineQuick;
-        public const string QuickLine3dPreviewFeatureCommands = Line3dPreview + ";" + Line3dBatchPreview;
+        public const string QuickLine3dPreviewFeatureCommands = Line3dBatchPreview;
         public const string DimensionTextFeatureCommands = DimensionText;
         public const string DataRefreshFeatureCommands = DataRefresh;
         public const string DwgExportFeatureCommands = DwgExport + ";" + DwgExportShort;
@@ -79,7 +78,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Canonical { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto, Help
         };
 
@@ -96,7 +95,7 @@ namespace UNCAD.Infra
 
         public static IReadOnlyList<string> Registered { get; } = new[]
         {
-            Line, LineQuick, Line3dPreview, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
+            Line, LineQuick, Line3dBatchPreview, DimensionText, Arch, Hose, Tray100, Tray200, Tray400, Fill, FillUpdate, Submit,
             Conduit, Conduit20, Conduit25, Conduit38, Conduit51,
             About, Settings, DataRefresh, DwgExport, XLayout, Statistics, Merge, XAuto,
             Help, ClientLogin,

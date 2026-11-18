@@ -32,7 +32,7 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Product: `UNCAD Pro`. Stable line: `3.3.7` (U1U 3D preview reference
+- Product: `UNCAD Pro`. Stable line: `3.3.8` (U1U 3D preview reference
   objects as a simplified building model — typed slabs/epoxy/waffle/steel/
   grating/bus-glass/grid columns — on the WebView2+three.js kernel,
   2026-11-18, D-054 amendment; full WPF UI since 3.0.0, D-038; patches

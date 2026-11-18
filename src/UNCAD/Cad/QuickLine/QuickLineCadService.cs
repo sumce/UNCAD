@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -58,7 +58,7 @@ namespace UNCAD.Cad.QuickLine
     public static class QuickLineCadService
     {
         private const double Epsilon = 1e-9;
-        // 整图扫描是 U1L3D/U13D/U1LX 的固定成本；只在明显变慢时输出一行 [PERF]。
+        // 整图扫描是 U13D/U1LX 的固定成本；只在明显变慢时输出一行 [PERF]。
         private const long PerfLogThresholdMilliseconds = 300;
         // ObjectClass lookups avoid opening entities that can never be scan
         // candidates.  IsDerivedFrom covers proxy-safe subclasses the same way

@@ -20,7 +20,7 @@ namespace UNCAD.UI
     /// 预览后现场反馈「这生成的 3D 有严重问题」，D-054 3.3.2 选型记录作废）。
     /// 本控件是**哑宿主**：场景语义（柱网规划/通道双线偏移/标签锚点）全部由
     /// Core 的 QuickLineOrbitPreviewEnvelope 算好序列化成 JSON 喂给本地页面
-    /// （Web/QuickLineOrbit，复用 QuickLine3D 已 vendor 的 three.js）——分层
+    /// （Web/QuickLineOrbit，自带 vendor 的 three.js）——分层
     /// 铁律不变：窗体不重建场景。WebView2 接线与安全口径逐条对齐
     /// U1L3DPreviewWindow（D-025）：虚拟主机只映射本地 Web 目录、非本地导航
     /// 一律取消、无宿主对象/下载/权限、渲染进程异常走降级文案。
@@ -277,7 +277,7 @@ namespace UNCAD.UI
             };
             core.WebMessageReceived += OnWebMessageReceived;
             // 虚拟主机根映射到 Web 父目录：页面在 /QuickLineOrbit/，three.js
-            // 从 ../QuickLine3D/vendor/ 引用（同主机内，不出网）。
+            // 引用本页 vendor 目录（同主机内，不出网）。
             core.SetVirtualHostNameToFolderMapping(VirtualHostName,
                 Path.GetDirectoryName(_webRoot),
                 CoreWebView2HostResourceAccessKind.Deny);

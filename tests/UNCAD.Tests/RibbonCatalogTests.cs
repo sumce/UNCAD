@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UNCAD.Infra;
@@ -17,7 +17,7 @@ namespace UNCAD.Tests
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(24, primary.Length);
+            Assert.Equal(23, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));
@@ -32,8 +32,6 @@ namespace UNCAD.Tests
                     StringComparison.OrdinalIgnoreCase));
             Assert.Equal("快速标注距离", quickLine.Text);
             Assert.Contains("标注", quickLine.ToolTip);
-            Assert.Single(primary, item => string.Equals(item.Command,
-                CommandIds.Line3dPreview, StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

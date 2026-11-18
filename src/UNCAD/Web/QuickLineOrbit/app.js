@@ -1,13 +1,13 @@
-// 3.3.5（D-054 Amendment）：U1U 确认窗左侧 3D 路由预览页——渲染内核从
+﻿// 3.3.5（D-054 Amendment）：U1U 确认窗左侧 3D 路由预览页——渲染内核从
 // HelixToolkit.Wpf 换回 WebView2 + three.js（用户看过 3.3.2/3.3.4 的 Helix
 // 预览后现场反馈「这生成的 3D 有严重问题」）。本页是**哑渲染器**：全部
 // 场景语义（柱网规划/通道双线偏移/标签锚点）由宿主侧 Core 信封
 // （QuickLineOrbitPreviewEnvelope）算好传入，这里只做三件事——
 // 画线（透视相机+轨道交互）、叠标签（HTML 层，中文交给 Chromium）、
 // 回消息（ready / renderError）。three.js 与 OrbitControls 复用
-// QuickLine3D 页已 vendor 的库（宿主把虚拟主机根映射到 Web 父目录）。
-import * as THREE from '../QuickLine3D/vendor/three/three.module.min.js';
-import { OrbitControls } from '../QuickLine3D/vendor/three/OrbitControls.js';
+// 本页自带 vendor 的 three.js 库。
+import * as THREE from 'vendor/three/three.module.min.js';
+import { OrbitControls } from 'vendor/three/OrbitControls.js';
 
 const el = {
   viewport: document.getElementById('viewport'),

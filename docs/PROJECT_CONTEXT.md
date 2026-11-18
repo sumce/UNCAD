@@ -1,11 +1,11 @@
-# UNCAD Project Context
+﻿# UNCAD Project Context
 
 This is the compact map for day-to-day maintenance. It is intentionally much
 shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.3.7` (2026-11-18; D-054 amendments — the
+- Current stable release: `3.3.8` (2026-11-18; D-054 amendments — the
   U1U 3D preview reference objects became a simplified building model:
   typed entries "标签=毫米=类型" in U1SET `UNC_PREVIEW_REF_LEVELS`
   (floor/epoxy resin/waffle plate with 3x3 round holes per structural

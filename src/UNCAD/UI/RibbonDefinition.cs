@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UNCAD.Infra;
@@ -95,8 +95,6 @@ namespace UNCAD.UI
                         "像 LINE 一样连续取点，生成绿色平面软管（默认直径 100）并标注"),
                     RibbonItemDefinition.Button("快速标注距离", CommandIds.LineQuick,
                         "点选线段后逐段快速填写毫米标注（兼容命令 UNLX）"),
-                    RibbonItemDefinition.Button("U1L 三维预览", CommandIds.Line3dPreview,
-                        "框选完整图框，按 U1L 等测线生成只读三维预览并显示上下游轴位"),
                     RibbonItemDefinition.Button("U13D 多图框预览", CommandIds.Line3dBatchPreview,
                         "框选多个图框，按轴位统一对齐并展示路由、电缆和桥架米数"),
                     RibbonItemDefinition.Button("标注转文字", CommandIds.DimensionText,
