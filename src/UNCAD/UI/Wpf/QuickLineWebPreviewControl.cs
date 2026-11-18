@@ -43,6 +43,7 @@ namespace UNCAD.UI
         private QuickLineOrbitPreviewEnvelope _envelope;
         private string _pendingJson;
         private bool _initializationStarted;
+        private bool _loadedSeen;
         private bool _pageReady;
         private bool _fatal;
         private bool _closed;
@@ -123,7 +124,14 @@ namespace UNCAD.UI
             // EnsureCoreWebView2Async（探针作者早就标注过「疑似白屏根因」但
             // 生产从未改）。SetModel 的入口保留（幂等）覆盖已 Loaded 的复用
             // 场景（批量窗换选行）。
-            Loaded += (sender, args) => BeginInitialize();
+            Loaded += (sender, args) =>
+            {
+                _loadedSeen = true;
+                // 构造期 SetModel 抢在 Loaded 前只挂起请求——此刻 hwnd 已
+                // 存在，放行（生产 FillReviewWindow 在窗口 Show 前构造期就
+                // SetModel，2026-11-18 10:31 现场实证旧改法被它抢先失效）。
+                if (_model != null) BeginInitialize();
+            };
             Unloaded += OnUnloaded;
         }
 
@@ -156,9 +164,10 @@ namespace UNCAD.UI
                 RecursionLimit = 64
             }.Serialize(payload);
             // 3.3.7.2（审计 R5）：null 模型（批量窗选中无预览行）不启动
-            // WebView——注释宣称「首个非 null 才启动」而旧实现无此判断。
+            // WebView；且初始化必须等 Loaded（hwnd 就绪）——构造期到达的
+            // 请求由 Loaded 处理器放行。
             if (_pageReady) DeliverEnvelope();
-            else if (model != null) BeginInitialize();
+            else if (model != null && _loadedSeen) BeginInitialize();
         }
 
         /// <summary>复位视角（页面消息驱动；页面未就绪时静默——页面自身有复位按钮/双击）。</summary>

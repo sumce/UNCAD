@@ -31,13 +31,13 @@ namespace UNCAD.UI
         /// <summary>火后不管；失败只记日志。</summary>
         internal static void WarmUp()
         {
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null) return;
-            if (!dispatcher.CheckAccess())
-            {
-                dispatcher.BeginInvoke((Action)WarmUp);
+            // AutoCAD 进程里没有 WPF Application.Current（首版靠它取
+            // Dispatcher，在 CAD 里恒为 null → 预热整体静默空转，2026-11-18
+            // 10:31 现场日志实证）。OnLicenseIdle 本来就在 CAD 主 STA 线程，
+            // 直接建窗即可（U1L 的窗也是在这个线程上弹的）。
+            if (System.Threading.Thread.CurrentThread.GetApartmentState()
+                != System.Threading.ApartmentState.STA)
                 return;
-            }
             if (_window != null) return;
             try
             {

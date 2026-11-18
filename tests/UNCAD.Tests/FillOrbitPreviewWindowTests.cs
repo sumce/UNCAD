@@ -510,6 +510,98 @@ namespace UNCAD.Tests
             });
         }
 
+        [Fact]
+        public void ProductionSequence_CtorSetModel_ThenShow_RendersDarkScene()
+        {
+            // 3.3.7.2 终验探针（装机门禁）：完全复刻生产 FillReviewWindow 的
+            // 时序——**构造期（窗口 Show 之前）就 SetModel**，之后才 Show。
+            // 2026-11-18 10:31 现场：旧实现构造期即启动初始化=预 HWND 调
+            // EnsureCoreWebView2Async（审计 R5「疑似白屏根因」）；3.3.7.2 的
+            // Loaded 挂钩被构造期 SetModel 抢先、形同虚设（同日现场再白）。
+            // 本探针锁死新语义：构造期 SetModel 只挂起请求，Loaded（hwnd
+            // 存在）才放行初始化——真 WebView2+真页面+GDI 真像素，非纯白
+            // 才算过。冷启动容忍 45s（本机控制器冷创建实测 33.5s）。
+            WpfStaRunner.Run(delegate
+            {
+                QuickLineWebPreviewControl.DefaultAutoInitialize = true;
+                try
+                {
+                    string repoWeb = Path.GetFullPath(Path.Combine(
+                        AppContext.BaseDirectory, "..", "..", "..", "..",
+                        "..", "src", "UNCAD", "Web"));
+                    var control = new QuickLineWebPreviewControl
+                    {
+                        Width = 880,
+                        Height = 600,
+                        WebRootOverride = Path.Combine(repoWeb, "QuickLineOrbit")
+                    };
+                    // 生产顺序：先 SetModel（此时控件未加载——必须只挂起，
+                    // 不得启动初始化）。
+                    control.SetModel(PreviewModel("生产时序 48/V"));
+                    var window = new Window
+                    {
+                        Title = "orbit-production-sequence",
+                        Content = control,
+                        Width = 920,
+                        Height = 660,
+                        Topmost = true
+                    };
+                    window.Show();
+                    string dir = Path.Combine(Path.GetTempPath(),
+                        "uncad-orbit-probe");
+                    Directory.CreateDirectory(dir);
+                    string png = Path.Combine(dir, "production-sequence.png");
+                    bool pageReadySeen = false;
+                    for (int i = 0; i < 450; i++)
+                    {
+                        Pump(1);
+                        Thread.Sleep(100);
+                        if (i == 30) CaptureWindow(window, png + ".early.png");
+                        var flags = System.Reflection.BindingFlags.Instance
+                            | System.Reflection.BindingFlags.NonPublic;
+                        if (Convert.ToString(typeof(QuickLineWebPreviewControl)
+                                .GetField("_pageReady", flags)?.GetValue(control))
+                            .Equals("True"))
+                        {
+                            pageReadySeen = true;
+                            Thread.Sleep(700);
+                            break;
+                        }
+                    }
+                    CaptureWindow(window, png);
+                    window.Close();
+                    Assert.True(pageReadySeen,
+                        "生产时序下页面应就绪（45s 内）——预热/初始化链路不通");
+                    // 真像素门禁：画面不得是纯白（未绑定的 WebView2 hwnd 是
+                    // 255/255/255）。采样中心区域多点。
+                    using (var bitmap = new System.Drawing.Bitmap(png))
+                    {
+                        int whiteish = 0;
+                        int samples = 0;
+                        for (int x = bitmap.Width / 4;
+                             x < bitmap.Width * 3 / 4; x += 24)
+                        {
+                            for (int y = bitmap.Height / 4;
+                                 y < bitmap.Height * 3 / 4; y += 24)
+                            {
+                                var pixel = bitmap.GetPixel(x, y);
+                                samples++;
+                                if (pixel.R > 240 && pixel.G > 240
+                                    && pixel.B > 240) whiteish++;
+                            }
+                        }
+                        Assert.True(samples > 0 && whiteish * 100 / samples < 20,
+                            "中心区域白色占比 " + whiteish + "/" + samples
+                            + " —— 生产时序下预览必须是深色 3D 场景而非白块");
+                    }
+                }
+                finally
+                {
+                    QuickLineWebPreviewControl.DefaultAutoInitialize = false;
+                }
+            });
+        }
+
         /// <summary>GDI 屏幕复制抓窗口真实合成画面（含 WebView2 的 HwndHost）。</summary>
         private static void CaptureWindow(Window window, string path)
         {
