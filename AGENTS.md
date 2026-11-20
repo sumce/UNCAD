@@ -32,12 +32,17 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source build: `3.4.1.6` (2026-11-19), pending install
-  acceptance; the installed build is `3.4.1.1`. XSTS frame details use
+- Current local source build: `3.4.1.6` (2026-11-19); the installed assembly is
+  `3.4.1.6`. The release ZIP was generated locally on 2026-11-20 at
+  `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
+  `DCA972DB7532FB9B34582C6F125E29FAA14B701892939DC86385540A46EC7C90`).
+  It has not been uploaded; current bundle hash differs from the installed
+  bundle, and user-drawing acceptance remains pending. XSTS frame details use
   one row per frame, with separate model and quantity columns for every drawn
   BOQ item and blank cells for missing items. Near-name hints and the "not
-  drawn" list are removed. The `v3.4.1` tag and official ZIP are pending.
-- Product: `UNCAD Pro`. Stable line: `3.4.0` (U1U/U13D 3D preview kernel
+  drawn" list are removed. The local `v3.4.1` tag and release ZIP are created.
+- Product: `UNCAD Pro`. Stable line: `3.4.1` (current patch `3.4.1.6`;
+  U1U/U13D 3D preview kernel
   switched to the in-box WPF Viewport3D — synchronous scene build, no browser
   process, no user-data-directory lock; the WebView2+three.js preview stack
   is retired, login page WebView2 stays, 2026-11-18, D-054 amendment; full

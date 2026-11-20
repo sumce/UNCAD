@@ -6,12 +6,15 @@ shorter than the historical release notes.
 ## Status
 
 - Current local source build: `3.4.1.6` (2026-11-19); the installed assembly is
-  `3.4.1.6`, but its bundle checksum differs from the latest local rebuild;
-  acceptance on user drawings is pending. XSTS frame details use one row per frame, with separate model
+  `3.4.1.6`. The local release ZIP was generated on 2026-11-20 at
+  `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
+  `DCA972DB7532FB9B34582C6F125E29FAA14B701892939DC86385540A46EC7C90`).
+  It has not been uploaded. Its bundle checksum differs from the installed
+  bundle, and user-drawing acceptance is pending. XSTS frame details use one row per frame, with separate model
   and quantity columns for all drawn BOQ items and blank cells for missing
   items. Near-name hints and the whole-drawing "not drawn" list are removed.
-  The `v3.4.1` release tag and official ZIP are still pending.
-- Current stable release line: `3.4.0` (latest patch `3.4.0.8`, 2026-11-19;
+  The local `v3.4.1` tag and ZIP are created.
+- Current stable release line: `3.4.1` (current patch `3.4.1.6`, 2026-11-20;
   D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
   optional WebView2/Three.js window launched in a separate process; both
   render identical millimetre geometry, so browser startup cannot block CAD.
