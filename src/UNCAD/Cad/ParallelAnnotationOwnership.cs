@@ -56,6 +56,7 @@ namespace UNCAD.Cad
             {
                 if (scopeEntityIds != null && !scopeEntityIds.Contains(id))
                     continue;
+                if (!QuickLineCadService.IsCandidateClass(id)) continue;
                 Entity entity;
                 try
                 {

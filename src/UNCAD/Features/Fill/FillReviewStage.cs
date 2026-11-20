@@ -7,6 +7,7 @@ using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.QuickLine;
 using UNCAD.Core.Text;
+using UNCAD.Infra;
 using UNCAD.UI;
 
 namespace UNCAD.Features.Fill
@@ -114,7 +115,8 @@ namespace UNCAD.Features.Fill
         internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
             List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
             FrameInfoJsonRecord previous, string selectedHandle,
-            string legacyLastUpdated = "", CableReserveInfo reserve = null)
+            string legacyLastUpdated = "", CableReserveInfo reserve = null,
+            FillReviewData finalReview = null)
         {
             bool hasHistory = previous != null
                 && (!string.IsNullOrWhiteSpace(previous.LastModifiedUtc)
@@ -131,6 +133,20 @@ namespace UNCAD.Features.Fill
             var rowDiffs = FillRowDiffBuilder.Build(existingRows, plannedRows);
             Tuple<List<FillRowDiff>, List<FillRowDiff>> sides =
                 FillRowDiffBuilder.BuildSides(existingRows, plannedRows);
+            List<FrameInfoJsonChange> fieldChanges = new List<FrameInfoJsonChange>();
+            if (finalReview != null)
+            {
+                FrameInfoJsonRecord projected = FrameInfoJsonRecordUpdater.Update(
+                    previous, machine, finalReview, CommandIds.FillUpdate,
+                    DateTime.UtcNow, null, reserve);
+                fieldChanges = (projected.Changes ?? new List<FrameInfoJsonChange>())
+                    .Where(change => change != null
+                        && string.Equals(change.TimestampUtc,
+                            projected.LastModifiedUtc, StringComparison.Ordinal)
+                        && string.Equals(change.Command, CommandIds.FillUpdate,
+                            StringComparison.Ordinal))
+                    .ToList();
+            }
             return new FillUpdateCompareItem
             {
                 MachineId = machine.MachineId ?? "",
@@ -147,6 +163,7 @@ namespace UNCAD.Features.Fill
                     diff.Status == FillRowDiff.StatusQuantity),
                 PreviousRows = sides.Item1,
                 PlannedRows = sides.Item2,
+                FieldChanges = fieldChanges,
                 CableCard = BuildCableCard(previous, reserve)
             };
         }

@@ -5,17 +5,34 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current stable release: `3.4.0` (2026-11-18; D-054 amendment — the U1U
-  and U13D 3D preview kernel is the in-box WPF Viewport3D: SetModel builds
-  the scene synchronously (no browser process, no WebView2 data-directory
-  lock, no white airspace window, no "starting renderer" state), the
+- Current local source build: `3.4.1.6` (2026-11-19); the installed assembly is
+  `3.4.1.6`, but its bundle checksum differs from the latest local rebuild;
+  acceptance on user drawings is pending. XSTS frame details use one row per frame, with separate model
+  and quantity columns for all drawn BOQ items and blank cells for missing
+  items. Near-name hints and the whole-drawing "not drawn" list are removed.
+  The `v3.4.1` release tag and official ZIP are still pending.
+- Current stable release line: `3.4.0` (latest patch `3.4.0.8`, 2026-11-19;
+  D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
+  optional WebView2/Three.js window launched in a separate process; both
+  render identical millimetre geometry, so browser startup cannot block CAD.
+  The WPF scene builds synchronously, with no browser process, WebView2 data-directory
+  lock, white airspace window, or "starting renderer" state in the default path. The
   reference building model formulas (floor/epoxy/waffle holes/steel/grating/
   devices/busbar glass/columns/1F ground, base-floor rebasing, grid-bay
   extents) were ported verbatim from the retired three.js page, and U13D
   keeps its orthographic camera, axis grid, compass, and info panel. The
-  WebView2 3D stack (web pages, prewarm host, orphan sweep) is retired;
-  the login page WebView2 stays. Future fixes increment the fourth version
-  part per D-032).
+  WebView2 in-process preview stack (prewarm host, orphan sweep) is retired;
+  the optional WebV process uses a unique local profile and only packaged
+  page assets. The login page WebView2 stays. Future fixes increment the fourth version
+  part per D-032). Patch .6 adds independent column visibility while preserving
+  grid-axis labels, centers those labels on grid center lines, and removes the
+  legacy I-Line/socket-panel demo boxes. Patch .7 binds U1U axis labels to the
+  two topological route endpoints. Patch .8 matches endpoints by their 4800 mm
+  workbook axis regions without requiring route-vector alignment; ambiguous
+  matches, branches, or invalid axes show a diagnostic and no guessed
+  cabinet/endpoint markers. Since patch .3, reference geometry follows occupied
+  route bays plus one neighboring bay, preserving nine waffle holes per
+  bay; 1F ground remains visible after floor rebasing.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -118,8 +135,15 @@ XLAYOUT/XSTS
   persists truncated/invalid JSON. Legacy v1 payloads remain readable for
   migration. It is preferred over guessing from labels.
 - Old frames and `xframe`/`xframe_v2` are supported. `XFrameTemplate.dwg`
-  contains only `xframe_v2`; legacy frames migrate on the next U1F/U1U write,
-  and attributes absent from the new definition are removed.
+  contains `FRAME_20261119`; legacy frames, including `FRAME_20261102`, migrate
+  on the next U1F/U1U write. Matching attribute values are preserved, new
+  attributes are added, and attributes absent from the new definition are
+  removed. The single-line `INFO2` attribute shows bridge and rigid-conduit
+  models in millimetres, separated by a space (for example,
+  `镀锌穿线管38mm 4000mm`); multiple lengths use
+  `2000 +2500 = 4500mm`. Hose remains in its independent Ruanguan block.
+  U1U preserves only unknown bridge/conduit measurements and removes stale hose
+  entries. BOQ and statistics report units are unchanged.
 - U1F/U1U cable total = measured + panel/box reserve (I-Line 3400 盘内 /
   socket panel 1000 盘内 / busbar box 500 箱内) + device reserve + owner reserve
   (3000 default, U1SET editable). Device reserve is entered in the review GUI,
@@ -129,8 +153,9 @@ XLAYOUT/XSTS
   excluded from reserve recovery (2026-11-06). Since 3.2.0.4 U1F is always a
   full redefine (D-052 appendix 7): the previous record, CABLE_INFO recovery
   and the copied-source prefill never run on U1F, and the sole horizontal
-  `0mm` marker is absorbed unconditionally. CABLE_INFO uses
-  millimetres only and writes every detail as value（label）, ending with =totalmm.
+  `0mm` marker is absorbed unconditionally. CABLE_INFO uses millimetres only,
+  writes every detail as value（label）, ends with =totalmm, and omits the
+  redundant `电缆` prefix before the model; old prefixed values remain readable.
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is
   revisited.
@@ -150,10 +175,9 @@ XLAYOUT/XSTS
   draggable GridSplitter (collapsed to zero when no preview). Each segment
   shows its millimetre label in a camera-facing overlay; the ground shows
   a two-way column grid (4800 mm bays, toggleable, default on) with
-  endpoint axis pins (verbatim workbook text) plus numeric ticks along the
-  endpoint-displacement-dominant axis and letter labels (U/V/W…) on the
-  perpendicular axis — the scene X axis is abstract and never assumed to be
-  the numeric axis (D-054 3.3.2 amendment). Tray (red dual lines +
+  endpoint axis pins (verbatim workbook text). When workbook regions match,
+  a single translation places the measured ends inside their respective bays;
+  numeric marks increase east and letters increase north. Tray (red dual lines +
   translucent fill, width from the U1Q label, 200 default when unparsed) /
   conduit (cyan dual lines) channel overlays come from
   ParallelAnnotationOwnership host attribution.

@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 using Xunit;
@@ -78,6 +80,24 @@ namespace UNCAD.Tests
             // 极短长度 → 不小于 10。
             Assert.Equal("100mm软管:10mm",
                 HoseAnnotationDefaults.BuildDefaultText(100.0, 2.0));
+        }
+
+        [Fact]
+        public void U1B_DiameterPromptUsesU1SetDefaultAndDoesNotPersistOverride()
+        {
+            string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
+                "..", "..", "..", "..", ".."));
+            string hose = File.ReadAllText(Path.Combine(root, "src", "UNCAD",
+                "Features", "Hose", "HoseFeature.cs"));
+            string help = File.ReadAllText(Path.Combine(root, "src", "UNCAD",
+                "Infra", "CommandHelpCatalog.cs"));
+
+            Assert.Contains("PromptDiameter(ctx, ReadDiameter(ctx)", hose);
+            Assert.Contains("DefaultValue = defaultDiameter", hose);
+            Assert.Contains("UseDefaultValue = true", hose);
+            Assert.Contains("result.Value > ConduitDiameter.MaximumMillimeters", hose);
+            Assert.DoesNotContain("Settings.Set(ConfigKeys.HoseDiameter", hose);
+            Assert.Contains("输入新数值仅覆盖本次", help);
         }
     }
 }

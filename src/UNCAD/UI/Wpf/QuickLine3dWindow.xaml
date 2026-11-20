@@ -31,14 +31,16 @@
                 <!-- 左：三维视口 + 悬浮工具条 -->
                 <Grid Grid.Column="0" Background="#0D131A">
                     <local:QuickLine3dViewportControl x:Name="Viewport" />
-                    <StackPanel Orientation="Horizontal"
+                    <WrapPanel Orientation="Horizontal"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,8,8,0">
                         <Button x:Name="FitButton" Content="适配" Click="OnFit" />
                         <Button x:Name="GridButton" Content="柱网 开" Click="OnGridToggle" />
                         <Button x:Name="LabelsButton" Content="隐藏路线标签" Click="OnRouteLabelsToggle" />
                         <Button x:Name="DirectionButton" Content="隐藏端点标签" Click="OnDirectionLabelsToggle" />
-                    </StackPanel>
+                        <Button x:Name="WebButton" Content="WebV" Click="OnWebPreview"
+                                ToolTip="在独立窗口中用 WebView2 / Three.js 打开当前场景" />
+                    </WrapPanel>
                     <TextBlock x:Name="StatusText" HorizontalAlignment="Left"
                                VerticalAlignment="Bottom" Margin="10,0,0,6"
                                FontSize="12" Foreground="#8FA0B3" IsHitTestVisible="False" />

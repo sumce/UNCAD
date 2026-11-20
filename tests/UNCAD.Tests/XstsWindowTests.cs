@@ -1,6 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using UNCAD.Core.Stat;
 using UNCAD.UI;
@@ -36,6 +41,7 @@ namespace UNCAD.Tests
                     Assert.Equal(7, window.MachineGrid.Columns.Count);
                     Assert.Equal(2, window.IssueGrid.Items.Count);
                     Assert.Equal(4, window.IssueGrid.Columns.Count);
+                    Assert.Equal(3, window.ReportTabs.Items.Count);
                     Assert.Contains("2", (string)window.IssueTab.Header,
                         StringComparison.Ordinal);
                     Assert.Contains("Excel: C:\\out\\UNCAD_XSTS.xlsx", window.Footer,
@@ -49,6 +55,106 @@ namespace UNCAD.Tests
                     Assert.Contains("无基准 0 台", badges, StringComparison.Ordinal);
                     Assert.True(window.CloseButton.IsDefault);
                     Assert.True(window.CloseButton.IsCancel);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void FrameTab_ShowsOneRowPerFrameWithSeparateModelAndQuantityColumns()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                XstsWindow window = null;
+                try
+                {
+                    var selected = new XstsCircuitRecord("M1", "主回路") { FrameHandle = "00AB" };
+                    selected.TableRows.Add(new List<string> { "1", "电缆", "YJV-3*25", "m", "12", "1.1" });
+                    selected.TableRows.Add(new List<string> { "2", "桥架", "200*100", "m", "8", "2.1" });
+                    selected.TableRows.Add(new List<string> { "4", "线管", "DN25", "m", "4", "3.1" });
+                    selected.TableRows.Add(new List<string> { "5", "软管", "DN20", "m", "2", "3.5" });
+                    selected.TableRows.Add(new List<string> { "自填", "配件[自填].A", "现场配套\n待确认型号", "套", "待确认", "CUSTOM-01" });
+                    var second = new XstsCircuitRecord("M2", "备用回路") { FrameHandle = "00AC" };
+                    second.TableRows.Add(new List<string> { "1", "电缆", "YJV-5*10", "m", "24.50", "1.3" });
+                    second.TableRows.Add(new List<string> { "2", "桥架", "100*50", "m", "10", "2.2" });
+                    var empty = new XstsCircuitRecord("M3", "照明回路") { FrameHandle = "00AD" };
+                    var report = XstsReportBuilder.Build(new[] { selected, second, empty },
+                        new[] { new XstsCircuitRecord("M1", "主回路"),
+                            new XstsCircuitRecord("M2", "备用回路"), new XstsCircuitRecord("M3", "照明回路") });
+                    window = new XstsWindow(report, null);
+                    window.ShowActivated = false;
+                    window.ShowInTaskbar = false;
+                    window.Show();
+                    window.ReportTabs.SelectedItem = window.FrameTab;
+                    Pump(4);
+                    Assert.Equal(3, window.ReportTabs.Items.Count);
+                    Assert.Null(window.FindName("BlindTab"));
+                    Assert.Null(window.FindName("BlindGrid"));
+                    Assert.Equal(3, window.FrameGrid.Items.Count);
+                    Assert.True(window.FrameGrid.IsReadOnly);
+                    Assert.Equal(3, window.FrameGrid.FrozenColumnCount);
+                    Assert.Equal(new[] { "机台 ID", "回路名称", "图框ID", "电缆型号", "电缆米数",
+                        "桥架型号", "桥架米数", "软管型号", "软管米数", "线管型号", "线管米数",
+                        "配件[自填].A型号", "配件[自填].A数量（套）" },
+                        window.FrameGrid.Columns.Select(column => (string)column.Header));
+                    Assert.Contains("3 框", (string)window.FrameTab.Header);
+                    var cableText = Assert.IsType<System.Windows.Controls.TextBlock>(
+                        window.FrameGrid.Columns[3].GetCellContent(report.Frames[0]));
+                    Assert.Equal("YJV-3*25", cableText.Text);
+                    var cableQuantity = Assert.IsType<System.Windows.Controls.TextBlock>(
+                        window.FrameGrid.Columns[4].GetCellContent(report.Frames[0]));
+                    Assert.Equal("12", cableQuantity.Text);
+                    Assert.Contains("编码：1.1", (string)cableText.ToolTip);
+                    var emptyModel = Assert.IsType<System.Windows.Controls.TextBlock>(
+                        window.FrameGrid.Columns[3].GetCellContent(report.Frames[2]));
+                    Assert.Equal("", emptyModel.Text);
+                    Assert.DoesNotContain("\n", cableText.Text);
+                    Assert.Equal(32, window.FrameGrid.RowHeight);
+                    Assert.DoesNotContain("未上图", StatusBadgeBar.Summary(window.BadgeBar));
+                    CaptureIfRequested(window, "xsts-details.png");
+                    window.Width = window.MinWidth;
+                    window.Height = window.MinHeight;
+                    Pump(3);
+                    Assert.True(window.FrameGrid.ActualWidth > 0);
+                    Assert.True(window.FrameGrid.ActualHeight > 0);
+                    window.FrameGrid.ScrollIntoView(window.FrameGrid.Items[0],
+                        window.FrameGrid.Columns.Last());
+                    Pump(3);
+                    var customText = Assert.IsType<System.Windows.Controls.TextBlock>(
+                        window.FrameGrid.Columns.Last().GetCellContent(report.Frames[0]));
+                    Assert.Contains("待确认", customText.Text);
+                    Assert.Contains("CUSTOM-01", (string)customText.ToolTip);
+                    CaptureIfRequested(window, "xsts-details-minimum.png");
+                }
+                catch (Exception ex) { failure = ex; }
+                finally { window?.Close(); }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void NextStep_DoesNotClaimCompleteWhenMachineHasNoBaseline()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var report = XstsReportBuilder.Build(
+                        new[] { new XstsCircuitRecord("UNKNOWN", "A") },
+                        new XstsCircuitRecord[0]);
+                    var window = new XstsWindow(report, null);
+                    Assert.Contains("核对图框明细", window.NextStep);
+                    Assert.DoesNotContain("回路齐全", window.NextStep);
                     window.Close();
                 }
                 catch (Exception ex) { failure = ex; }
@@ -135,6 +241,19 @@ namespace UNCAD.Tests
                 Dispatcher.PushFrame(frame);
                 Thread.Sleep(30);
             }
+        }
+
+        private static void CaptureIfRequested(Window window, string name)
+        {
+            string directory = Environment.GetEnvironmentVariable("UNCAD_XSTS_SHOTS");
+            if (string.IsNullOrWhiteSpace(directory)) return;
+            Directory.CreateDirectory(directory);
+            var image = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),
+                (int)Math.Ceiling(window.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+            image.Render(window);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(image));
+            using (var stream = File.Create(Path.Combine(directory, name))) encoder.Save(stream);
         }
     }
 }

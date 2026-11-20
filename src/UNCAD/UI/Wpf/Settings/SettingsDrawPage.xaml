@@ -191,6 +191,20 @@
                 </StackPanel>
             </ui:Card>
 
+            <!-- Xauto 布局占用率 -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="自动布局（Xauto）" />
+                    <StackPanel Margin="0,12,0,0">
+                        <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="图框占用比例（0.2–1.0）" />
+                        <ui:NumberBox x:Name="XAutoFillRatio" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadNumberBox}"
+                                      Minimum="0.2" Maximum="1.0"
+                                      ToolTip="1.0 按图框可用区域铺满；较小值会留出更多空白。" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+
             <!-- 3D 预览参照层（U1U，3.3.6；3.3.7 类型化模型） -->
             <ui:Card Style="{DynamicResource UncadCard}">
                 <StackPanel>

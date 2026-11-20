@@ -10,8 +10,18 @@ deferred, or important for support diagnosis.
 
 ## Intentional Behavior
 
+- XSTS frame details use one row per physical frame, with machine ID, circuit
+  and current frame handle, then separate model/quantity pairs for cable,
+  tray, hose and conduit. Other drawn items add pairs; absent items stay blank.
+  Original item numbers, names, features, units, quantities and codes remain
+  in UI tooltips and Excel comments. No item is filtered out by category or
+  catalog code. Empty or unreadable frames retain a row; duplicates stay separate.
+  Near-name hints and the whole-drawing "not drawn" list were removed at the
+  user's request on 2026-11-19, including their extra scan and analysis.
 - Repeating XLAYOUT can create another machine-ID label.
-- U1F/U1U do not draw automatic upstream connection geometry.
+- U1F/U1U do not write automatic upstream connection geometry to the drawing.
+  The U1U 3D preview may show a schematic cabinet connection from its inferred
+  upstream endpoint; that line exists only inside the read-only preview.
 - A missing online license response fails closed (no offline grace path); the
   customer can enter a new authorization code in the login dialog.
 - HTTP/HTTPS machine-workbook sources are download-only (D-041): they refresh
@@ -90,6 +100,18 @@ deferred, or important for support diagnosis.
 
 ## Environment Limits
 
+- WebV 是可选预览窗口，需安装 Microsoft Edge WebView2 Runtime；如果运行时
+  缺失、控制器超时或 GPU 上下文丢失，窗口会显示错误，WPF 内嵌预览仍可用。
+  WebV 在独立进程和独立临时用户目录运行，不会阻塞 AutoCAD。
+- U1U direction is resolved only for an unbranched route with exactly two
+  topological endpoints and parseable workbook axes whose 4800 mm regions match
+  exactly one endpoint assignment. Route-vector angular alignment is not
+  required. Branches, disconnected route groups, invalid axes, and zero or
+  multiple region matches leave cabinet and endpoint-axis markers hidden and
+  report why; they do not block fill or BOQ work.
+- U1U previews exceeding 4096 occupied column bays including their margin
+  show a selection-size error. Bays and waffle openings are not sampled.
+  This limit affects the preview only, not the drawing or BOQ.
 - CAD integration tests and real command acceptance require AutoCAD 2022 and
   its .NET assemblies. Core tests should remain runnable without AutoCAD loaded.
 - User drawings, customer workbooks, logs, `bin`, `obj`, and `artifacts` are

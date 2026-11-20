@@ -30,6 +30,28 @@ rewrite an existing entry.
   XFrameTemplate.dwg (user-supplied) is the single template source and ships
   from `Resources/XFrameTemplate.dwg`.
 
+- Amendment (2026-11-19, `FRAME_20261119`): the user-supplied template now
+  defines `FRAME_20261119`, superseding `FRAME_20261102`. U1F/U1U migrate
+  older frame definitions to it in the existing write transaction, preserve
+  same-name attribute values, add newly defined attributes, and remove
+  attributes absent from the new definition without resizing existing tables.
+  Its single-line `INFO2` attribute lists available fixed-catalog bridge,
+  conduit, and hose models with their measured millimetre segments and totals.
+  U1U preserves only the INFO2 categories whose measurements are unknown;
+  measured or confirmed-empty categories are refreshed independently.
+- Amendment (2026-11-19, 3.4.1.4 — frame bridge and conduit length display):
+  show frame attribute lengths in millimetres. A single segment is shown as
+  `4000mm`; multiple segments are shown as `2000 +2500 = 4500mm`. The retired
+  `CONDUIT_INFO` attribute uses the same format when present for compatibility.
+  BOQ quantities and statistics reports retain their existing units.
+- Amendment (2026-11-19, 3.4.1.5 — INFO2 display scope and format):
+  `INFO2` shows only bridge and rigid-conduit entries. It uses a space between
+  model and length (`镀锌穿线管38mm 4000mm`), with multiple segments formatted
+  as `2000 +2500 = 4500mm`; conduit names use `镀锌穿线管{diameter}mm`.
+  Hose entries are not shown in `INFO2`; the separate Ruanguan block update is
+  unchanged. U1U retains old bridge/conduit entries only when that category's
+  measurement is unknown, and removes old hose entries during the same update.
+
 ## D-043: Legacy Device-Reserve Marker Auto-Absorption (2026-11-03)
 
 - Status: accepted
@@ -873,6 +895,12 @@ rewrite an existing entry.
   `FillOrMigrate` skips legacy standalone-block inheritance on U1F so the
   redefine really starts from a clean slate.
 
+- Amendment (2026-11-19, 3.4.1.6 — CABLE_INFO model display): new CABLE_INFO
+  values show the engineering model prefix directly (for example,
+  `ZB-YJVR-3*2.5mm²`) without the redundant word `电缆`. The same applies to
+  model-only values when there are no measurements. Existing values with the
+  old `电缆` prefix remain readable for U1U and submission extraction.
+
 ## D-053: Xauto Proportion Relay And Camera-Depth Hops (2026-11-15)
 
 - Status: accepted
@@ -1338,3 +1366,156 @@ rewrite an existing entry.
   posture transfers trivially: the preview now has no web surface at all
   — it cannot navigate, download, or script, and it still never writes
   CAD entities, never refreshes workbooks, never touches the network.
+- Amendment (2026-11-18, 3.4.0.1 — user feedback "这毫米标位置不对！
+  很多标记显示的位置都不对！这做的柜子是啥意思啊 柜子是连着上游的
+  并且根据上游类似摆放柜子！插座盘离地面有1M"):
+  1. **Screen labels use the WPF row-vector view basis in the correct column
+     order.** Every world anchor now projects through the same camera basis as
+     the 3D geometry; text is centered on its projected anchor, and collision
+     avoidance offsets survive the final placement update.
+  2. **U1U preview cabinets follow the upstream.** The envelope carries the
+     planner's upstream/downstream endpoints; preview cabinets are arranged
+     beside the upstream endpoint, aligned perpendicular to the route, with
+     visible connector lines from that endpoint. This is preview-only and
+     does not create or alter CAD geometry.
+  3. **Socket-panel mounting elevation is 1000 mm above the selected floor.**
+     The default duplicate socket-panel entry is removed; already-saved
+     configurations with the matching legacy "top/install" pair render one
+     panel, while distinct configured entries remain.
+- Amendment (2026-11-18, 3.4.0.2 — user clarification of the building and
+  equipment dimensions, including "华夫孔是圆的，一个轴位置有9个孔"):
+  1. **Equipment dimensions use distinct base and height values.** The I-L
+     panel rises 2200 mm from the selected floor. The socket panel's
+     installation elevation is its bottom at +1000 mm and its box height is
+     1000 mm (top +2000 mm); legacy "插座盘顶面" entries are interpreted using
+     this clarified installation convention.
+  2. **Waffle openings are circular mesh cutouts.** Each 4800 mm column-grid
+     bay contains 3×3 openings. The mesh is batched with the rest of the
+     scene; up to 8000 hole cells are retained, and larger previews sample
+     complete bays evenly across the extent. This is display geometry only,
+     not fabrication geometry.
+  3. The 1F steel top, 2F epoxy floor, 2F steel top, 2F grating top, 3F waffle
+     slab, 600 mm raised-floor surface, and three busbar elevations remain at
+     the cumulative/user-provided values in `PreviewReferenceLevels.DefaultList`.
+- Amendment (2026-11-18, 3.4.0.3 — user: "根据回路占用的空间来渲染"):
+  1. Reference geometry follows the union of whole 4800 mm bays touched by
+     route segments and channel widths, expanded by one neighboring bay.
+     A route on a grid boundary touches both adjacent bays. Empty interiors
+     of L/U routes and gaps between disconnected routes are not filled.
+     Floors, bus layers, waffle slabs, columns, grid lines and optional
+     steel/grating share this footprint.
+  2. Every retained bay has all nine circular openings; the 3.4.0.2
+     whole-rectangle sampling rule is superseded. Above 4096 occupied bays
+     including the margin, the preview reports that the selection is too
+     large rather than silently omitting bays. This does not block BOQ work.
+  3. 1F ground and column bases remain present after floor rebasing:
+     with 2F as scene zero, 1F is at -7800 mm. Camera framing includes it.
+     This patch does not redefine upstream/downstream endpoint inference.
+- Amendment (2026-11-18, 3.4.0.4 — user: "支持 WebV + 当前方案 的 3D 预览
+  双功能支持吧！", following the 2500 mm route-length mismatch report):
+  1. **Both preview modes are supported.** WPF Viewport3D remains the immediate
+     in-dialog/default renderer. A toolbar action opens an optional WebView2 +
+     Three.js window in `UNCAD.Preview.exe`, outside AutoCAD's STA process.
+     The Web renderer receives the exact material-batched meshes, camera, and
+     label anchors produced from the same `QuickLine3dScene`; it does not
+     reconstruct lengths or building geometry. Each window gets a GUID-scoped
+     temporary profile/session. The local virtual host denies remote resources,
+     navigation, downloads, permissions, and host objects. A stalled UI watchdog
+     may terminate only the helper process; WebV failures leave WPF and BOQ intact.
+  2. **Preview geometry uses the labelled millimetre length.** U1U and U13D no
+     longer substitute drawn sketch length for an unconfirmed `00mm` placeholder.
+     That display-length fallback remains available to Xauto, where it is an
+     explicit planning rule. Completion markers still affect completion state,
+     not geometry scale. Route segments, labels, and configured reference levels
+     therefore share millimetres in both renderers.
+  3. The 3.4.0 release-package contract includes the isolated viewer executable
+     and its local Three.js assets. If WebView2 is unavailable, WPF stays usable.
+     This reintroduces neither WebView2 inside AutoCAD nor prewarming/orphan
+     process sweeping.
+- Amendment (2026-11-18, 3.4.0.5, included in package 3.4.0.6 — U1U response time,
+  joined U1L entities, and fill-time style correction):
+  1. **Reuse an already-collected single-frame boundary.** Selecting one frame
+     has already run the spatial collection; U1U reuses that region instead of
+     collecting the entire current space a second time. The existing timings
+     report selection, route scan, route ownership, layer planning, preview,
+     and batch phases so a real drawing can identify the remaining bottleneck.
+  2. **Recover joined-route labels only from a proven stale association.**
+     U1F/U1U may reattach an explicitly U1L-associated label to an open,
+     straight joined polyline only if its original handle no longer resolves
+     anywhere in the database and exactly one path is nearest within the
+     configured limit.
+     Live, malformed, distant, or ambiguous associations are not guessed.
+     Recovered labels join the cable layer and style correction; they are not
+     treated as additional route geometry.
+  3. **Apply the captured U1SET drawing styles inside the existing write
+     transaction.** Owned U1L labels use configured height/position/offset;
+     U1Q/U1C outputs are regenerated when their stored style stamp differs;
+     U1B labels use the configured cable-label height. Unknown or
+     metadata-less annotation outputs remain untouched, and a failed fill
+     transaction rolls these corrections back with the fill.
+- Consequence: do not enable stale-label recovery for U1LX,
+  Xauto, or preview scans; do not infer a deleted source from proximity alone;
+  keep all drawing-style edits inside the U1F/U1U write transaction. The
+  remaining U1U timing must be checked on a representative AutoCAD drawing
+  before claiming a field performance improvement.
+- Amendment (2026-11-18, 3.4.0.6 — user requested removable columns and axis
+  labels centered in the grid):
+  1. U1U preview has an independent column visibility toggle. Hiding columns
+     hides only column solids; grid lines and grid-axis labels remain visible.
+     WebV receives the same hidden group when opened.
+  2. Numeric and letter axis labels sit on the corresponding grid's center
+     lines, rather than along the outer boundary.
+  3. The preview no longer draws the I-Line/socket-panel demonstration boxes
+     from the legacy default reference-level entries. Other configured device
+     reference entries remain supported; no CAD entities are changed.
+- Consequence: column visibility is preview-only. The U1U optimization in the
+  included 3.4.0.5 changes has not yet been timed on a representative customer
+  drawing.
+- Amendment (2026-11-19, 3.4.0.7 — user clarification: "轴位就是在这个多方向多段线的两端"):
+  1. U1U preview finds route ends from the reconstructed segment graph's
+     degree-one nodes. Exactly two ends are required; branching and disconnected
+     components do not get collapsed into guessed global ends.
+  2. With no located connection blocks, the upstream/downstream workbook axes
+     orient those ends using the confirmed isometric convention (+X=north,
+     +Y=west, increasing numeric axes=east). Axis values must parse and the
+     direction vector must align with the route plane.
+  3. If either condition fails, keep route and grid geometry but hide endpoint
+     pins, interpolated axis marks, and upstream cabinets; show a preview
+     diagnostic. This is read-only preview behavior and never blocks U1U fill.
+- Amendment (2026-11-19, 3.4.0.8 — clarification: "两个端点正好能在轴位的区域内就行"):
+  1. Workbook axes describe 4800 mm grid regions, not a required route vector.
+     With no located connection blocks, compare the two topological endpoints
+     against both upstream/downstream assignments using the established X/Y
+     axis convention. Each axis component may differ from the axis-region
+     center offset by at most one grid pitch; this is equivalent to allowing
+     each endpoint anywhere inside its one-bay-wide region after translation.
+     Render that same fit: center the grid between the two possible upstream
+     center estimates. Keep the route and the 4800 mm pitch unchanged.
+  2. Resolve direction only when exactly one endpoint assignment fits both
+     axis regions. If neither or both assignments fit, keep direction
+     unresolved and report the reason. Do not apply an angular-alignment
+     threshold.
+  3. Located connection blocks remain authoritative; an axis-region mismatch
+     is diagnostic only and does not override their endpoint assignment.
+     Branch, endpoint-count, and read-only preview behavior from 3.4.0.7 remain.
+- Amendment (2026-11-19, 3.4.1.2 — complete column axes and responsive preview):
+  1. U1U column labels use the complete numeric/letter combination, including
+     multi-letter axes such as `48/AA`, at each occupied column's X/Y position.
+     The fitted axis-region center is the column-grid intersection; the region
+     remains one 4800 mm bay centered on it. This supersedes the separate
+     center-line labels from 3.4.0.6 without changing endpoint matching or
+     measured route lengths. Unresolved axes are still not guessed.
+  2. WebV exposes its own column visibility switch. Column solids and grid
+     labels remain independent in both renderers; hiding columns never edits
+     CAD entities. U13D labels both reference axes with complete combinations
+     at their intersections, without generating every cross-product label.
+  3. WPF builds hidden geometry only when enabled, retains visibility between
+     frame selections, reuses an unchanged model, and coalesces orbit/pan
+     updates at rendering time. Both renderers support middle-button panning
+     and cursor-centered zoom. Reset restores the complete initial camera.
+  4. Route scanning uses a conservative spatial candidate index before the
+     existing scoring and global assignment. Explicit, legacy, stale-label,
+     observation, and dimension ownership rules remain unchanged. Selected
+     frame filtering occurs only after global assignment, preserving competing
+     labels across frame boundaries. Synthetic CAD timing is not evidence of
+     end-to-end performance on the customer's large drawing.

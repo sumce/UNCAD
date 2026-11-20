@@ -12,9 +12,7 @@ using UNCAD.Infra;
 namespace UNCAD.Features.Fill
 {
     /// <summary>
-    /// 3.3.0（D-054）：一个图框范围内的路由体检结果——连通性报告（特性②，
-    /// 报告级不拦截）、图层矫正计划与报告文案（特性①）、3D 路由预览模型
-    /// （特性③，场景在 Features 阶段构建后传入窗体）。
+    /// 3.3.0（D-054）：一个图框范围内的连通性报告与图层矫正计划。3D 预览已停用。
     /// </summary>
     internal sealed class FillRouteInspection
     {
@@ -26,32 +24,72 @@ namespace UNCAD.Features.Fill
         public string LayerCorrectionText { get; set; }
         /// <summary>3D 路由预览模型（null=没有带毫米标注的线段，窗体隐藏预览区）。</summary>
         public QuickLineOrbitPreviewModel Preview { get; set; }
+        /// <summary>本框已识别路由与恢复的旧 U1L 标签，供写事务复用。</summary>
+        public List<QuickLineCadSegment> Segments { get; set; }
+            = new List<QuickLineCadSegment>();
+        /// <summary>本框带 UNCAD_PARALLEL 元数据的输出。</summary>
+        public List<ParallelAnnotationOwnershipEntry> ParallelOutputs { get; set; }
+            = new List<ParallelAnnotationOwnershipEntry>();
 
         public string ConnectivityText
             => Connectivity == null ? "—" : Connectivity.ToDisplayText();
     }
 
     /// <summary>
-    /// 3.3.0（D-054）：U1F/U1U 的路由体检阶段——整图扫描一次（QuickLineCadService
-    /// .Scan，3.3.0 起含 U1R/Xauto 开洞后的开放 Polyline），按图框范围分桶后：
-    /// ① 连通性分析（CircuitConnectivityAnalyzer，端点容差与 U1LX 同口径）；
-    /// ② 图层矫正计划（LayerGovernorService + ParallelAnnotationOwnership 归属）；
-    /// ③ U1U 预览场景（QuickLineIsometricSceneBuilder.BuildAll 带毫米标 + 地面归零，
-    ///    柱位摘要按 QuickLineAxisSpan 解析，解析失败显示原文不猜）。
+    /// 3.3.0（D-054）：U1F/U1U 整图扫描后只执行连通性分析和图层矫正计划。
     /// </summary>
     internal static class FillRouteInspectionStage
     {
+        internal static FillDrawingSettingsCorrectionResult CorrectDrawingSettings(
+            CadContext ctx, Transaction transaction,
+            FillRouteInspection inspection, FillDrawingStyleSettings settings)
+            => FillDrawingSettingsCorrector.Apply(ctx, transaction,
+                inspection?.Segments, inspection?.ParallelOutputs, settings,
+                inspection?.LayerPlan != null);
+
+        internal static void WriteDrawingStyleCorrectionResult(CadContext ctx,
+            string command, int cableLabels, int trayRuns, int conduitRuns,
+            int hoseLabels)
+        {
+            if (cableLabels + trayRuns + conduitRuns + hoseLabels <= 0) return;
+            ctx.Write("\n[" + command + "] U1SET 绘图样式已矫正：毫米标 "
+                + cableLabels + " 个，桥架 " + trayRuns + " 趟，线管 "
+                + conduitRuns + " 趟，软管标 " + hoseLabels + " 个。");
+        }
+
+        internal static void WriteDrawingStyleCorrectionResult(CadContext ctx,
+            string command, FillDrawingSettingsCorrectionResult result)
+        {
+            if (result == null) return;
+            WriteDrawingStyleCorrectionResult(ctx, command, result.CableLabels,
+                result.TrayRuns, result.ConduitRuns, result.HoseLabels);
+        }
+
         /// <summary>整图扫描（含未标注线，供连通性与图层识别）。</summary>
-        internal static IReadOnlyList<QuickLineCadSegment> Scan(CadContext ctx)
-            => QuickLineCadService.Scan(ctx, new QuickLineScanOptions
+        internal static IReadOnlyList<QuickLineCadSegment> Scan(CadContext ctx,
+            FillDrawingStyleSettings styleSettings = null,
+            IReadOnlyList<FrameRectangle> boundaries = null)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var options = new QuickLineScanOptions
             {
-                IncludeUnlabelled = true
-            });
+                IncludeUnlabelled = true,
+                FrameBoundaries = boundaries
+            };
+            if (styleSettings != null)
+                options.StaleAssociationMaximumDistance =
+                    styleSettings.StaleLabelAssociationMaximumDistance;
+            IReadOnlyList<QuickLineCadSegment> segments =
+                QuickLineCadService.Scan(ctx, options);
+            timer.Stop();
+            Log.Info("[PERF] U1U/U1F 路由扫描: " + timer.ElapsedMilliseconds
+                + " ms，线段 " + segments.Count + "，合并线恢复毫米标 "
+                + segments.Sum(item => item.RestoredLabelIds?.Count ?? 0));
+            return segments;
+        }
 
         /// <summary>
-        /// 单框 U1F/U1U 的体检入口：范围=图框实体集（U1U 单框用分区结果，
-        /// U1F 用本次选集），柱位摘要取机台行的上下游轴位；体检完输出命令行
-        /// 诊断（连通性报告级 + 图层矫正预告）。updateMode=U1U 时构建 3D 预览。
+        /// 单框 U1F/U1U 的体检入口：范围=图框实体集，输出连通性诊断和图层矫正预告。
         /// 3.3.0.1：U1U 传图框 Boundary——Collect 模式的 EntityIds 从来不含
         /// Line 电缆线（TryAnchor 严格模式只收表格/文字/块），线段归属必须
         /// 按边界几何判定（现场报告"U1U 没有 3D 预览、电缆/桥架图层没动"的
@@ -59,7 +97,7 @@ namespace UNCAD.Features.Fill
         /// </summary>
         internal static FillRouteInspection InspectSelectionAndReport(
             CadContext ctx, FillSelection selection, MachineRow picked,
-            bool updateMode)
+            bool updateMode, FillDrawingStyleSettings styleSettings = null)
         {
             string command = updateMode ? CommandIds.FillUpdate : CommandIds.Fill;
             System.Collections.Generic.IEnumerable<ObjectId> scope =
@@ -67,16 +105,23 @@ namespace UNCAD.Features.Fill
                     ? selection.Region.EntityIds
                     : selection?.SourceIds
                     ?? Array.Empty<ObjectId>();
-            IReadOnlyList<QuickLineCadSegment> scanned = Scan(ctx);
+            IReadOnlyList<QuickLineCadSegment> scanned = Scan(ctx, styleSettings,
+                selection?.Region?.Boundary == null ? null
+                    : new[] { selection.Region.Boundary });
+            var inspectTimer = System.Diagnostics.Stopwatch.StartNew();
             FillRouteInspection inspection;
             using (Transaction readTransaction =
                 ctx.Db.TransactionManager.StartTransaction())
             {
                 inspection = Inspect(ctx, readTransaction, scope, scanned,
-                    picked?.UpstreamAxis, picked?.DownstreamAxis, updateMode,
                     selection?.Region?.Boundary);
                 readTransaction.Commit();
             }
+            inspectTimer.Stop();
+            Log.Info("[PERF] " + command + " 路由归属/诊断: "
+                + inspectTimer.ElapsedMilliseconds + " ms，框内线段 "
+                + inspection.Segments.Count + "，元数据输出 "
+                + inspection.ParallelOutputs.Count);
             ctx.Write("\n[" + command + "] 连通性：" + inspection.ConnectivityText
                 + "（报告级检查，不拦截写入）。");
             if (inspection.LayerCorrectionText != null)
@@ -112,10 +157,11 @@ namespace UNCAD.Features.Fill
         internal static FillRouteInspection Inspect(CadContext ctx,
             Transaction readTransaction, IEnumerable<ObjectId> scopeEntityIds,
             IReadOnlyList<QuickLineCadSegment> scanned,
-            string upstreamAxis, string downstreamAxis,
-            bool buildPreview, FrameRectangle boundary = null,
+            FrameRectangle boundary = null,
             List<ParallelAnnotationOwnershipEntry> precollectedOutputs = null)
         {
+            var inspectTimer = System.Diagnostics.Stopwatch.StartNew();
+            var phaseTimer = System.Diagnostics.Stopwatch.StartNew();
             var scope = new HashSet<ObjectId>(scopeEntityIds
                 ?? Enumerable.Empty<ObjectId>());
             var inspection = new FillRouteInspection();
@@ -123,6 +169,7 @@ namespace UNCAD.Features.Fill
                 ?? Array.Empty<QuickLineCadSegment>())
                 .Where(item => item != null && SegmentInScope(item, scope, boundary))
                 .ToList();
+            long filterMilliseconds = phaseTimer.ElapsedMilliseconds;
 
             // ② 连通性（特性②）：只分析，不拦截——D-054。
             if (inScope.Count > 0)
@@ -141,57 +188,47 @@ namespace UNCAD.Features.Fill
             // 输出（KIND=U1Q/U1C，特性④归属）。3.3.0.1：只喂本框的线段（绝不
             // 动图框外的图形）；输出全图收集后按宿主段过滤到本框（Plan 的 scope
             // 传 null——列表已预过滤）。
-            List<ParallelAnnotationOwnershipEntry> frameOutputs = null;
+            List<ParallelAnnotationOwnershipEntry> frameOutputs;
             bool governorEnabled =
                 Settings.GetBool(ConfigKeys.FillLayerGovernor, true);
-            if (governorEnabled || buildPreview)
+            // 复用整图元数据扫描结果，样式矫正无论图层治理开关状态都可用；
+            // 批量路径在循环外传入，避免每框重复扫描。
+            phaseTimer.Restart();
+            List<ParallelAnnotationOwnershipEntry> outputs =
+                precollectedOutputs
+                    ?? ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
+            if (boundary != null)
+                frameOutputs = FilterOutputsByHostFrame(outputs, inScope,
+                    readTransaction, boundary);
+            else
             {
-                // 3.3.3.2（审计 #4）：批量链在预检循环外收一次经参数传入
-                //（逐框各收一遍是 O(图框×实体)——与 routeScanned 同一教训）；
-                // 单框路径不传，此处自收（保持 3.3.0.1 行为）。
-                List<ParallelAnnotationOwnershipEntry> outputs =
-                    precollectedOutputs
-                        ?? ParallelAnnotationOwnership.Collect(ctx, readTransaction, null);
-                if (boundary != null)
-                    frameOutputs = FilterOutputsByHostFrame(outputs, inScope,
-                        readTransaction, boundary);
-                else
-                {
-                    var scopeOnly = new HashSet<ObjectId>(scope
-                        ?? Enumerable.Empty<ObjectId>());
-                    frameOutputs = outputs.Where(entry => entry != null
-                        && scopeOnly.Contains(entry.EntityId)).ToList();
-                }
+                var scopeOnly = new HashSet<ObjectId>(scope
+                    ?? Enumerable.Empty<ObjectId>());
+                frameOutputs = outputs.Where(entry => entry != null
+                    && scopeOnly.Contains(entry.EntityId)).ToList();
             }
+            long ownershipMilliseconds = phaseTimer.ElapsedMilliseconds;
+            inspection.Segments = inScope;
+            inspection.ParallelOutputs = frameOutputs;
+
             if (governorEnabled && frameOutputs != null)
             {
+                phaseTimer.Restart();
                 inspection.LayerPlan = LayerGovernorService.Plan(ctx, readTransaction,
                     inScope, frameOutputs, null);
+                long layerPlanMilliseconds = phaseTimer.ElapsedMilliseconds;
                 if (inspection.LayerPlan != null && !inspection.LayerPlan.IsEmpty)
                     inspection.LayerCorrectionText =
                         inspection.LayerPlan.Counters.Describe();
+                if (precollectedOutputs == null)
+                    Log.Info("[PERF] 路由图层计划: " + layerPlanMilliseconds + " ms");
             }
 
-            // ③ 预览（特性③）：带毫米标的线段重建等测场景并整体地面归零。
-            // 3.3.0.1：包裹 try/catch——场景构建对方向不可分类的草图会抛
-            // ArgumentException，预览是展示件，绝不能把 U1U 主流程炸掉。
-            // 3.3.1（D-054 Amendment）：逐段带入毫米标原文（特性B）、上下游
-            // 轴位原文（特性C 端点钉标签）、桥架/线管通道归属（特性D 双线）。
-            if (buildPreview)
-            {
-                try
-                {
-                    Dictionary<string, QuickLineOrbitPreviewChannel> channels =
-                        BuildChannels(readTransaction, frameOutputs, inScope);
-                    inspection.Preview = BuildPreview(inScope,
-                        QuickLineAxisSpan.Describe(upstreamAxis, downstreamAxis),
-                        upstreamAxis, downstreamAxis, channels);
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Warn("[U1U] 3D 预览场景构建失败（不影响写入）：" + ex.Message);
-                }
-            }
+            inspectTimer.Stop();
+            if (precollectedOutputs == null)
+                Log.Info("[PERF] 路由范围筛选 " + filterMilliseconds
+                    + " ms，元数据归属 " + ownershipMilliseconds
+                    + " ms，总体 " + inspectTimer.ElapsedMilliseconds + " ms");
             return inspection;
         }
 
@@ -268,8 +305,7 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// 场景构建与 QuickLine3dPreviewFeature.BuildAll 同口径：真实毫米做距离、
-        /// 未确认占位标按当前画长、COMPLETED 标记保留。3.3.1：毫米标原文按段
+        /// 与 U13D 共用毫米标注建模口径，COMPLETED 只保留确认状态。毫米标原文按段
         /// 句柄带入（特性B），上下游轴位原文带入（特性C），桥架/线管通道归属
         /// 带入（特性D）。
         /// </summary>
@@ -285,12 +321,6 @@ namespace UNCAD.Features.Fill
                 item => item.LineId.Handle.ToString(),
                 item => item.LabelMillimetres.Value,
                 StringComparer.OrdinalIgnoreCase);
-            var displayDistances = labelled.ToDictionary(
-                item => item.LineId.Handle.ToString(),
-                item => !item.HasCompletionMarker
-                    && QuickLineMillimeterText.IsPlaceholder(item.LabelText)
-                        ? item.Length : item.LabelMillimetres.Value,
-                StringComparer.OrdinalIgnoreCase);
             var completed = new HashSet<string>(labelled
                 .Where(item => item.HasCompletionMarker)
                 .Select(item => item.LineId.Handle.ToString()),
@@ -303,10 +333,26 @@ namespace UNCAD.Features.Fill
                 new QuickLineSegment(item.LineId.Handle.ToString(),
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                     new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))), 1.0);
-            QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder.BuildAll(
-                graph, distances, displayDistances, completed);
+            QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder.BuildMetricPreview(
+                graph, distances, completed);
+            QuickLineRouteDirection direction =
+                QuickLineRouteDirectionPlanner.Resolve(scene,
+                    upstreamAxis, downstreamAxis);
+            var sceneNodes = scene.Nodes.ToDictionary(node => node.Id,
+                node => node.Position, StringComparer.OrdinalIgnoreCase);
+            QuickLineSpatialPoint? upstreamEndpoint =
+                direction.IsResolved && sceneNodes.TryGetValue(
+                    direction.UpstreamNodeId, out QuickLineSpatialPoint upstream)
+                        ? upstream : (QuickLineSpatialPoint?)null;
+            QuickLineSpatialPoint? downstreamEndpoint =
+                direction.IsResolved && sceneNodes.TryGetValue(
+                    direction.DownstreamNodeId, out QuickLineSpatialPoint downstream)
+                        ? downstream : (QuickLineSpatialPoint?)null;
             return QuickLineOrbitPreviewModel.FromScene(scene, axisSummary,
-                upstreamAxis, downstreamAxis, labelTexts, channels);
+                upstreamAxis, downstreamAxis, labelTexts, channels,
+                upstreamEndpoint, downstreamEndpoint,
+                directionResolved: direction.IsResolved,
+                directionDiagnostics: direction.Diagnostics);
         }
 
         /// <summary>3.3.1（特性D）：U1Q 标注文本解析不出宽度时的缺省桥架宽（图例注明）。</summary>

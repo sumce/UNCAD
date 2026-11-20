@@ -70,14 +70,15 @@ namespace UNCAD.Tests
         [Fact]
         public void FrameBlockNames_AreFrozenForLegacyDrawings()
         {
-            // 五代图框块名是对客户老图纸的承诺（AGENTS 硬约束：旧框必须可读，迁移不改尺寸）。
-            // 2026-11-02（D-040）：FRAME_20261102 成为当前代，xframe_v2 降为上一代仍可读。
+            // 图框块名是对客户旧图纸的兼容承诺；上一代迁移到当前代。
+            // 2026-11-19：FRAME_20261102 降为上一代，FRAME_20261119 成为当前代。
             // 改名或删除任何一代都等于放弃一批现场图纸，必须先立新决策。
             Assert.Equal("frame_20260812", FrameRegionCollector.SupportedFrameName);
             Assert.Equal("frame", FrameRegionCollector.LegacyFrameName);
             Assert.Equal("xframe", FrameRegionCollector.XFrameName);
             Assert.Equal("xframe_v2", FrameRegionCollector.XFrameV2Name);
-            Assert.Equal("FRAME_20261102", FrameRegionCollector.CurrentFrameName);
+            Assert.Equal("FRAME_20261102", FrameRegionCollector.PreviousFrameName);
+            Assert.Equal("FRAME_20261119", FrameRegionCollector.CurrentFrameName);
         }
 
         private static IEnumerable<string> SourceFilesUnder(params string[] parts)

@@ -358,6 +358,7 @@ namespace UNCAD.UI
                 _synchronizing = true;
                 CableBox.Text = Data.BoqCableModel;
                 _synchronizing = false;
+                RefreshItem(Data.FlexibleConduitItem());
             }
             RefreshItem(item);
             UpdateDeleteState();

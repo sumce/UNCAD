@@ -23,6 +23,8 @@ _ReSharper*/
 
 # Generated bundle binaries (keep PackageContents.xml)
 bundle/UNCAD.bundle/*.dll
+bundle/UNCAD.bundle/*.exe
+bundle/UNCAD.bundle/*.exe.config
 bundle/UNCAD.bundle/**/*.dll
 bundle/UNCAD.bundle/Web/
 bundle/UNCAD.bundle/checksums.sha256

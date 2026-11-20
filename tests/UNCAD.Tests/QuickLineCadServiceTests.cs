@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UNCAD.Cad.QuickLine;
+using UNCAD.Core.QuickLine;
 using Xunit;
 
 namespace UNCAD.Tests
@@ -30,6 +32,45 @@ namespace UNCAD.Tests
         {
             Assert.Equal("1250.5mm", QuickLineCadService.FormatMillimetres(1250.5));
             Assert.Equal("2000mm", QuickLineCadService.FormatMillimetres(2000));
+        }
+
+        [Fact]
+        public void StaleLabelMatcher_RestoresOnlyUniqueNearbyPath()
+        {
+            var paths = new IReadOnlyList<QuickLinePoint>[]
+            {
+                new[] { new QuickLinePoint(0, 0), new QuickLinePoint(100, 0) },
+                new[] { new QuickLinePoint(0, 40), new QuickLinePoint(100, 40) }
+            };
+
+            Assert.Equal(0, QuickLineStaleLabelMatcher.FindUniqueNearestPath(
+                new QuickLinePoint(50, 3), paths, 10, 1));
+        }
+
+        [Fact]
+        public void StaleLabelRecovery_IsDisabledOutsideFillScan()
+        {
+            Assert.Null(new QuickLineScanOptions()
+                .StaleAssociationMaximumDistance);
+        }
+
+        [Fact]
+        public void StaleLabelMatcher_RejectsUnrelatedOrAmbiguousPaths()
+        {
+            var unrelated = new IReadOnlyList<QuickLinePoint>[]
+            {
+                new[] { new QuickLinePoint(0, 40), new QuickLinePoint(100, 40) }
+            };
+            var ambiguous = new IReadOnlyList<QuickLinePoint>[]
+            {
+                new[] { new QuickLinePoint(0, 0), new QuickLinePoint(100, 0) },
+                new[] { new QuickLinePoint(0, 10), new QuickLinePoint(100, 10) }
+            };
+
+            Assert.Equal(-1, QuickLineStaleLabelMatcher.FindUniqueNearestPath(
+                new QuickLinePoint(50, 3), unrelated, 10, 1));
+            Assert.Equal(-1, QuickLineStaleLabelMatcher.FindUniqueNearestPath(
+                new QuickLinePoint(50, 5), ambiguous, 10, 1));
         }
     }
 }

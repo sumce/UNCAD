@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using UNCAD.Core.QuickLine;
 using UNCAD.Infra;
@@ -10,18 +12,8 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// 3.4.0：U1U 确认窗左侧的 3D 路由预览——渲染内核从 WebView2+three.js
-    /// 换回 **WPF 原生 Viewport3D**（用户指令「算了 用 Viewport3D吧」；
-    /// 3.3.5~3.3.8 的浏览器内核在本机被 WebView2 用户数据目录锁同步阻塞
-    /// STA 线程，「正在启动三维渲染器」白屏反复复发，浏览器整条路退役）。
-    /// 分层铁律不变：场景语义全在 Core 信封（QuickLineOrbitPreviewEnvelope）
-    /// 与 QuickLineOrbitSceneBuilder（three.js 页面视觉公式原样搬迁），
-    /// 本控件只做宿主三件事——SetModel→同步建场景（无任何异步初始化，
-    /// 「启动」这个状态不存在）、四个开关按钮（柱网/参照/结构/复位）、
-    /// 图例/摘要文案。对宿主窗 API 与历版同形（SetModel/Model/柱网开关/
-    /// 复位），数据级计数器仍取自信封（SetModel 时同步算好，无头测试照常
-    /// 断言）。场景构建失败整块降级为提示文案，绝不炸确认窗（预览是展示
-    /// 件的 3.3.0.1 降级口径）。
+    /// U1U preview host: synchronous WPF scene with an optional isolated WebV
+    /// window consuming the same geometry. Scene failures never block BOQ work.
     /// </summary>
     public sealed class QuickLineOrbitPreviewControl : Grid
     {
@@ -37,18 +29,23 @@ namespace UNCAD.UI
         private readonly TextBlock _legendText;
         private readonly TextBlock _summaryText;
         private readonly Button _gridButton;
+        private readonly Button _columnsButton;
         private readonly Button _refButton;
         private readonly Button _detailButton;
         private readonly Button _resetButton;
+        private readonly Button _webButton;
 
+        private QuickLine3dScene _scene;
         private QuickLineOrbitPreviewModel _model;
         private QuickLineOrbitPreviewEnvelope _envelope;
         private bool _columnGridEnabled = true;
+        private bool _columnsEnabled = true;
         private bool _referenceEnabled = true;
         private bool _detailEnabled;
         private bool _hasReferenceLevels;
         private bool _hasDetailStructure;
         private bool _hasColumnGrid;
+        private bool _hasColumns;
         private bool _fatal;
 
         public QuickLineOrbitPreviewControl()
@@ -73,7 +70,7 @@ namespace UNCAD.UI
                 VerticalAlignment.Center);
             Children.Add(_hintText);
 
-            var buttons = new StackPanel
+            var buttons = new WrapPanel
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -81,13 +78,23 @@ namespace UNCAD.UI
                 Margin = new Thickness(0, 8, 8, 0)
             };
             _gridButton = CreateSceneButton("柱网 开", OnGridButton);
+            _columnsButton = CreateSceneButton("柱子 开", OnColumnsButton);
             _refButton = CreateSceneButton("参照 开", OnRefButton);
             _detailButton = CreateSceneButton("结构 开", OnDetailButton);
             _resetButton = CreateSceneButton("复位", OnResetButton);
+            _webButton = CreateSceneButton("WebV", OnWebPreview);
+            _webButton.ToolTip = "在独立窗口中用 WebView2 / Three.js 打开当前场景";
+            buttons.Children.Add(new TextBlock
+            {
+                Text = "WPF", Foreground = HintBrush, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 4, 0)
+            });
             buttons.Children.Add(_gridButton);
+            buttons.Children.Add(_columnsButton);
             buttons.Children.Add(_refButton);
             buttons.Children.Add(_detailButton);
             buttons.Children.Add(_resetButton);
+            buttons.Children.Add(_webButton);
             Children.Add(buttons);
 
             _legendText = new TextBlock
@@ -133,6 +140,7 @@ namespace UNCAD.UI
         internal int BuiltConduitChannelCount { get; private set; }
 
         internal bool ColumnGridEnabled => _columnGridEnabled;
+        internal bool ColumnsEnabled => _columnsEnabled;
 
         private int _plannedColumnGridLineCount;
         private int _plannedAxisTickCount;
@@ -141,8 +149,12 @@ namespace UNCAD.UI
         /// <summary>切换场景（含 null=隐藏为提示文字）。同步建场景，无任何异步。</summary>
         public void SetModel(QuickLineOrbitPreviewModel model)
         {
+            if (ReferenceEquals(_model, model) && !_fatal) return;
             _model = model;
+            _scene = null;
             _fatal = false;
+            _hasColumns = false;
+            QuickLine3dScene scene = null;
             try
             {
                 // 3.3.6：参照层清单来自 U1SET（标签=毫米=类型=锚定；空=不画）。
@@ -153,11 +165,23 @@ namespace UNCAD.UI
                     out string baseFloorLabel);
                 _envelope = QuickLineOrbitPreviewEnvelope.Build(model,
                     PreviewReferenceLevels.Parse(rawLevels), baseFloorLabel);
+                scene = QuickLineOrbitSceneBuilder.Build(_envelope);
+                var hidden = new List<QuickLine3dSceneGroupKind>();
+                if (!_columnGridEnabled) hidden.Add(QuickLine3dSceneGroupKind.Grid);
+                if (!_columnsEnabled) hidden.Add(QuickLine3dSceneGroupKind.Columns);
+                if (!_referenceEnabled) hidden.Add(QuickLine3dSceneGroupKind.Reference);
+                if (!_detailEnabled) hidden.Add(QuickLine3dSceneGroupKind.Detail);
+                _viewport.SetScene(scene ?? new QuickLine3dScene(),
+                    initiallyHiddenGroups: hidden);
+                _scene = scene;
             }
             catch (Exception ex)
             {
                 Log.Warn("[U1U] 3D 预览场景构建失败: " + ex);
                 _envelope = null;
+                _viewport.SetScene(new QuickLine3dScene());
+                RefreshDataCounters();
+                ShowIdleState();
                 ShowFatalError("3D 预览场景构建失败：" + ex.Message
                     + "\n（不影响清单写入；可用 U1S/U1F 正常出清单。）");
                 return;
@@ -169,14 +193,11 @@ namespace UNCAD.UI
                 return;
             }
             _hintText.Visibility = Visibility.Collapsed;
-            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(_envelope);
-            _viewport.SetScene(scene);
             _hasReferenceLevels = _envelope.ReferenceLevels.Count > 0;
             _hasDetailStructure = ContainsDetail(scene);
             _hasColumnGrid = _envelope.ColumnGridLines.Count > 0;
-            _columnGridEnabled = true;
-            _referenceEnabled = true;
-            _detailEnabled = false;
+            _hasColumns = _viewport.HasGroup(
+                QuickLine3dSceneGroupKind.Columns);
             ApplyToggles();
             _legendText.Text = QuickLineOrbitSceneBuilder.BuildLegend(_envelope);
             _summaryText.Text = QuickLineOrbitSceneBuilder.BuildSummary(_envelope);
@@ -194,6 +215,12 @@ namespace UNCAD.UI
         internal void ToggleColumnGrid()
         {
             _columnGridEnabled = !_columnGridEnabled;
+            ApplyToggles();
+        }
+
+        internal void ToggleColumns()
+        {
+            _columnsEnabled = !_columnsEnabled;
             ApplyToggles();
         }
 
@@ -219,9 +246,11 @@ namespace UNCAD.UI
             _legendText.Visibility = Visibility.Collapsed;
             _summaryText.Visibility = Visibility.Collapsed;
             _gridButton.Visibility = Visibility.Collapsed;
+            _columnsButton.Visibility = Visibility.Collapsed;
             _refButton.Visibility = Visibility.Collapsed;
             _detailButton.Visibility = Visibility.Collapsed;
             _resetButton.Visibility = Visibility.Collapsed;
+            _webButton.Visibility = Visibility.Collapsed;
         }
 
         private static bool ContainsDetail(QuickLine3dScene scene)
@@ -272,6 +301,9 @@ namespace UNCAD.UI
             _gridButton.Visibility = _hasColumnGrid
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            _columnsButton.Visibility = _hasColumns
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             _refButton.Visibility = _hasReferenceLevels
                 ? Visibility.Visible
                 : Visibility.Collapsed;
@@ -281,13 +313,17 @@ namespace UNCAD.UI
             _resetButton.Visibility = _envelope != null
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+            _webButton.Visibility = _resetButton.Visibility;
 
             _gridButton.Content = _columnGridEnabled ? "柱网 开" : "柱网 关";
+            _columnsButton.Content = _columnsEnabled ? "柱子 开" : "柱子 关";
             _refButton.Content = _referenceEnabled ? "参照 开" : "参照 关";
             _detailButton.Content = _detailEnabled ? "结构 开" : "结构 关";
 
             _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Grid,
                 _columnGridEnabled);
+            _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Columns,
+                _columnsEnabled);
             _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Reference,
                 _referenceEnabled);
             _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Detail,
@@ -298,6 +334,11 @@ namespace UNCAD.UI
         {
             _columnGridEnabled = !_columnGridEnabled;
             ApplyToggles();
+        }
+
+        private void OnColumnsButton(object sender, RoutedEventArgs args)
+        {
+            ToggleColumns();
         }
 
         private void OnRefButton(object sender, RoutedEventArgs args)
@@ -334,6 +375,31 @@ namespace UNCAD.UI
             };
             button.Click += onClick;
             return button;
+        }
+
+        private async void OnWebPreview(object sender, RoutedEventArgs args)
+        {
+            if (_scene == null) return;
+            _webButton.IsEnabled = false;
+            try
+            {
+                var hidden = new List<string>();
+                if (!_columnGridEnabled) hidden.Add("Grid");
+                if (!_columnsEnabled) hidden.Add("Columns");
+                if (!_referenceEnabled) hidden.Add("Reference");
+                if (!_detailEnabled) hidden.Add("Detail");
+                await QuickLineWebPreview.OpenAsync(_scene,
+                    "U1U · " + _model.AxisSummary, hidden);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("[U1U] WebV 预览启动失败: " + ex.Message);
+                _summaryText.Text = "WebV 未打开：" + ex.Message;
+            }
+            finally
+            {
+                _webButton.IsEnabled = true;
+            }
         }
 
         private static Brush CreateFrozenBrush(byte r, byte g, byte b)

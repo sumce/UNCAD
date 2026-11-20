@@ -25,23 +25,39 @@ namespace UNCAD.Tests
                 "BatchFillUpdatePreflight.cs");
             Assert.Contains("foreach (FillReviewItem item in review.Items.Where(item =>",
                 preflight);
-            Assert.Contains("item.RequiresCatalogConfirmation))", preflight);
+            Assert.Contains("item.RequiresCatalogConfirmation", preflight);
             Assert.Contains("FillReviewData.CategoryName(item.Category)", preflight);
             Assert.Contains("workbook.Catalog.SelectableItems", preflight);
+            Assert.Contains("cableChoicePending", preflight);
+            Assert.Contains("item.Category == TableFillCategory.FlexibleConduit",
+                preflight);
             Assert.DoesNotContain("FirstOrDefault(item =>", preflight
                 .Substring(preflight.IndexOf("D-052-A", StringComparison.Ordinal)));
             Assert.Contains("固定清单没有可选择的\" + category + \"规格", preflight);
 
-            string coordinator = Read("src", "UNCAD", "Features", "Fill",
-                "BatchFillUpdateCoordinator.cs");
+            string catalogStage = Read("src", "UNCAD", "Features", "Fill",
+                "BatchFillUpdateCatalogStage.cs");
             // 确认后逐项应用回清单；软管联动只在电缆被替换时触发。
-            Assert.Contains("foreach (BatchCatalogAssignment assignment in plan.CatalogAssignments)",
-                coordinator);
-            Assert.Contains("picker.Selections.TryGetValue(assignment.RequestKey", coordinator);
+            Assert.Contains("foreach (BatchCatalogAssignment assignment in",
+                catalogStage);
+            Assert.Contains("picker.Selections.TryGetValue(assignment.RequestKey",
+                catalogStage);
             Assert.Contains("plan.Review.ReplaceWithCatalogItem(assignment.Item, selected,",
-                coordinator);
-            Assert.Contains("assignment.Item.Category == Core.Fill.TableFillCategory.Cable",
-                coordinator);
+                catalogStage);
+            Assert.Contains("cableReplacementPlans.Add(plan)", catalogStage);
+            Assert.Contains("hoseRequests", catalogStage);
+            Assert.Contains("item.Description, workbook.Catalog.SelectableItems",
+                catalogStage);
+            Assert.Contains("Category == TableFillCategory.FlexibleConduit",
+                catalogStage);
+            Assert.Contains("BatchFillUpdateCatalogStage.Resolve(ctx, plans, catalogRequests,",
+                Read("src", "UNCAD", "Features", "Fill",
+                    "BatchFillUpdateCoordinator.cs"));
+
+            string hose = Read("src", "UNCAD", "Features", "Fill",
+                "FillRuanguanStage.cs");
+            Assert.Contains("flexible.Quantity = meters", hose);
+            Assert.DoesNotContain("review.RemoveItem(flexible)", hose);
         }
 
         [Fact]

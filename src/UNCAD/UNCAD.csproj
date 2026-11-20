@@ -15,9 +15,9 @@
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
     <AssemblyCompany>UNSIAO.Ltd</AssemblyCompany>
-    <AssemblyVersion>3.4.0.0</AssemblyVersion>
-    <FileVersion>3.4.0.0</FileVersion>
-    <Version>3.4.0</Version>
+    <AssemblyVersion>3.4.1.6</AssemblyVersion>
+    <FileVersion>3.4.1.6</FileVersion>
+    <Version>3.4.1</Version>
     <BuildTimestampCompact>$([System.DateTime]::UtcNow.ToString("yyyyMMddHHmmss"))</BuildTimestampCompact>
     <InformationalVersion>$(Version)+build.$(BuildTimestampCompact)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -66,7 +66,7 @@
     <PackageReference Include="NPOI" Version="2.5.6" />
     <!-- 3.0 UI（D-038）：全部窗体迁 WPF + WPF-UI Fluent 库 -->
     <PackageReference Include="WPF-UI" Version="4.0.2" />
-    <!-- WebView2 remains for the online login window; 3D previews use WPF Viewport3D. -->
+    <ProjectReference Include="..\UNCAD.Preview\UNCAD.Preview.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -90,4 +90,12 @@
            Text="未找到 AutoCAD 2022 .NET API（$(AutoCADDir)\AcMgd.dll）。请安装 AutoCAD 2022，或用 -p:AutoCADDir=... 指定路径。" />
   </Target>
 
+  <Target Name="CopyWebPreview" AfterTargets="Build">
+    <ItemGroup>
+      <PreviewExecutable Include="$(MSBuildProjectDirectory)\..\UNCAD.Preview\bin\$(Configuration)\net48\UNCAD.Preview.exe*" Exclude="**\*.pdb" />
+      <PreviewAsset Include="$(MSBuildProjectDirectory)\..\UNCAD.Preview\Web\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PreviewExecutable)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PreviewAsset)" DestinationFiles="@(PreviewAsset->'$(OutDir)Web\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

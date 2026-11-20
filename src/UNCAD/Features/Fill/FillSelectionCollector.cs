@@ -113,45 +113,55 @@ namespace UNCAD.Features.Fill
         internal static string ReadRuanguanLengthMeters(Transaction transaction,
             ObjectId[] blockIds)
         {
-            if (blockIds == null || blockIds.Length == 0) return "";
-            var values = new List<string>();
+            double[] lengths = ReadRuanguanLengthMillimeters(transaction, blockIds);
+            if (lengths.Length == 0) return "";
+            double total = lengths.Sum() / 1000d;
+            if (double.IsNaN(total) || double.IsInfinity(total))
+                throw new InvalidDataException("Ruanguan 软管长度合计超出可处理范围。");
+            return TextFormatter.FormatNum(total);
+        }
+
+        internal static double[] ReadRuanguanLengthMillimeters(
+            Transaction transaction, ObjectId[] blockIds)
+        {
+            if (blockIds == null || blockIds.Length == 0) return Array.Empty<double>();
+            var lengths = new List<double>();
+            var seenBlocks = new HashSet<ObjectId>();
             foreach (ObjectId id in blockIds)
             {
+                if (!seenBlocks.Add(id)) continue;
                 var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
                 if (block == null) continue;
+                var blockLengths = new HashSet<double>();
                 foreach (ObjectId attributeId in block.AttributeCollection)
                 {
                     var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
                         as AttributeReference;
-                    string meters = ParseRuanguanMeters(attribute?.TextString ?? "",
-                        attribute?.Tag);
-                    if (meters.Length > 0) values.Add(meters);
+                    if (RuanguanBlockWriter.TryReadLength(attribute?.TextString ?? "",
+                        attribute?.Tag, out double millimetres))
+                        blockLengths.Add(millimetres);
                 }
-                if (!block.IsDynamicBlock) continue;
-                foreach (DynamicBlockReferenceProperty property
-                    in block.DynamicBlockReferencePropertyCollection)
+                if (block.IsDynamicBlock)
                 {
-                    // Dynamic blocks expose many numeric coordinates. Only a
-                    // property explicitly named as a hose length may use a bare
-                    // number; all other values require an mm/m unit or prefix.
-                    string meters = ParseRuanguanMeters(Convert.ToString(property.Value),
-                        property.PropertyName);
-                    if (meters.Length > 0) values.Add(meters);
+                    foreach (DynamicBlockReferenceProperty property
+                        in block.DynamicBlockReferencePropertyCollection)
+                    {
+                        // Dynamic blocks expose many numeric coordinates. Only a
+                        // property explicitly named as a hose length may use a bare
+                        // number; all other values require an mm/m unit or prefix.
+                        if (RuanguanBlockWriter.TryReadLength(
+                            Convert.ToString(property.Value), property.PropertyName,
+                            out double millimetres))
+                            blockLengths.Add(millimetres);
+                    }
                 }
-            }
-            if (values.Count == 0) return "";
-            string first = values[0];
-            if (values.Any(value => !string.Equals(value, first,
-                    StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidDataException("同一图框中存在多个不一致的 Ruanguan 软管长度。请只保留一个有效长度。");
-            return first;
-        }
 
-        private static string ParseRuanguanMeters(string value, string tag)
-        {
-            if (!RuanguanBlockWriter.TryReadLength(value, tag,
-                out double millimetres)) return "";
-            return TextFormatter.FormatNum(millimetres / 1000d);
+                if (blockLengths.Count > 1)
+                    throw new InvalidDataException("Ruanguan 块 " + block.Handle
+                        + " 存在多个不一致的软管长度。");
+                if (blockLengths.Count == 1) lengths.Add(blockLengths.Single());
+            }
+            return lengths.ToArray();
         }
 
         public static bool TryReadExistingIdentity(CadContext ctx, FillSelection selection,

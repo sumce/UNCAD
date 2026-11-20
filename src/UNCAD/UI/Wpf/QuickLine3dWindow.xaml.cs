@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Threading.Tasks;
 using UNCAD.Infra;
 using Wpf.Ui.Controls;
 
@@ -29,7 +30,7 @@ namespace UNCAD.UI
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
             ToolBarStyle.ApplySceneButtons(FitButton, GridButton, LabelsButton,
-                DirectionButton);
+                DirectionButton, WebButton);
             // 同步装载（无任何异步初始化——这正是换原生内核的意义）。
             LoadScene(scene);
         }
@@ -45,12 +46,14 @@ namespace UNCAD.UI
                     return;
                 }
                 _scene = batch;
-                Viewport.SetScene(batch.Scene);
-                Viewport.SetLabelKindVisible("route", batch.ShowRouteLabels);
-                Viewport.SetLabelKindVisible("directionDown",
-                    batch.ShowDirectionLabels);
-                Viewport.SetLabelKindVisible("directionUp",
-                    batch.ShowDirectionLabels);
+                var hiddenLabelKinds = new List<string>();
+                if (!batch.ShowRouteLabels) hiddenLabelKinds.Add("route");
+                if (!batch.ShowDirectionLabels)
+                {
+                    hiddenLabelKinds.Add("directionDown");
+                    hiddenLabelKinds.Add("directionUp");
+                }
+                Viewport.SetScene(batch.Scene, hiddenLabelKinds);
                 LabelsButton.Content = batch.ShowRouteLabels
                     ? "隐藏路线标签" : "显示路线标签";
                 DirectionButton.Content = batch.ShowDirectionLabels
@@ -203,6 +206,32 @@ namespace UNCAD.UI
         private void OnClose(object sender, RoutedEventArgs args)
         {
             Close();
+        }
+
+        private async void OnWebPreview(object sender, RoutedEventArgs args)
+        {
+            if (_scene == null) return;
+            WebButton.IsEnabled = false;
+            try
+            {
+                var hidden = new List<string> { "Detail" };
+                if (!Viewport.IsGroupVisible(QuickLine3dSceneGroupKind.Grid)) hidden.Add("Grid");
+                var labels = new List<string>();
+                if (LabelsButton.Content as string == "显示路线标签") labels.Add("route");
+                if (DirectionButton.Content as string == "显示端点标签")
+                    labels.AddRange(new[] { "directionDown", "directionUp" });
+                await QuickLineWebPreview.OpenAsync(_scene.Scene,
+                    "U13D · " + _scene.StatusText, hidden, labels);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn("[U13D] WebV 预览启动失败: " + ex.Message);
+                StatusText.Text = "WebV 未打开：" + ex.Message;
+            }
+            finally
+            {
+                WebButton.IsEnabled = true;
+            }
         }
 
         private static class ToolBarStyle

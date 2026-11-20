@@ -35,6 +35,7 @@ namespace UNCAD.Core.Stat
     public sealed class ConduitStat
     {
         public string Spec { get; set; }
+        public string CatalogModel { get; set; }
         public List<double> LengthsMm { get; } = new List<double>();
         public double TotalMm => LengthsMm.Sum();
         public double TotalM => TotalMm / 1000.0;

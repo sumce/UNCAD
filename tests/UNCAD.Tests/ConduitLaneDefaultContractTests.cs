@@ -23,7 +23,7 @@ namespace UNCAD.Tests
         {
             string source = File.ReadAllText(Repo("src", "UNCAD", "Features",
                 "Conduit", "ConduitFeature.cs"));
-            Assert.Contains("Settings.GetDouble(ConfigKeys.ConduitLineOff, 15.0)",
+            Assert.Contains("Settings.GetNonNegativeDouble(ConfigKeys.ConduitLineOff, 15.0)",
                 source, StringComparison.Ordinal);
             Assert.Contains("Settings.Get(ConfigKeys.ConduitSide, \"1\")",
                 source, StringComparison.Ordinal);

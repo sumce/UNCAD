@@ -173,11 +173,16 @@ namespace UNCAD.Features.Fill
         internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
             ObjectId[] blockIds, MachineRow selected, CableStatResult statistics,
             bool preserveCable, bool preserveConduit)
+            => FillFrame(ctx, transaction, blockIds, selected, statistics,
+                preserveCable, preserveConduit, preserveCable || preserveConduit,
+                preserveCable || preserveConduit);
+
+        internal static FillWriteResult FillFrame(CadContext ctx, Transaction transaction,
+            ObjectId[] blockIds, MachineRow selected, CableStatResult statistics,
+            bool preserveCable, bool preserveConduit, bool preserveBridgeInfo2,
+            bool preserveConduitInfo2)
         {
             if (blockIds == null || blockIds.Length == 0) return FillWriteResult.Empty;
-            Dictionary<string, string> values = FrameBlockFiller.BuildValues(
-                selected, statistics, preserveCable, preserveConduit);
-            if (values.Count == 0) return FillWriteResult.Empty;
 
             int blocks = 0, attributes = 0;
             foreach (ObjectId id in blockIds)
@@ -185,6 +190,23 @@ namespace UNCAD.Features.Fill
                 var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
                 if (block == null || block.AttributeCollection == null
                     || block.AttributeCollection.Count == 0) continue;
+                string existingInfo2 = null;
+                foreach (ObjectId attributeId in block.AttributeCollection)
+                {
+                    var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
+                        as AttributeReference;
+                    if (attribute != null && string.Equals(attribute.Tag,
+                        FrameBlockFiller.TagInfo2, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingInfo2 = attribute.TextString ?? "";
+                        break;
+                    }
+                }
+                Dictionary<string, string> values = FrameBlockFiller.BuildValues(
+                    selected, statistics, preserveCable, preserveConduit,
+                    preserveBridgeInfo2, preserveConduitInfo2, existingInfo2);
+                if (values.Count == 0) continue;
+
                 bool touched = false;
                 foreach (ObjectId attributeId in block.AttributeCollection)
                 {
@@ -207,7 +229,7 @@ namespace UNCAD.Features.Fill
         /// <summary>
         /// U1F/U1U 定义复制来的图框时，先把源框带来的旧信息显式清空
         /// （2026-11-06 用户要求“U1F 定义要把信息都清理掉”）：FRAMEINFO JSON
-        /// 载荷、CABLE_INFO、CONDUIT_INFO——随后正常写入新机台数据。清空与
+        /// 载荷、CABLE_INFO、CONDUIT_INFO、INFO2——随后正常写入新机台数据。清空与
         /// 写入同一事务：整体提交或整体回滚，不会出现半清空状态。
         /// 返回清空的属性数（日志用）。
         /// </summary>
@@ -230,6 +252,8 @@ namespace UNCAD.Features.Fill
                     bool stale = string.Equals(tag, FrameBlockFiller.TagCable,
                         StringComparison.OrdinalIgnoreCase)
                         || string.Equals(tag, FrameBlockFiller.TagConduit,
+                            StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(tag, FrameBlockFiller.TagInfo2,
                             StringComparison.OrdinalIgnoreCase)
                         || FrameInfoJsonBlockWriter.IsJsonTagName(tag);
                     if (!stale) continue;

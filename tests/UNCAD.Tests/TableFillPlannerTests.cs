@@ -37,6 +37,19 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_ResolvesRigidConduitInfo2ModelFromCatalogFeature()
+        {
+            var items = Items();
+            items[2].Feature = "1.名称:镀锌穿线管DN20";
+            var stat = StatCalculator.Calculate(
+                new[] { "⌀20线管 2000mm", "⌀20线管 2500mm" }, 250);
+
+            TableFillPlanner.Build(new MachineRow(), items, stat);
+
+            Assert.Equal("镀锌穿线管DN20", stat.Conduits[0].CatalogModel);
+        }
+
+        [Fact]
         public void Build_ThrowsWhenBridgeSpecIsNotInCatalog()
         {
             // D-016：未匹配的桥架没有清单编码，必须在 CAD 事务之前失败，

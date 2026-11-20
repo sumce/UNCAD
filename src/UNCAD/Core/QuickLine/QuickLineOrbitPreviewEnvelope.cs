@@ -40,7 +40,12 @@ namespace UNCAD.Core.QuickLine
             string downstreamAxisLabel,
             bool anyTrayWidthAssumedDefault,
             IReadOnlyList<EnvelopeReferenceLevel> referenceLevels,
-            double baseFloorZ)
+            double baseFloorZ,
+            EnvelopePoint upstreamEndpoint,
+            EnvelopePoint downstreamEndpoint,
+            EnvelopePoint gridAnchor,
+            bool directionResolved,
+            IReadOnlyList<string> directionDiagnostics)
         {
             Segments = segments;
             ColumnGridLines = columnGridLines;
@@ -55,6 +60,12 @@ namespace UNCAD.Core.QuickLine
             AnyTrayWidthAssumedDefault = anyTrayWidthAssumedDefault;
             ReferenceLevels = referenceLevels ?? Array.Empty<EnvelopeReferenceLevel>();
             BaseFloorZ = baseFloorZ;
+            UpstreamEndpoint = upstreamEndpoint;
+            DownstreamEndpoint = downstreamEndpoint;
+            GridAnchor = gridAnchor;
+            DirectionResolved = directionResolved;
+            DirectionDiagnostics = directionDiagnostics
+                ?? Array.Empty<string>();
         }
 
         /// <summary>一条电缆段：中心线端点 + 轴向 + 通道双线（null=普通电缆段）。</summary>
@@ -95,6 +106,18 @@ namespace UNCAD.Core.QuickLine
         /// 设备/母线在本层地面上起算）。
         /// </summary>
         public double BaseFloorZ { get; }
+
+        /// <summary>上游路线端点（柜体定位用；没有柱网规划时为空）。</summary>
+        public EnvelopePoint UpstreamEndpoint { get; }
+
+        /// <summary>下游路线端点（确定柜体排布朝向用；没有柱网规划时为空）。</summary>
+        public EnvelopePoint DownstreamEndpoint { get; }
+
+        /// <summary>柱网锚点；方向未确认时不代表上游。</summary>
+        public EnvelopePoint GridAnchor { get; }
+
+        public bool DirectionResolved { get; }
+        public IReadOnlyList<string> DirectionDiagnostics { get; }
 
         /// <summary>由预览模型构建信封（model 为 null/空段时返回 null）。
         /// referenceLevels：参照层清单（U1SET 配置解析而来；null=无参照层）。</summary>
@@ -157,11 +180,25 @@ namespace UNCAD.Core.QuickLine
             var numericTicks = new List<EnvelopeLabel>();
             var letterLabels = new List<EnvelopeLabel>();
             var pins = new List<EnvelopePin>();
+            EnvelopePoint upstreamEndpoint = null;
+            EnvelopePoint downstreamEndpoint = null;
+            EnvelopePoint gridAnchor = null;
             QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
                 model.Segments, model.UpstreamAxisLabel,
-                model.DownstreamAxisLabel);
+                model.DownstreamAxisLabel, model.UpstreamEndpoint,
+                model.DownstreamEndpoint, model.DirectionResolved,
+                QuickLineColumnGridPlanner.DefaultSpacingMillimetres,
+                model.DirectionDiagnostics);
             if (grid != null)
             {
+                gridAnchor = EnvelopePoint.Of(grid.GridAnchor);
+                if (grid.DirectionResolved)
+                {
+                    upstreamEndpoint = EnvelopePoint.Of(
+                        grid.UpstreamEndpoint.Value);
+                    downstreamEndpoint = EnvelopePoint.Of(
+                        grid.DownstreamEndpoint.Value);
+                }
                 foreach (QuickLineColumnGridLine line in grid.Lines)
                 {
                     gridLines.Add(line.ConstantX
@@ -176,8 +213,10 @@ namespace UNCAD.Core.QuickLine
                 {
                     numericTicks.Add(new EnvelopeLabel(
                         tick.Number.ToString(CultureInfo.InvariantCulture),
-                        grid.NumericAxisIsX ? tick.Position : grid.MinX,
-                        grid.NumericAxisIsX ? grid.MinY : tick.Position,
+                        grid.NumericAxisIsX ? tick.Position
+                            : (grid.MinX + grid.MaxX) / 2.0,
+                        grid.NumericAxisIsX
+                            ? (grid.MinY + grid.MaxY) / 2.0 : tick.Position,
                         tickHeight * 0.5, tickHeight));
                 }
                 foreach (QuickLineColumnGridLetterLabel letter
@@ -185,15 +224,20 @@ namespace UNCAD.Core.QuickLine
                 {
                     letterLabels.Add(new EnvelopeLabel(
                         letter.Letter,
-                        grid.NumericAxisIsX ? grid.MaxX : letter.Position,
-                        grid.NumericAxisIsX ? letter.Position : grid.MaxY,
+                        grid.NumericAxisIsX
+                            ? (grid.MinX + grid.MaxX) / 2.0 : letter.Position,
+                        grid.NumericAxisIsX ? letter.Position
+                            : (grid.MinY + grid.MaxY) / 2.0,
                         tickHeight * 0.5, tickHeight));
                 }
-                double pinLength = diagonal * EndpointPinLengthDiagonalRatio;
-                AddEndpointPin(pins, grid.UpstreamEndpoint,
-                    model.UpstreamAxisLabel, pinLength, tickHeight);
-                AddEndpointPin(pins, grid.DownstreamEndpoint,
-                    model.DownstreamAxisLabel, pinLength, tickHeight);
+                if (grid.DirectionResolved)
+                {
+                    double pinLength = diagonal * EndpointPinLengthDiagonalRatio;
+                    AddEndpointPin(pins, grid.UpstreamEndpoint.Value,
+                        model.UpstreamAxisLabel, pinLength, tickHeight);
+                    AddEndpointPin(pins, grid.DownstreamEndpoint.Value,
+                        model.DownstreamAxisLabel, pinLength, tickHeight);
+                }
             }
 
             var levels = new List<EnvelopeReferenceLevel>();
@@ -239,7 +283,10 @@ namespace UNCAD.Core.QuickLine
                 model.AxisSummary ?? string.Empty,
                 (model.UpstreamAxisLabel ?? string.Empty).Trim(),
                 (model.DownstreamAxisLabel ?? string.Empty).Trim(),
-                anyAssumed, levels, baseFloorZ);
+                anyAssumed, levels, baseFloorZ,
+                upstreamEndpoint, downstreamEndpoint, gridAnchor,
+                grid?.DirectionResolved ?? false,
+                grid?.Diagnostics ?? model.DirectionDiagnostics);
         }
 
         /// <summary>段方向的水平法向（dir × ẑ 归一化；竖直段回退 ŷ——与

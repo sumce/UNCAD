@@ -291,6 +291,8 @@ namespace UNCAD.UI
 
             // U1B（3.3.3，D-054 Amendment）：软管直径默认 100；标注字高与 U1L 共用。
             SetNumber(DrawPage.HoseDiameter, Settings.GetDouble(ConfigKeys.HoseDiameter, 100.0));
+            SetNumber(DrawPage.XAutoFillRatio,
+                Settings.GetDouble(ConfigKeys.XAutoFillRatio, 0.65));
             DrawPage.PreviewReferenceLevels.Text = Settings.Get(
                 ConfigKeys.PreviewReferenceLevels,
                 UNCAD.Core.QuickLine.PreviewReferenceLevels.DefaultList);
@@ -377,6 +379,8 @@ namespace UNCAD.UI
                 Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true);
             BomPage.DeviceReserveAutoDetect.IsChecked =
                 Settings.GetBool(ConfigKeys.FillDeviceReserveAutoDetect, true);
+            BomPage.FillLayerGovernor.IsChecked =
+                Settings.GetBool(ConfigKeys.FillLayerGovernor, true);
             // 日志与操作记录（2.10.0）
             SelectLogLevel(Settings.Get(ConfigKeys.LogLevel, FileLogger.DefaultLevel));
             SetNumber(LogsPage.LogRetentionDays, Settings.GetDouble(
@@ -496,6 +500,8 @@ namespace UNCAD.UI
 
             // 软管（U1B）
             Settings.Set(ConfigKeys.HoseDiameter, NumberText(DrawPage.HoseDiameter));
+            Settings.Set(ConfigKeys.XAutoFillRatio,
+                NumberText(DrawPage.XAutoFillRatio));
             Settings.Set(ConfigKeys.PreviewReferenceLevels,
                 DrawPage.PreviewReferenceLevels.Text.Trim());
 
@@ -566,6 +572,8 @@ namespace UNCAD.UI
                 IsOn(BomPage.RequireAllCircuits));
             Settings.SetBool(ConfigKeys.FillDeviceReserveAutoDetect,
                 IsOn(BomPage.DeviceReserveAutoDetect));
+            Settings.SetBool(ConfigKeys.FillLayerGovernor,
+                IsOn(BomPage.FillLayerGovernor));
 
             // 输出结构与日志/操作记录
             Settings.Set(ConfigKeys.LogLevel, SelectedLogLevel());

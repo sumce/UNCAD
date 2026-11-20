@@ -70,13 +70,24 @@ namespace UNCAD.Core.QuickLine
         public QuickLineOrbitPreviewModel(
             IReadOnlyList<QuickLineOrbitPreviewSegment> segments,
             string axisSummary, IReadOnlyList<string> diagnostics,
-            string upstreamAxisLabel = null, string downstreamAxisLabel = null)
+            string upstreamAxisLabel = null, string downstreamAxisLabel = null,
+            QuickLineSpatialPoint? upstreamEndpoint = null,
+            QuickLineSpatialPoint? downstreamEndpoint = null,
+            string upstreamType = null, bool directionResolved = false,
+            IReadOnlyList<string> directionDiagnostics = null)
         {
             Segments = segments ?? Array.Empty<QuickLineOrbitPreviewSegment>();
             AxisSummary = axisSummary ?? string.Empty;
             Diagnostics = diagnostics ?? Array.Empty<string>();
             UpstreamAxisLabel = upstreamAxisLabel ?? string.Empty;
             DownstreamAxisLabel = downstreamAxisLabel ?? string.Empty;
+            UpstreamEndpoint = upstreamEndpoint;
+            DownstreamEndpoint = downstreamEndpoint;
+            UpstreamType = upstreamType ?? string.Empty;
+            DirectionResolved = directionResolved
+                && upstreamEndpoint != null && downstreamEndpoint != null;
+            DirectionDiagnostics = directionDiagnostics
+                ?? Array.Empty<string>();
         }
 
         public IReadOnlyList<QuickLineOrbitPreviewSegment> Segments { get; }
@@ -87,6 +98,11 @@ namespace UNCAD.Core.QuickLine
         /// <summary>3.3.1（特性C）：下游轴位原文。</summary>
         public string DownstreamAxisLabel { get; }
         public IReadOnlyList<string> Diagnostics { get; }
+        public QuickLineSpatialPoint? UpstreamEndpoint { get; }
+        public QuickLineSpatialPoint? DownstreamEndpoint { get; }
+        public string UpstreamType { get; }
+        public bool DirectionResolved { get; }
+        public IReadOnlyList<string> DirectionDiagnostics { get; }
 
         /// <summary>
         /// 由等测场景构建预览模型：整体地面归零（minZ→0），段端点取场景节点
@@ -98,7 +114,11 @@ namespace UNCAD.Core.QuickLine
             QuickLineIsometricScene scene, string axisSummary,
             string upstreamAxisLabel = null, string downstreamAxisLabel = null,
             IReadOnlyDictionary<string, string> labelTexts = null,
-            IReadOnlyDictionary<string, QuickLineOrbitPreviewChannel> channels = null)
+            IReadOnlyDictionary<string, QuickLineOrbitPreviewChannel> channels = null,
+            QuickLineSpatialPoint? upstreamEndpoint = null,
+            QuickLineSpatialPoint? downstreamEndpoint = null,
+            string upstreamType = null, bool directionResolved = false,
+            IReadOnlyList<string> directionDiagnostics = null)
         {
             if (scene == null || scene.Segments.Count == 0) return null;
             double minZ = scene.Nodes.Count == 0
@@ -129,7 +149,19 @@ namespace UNCAD.Core.QuickLine
             }
             if (segments.Count == 0) return null;
             return new QuickLineOrbitPreviewModel(segments, axisSummary,
-                scene.Diagnostics, upstreamAxisLabel, downstreamAxisLabel);
+                scene.Diagnostics, upstreamAxisLabel, downstreamAxisLabel,
+                NormalizeEndpoint(upstreamEndpoint, minZ),
+                NormalizeEndpoint(downstreamEndpoint, minZ),
+                upstreamType, directionResolved, directionDiagnostics);
+        }
+
+        private static QuickLineSpatialPoint? NormalizeEndpoint(
+            QuickLineSpatialPoint? point, double minZ)
+        {
+            return point.HasValue
+                ? new QuickLineSpatialPoint(point.Value.X, point.Value.Y,
+                    point.Value.Z - minZ)
+                : (QuickLineSpatialPoint?)null;
         }
     }
 }

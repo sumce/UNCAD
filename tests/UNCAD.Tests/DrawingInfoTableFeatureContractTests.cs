@@ -26,14 +26,19 @@ namespace UNCAD.Tests
             Assert.Contains("XFrameMigrationService.Migrate", update);
             Assert.Contains("FrameRegionCollector.IsLegacyFrame(transaction, frame)", migration);
             Assert.Contains("frame.BlockTableRecord = targetDefinitionId", migration);
-            Assert.Contains("EraseTables(transaction, oldTables)", migration);
+            Assert.DoesNotContain("EraseTables(", migration);
             Assert.Contains("selection.TableIds = new[] { boqId }", migration);
-            Assert.Contains("selection.DrawingInfoTableIds = new[] { tableId }", migration);
-            Assert.Contains("ReplaceSourceIds(selection, oldTables, boqId, infoId)", migration);
+            Assert.Contains("selection.DrawingInfoTableIds =", migration);
+            Assert.Contains("RepairSplitDrawingInfoTables", migration);
+            Assert.Contains("HasDrawingInfoTable", migration);
+            Assert.Contains("ReplaceSourceIds(selection, Array.Empty<ObjectId>(), boqId)",
+                migration);
+            Assert.Contains("ReplaceSourceIds(selection, Array.Empty<ObjectId>(), tableId)",
+                migration);
             Assert.Contains("DefaultProjectName = \"新项目二次配电力工程(Power)\"",
                 migration);
             Assert.Contains("EnsureProjectNameDefaults", migration);
-            Assert.Contains("HasCurrentDrawingInfoTable", migration);
+            Assert.Contains("FrameRegionCollector.CurrentFrameName", migration);
             string writer = Read("src", "UNCAD", "Features", "Fill",
                 "CadDrawingInfoTableWriter.cs");
             Assert.Contains("table.SetTextString(headerRow + 1, 1, floor)", writer);

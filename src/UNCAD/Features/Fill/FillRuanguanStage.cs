@@ -66,8 +66,8 @@ namespace UNCAD.Features.Fill
             }
             if (!flexible.CatalogMatched)
             {
-                ctx.Write("\n[U1F/U1U] 软管直径未匹配固定清单，未加入软管清单。");
-                review.RemoveItem(flexible);
+                flexible.Quantity = meters;
+                ctx.Write("\n[U1F/U1U] 软管直径未匹配固定清单，已保留在清单中供选择替代规格。");
                 return true;
             }
             flexible.Quantity = meters;

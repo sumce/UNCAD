@@ -112,13 +112,16 @@ namespace UNCAD.Features.Fill
             // 出现带 RUN 的单行标注（合并趟成员），迁移后整趟替换与角度修复
             // 退化为 SOURCE 单段口径。
             if (ParallelAnnotationMetadata.TryRead(source, out string kind,
-                    out string sourceHandle, out string runHandles)
+                    out string sourceHandle, out string runHandles,
+                    out string styleStamp)
                 && !string.IsNullOrWhiteSpace(runHandles))
                 ParallelAnnotationMetadata.Set(replacement, kind, sourceHandle,
-                    runHandles);
+                    runHandles, styleStamp);
             else if (ParallelAnnotationMetadata.TryRead(source,
-                    out string plainKind, out string plainSource))
-                ParallelAnnotationMetadata.Set(replacement, plainKind, plainSource);
+                    out string plainKind, out string plainSource, out _,
+                    out string plainStyleStamp))
+                ParallelAnnotationMetadata.Set(replacement, plainKind, plainSource,
+                    null, plainStyleStamp);
             source.UpgradeOpen();
             source.Erase();
             return true;

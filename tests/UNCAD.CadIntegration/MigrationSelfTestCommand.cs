@@ -22,26 +22,27 @@ namespace UNCAD.CadIntegration
     /// 图框迁移自检（UNCAD_MIGRATION_SELFTEST），发布门槛用（release.ps1 默认执行，
     /// -SkipMigration 可跳过）。背景：AGENTS.md 硬约束「Old frames and xframe frames
     /// remain readable. Migration must not resize a user's existing table, row, or
-    /// column」长期只有口头承诺与纯字符串单测；五代图框（frame / frame_20260812 /
-    /// xframe / xframe_v2 / FRAME_20261102）在真机 AutoCAD 里的迁移行为没有命令级断言。
+    /// column」长期只有口头承诺与纯字符串单测；五代旧图框及当前图框在真机
+    /// AutoCAD 里的迁移行为没有命令级断言。
     ///
-    /// D-040（2026-11-02，用户更换图框模板）：最新块名 = FRAME_20261102，JSON 主存储
-    /// = 图框块内 FRAMEINFO 文字属性；xframe_v2 降级为"上一代"（可读、可迁移），
+    /// D-040（2026-11-19，用户更换图框模板）：最新块名 = FRAME_20261119，
+    /// 含单行 INFO2 属性；JSON 主存储 = 图框块内 FRAMEINFO 文字属性；
+    /// FRAME_20261102 与更早图框均可读、可迁移，
     /// 独立 frameinfo_json 块与旧内嵌 FRAMEINFO_JSON 属性只作遗留读源（读照常、
     /// 写入后清空属于本框的副本）。
     ///
     /// 在临时图纸副本（必须是新版 XFrameTemplate.dwg——夹具要用其中真实的
-    /// FRAME_20261102 定义造第五代实例）里程序化构造"老图"：
-    ///   1) 四代旧图框定义按各自年代的边框样式合成（frame=闭合矩形多段线，
+    /// FRAME_20261119 定义造当前代实例）里程序化构造"老图"：
+    ///   1) 五代旧图框定义按各自年代的边框样式合成（frame=闭合矩形多段线，
     ///      frame_20260812/xframe/xframe_v2=四条外边 Line），并挂旧式属性定义
     ///      （MACHINEID-*/CABLE_INFO/FRAMEINFO_JSON/BRIDGE_FRAME_INFO/CONDUIT_INFO）；
     ///      若模板自带同名定义则直接复用，只补缺失的属性定义；
-    ///   2) 第五代直接插入图纸中真实的 FRAME_20261102 定义；
+    ///   2) FRAME_20261102 作上一代旧框合成；当前代直接使用真实模板定义；
     ///   3) frame_20260812 与 xframe 的实例属性里写入旧版 v1 扁平
     ///      FRAMEINFO_JSON（含替代型号与历史条目，样例键名与解码器 ParseV1 对齐）；
     ///   4) frame 框内放一个遗留独立 frameinfo_json 块（JSON 属性挂 v1 扁平档案），
     ///      验证"遗留独立块读取照常、写入后清空、迁移不新建"；
-    ///   5) FRAME_20261102 框内放一张最小 BOQ 表（数据行高用 D-027 的 5847.8848）。
+    ///   5) 当前代框内放一张最小 BOQ 表（数据行高用 D-027 的 5847.8848）。
     ///
     /// 然后按 U1F/U1U 首次写入的同一条迁移链执行（Features 层服务直调，与
     /// BatchFillUpdateCoordinator 写事务同序，不含 UI/Excel 输出）：
@@ -50,8 +51,8 @@ namespace UNCAD.CadIntegration
     ///   → FrameInfoJsonBlockWriter.FillOrMigrate(逐框)。
     ///
     /// 断言（任一失败即 FAIL，写 %UNCAD_CAD_INTEGRATION_RESULT% + 明细）：
-    ///   a) 五代图框全部被 FrameRegionCollector 识别，迁移前后各一遍；迁移后
-    ///      全部升级为 FRAME_20261102（IsLegacyFrame 全 false）；
+    ///   a) 六代图框全部被 FrameRegionCollector 识别，迁移前后各一遍；迁移后
+    ///      全部升级为 FRAME_20261119（IsLegacyFrame 全 false）；
     ///   b) 旧内嵌 FRAMEINFO_JSON 与遗留独立块 JSON 迁移到图框块的 FRAMEINFO
     ///      属性（meta.frameHandle 与图框一致），机台ID/设备名/替代型号/实测长度
     ///      与 v1 历史条目不丢；
@@ -154,7 +155,7 @@ namespace UNCAD.CadIntegration
                 + "FrameInfoJsonBlockWriter.Read/FillOrMigrate），与 U1F/U1U 首次写入同一"
                 + "事务顺序；不含 FillTableModule/FillFrame/BOQ Excel 输出与任何 UI。");
 
-            // ---------------- 阶段 1：构造五代"老图"夹具 ----------------
+            // ---------------- 阶段 1：构造五代旧框和当前框夹具 ----------------
             _stage = "build fixture";
             Fixture fixture;
             using (Transaction tx = ctx.Db.TransactionManager.StartTransaction())
@@ -303,9 +304,9 @@ namespace UNCAD.CadIntegration
                 Info("  XFrameMigrationService.Migrate: 图框 " + migration.Frames
                     + " 个，BOQ 表替换 " + migration.BoqTables
                     + " 个，制图信息表替换 " + migration.DrawingInfoTables + " 个");
-                Check(migration.Frames == 4 && migration.BoqTables == 4
-                    && migration.DrawingInfoTables == 5,
-                    "迁移计数应为 图框4/BOQ表4/制图信息表5（4 个旧图框 + 1 个无信息表的 "
+                Check(migration.Frames == 5 && migration.BoqTables == 5
+                    && migration.DrawingInfoTables == 6,
+                    "迁移计数应为 图框5/BOQ表5/制图信息表6（5 个旧图框 + 1 个无信息表的 "
                     + FrameRegionCollector.CurrentFrameName + " 框），实际 "
                     + migration.Frames + "/" + migration.BoqTables + "/"
                     + migration.DrawingInfoTables);
@@ -365,10 +366,10 @@ namespace UNCAD.CadIntegration
             public ObjectId LegacyStandaloneJsonBlockId;
             public HashSet<string> StandaloneJsonHandlesBefore =
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            public string[] V2DefinitionTags = new string[0];
+            public string[] CurrentDefinitionTags = new string[0];
         }
 
-        /// <summary>构造五代图框 + 遗留独立 JSON 块 + 最小 BOQ 表。使用后提交，不留半成品。</summary>
+        /// <summary>构造六代图框 + 遗留独立 JSON 块 + 最小 BOQ 表。使用后提交，不留半成品。</summary>
         private static Fixture BuildFixture(CadContext ctx, Transaction tx)
         {
             Database db = ctx.Db;
@@ -381,29 +382,57 @@ namespace UNCAD.CadIntegration
 
             var fixture = new Fixture();
 
-            // 第五代：真实模板定义（探针即正式实例，避免多插一个多余的图框）。
-            ObjectId v2Definition = blocks[FrameRegionCollector.CurrentFrameName];
-            FrameRectangle v2Boundary;
+            // 当前代：真实模板定义（探针即正式实例，避免多插一个多余的图框）。
+            ObjectId currentDefinition = blocks[FrameRegionCollector.CurrentFrameName];
+            FrameRectangle currentBoundary;
             {
-                var probe = new BlockReference(new Point3d(BaseX + 4 * FrameGapX
-                    + 4 * LegacyFrameWidth, BaseY, 0), v2Definition);
+                var probe = new BlockReference(new Point3d(BaseX + 5 * FrameGapX
+                    + 5 * LegacyFrameWidth, BaseY, 0), currentDefinition);
                 ctx.AddToCurrentSpace(tx, probe);
-                v2Boundary = FrameRegionCollector.ReadBoundary(tx, probe);
-                var v2Slot = new FrameSlot
+                currentBoundary = FrameRegionCollector.ReadBoundary(tx, probe);
+                var currentSlot = new FrameSlot
                 {
                     Generation = FrameRegionCollector.CurrentFrameName,
                     Legacy = false,
                     FrameId = probe.ObjectId,
-                    Machine = NewMachine("MIG-F5", "泵5", "E区", "ZB-YJV-4*16", "7.5",
-                        "详图戊", "12", "50", "母线插接箱", "H9", "J3", "6F", "5F", "QF5")
+                    Machine = NewMachine("MIG-F6", "泵6", "F区", "ZB-YJV-4*16", "7.5",
+                        "详图己", "13", "50", "母线插接箱", "J9", "K3", "7F", "6F", "QF6")
                 };
-                fixture.Slots.Add(v2Slot);
+                fixture.Slots.Add(currentSlot);
+                var definition = (BlockTableRecord)tx.GetObject(currentDefinition,
+                    OpenMode.ForRead);
+                foreach (ObjectId entityId in definition)
+                {
+                    if (!(tx.GetObject(entityId, OpenMode.ForRead, true)
+                        is AttributeDefinition attributeDefinition)
+                        || attributeDefinition.Constant) continue;
+                    var reference = new AttributeReference();
+                    reference.SetDatabaseDefaults(db);
+                    reference.SetAttributeFromBlock(attributeDefinition,
+                        probe.BlockTransform);
+                    if (string.Equals(attributeDefinition.Tag,
+                        FrameBlockFiller.TagDevice, StringComparison.OrdinalIgnoreCase))
+                        reference.TextString = FrameBlockFiller.DeviceText(
+                            currentSlot.Machine);
+                    else if (string.Equals(attributeDefinition.Tag,
+                        FrameBlockFiller.TagPower, StringComparison.OrdinalIgnoreCase))
+                        reference.TextString = FrameBlockFiller.PowerText(
+                            currentSlot.Machine);
+                    probe.AttributeCollection.AppendAttribute(reference);
+                    tx.AddNewlyCreatedDBObject(reference, true);
+                }
             }
-            fixture.V2DefinitionTags = DefinitionTags(tx, v2Definition);
+            fixture.CurrentDefinitionTags = DefinitionTags(tx, currentDefinition);
+            Check(fixture.CurrentDefinitionTags.Contains(FrameBlockFiller.TagInfo2,
+                    StringComparer.OrdinalIgnoreCase),
+                "FRAME_20261119 模板必须定义 INFO2 属性。");
+            Check(!DefinitionAttributeIsMText(tx, currentDefinition,
+                    FrameBlockFiller.TagInfo2),
+                "FRAME_20261119 的 INFO2 必须是单行属性，不能是 MText 属性。");
             Info("真实 " + FrameRegionCollector.CurrentFrameName + " 定义属性标签: "
-                + string.Join(", ", fixture.V2DefinitionTags));
+                + string.Join(", ", fixture.CurrentDefinitionTags));
 
-            // 四代旧定义：frame 用闭合矩形多段线（最老模板样式），
+            // 五代旧定义：frame 用闭合矩形多段线（最老模板样式），
             // frame_20260812 / xframe / xframe_v2 用四条外边 Line（上一代模板样式）。
             // xframe_v2 从 D-040 起是"上一代"（可读、可迁移），模板已不再自带，
             // 与三代更老的图框一样按旧样式合成；若图纸里恰好已有同名定义则复用。
@@ -425,19 +454,23 @@ namespace UNCAD.CadIntegration
                 FrameRegionCollector.XFrameV2Name, false, false,
                 NewMachine("MIG-F4", "泵4", "D区", "ZB-YJV-6*10", "5.5", "详图丁", "11",
                     "40", "母线插接箱", "G8", "H2", "5F", "4F", "QF4"), null);
+            InsertLegacyFrame(ctx, tx, blocks, fixture, 4,
+                FrameRegionCollector.PreviousFrameName, false, false,
+                NewMachine("MIG-F5", "泵5", "E区", "ZB-YJV-4*16", "6.2", "详图戊", "12",
+                    "50", "母线插接箱", "H9", "J3", "6F", "5F", "QF5"), null);
 
             // frame 框内的遗留独立 frameinfo_json 块：D-040 前的旧图纸用它存 JSON，
             // 现在必须"读取照常、写入后清空、迁移永不新建"。
-            // 注意 Slots[0] 是先插入的第五代探针，这里必须按定义名取 frame 槽位。
+            // 当前代探针先插入；这里必须按定义名取最老的 frame 槽位。
             fixture.LegacyStandaloneJsonBlockId = InsertStandaloneJsonBlock(ctx, tx,
                 blocks, fixture.Slots.First(slot => slot.Generation.Equals(
                     FrameRegionCollector.LegacyFrameName,
                     StringComparison.OrdinalIgnoreCase)), V1JsonF1);
 
-            // 最小 BOQ 表放在第五代（当前代）图框内：迁移不会替换它的表，
+            // 最小 BOQ 表放在当前代图框内：迁移不会替换它的表，
             // 正好用它守住"不改用户既有表格尺寸"的承诺。
-            double width = v2Boundary.Width;
-            double height = v2Boundary.Height;
+            double width = currentBoundary.Width;
+            double height = currentBoundary.Height;
             var table = new Table();
             table.SetDatabaseDefaults(db);
             table.SetSize(4, 6);
@@ -447,8 +480,8 @@ namespace UNCAD.CadIntegration
             table.Rows[0].Height = 3000;
             for (int row = 1; row < 4; row++)
                 table.Rows[row].Height = BoqDataRowHeight;
-            table.Position = new Point3d(v2Boundary.MinX + width * 0.08,
-                v2Boundary.MaxY - height * 0.35, 0);
+            table.Position = new Point3d(currentBoundary.MinX + width * 0.08,
+                currentBoundary.MaxY - height * 0.35, 0);
             table.Cells[0, 0].TextString = "NO.";
             table.Cells[0, 1].TextString = "项目名称";
             table.Cells[0, 2].TextString = "项目特征描述";
@@ -827,7 +860,7 @@ namespace UNCAD.CadIntegration
                     + string.Join("; ", regions.Errors));
             Check(regions.SelectedFrameCount == fixture.Slots.Count
                 && regions.Groups.Count == fixture.Slots.Count,
-                "五代图框应全部被识别（分组 " + regions.Groups.Count + "/选中 "
+                "五代旧框和当前框应全部被识别（分组 " + regions.Groups.Count + "/选中 "
                 + regions.SelectedFrameCount + "，期望 "
                 + fixture.Slots.Count + "）；FrameRegionCollector.IsSupportedFrameName "
                 + "语义退化。");
@@ -902,7 +935,7 @@ namespace UNCAD.CadIntegration
                 Info("");
                 Info("=== 迁移后断言 ===");
 
-                // a) 五代全部迁移到当前代且仍可被识别。
+                // a) 五代旧框全部迁移到当前代且仍可被识别。
                 foreach (FrameSlot slot in fixture.Slots)
                 {
                     BlockReference frame = (BlockReference)tx.GetObject(slot.FrameId,
@@ -919,11 +952,11 @@ namespace UNCAD.CadIntegration
                 }
                 FrameRegionCollection after = FrameRegionCollector.Collect(ctx,
                     fixture.Slots.Select(slot => slot.FrameId).ToArray());
-                Check(after.Errors.Count == 0 && after.SelectedFrameCount == 5
-                    && after.Groups.Count == 5,
-                    "迁移后应仍识别出 5 个图框（实际 " + after.Groups.Count
+                Check(after.Errors.Count == 0 && after.SelectedFrameCount == 6
+                    && after.Groups.Count == 6,
+                    "迁移后应仍识别出 6 个图框（实际 " + after.Groups.Count
                     + "），分区错误: " + string.Join("; ", after.Errors));
-                Info("  a) 五代图框全部识别并升级为 "
+                Info("  a) 六代图框全部识别并升级为 "
                     + FrameRegionCollector.CurrentFrameName + ": 通过");
 
                 // b) 遗留 JSON（内嵌属性 + 独立块）→ 图框块 FRAMEINFO 属性，身份不丢。
@@ -1024,7 +1057,7 @@ namespace UNCAD.CadIntegration
                     + "，数据行高 " + BoqDataRowHeight + "）: 通过");
 
                 // d) 旧属性移除 + 保留属性值不丢 + FRAMEINFO 主存储不被清空。
-                string[] allowed = fixture.V2DefinitionTags
+                string[] allowed = fixture.CurrentDefinitionTags
                     .Concat(new[] { ProjectNameTag })
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
                 foreach (FrameSlot slot in fixture.Slots)
@@ -1037,6 +1070,11 @@ namespace UNCAD.CadIntegration
                         && frameInfo.TrimStart().StartsWith("{", StringComparison.Ordinal)
                         && FrameInfoJsonCodec.Parse(frameInfo) != null,
                         slot.Generation + " FRAMEINFO 属性缺失/为空/非法（主存储被清空）。");
+                    Check(attributes.ContainsKey(FrameBlockFiller.TagInfo2),
+                        slot.Generation + " 迁移后缺少 INFO2 属性。");
+                    Check(!FrameAttributeIsMText(tx, slot.FrameId,
+                            FrameBlockFiller.TagInfo2),
+                        slot.Generation + " 迁移后的 INFO2 属性必须是单行文本。");
                     if (!slot.Legacy) continue;
                     foreach (string legacyTag in new[]
                         { LegacyJsonTag, LegacyBridgeTag, ConduitTag })
@@ -1775,6 +1813,38 @@ namespace UNCAD.CadIntegration
                     tags.Add(attribute.Tag ?? "");
             }
             return tags.ToArray();
+        }
+
+        private static bool DefinitionAttributeIsMText(Transaction tx,
+            ObjectId definitionId, string tag)
+        {
+            var definition = (BlockTableRecord)tx.GetObject(definitionId,
+                OpenMode.ForRead, true);
+            foreach (ObjectId entityId in definition)
+            {
+                if (!(tx.GetObject(entityId, OpenMode.ForRead, true)
+                    is AttributeDefinition attribute)
+                    || attribute.Constant
+                    || !string.Equals(attribute.Tag, tag,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                return attribute.IsMTextAttributeDefinition;
+            }
+            return false;
+        }
+
+        private static bool FrameAttributeIsMText(Transaction tx, ObjectId frameId,
+            string tag)
+        {
+            var frame = (BlockReference)tx.GetObject(frameId, OpenMode.ForRead, true);
+            foreach (ObjectId attributeId in frame.AttributeCollection)
+            {
+                var attribute = tx.GetObject(attributeId, OpenMode.ForRead, true)
+                    as AttributeReference;
+                if (attribute != null && string.Equals(attribute.Tag, tag,
+                    StringComparison.OrdinalIgnoreCase))
+                    return attribute.IsMTextAttribute;
+            }
+            return false;
         }
 
         private static void Check(bool condition, string message)

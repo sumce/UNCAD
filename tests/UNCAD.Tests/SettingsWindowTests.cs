@@ -190,6 +190,10 @@ namespace UNCAD.Tests
                 Assert.Equal(100000, page.UnlHeight.Maximum);
                 Assert.Equal(0, page.UnlOffset.Minimum);
                 Assert.Equal(1, page.UnrDiameter.Minimum);
+                Assert.Equal(0.2, page.XAutoFillRatio.Minimum);
+                Assert.Equal(1.0, page.XAutoFillRatio.Maximum);
+                Assert.Contains(FindAll<TextBlock>(page),
+                    block => block.Text == "图框占用比例（0.2–1.0）");
 
                 // 2.10.0 已移除“默认规格”：U1Q1/U1Q2/U1Q4 各自传固定规格，改了不生效。
                 Assert.DoesNotContain(FindAll<TextBlock>(page),
@@ -257,14 +261,16 @@ namespace UNCAD.Tests
                     Assert.Equal(100000, box.Maximum);
                 });
 
-                // 8 个自动填充类别 + 整机回路校验 + 设备预留自动识别（D-043）。
+                // 8 个自动填充类别 + 三项独立行为开关。
                 List<ToggleSwitch> autoFill = FindAll<ToggleSwitch>(page);
-                Assert.Equal(10, autoFill.Count);
+                Assert.Equal(11, autoFill.Count);
                 List<ToggleSwitch> categoryBoxes = autoFill
                     .Where(toggle => !Convert.ToString(toggle.Content)
                         .StartsWith("整机回路校验")
                         && !Convert.ToString(toggle.Content)
-                            .StartsWith("设备内预留自动识别")).ToList();
+                            .StartsWith("设备内预留自动识别")
+                        && !Convert.ToString(toggle.Content)
+                            .StartsWith("U1F/U1U 图层自动矫正")).ToList();
                 Assert.Equal(new[]
                 {
                     "电缆", "断路器", "电盘", "软管",
@@ -273,6 +279,10 @@ namespace UNCAD.Tests
                     .ToArray());
                 Assert.Contains(autoFill, toggle =>
                     Convert.ToString(toggle.Content).StartsWith("整机回路校验"));
+                Assert.Contains(autoFill, toggle =>
+                    Convert.ToString(toggle.Content).StartsWith("U1F/U1U 图层自动矫正"));
+                Assert.Equal(Settings.GetBool(ConfigKeys.FillLayerGovernor, true),
+                    page.FillLayerGovernor.IsChecked);
                 Assert.DoesNotContain(autoFill, toggle =>
                     Convert.ToString(toggle.Content).Contains("未匹配"));
                 window.Close();
@@ -497,8 +507,7 @@ namespace UNCAD.Tests
             var found = new SortedSet<string>(Regex.Matches(source,
                     @"ConfigKeys\.(\w+)").Cast<Match>()
                 .Select(match => match.Groups[1].Value));
-            // 旧 UnifiedSettingsForm.LoadValues/Save 引用的键零丢失；新增键必须
-            // 带版本注释登记（当前 55 个：53 + 3.3.3 HoseDiameter + 3.3.6 PreviewReferenceLevels）。
+            // 页面加载和保存的所有配置键都必须在本契约中登记。
             string[] expected =
             {
                 "UnlText", "UnlHeight", "UnlPos", "UnlOffset",
@@ -511,6 +520,7 @@ namespace UNCAD.Tests
                 "HoseDiameter",
                 // 3.3.6：U1U 3D 预览参照层清单（绘制标注页）。
                 "PreviewReferenceLevels",
+                "XAutoFillRatio",
                 "UnaddHeight", "UnaddMmPerGrid", "UnaddTextEnabled",
                 "UnaddMTextEnabled", "UnaddDimensionEnabled", "UnaddCableEnabled",
                 "UnaddBridgeEnabled", "UnaddConduitEnabled",
@@ -527,6 +537,7 @@ namespace UNCAD.Tests
                 "FillAutofillBusPlugBox",
                 "CableReserveILine", "CableReserveSocket", "CableReserveBusbar",
                 "FillDeviceReserveAutoDetect", "FillRequireAllCircuits",
+                "FillLayerGovernor",
                 "LogLevel", "LogRetentionDays", "HistoryRetentionMonths"
             };
             string[] missing = expected.Except(found).ToArray();
@@ -535,6 +546,10 @@ namespace UNCAD.Tests
                 "迁移丢了配置键: " + string.Join(",", missing));
             Assert.True(added.Length == 0,
                 "迁移新增了配置键: " + string.Join(",", added));
+            Assert.Equal(2, Regex.Matches(source,
+                @"ConfigKeys\.XAutoFillRatio\b").Count);
+            Assert.Equal(2, Regex.Matches(source,
+                @"ConfigKeys\.FillLayerGovernor\b").Count);
         }
 
         [Fact]

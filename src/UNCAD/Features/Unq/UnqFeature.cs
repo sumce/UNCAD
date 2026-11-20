@@ -55,8 +55,8 @@ namespace UNCAD.Features.Unq
                 : content.IndexOf("400*", System.StringComparison.Ordinal) >= 0
                     ? CommandIds.Tray400 : CommandIds.Tray200;
             double hgt = Settings.GetDouble(ConfigKeys.UnqHeight, 180.0);
-            double lineOff = Settings.GetDouble(ConfigKeys.UnqLineOff, 15.0);
-            double textOff = Settings.GetDouble(ConfigKeys.UnqTextOff, 0.0);
+            double lineOff = Settings.GetNonNegativeDouble(ConfigKeys.UnqLineOff, 15.0);
+            double textOff = Settings.GetNonNegativeDouble(ConfigKeys.UnqTextOff, 0.0);
             string side = Settings.Get(ConfigKeys.UnqSide, "1");
             ProductMetadata.EnsureCommandAllowed(commandName);
 

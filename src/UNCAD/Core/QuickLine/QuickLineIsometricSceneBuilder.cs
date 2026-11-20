@@ -13,6 +13,16 @@ namespace UNCAD.Core.QuickLine
     {
         private const double DefaultAngleToleranceDegrees = 3.0;
 
+        /// <summary>
+        /// Read-only previews share the building's millimetre scale. Completion
+        /// state must not substitute schematic CAD lengths for labelled lengths.
+        /// </summary>
+        public static QuickLineIsometricScene BuildMetricPreview(QuickLineGraph graph,
+            IReadOnlyDictionary<string, double> distancesMillimetres,
+            ISet<string> completedSegmentIds)
+            => BuildAll(graph, distancesMillimetres, distancesMillimetres,
+                completedSegmentIds);
+
         /// <summary>Creates the blank southeast-isometric drawing workspace.</summary>
         public static QuickLineIsometricScene CreateDrawingScene()
             => new QuickLineIsometricScene("N1",
@@ -216,7 +226,7 @@ namespace UNCAD.Core.QuickLine
                 throw new ArgumentException("图框内没有可识别的等测 U1L 线段。",
                     nameof(graph));
             return new QuickLineIsometricScene(rootNodeId ?? "N1", resolvedProjection,
-                nodes, segments, diagnostics);
+                nodes, segments, diagnostics, branch);
         }
 
         public static bool TryClassify(QuickLineSegment segment,

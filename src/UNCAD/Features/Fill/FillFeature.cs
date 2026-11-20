@@ -57,27 +57,8 @@ namespace UNCAD.Features.Fill
                     + "] 未找到清单表/图框块/设备块/上下游信息块/统计文字。");
                 return;
             }
-            if (updateMode)
-            {
-                stageClock.Restart();
-                FrameRegionCollection regions = FrameRegionCollector.Collect(ctx, selection.SourceIds);
-                stageClock.Stop();
-                Log.Info("U1U 图框分区: " + stageClock.ElapsedMilliseconds + " ms");
-                if (regions.Groups.Count == 1) selection.Region = regions.Groups[0];
-                if (regions.SelectedFrameCount > 1)
-                {
-                    if (regions.Errors.Count > 0)
-                    {
-                        foreach (string error in regions.Errors)
-                            ctx.Write("\n[U1U] 图框分区失败: " + error);
-                        return;
-                    }
-                    // Only multi-frame update replaces the explicit selection with spatial groups.
-                    // A single frame retains the established interactive update behavior.
-                    BatchFillUpdateCoordinator.Execute(ctx, regions.Groups);
-                    return;
-                }
-            }
+            if (updateMode && BatchFillUpdateCoordinator
+                .TryHandleMultiFrameSelection(ctx, selection)) return;
             if (!selection.HasWriteTargets)
             {
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -96,6 +77,7 @@ namespace UNCAD.Features.Fill
             // 横排毫米标（如 "3000mm"）同时命中电缆长度判据（^数字0mm$），不从
             // 统计排除就会双算（统计一次、设备内预留又一次，总长虚高一份）。
             FillRuntimeOptions options = FillSettings.Current();
+            FillDrawingStyleSettings drawingStyle = FillDrawingStyleSettings.Capture();
             FrameInfoJsonRecord frameInfoPrevious = FillReserveStage.Resolve(ctx,
                 selection, options, updateMode,
                 out List<ObjectId> deviceReserveEraseIds,
@@ -103,8 +85,12 @@ namespace UNCAD.Features.Fill
                 out bool copiedFrameDetected,
                 out double? copiedDeviceReserveHint,
                 out UNCAD.Core.Fill.ExistingFillIdentity frameIdentity);
+            stageClock.Restart();
             SummationOutput summation = FillStatisticsStage.Execute(ctx, selection,
                 options, updateMode, markerExcludedIds);
+            stageClock.Stop();
+            Log.Info("[PERF] " + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
+                + " 统计求和: " + stageClock.ElapsedMilliseconds + " ms");
             CableStatResult statistics = summation.Statistics;
 
             string path = ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
@@ -165,11 +151,10 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] " + redefineNote);
 
-            // 3.3.0（D-054）路由体检：连通性（报告级）+ 图层矫正计划 + U1U 3D
-            // 路由预览；阶段逻辑在 FillRouteInspectionStage（轴位取自机台行）。
+            // 路由体检只做连通性报告和图层矫正计划，不构建 3D 场景。
             FillRouteInspection routeInspection =
                 FillRouteInspectionStage.InspectSelectionAndReport(ctx, selection,
-                    picked, updateMode);
+                    picked, updateMode, drawingStyle);
 
             // 整机回路校验（U1SET 可关闭）。D-034：部分回路的 BOQ 会丢掉未选
             // 回路的工程量，宁可少生成也不能写错数。D-044（2026-11-03）：U1F 与
@@ -288,11 +273,12 @@ namespace UNCAD.Features.Fill
 
             // U1U 强化：写表前展示上次更新时间/用户与字段级变化对比。
             // 必须放在清单确认窗之后、用确认后的最终行构建——用户在确认窗里
-            // 改设备内预留或电缆米数之后，先弹的对比就成了假数据。
+            // 改设备内预留或电缆米数之后，先弹的对比就成了假数据；字段变化
+            // 也必须用同一份最终 review 预演写入结果。
             // 2026-11-04：传入 cableReserve 驱动电缆长度卡片（实测/盘内箱内/
             // 设备内/业主分解）；内容无变化时不弹窗，直接更新。
             if (updateMode && !ShowUpdateCompare(ctx, selection, picked, tableRows,
-                cableReserve)) return;
+                cableReserve, review)) return;
 
             ConfigPrinter.Print(ctx, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 ("清单行数", tableRows.Count.ToString()),
@@ -320,6 +306,7 @@ namespace UNCAD.Features.Fill
 
             int filled;
             int migratedBridgeLabels, layerGovernorMoved = 0;
+            var drawingStyleCorrection = new FillDrawingSettingsCorrectionResult();
             XFrameMigrationResult xframeMigration;
             FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
                 upstreamInfoResult;
@@ -350,6 +337,9 @@ namespace UNCAD.Features.Fill
                         new[] { selection });
                     // 3.3.0（D-054 特性①）：图层矫正进既有写事务（一次 U 连同填充一起回退）。
                     layerGovernorMoved = LayerGovernorService.Apply(ctx, transaction, routeInspection.LayerPlan);
+                    drawingStyleCorrection =
+                        FillRouteInspectionStage.CorrectDrawingSettings(ctx,
+                            transaction, routeInspection, drawingStyle);
                     // D-043：删除已吸收的老版设备预留横排标注（吸收判定在读阶段）。
                     DeviceReserveMarkerReader.EraseAbsorbed(transaction,
                         deviceReserveEraseIds.ToArray(),
@@ -396,7 +386,11 @@ namespace UNCAD.Features.Fill
                         !copiedFrameDetected
                             && updateMode && statistics.CableState == MeasurementState.Unknown,
                         !copiedFrameDetected
-                            && updateMode && statistics.ConduitState == MeasurementState.Unknown);
+                            && updateMode && statistics.ConduitState == MeasurementState.Unknown,
+                        !copiedFrameDetected && updateMode
+                            && statistics.BridgeState == MeasurementState.Unknown,
+                        !copiedFrameDetected && updateMode
+                            && statistics.ConduitState == MeasurementState.Unknown);
                     deviceResult = CadBlockAttributeWriter.FillDeviceName(ctx, transaction,
                         selection.DeviceBlockIds, DeviceBlockFiller.BuildValue(picked));
                     ruanguanResult = RuanguanBlockWriter.FillModelAndLength(ctx, transaction,
@@ -504,7 +498,8 @@ namespace UNCAD.Features.Fill
             if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
                 || xframeMigration.DrawingInfoTables > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 图框已升级：xframe_v2 " + xframeMigration.Frames
+                    + "] 图框已升级：" + FrameRegionCollector.CurrentFrameName + " "
+                    + xframeMigration.Frames
                     + " 个，BOQ 表替换 " + xframeMigration.BoqTables
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
@@ -527,6 +522,8 @@ namespace UNCAD.Features.Fill
                     + " 个旧桥架标注（升级 BOQ 两行样式或修复角度）；格数按 "
                     + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格换算。");
             FillRouteInspectionStage.WriteWriteResult(ctx, command, routeInspection, layerGovernorMoved);
+            FillRouteInspectionStage.WriteDrawingStyleCorrectionResult(ctx,
+                command, drawingStyleCorrection);
             if (deviceColorBlocks + upstreamColorBlocks > 0)
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] 颜色已校正：设备端 " + deviceColorBlocks
@@ -576,7 +573,7 @@ namespace UNCAD.Features.Fill
         /// </summary>
         private static bool ShowUpdateCompare(CadContext ctx, FillSelection selection,
             MachineRow picked, List<TableFillRow> plannedRows,
-            CableReserveInfo cableReserve)
+            CableReserveInfo cableReserve, FillReviewData finalReview)
         {
             try
             {
@@ -589,7 +586,7 @@ namespace UNCAD.Features.Fill
                 FillUpdateCompareItem item = FillReviewStage.BuildCompareItem(picked,
                     plannedRows, existing, previous, "",
                     FrameLegacyInfoReader.ReadLastUpdatedText(ctx, selection),
-                    cableReserve);
+                    cableReserve, finalReview);
                 // 2026-11-04 用户要求：内容没有变化就不弹对比窗，不打扰预览。
                 if (!item.HasChanges)
                 {
@@ -726,9 +723,10 @@ namespace UNCAD.Features.Fill
         internal static FillUpdateCompareItem BuildCompareItem(MachineRow machine,
             List<TableFillRow> plannedRows, List<TableFillRow> existingRows,
             FrameInfoJsonRecord previous, string selectedHandle,
-            string legacyLastUpdated = "", CableReserveInfo reserve = null)
+            string legacyLastUpdated = "", CableReserveInfo reserve = null,
+            FillReviewData finalReview = null)
             => FillReviewStage.BuildCompareItem(machine, plannedRows, existingRows,
-                previous, selectedHandle, legacyLastUpdated, reserve);
+                previous, selectedHandle, legacyLastUpdated, reserve, finalReview);
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
             FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,

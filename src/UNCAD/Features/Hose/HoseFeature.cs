@@ -29,7 +29,7 @@ namespace UNCAD.Features.Hose
     /// </summary>
     [Feature("hose", "绘制软管",
         Commands = CommandIds.HoseFeatureCommands,
-        Description = "LINE 式连线绘制平面软管（默认直径100绿色）并生成软管标注")]
+        Description = "LINE 式连线绘制平面软管（默认直径100，可在命令中调整）并生成软管标注")]
     public class HoseFeature : CommandBase
     {
         [CommandMethod(CommandIds.Hose)]
@@ -38,7 +38,11 @@ namespace UNCAD.Features.Hose
         protected override void Execute(CadContext ctx)
         {
             ProductMetadata.EnsureCommandAllowed(CommandIds.Hose);
-            double diameter = ReadDiameter(ctx);
+            if (!PromptDiameter(ctx, ReadDiameter(ctx), out double diameter))
+            {
+                ctx.Write("\n[U1B] 已取消，本次未绘制。");
+                return;
+            }
             double textHeight = Settings.GetDouble(ConfigKeys.UnlHeight, 180.0);
             if (double.IsNaN(textHeight) || double.IsInfinity(textHeight)
                 || textHeight <= 0)
@@ -123,6 +127,45 @@ namespace UNCAD.Features.Hose
                 return 100.0;
             }
             return diameter;
+        }
+
+        private static bool PromptDiameter(CadContext ctx, double defaultDiameter,
+            out double diameter)
+        {
+            while (true)
+            {
+                var options = new PromptDoubleOptions("\n输入软管直径（mm） <"
+                    + TextFormatter.FormatNum(defaultDiameter) + ">:")
+                {
+                    AllowNone = true,
+                    AllowNegative = false,
+                    AllowZero = false,
+                    DefaultValue = defaultDiameter,
+                    UseDefaultValue = true
+                };
+                PromptDoubleResult result = ctx.Ed.GetDouble(options);
+                if (result.Status == PromptStatus.OK)
+                {
+                    if (double.IsNaN(result.Value) || double.IsInfinity(result.Value)
+                        || result.Value < 1.0
+                        || result.Value > ConduitDiameter.MaximumMillimeters)
+                    {
+                        ctx.Write("\n[U1B] 直径必须在 1–"
+                            + ConduitDiameter.MaximumMillimeters
+                            + " mm 范围内，请重新输入。");
+                        continue;
+                    }
+                    diameter = result.Value;
+                    return true;
+                }
+                if (result.Status == PromptStatus.None)
+                {
+                    diameter = defaultDiameter;
+                    return true;
+                }
+                diameter = defaultDiameter;
+                return false;
+            }
         }
 
         /// <summary>

@@ -32,12 +32,19 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
+- Current local source build: `3.4.1.6` (2026-11-19), pending install
+  acceptance; the installed build is `3.4.1.1`. XSTS frame details use
+  one row per frame, with separate model and quantity columns for every drawn
+  BOQ item and blank cells for missing items. Near-name hints and the "not
+  drawn" list are removed. The `v3.4.1` tag and official ZIP are pending.
 - Product: `UNCAD Pro`. Stable line: `3.4.0` (U1U/U13D 3D preview kernel
   switched to the in-box WPF Viewport3D — synchronous scene build, no browser
   process, no user-data-directory lock; the WebView2+three.js preview stack
   is retired, login page WebView2 stays, 2026-11-18, D-054 amendment; full
   WPF UI since 3.0.0, D-038; patches increment the fourth version part per
-  D-032).
+  D-032. Patch 3.4.0.8 binds U1U axis labels to the two route endpoints by
+  topology and workbook axis regions; ambiguous endpoint matches are reported,
+  not guessed).
 - Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
 - The only supported distribution is the online-licensed Pro package.
 - The release entry point is `release.ps1`; customer and expiry data come from

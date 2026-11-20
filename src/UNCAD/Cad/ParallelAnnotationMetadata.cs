@@ -16,6 +16,7 @@ namespace UNCAD.Cad
         /// <summary>D-050（2026-11-09）：合并趟的全部成员源句柄（"|" 连接）。
         /// SOURCE 仍保留 = 首成员句柄，旧读取方（角度修复/3D 分组）不受影响。</summary>
         private const string RunKey = "RUN";
+        private const string StyleKey = "STYLE";
         /// <summary>一趟内成员句柄的分隔符（句柄是十六进制串，不含 "|"）。</summary>
         public const string RunHandleSeparator = "|";
 
@@ -42,7 +43,7 @@ namespace UNCAD.Cad
         }
 
         public static void Set(Entity entity, string kind, string sourceHandle,
-            string runHandles = null)
+            string runHandles = null, string styleStamp = null)
         {
             if (entity == null || string.IsNullOrWhiteSpace(kind)
                 || string.IsNullOrWhiteSpace(sourceHandle)) return;
@@ -86,19 +87,37 @@ namespace UNCAD.Cad
                 values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
                     runHandles.Trim()));
             }
+            if (!string.IsNullOrWhiteSpace(styleStamp))
+            {
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString, StyleKey));
+                values.Add(new TypedValue((int)DxfCode.ExtendedDataAsciiString,
+                    styleStamp.Trim()));
+            }
             try { entity.XData = new ResultBuffer(values.ToArray()); }
             catch { /* Annotation metadata is optional; geometry remains valid. */ }
         }
 
+        public static string BuildStyleStamp(double curveOffset,
+            double textOffset, double textHeight, bool above, short colorIndex)
+            => string.Join("|", curveOffset.ToString("R", CultureInfo.InvariantCulture),
+                textOffset.ToString("R", CultureInfo.InvariantCulture),
+                textHeight.ToString("R", CultureInfo.InvariantCulture),
+                above ? "1" : "0", colorIndex.ToString(CultureInfo.InvariantCulture));
+
         public static bool TryRead(Entity entity, out string kind, out string sourceHandle)
-            => TryRead(entity, out kind, out sourceHandle, out _);
+            => TryRead(entity, out kind, out sourceHandle, out _, out _);
 
         public static bool TryRead(Entity entity, out string kind,
             out string sourceHandle, out string runHandles)
+            => TryRead(entity, out kind, out sourceHandle, out runHandles, out _);
+
+        public static bool TryRead(Entity entity, out string kind,
+            out string sourceHandle, out string runHandles, out string styleStamp)
         {
             kind = "";
             sourceHandle = "";
             runHandles = "";
+            styleStamp = "";
             if (entity == null) return false;
             try
             {
@@ -116,6 +135,8 @@ namespace UNCAD.Cad
                             || string.Equals(text, SourceKey,
                                 StringComparison.OrdinalIgnoreCase)
                             || string.Equals(text, RunKey,
+                                StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(text, StyleKey,
                                 StringComparison.OrdinalIgnoreCase))
                         {
                             key = text;
@@ -139,6 +160,12 @@ namespace UNCAD.Cad
                             runHandles = text;
                             key = "";
                         }
+                        else if (string.Equals(key, StyleKey,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            styleStamp = text;
+                            key = "";
+                        }
                     }
                 }
             }
@@ -147,6 +174,7 @@ namespace UNCAD.Cad
                 kind = "";
                 sourceHandle = "";
                 runHandles = "";
+                styleStamp = "";
             }
             return kind.Length > 0 && sourceHandle.Length > 0;
         }

@@ -48,7 +48,9 @@ if (-not $SkipBundle) {
     New-Item (Split-Path -Parent $bundleWebViewLoader) -ItemType Directory -Force | Out-Null
     Copy-Item -LiteralPath $webViewLoader -Destination $bundleWebViewLoader -Force
 
-    # 3.4.0：3D 预览改原生 Viewport3D——Web 页面树不再构建进包。
+    Copy-Item -LiteralPath (Join-Path $outputDir "UNCAD.Preview.exe") -Destination $bundleDir -Force
+    Copy-Item -LiteralPath (Join-Path $outputDir "UNCAD.Preview.exe.config") -Destination $bundleDir -Force
+    Copy-Item -LiteralPath (Join-Path $outputDir "Web") -Destination $bundleDir -Recurse -Force
 
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
@@ -65,6 +67,10 @@ if (-not $SkipBundle) {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
+        "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
+        "Web\Preview\index.html", "Web\Preview\app.js", "Web\Preview\styles.css",
+        "Web\Preview\vendor\three\LICENSE.txt", "Web\Preview\vendor\three\OrbitControls.js",
+        "Web\Preview\vendor\three\three.core.min.js", "Web\Preview\vendor\three\three.module.min.js",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"

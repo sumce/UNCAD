@@ -97,13 +97,14 @@ namespace UNCAD.Core.QuickLine
             QuickLineProjectionMode projectionMode,
             IList<QuickLineIsometricNode> nodes,
             IList<QuickLineIsometricSegment> segments,
-            IList<string> diagnostics)
+            IList<string> diagnostics, int componentCount = 1)
         {
             RootNodeId = rootNodeId;
             ProjectionMode = projectionMode;
             Nodes = new ReadOnlyCollection<QuickLineIsometricNode>(nodes);
             Segments = new ReadOnlyCollection<QuickLineIsometricSegment>(segments);
             Diagnostics = new ReadOnlyCollection<string>(diagnostics);
+            ComponentCount = componentCount;
         }
 
         public string RootNodeId { get; }
@@ -111,5 +112,6 @@ namespace UNCAD.Core.QuickLine
         public IReadOnlyList<QuickLineIsometricNode> Nodes { get; }
         public IReadOnlyList<QuickLineIsometricSegment> Segments { get; }
         public IReadOnlyList<string> Diagnostics { get; }
+        internal int ComponentCount { get; }
     }
 }

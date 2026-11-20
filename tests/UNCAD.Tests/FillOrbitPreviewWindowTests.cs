@@ -4,6 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
@@ -216,17 +219,21 @@ namespace UNCAD.Tests
                     {
                         new QuickLineOrbitPreviewSegment("s1",
                             new QuickLineSpatialPoint(0, 0, 0),
-                            new QuickLineSpatialPoint(9600, 0, 0),
+                            new QuickLineSpatialPoint(0, 9600, 0),
                             QuickLineSpatialAxis.X, 9600, true,
                             "9600mm",
                             new QuickLineOrbitPreviewChannel(400.0, false, false)),
                         new QuickLineOrbitPreviewSegment("s2",
-                            new QuickLineSpatialPoint(9600, 0, 0),
-                            new QuickLineSpatialPoint(9600, 0, 2500),
+                            new QuickLineSpatialPoint(0, 9600, 0),
+                            new QuickLineSpatialPoint(0, 9600, 2500),
                             QuickLineSpatialAxis.Z, 2500, true,
                             "2500mm",
                             new QuickLineOrbitPreviewChannel(null, false, true))
-                    }, "上游 48/V ↔ 下游 37/V", new List<string>(), "48/V", "37/V");
+                    }, "上游 48/V ↔ 下游 46/V", new List<string>(),
+                        "48/V", "46/V",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(0, 9600, 2500),
+                        directionResolved: true);
                     var control = new QuickLineOrbitPreviewControl();
                     control.Width = 320;
                     control.Height = 260;
@@ -256,6 +263,23 @@ namespace UNCAD.Tests
                     // 特性D：桥架双线 1 段 + 线管双线 1 段。
                     Assert.Equal(1, control.BuiltTrayChannelCount);
                     Assert.Equal(1, control.BuiltConduitChannelCount);
+
+                    // 隐藏柱体不影响柱网和轴号。
+                    var viewport = FindViewport(control);
+                    Assert.True(viewport.HasGroup(
+                        QuickLine3dSceneGroupKind.Columns));
+                    Assert.True(control.ColumnsEnabled);
+                    control.ToggleColumns();
+                    Pump(2);
+                    Assert.False(control.ColumnsEnabled);
+                    Assert.False(viewport.IsGroupVisible(
+                        QuickLine3dSceneGroupKind.Columns));
+                    Assert.True(viewport.IsGroupVisible(
+                        QuickLine3dSceneGroupKind.Grid));
+                    Assert.True(control.BuiltAxisTickCount >= 2);
+                    Assert.True(control.BuiltLetterLabelCount >= 1);
+                    control.ToggleColumns();
+                    Pump(2);
 
                     // 柱网开关：关掉只影响柱网/两向标签，路由与通道照常。
                     Assert.True(control.ColumnGridEnabled);
@@ -318,7 +342,7 @@ namespace UNCAD.Tests
         {
             // 3.3.7 三轮的建筑模型公式随内核延续：typed 参照层必须产出参照组
             //（楼板/环氧/华夫/设备/母线玻璃）+ 结构组（工字钢/葡萄架，默认藏）
-            // + 结构柱；「本层=2F地面」基准重定位后地面铺板只在基准=0 时画。
+            // + 结构柱；一楼地面随「本层=2F地面」一起重定位。
             var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
             {
                 new QuickLineOrbitPreviewSegment("s1",
@@ -350,9 +374,16 @@ namespace UNCAD.Tests
                 primitive => primitive.Group == QuickLine3dSceneGroupKind.Reference);
             Assert.Contains(scene.Primitives,
                 primitive => primitive.Group == QuickLine3dSceneGroupKind.Detail);
-            // 本层基准非 0 → 不自动铺 1F 地面（本层楼板条目已在 0）。
-            Assert.DoesNotContain(scene.Labels,
-                label => label.Text.StartsWith("1F地面", StringComparison.Ordinal));
+            Assert.Contains(scene.Labels,
+                label => label.Text == "1F地面 -7800" && label.Z == -7800);
+            Assert.Contains(scene.Primitives, primitive =>
+                primitive.Kind == QuickLine3dPrimitiveKind.Box
+                && primitive.Tint == Color_FromRgb(0x39, 0x42, 0x4E)
+                && Math.Abs(primitive.A1z + primitive.Sizez / 2 + 7800) < 0.001);
+            Assert.All(scene.Primitives.Where(primitive =>
+                primitive.Kind == QuickLine3dPrimitiveKind.Box
+                && primitive.Tint == Color_FromRgb(0x5D, 0x69, 0x77)),
+                column => Assert.Equal(-7800, column.A1z - column.Sizez / 2));
             // 信封保留锚定后的绝对标高；场景构建阶段再减本层基准。
             Assert.Contains(envelope.ReferenceLevels,
                 level => level.Kind == "bus" && Math.Abs(level.Z - 11460.0) < 0.5);
@@ -376,6 +407,217 @@ namespace UNCAD.Tests
             // 无「本层」基准（1F 绝对标高口径）→ 自动铺 1F 地面。
             Assert.Contains(scene.Labels,
                 label => label.Text.StartsWith("1F地面", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_WaffleCoversOnlyOccupiedBaysWithoutSampling()
+        {
+            var model = new QuickLineOrbitPreviewModel(
+                new List<QuickLineOrbitPreviewSegment>
+                {
+                    new QuickLineOrbitPreviewSegment("large",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(300000, 300000, 0),
+                        QuickLineSpatialAxis.X, 424264, true)
+                }, "large", new List<string>());
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model,
+                    PreviewReferenceLevels.Parse("3F地面=15000=华夫板"), null);
+
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            QuickLine3dPrimitive[] waffleCells = scene.Primitives.Where(
+                primitive => primitive.Kind
+                    == QuickLine3dPrimitiveKind.WaffleCell).ToArray();
+
+            QuickLinePreviewFootprint footprint = QuickLinePreviewFootprint.Plan(envelope);
+            Assert.Equal(footprint.Bays.Count * 9, waffleCells.Length);
+            Assert.InRange(waffleCells.Length, 1, 5400);
+            Assert.DoesNotContain(waffleCells, cell =>
+                cell.A1x == 148800 && cell.A1y == 9600);
+            Assert.All(waffleCells.GroupBy(primitive => new
+            {
+                X = Math.Floor(primitive.A1x / 4800.0),
+                Y = Math.Floor(primitive.A1y / 4800.0)
+            }), bay => Assert.Equal(9, bay.Count()));
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_AllReferenceLayersFollowOccupiedSpace()
+        {
+            var model = new QuickLineOrbitPreviewModel(new[]
+            {
+                new QuickLineOrbitPreviewSegment("x",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(96000, 0, 0),
+                    QuickLineSpatialAxis.X, 96000, true),
+                new QuickLineOrbitPreviewSegment("y",
+                    new QuickLineSpatialPoint(96000, 0, 0),
+                    new QuickLineSpatialPoint(96000, 96000, 0),
+                    QuickLineSpatialAxis.Y, 96000, true)
+            }, "", new List<string>());
+            var envelope = QuickLineOrbitPreviewEnvelope.Build(model,
+                PreviewReferenceLevels.Parse(PreviewReferenceLevels.DefaultList),
+                "2F地面");
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            foreach (QuickLine3dPrimitive primitive in scene.Primitives)
+            {
+                if (primitive.Kind == QuickLine3dPrimitiveKind.Box)
+                    Assert.False(Math.Abs(primitive.A1x - 48000) < primitive.Sizex / 2
+                        && Math.Abs(primitive.A1y - 48000) < primitive.Sizey / 2,
+                        "No floor, bus layer, column or structural detail may fill the empty interior.");
+                if (primitive.Group == QuickLine3dSceneGroupKind.Grid)
+                    Assert.False(Math.Abs(primitive.A1x - 48000) < 0.001
+                        && Math.Abs(primitive.B1x - 48000) < 0.001
+                        && Math.Min(primitive.A1y, primitive.B1y) < 48000
+                        && Math.Max(primitive.A1y, primitive.B1y) > 48000);
+            }
+            double footprintArea = QuickLinePreviewFootprint.Plan(envelope).Bays.Count
+                * 4800.0 * 4800.0;
+            foreach (Color floorColor in new[]
+            {
+                Color_FromRgb(0x39, 0x42, 0x4E),
+                Color_FromRgb(0x5F, 0x9E, 0x6E),
+                Color_FromRgb(0x8F, 0xAD, 0xC0)
+            })
+                Assert.Equal(footprintArea, scene.Primitives.Where(primitive =>
+                    primitive.Kind == QuickLine3dPrimitiveKind.Box
+                    && primitive.Tint == floorColor).Sum(p => p.Sizex * p.Sizey));
+            Assert.Equal(1584, scene.Primitives.Count(p =>
+                p.Kind == QuickLine3dPrimitiveKind.WaffleCell));
+        }
+
+        [Fact]
+        public void OrbitControl_TooLargePreviewShowsHintAndClearsOldScene()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                var control = new QuickLineOrbitPreviewControl();
+                control.SetModel(PreviewModel(""));
+                var model = new QuickLineOrbitPreviewModel(new[]
+                {
+                    new QuickLineOrbitPreviewSegment("oversized",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(1000000000, 0, 0),
+                        QuickLineSpatialAxis.X, 1000000000, true)
+                }, "", new List<string>());
+                control.SetModel(model);
+                Assert.Equal(0, FindViewport(control).TriangleCount);
+                Assert.Contains(control.Children.OfType<TextBlock>(),
+                    text => text.Visibility == Visibility.Visible
+                        && text.Text.Contains("4096"));
+                control.SetModel(PreviewModel(""));
+                Assert.True(FindViewport(control).TriangleCount > 0);
+            });
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_PlacesNineCircularWaffleHolesPerBay()
+        {
+            var model = new QuickLineOrbitPreviewModel(
+                new List<QuickLineOrbitPreviewSegment>
+                {
+                    new QuickLineOrbitPreviewSegment("diagonal-bay",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(4800, 4800, 0),
+                        QuickLineSpatialAxis.X, 6788, true)
+                }, "bay", new List<string>());
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model,
+                    PreviewReferenceLevels.Parse("3F地面=15000=华夫板"),
+                    null);
+
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            QuickLine3dPrimitive[] bayCells = scene.Primitives.Where(primitive =>
+                primitive.Kind == QuickLine3dPrimitiveKind.WaffleCell
+                && primitive.A1x >= 0 && primitive.B1x <= 4800
+                && primitive.A1y >= 0 && primitive.B1y <= 4800).ToArray();
+
+            Assert.Equal(9, bayCells.Length);
+            Assert.All(bayCells, cell =>
+            {
+                Assert.True(cell.Radius > 0);
+                Assert.True(cell.Radius < (cell.B1x - cell.A1x) / 2.0);
+                Assert.Equal(15000.0, cell.A1z);
+            });
+
+            WpfStaRunner.Run(delegate
+            {
+                var geometry = new QuickLine3dViewportControl.MeshBuilder();
+                geometry.Append(bayCells[0]);
+                Assert.Equal(16, geometry.LastAppendTriangles);
+                var built = geometry.ToBuilt(
+                    new QuickLine3dViewportControl.MaterialKey(
+                        bayCells[0].Tint, bayCells[0].Opacity),
+                    QuickLine3dSceneGroupKind.Reference);
+                Assert.Equal(16, built.Mesh.Positions.Count);
+                Assert.Equal(48, built.Mesh.TriangleIndices.Count);
+                Point3D center = new Point3D(
+                    (bayCells[0].A1x + bayCells[0].B1x) / 2.0,
+                    (bayCells[0].A1y + bayCells[0].B1y) / 2.0,
+                    bayCells[0].A1z);
+                for (int index = 0; index < 12; index++)
+                {
+                    Point3D inner = built.Mesh.Positions[index + 4];
+                    Assert.Equal(bayCells[0].Radius,
+                        (inner - center).Length, 6);
+                }
+                double area = 0;
+                for (int index = 0; index < built.Mesh.TriangleIndices.Count; index += 3)
+                {
+                    Point3D a = built.Mesh.Positions[built.Mesh.TriangleIndices[index]];
+                    Point3D b = built.Mesh.Positions[built.Mesh.TriangleIndices[index + 1]];
+                    Point3D c = built.Mesh.Positions[built.Mesh.TriangleIndices[index + 2]];
+                    double cross = Vector3D.CrossProduct(b - a, c - a).Z;
+                    Assert.True(cross > 0, "Every face must face up and have nonzero area.");
+                    area += cross / 2;
+                }
+                // Full square minus the regular 12-sided opening: no corner gaps.
+                double squareArea = (bayCells[0].B1x - bayCells[0].A1x)
+                    * (bayCells[0].B1y - bayCells[0].A1y);
+                Assert.Equal(squareArea - 3 * bayCells[0].Radius * bayCells[0].Radius,
+                    area, 5);
+            });
+        }
+
+        [Fact]
+        public void OrbitSceneBuilder_RemovesLegacyDemoCabinetsAndKeepsCustomDevices()
+        {
+            var model = new QuickLineOrbitPreviewModel(
+                new List<QuickLineOrbitPreviewSegment>
+                {
+                    new QuickLineOrbitPreviewSegment("route",
+                        new QuickLineSpatialPoint(4800, 2400, 0),
+                        new QuickLineSpatialPoint(9600, 2400, 0),
+                        QuickLineSpatialAxis.X, 4800, true)
+                }, "摘要", new List<string>(), "48/V", "48/W",
+                new QuickLineSpatialPoint(4800, 2400, 0),
+                new QuickLineSpatialPoint(9600, 2400, 0),
+                directionResolved: true);
+            const string levels =
+                "本层=2F地面;2F地面=7800=环氧地坪"
+                + ";I-L盘高度=2200=设备=2F地面"
+                + ";插座盘顶面=1000=设备=2F地面"
+                + ";插座盘安装=1000=设备=2F地面"
+                + ";自定义设备=800=设备=2F地面";
+            PreviewReferenceLevels.TryParseBaseFloor(levels,
+                out string baseFloor);
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model,
+                    PreviewReferenceLevels.Parse(levels), baseFloor);
+
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            QuickLine3dPrimitive customDevice = Assert.Single(scene.Primitives,
+                primitive => primitive.Kind == QuickLine3dPrimitiveKind.Box
+                    && primitive.Group == QuickLine3dSceneGroupKind.Reference
+                    && primitive.Tint == Color_FromRgb(0xD9, 0xDF, 0xE6));
+
+            Assert.Equal(800.0, customDevice.Sizez);
+            Assert.Contains(scene.Labels, label =>
+                label.Text == "自定义设备 800");
+            Assert.DoesNotContain(scene.Labels, label =>
+                label.Text.Contains("I-L盘")
+                    || label.Text.Contains("I-Line盘")
+                    || label.Text.Contains("插座盘"));
         }
 
         [Fact]
@@ -499,7 +741,11 @@ namespace UNCAD.Tests
             Assert.Equal(1, scene.Labels.Count(label => label.Kind == "route"));
             Assert.Equal(2, scene.Labels.Count(label =>
                 label.Kind == "directionDown" || label.Kind == "directionUp"));
-            Assert.True(scene.Labels.Count(label => label.Kind == "axis") >= 4);
+            var axes = scene.Labels.Where(label => label.Kind == "axis").ToArray();
+            Assert.Equal(3, axes.Length);
+            Assert.Contains(axes, label => label.Text == "48/W" && label.X == 0 && label.Y == 0);
+            Assert.Contains(axes, label => label.Text == "49/W" && label.X == 4800 && label.Y == 0);
+            Assert.Contains(axes, label => label.Text == "48/X" && label.X == 0 && label.Y == 4800);
             Assert.Equal(4, scene.Labels.Count(label => label.Kind == "compass"));
             // 面板：回路/桥架/图框各 1 行 + 诊断文案。
             Assert.Equal("多图框", batch.MachineId);
@@ -575,6 +821,132 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void ViewportControl_CursorZoomAndFullResetPreserveCameraContract()
+        {
+            WpfStaRunner.Run(() =>
+            {
+                var scene = new QuickLine3dScene { Diagonal = 4000, CameraDistance = 12000 };
+                scene.AddTube(QuickLine3dSceneGroupKind.Routes, 0, 0, 0, 4000, 0, 0, 10, Colors.Red);
+                var viewport = new QuickLine3dViewportControl();
+                viewport.Measure(new Size(800, 600));
+                viewport.Arrange(new Rect(0, 0, 800, 600));
+                viewport.SetScene(scene);
+                var camera = (PerspectiveCamera)viewport.Children.OfType<Viewport3D>().Single().Camera;
+                Point3D original = camera.Position;
+                Vector3D originalDirection = camera.LookDirection;
+                viewport.OrbitBy(80, 40);
+                Assert.Equal(originalDirection, camera.LookDirection);
+                viewport.ZoomAt(new Point(400, 300), 0);
+                Point3D cursorAnchor = CameraPlanePoint(camera, new Point(600, 200));
+                viewport.ZoomAt(new Point(600, 200), 120);
+                Assert.True((CameraPlanePoint(camera, new Point(600, 200)) - cursorAnchor).Length < 1e-6);
+                Assert.NotEqual(originalDirection, camera.LookDirection);
+                Assert.NotEqual(new Point3D(0, 0, 0), camera.Position + camera.LookDirection);
+                Assert.True(camera.LookDirection.Length < originalDirection.Length);
+                viewport.ResetCamera();
+                Assert.True((camera.Position - original).Length < 1e-6);
+                Assert.True((camera.LookDirection - originalDirection).Length < 1e-6);
+
+                scene.Orthographic = true;
+                scene.OrthoViewHeight = 6000;
+                viewport.SetScene(scene);
+                var ortho = (OrthographicCamera)viewport.Children.OfType<Viewport3D>().Single().Camera;
+                double before = ortho.Width;
+                cursorAnchor = CameraPlanePoint(ortho, new Point(600, 200));
+                viewport.ZoomAt(new Point(600, 200), 120);
+                Assert.True((CameraPlanePoint(ortho, new Point(600, 200)) - cursorAnchor).Length < 1e-6);
+                Assert.True(ortho.Width < before);
+                Assert.NotEqual(new Point3D(0, 0, 0), ortho.Position + ortho.LookDirection);
+                viewport.ResetCamera();
+                Assert.Equal(before, ortho.Width, 6);
+                Assert.True(((ortho.Position + ortho.LookDirection) - new Point3D()).Length < 1e-6);
+                viewport.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+            });
+        }
+
+        private static Point3D CameraPlanePoint(ProjectionCamera camera, Point pixel)
+        {
+            Vector3D forward = camera.LookDirection;
+            forward.Normalize();
+            Vector3D right = Vector3D.CrossProduct(forward, camera.UpDirection);
+            right.Normalize();
+            Vector3D up = Vector3D.CrossProduct(right, forward);
+            double width = camera is OrthographicCamera orthographic ? orthographic.Width
+                : 2 * camera.LookDirection.Length
+                    * Math.Tan(((PerspectiveCamera)camera).FieldOfView * Math.PI / 360);
+            return camera.Position + camera.LookDirection
+                + right * ((pixel.X - 400) * width / 800)
+                + up * ((300 - pixel.Y) * width / 800);
+        }
+
+        [Fact]
+        public void ViewportControl_CoalescesOrbitUntilRenderingAndStopsWhenIdle()
+        {
+            WpfStaRunner.Run(() =>
+            {
+                var viewport = new QuickLine3dViewportControl();
+                viewport.SetScene(new QuickLine3dScene { Diagonal = 4000, CameraDistance = 12000 });
+                var window = new Window { Content = viewport, Width = 800, Height = 600 };
+                window.Show();
+                Pump(2);
+                var camera = (PerspectiveCamera)viewport.Children.OfType<Viewport3D>().Single().Camera;
+                Vector3D original = camera.LookDirection;
+                for (int i = 0; i < 50; i++) viewport.OrbitBy(1, 0);
+                Assert.Equal(original, camera.LookDirection);
+                Pump(3);
+                Assert.NotEqual(original, camera.LookDirection);
+                Vector3D rendered = camera.LookDirection;
+                Pump(2);
+                Assert.Equal(rendered, camera.LookDirection);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void ViewportControl_HiddenGeometryIsBuiltOnlyOnceWhenEnabled()
+        {
+            WpfStaRunner.Run(() =>
+            {
+                var scene = new QuickLine3dScene();
+                scene.AddTube(QuickLine3dSceneGroupKind.Routes, 0, 0, 0, 100, 0, 0, 1, Colors.Red);
+                scene.AddBox(QuickLine3dSceneGroupKind.Detail, 50, 0, 20, 100, 20, 20,
+                    Colors.Gray, 1, Colors.Transparent);
+                var viewport = new QuickLine3dViewportControl();
+                viewport.SetScene(scene);
+                int initial = viewport.TriangleCount;
+                Assert.True(viewport.HasGroup(QuickLine3dSceneGroupKind.Detail));
+                Assert.False(viewport.IsGroupVisible(QuickLine3dSceneGroupKind.Detail));
+                viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Detail, true);
+                Assert.True(viewport.TriangleCount > initial);
+                int built = viewport.TriangleCount;
+                viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Detail, false);
+                viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Detail, true);
+                Assert.Equal(built, viewport.TriangleCount);
+            });
+        }
+
+        [Fact]
+        public void OrbitControl_ReusesSameModelAndRetainsHiddenColumnsBetweenFrames()
+        {
+            WpfStaRunner.Run(() =>
+            {
+                var control = new QuickLineOrbitPreviewControl();
+                var model = PreviewModel("first");
+                control.SetModel(model);
+                control.ToggleColumns();
+                var viewport = FindViewport(control);
+                var surface = viewport.Children.OfType<Viewport3D>().Single();
+                var visuals = surface.Children.Cast<Visual3D>().ToArray();
+                control.SetModel(model);
+                Assert.Equal(visuals, surface.Children.Cast<Visual3D>());
+                control.SetModel(PreviewModel("second"));
+                Assert.False(control.ColumnsEnabled);
+                Assert.False(viewport.IsGroupVisible(QuickLine3dSceneGroupKind.Columns));
+                Assert.True(viewport.IsGroupVisible(QuickLine3dSceneGroupKind.Grid));
+            });
+        }
+
+        [Fact]
         public void ViewportControl_TogglesGroupsAndLabelKinds()
         {
             WpfStaRunner.Run(delegate
@@ -603,7 +975,10 @@ namespace UNCAD.Tests
 
                 var viewport = new QuickLine3dViewportControl();
                 viewport.SetScene(scene);
-                Assert.True(viewport.MeshCount >= 4, "四组网格全建");
+                Viewport3D surface = viewport.Children.OfType<Viewport3D>().Single();
+                Assert.All(surface.Children.OfType<ModelVisual3D>(),
+                    visual => Assert.True(visual.Content.IsFrozen));
+                Assert.Equal(3, viewport.MeshCount);
                 Assert.Equal(2, viewport.LabelCount);
                 Assert.True(viewport.IsGroupVisible(
                     QuickLine3dSceneGroupKind.Routes));
@@ -620,6 +995,136 @@ namespace UNCAD.Tests
                 viewport.SetLabelKindVisible("mm", false);
                 viewport.SetLabelKindVisible("mm", true);
                 viewport.ResetCamera();
+            });
+        }
+
+        [Fact]
+        public void ViewportControl_ShortRouteCanZoomOutFromFullBuilding()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                var model = new QuickLineOrbitPreviewModel(new[]
+                {
+                    new QuickLineOrbitPreviewSegment("short",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(10, 0, 0),
+                        QuickLineSpatialAxis.X, 10, true)
+                }, "", new List<string>());
+                var envelope = QuickLineOrbitPreviewEnvelope.Build(model,
+                    PreviewReferenceLevels.Parse(PreviewReferenceLevels.DefaultList),
+                    "2F地面");
+                var viewport = new QuickLine3dViewportControl();
+                viewport.SetScene(QuickLineOrbitSceneBuilder.Build(envelope));
+                var surface = viewport.Children.OfType<Viewport3D>().Single();
+                var camera = (PerspectiveCamera)surface.Camera;
+                double before = camera.LookDirection.Length;
+                viewport.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice,
+                    Environment.TickCount, -120) { RoutedEvent = Mouse.MouseWheelEvent });
+                Assert.Equal(before * 1.15, camera.LookDirection.Length, 6);
+            });
+        }
+
+        [Fact]
+        public void ViewportControl_DefersHiddenLabelsAndUsesLowPolyNodes()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                const int count = 1000;
+                var scene = new QuickLine3dScene { Diagonal = 100000.0 };
+                for (int index = 0; index < count; index++)
+                {
+                    scene.AddSphere(QuickLine3dSceneGroupKind.Routes,
+                        index * 100.0, 0, 0, 20,
+                        Color_FromRgb(0xE7, 0xEE, 0xF7));
+                    scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "route",
+                        "route " + index, index * 100.0, 0, 0);
+                }
+
+                var viewport = new QuickLine3dViewportControl();
+                viewport.SetScene(scene, new[] { "route" });
+
+                Assert.Equal(count, viewport.LabelCount);
+                Assert.Equal(0, viewport.MaterializedLabelCount);
+                Assert.Equal(count * 8, viewport.TriangleCount);
+
+                viewport.SetLabelKindVisible("route", true);
+                Assert.Equal(count, viewport.MaterializedLabelCount);
+            });
+        }
+
+        [Fact]
+        public void ViewportControl_ProjectsAndCentersLabelsAtTheirAnchors()
+        {
+            WpfStaRunner.Run(delegate
+            {
+                Point3D eye = new Point3D(120, -90, 75);
+                Point3D target = new Point3D(10, 20, 30);
+                Matrix3D view = QuickLine3dViewportControl.CreateViewMatrix(
+                    eye, target);
+                Point3D cameraTarget = view.Transform(target);
+                Point3D cameraEye = view.Transform(eye);
+                Assert.Equal(0.0, cameraTarget.X, 6);
+                Assert.Equal(0.0, cameraTarget.Y, 6);
+                Assert.Equal(-(eye - target).Length, cameraTarget.Z, 6);
+                Assert.Equal(0.0, cameraEye.X, 6);
+                Assert.Equal(0.0, cameraEye.Y, 6);
+                Assert.Equal(0.0, cameraEye.Z, 6);
+
+                var scene = new QuickLine3dScene
+                {
+                    Diagonal = 4000.0,
+                    Centerx = 2000.0,
+                    CameraDistance = 10000.0,
+                    Near = 1.0,
+                    Far = 1000000.0
+                };
+                scene.AddTube(QuickLine3dSceneGroupKind.Routes,
+                    0, 0, 0, 4000, 0, 0, 10,
+                    Color_FromRgb(0xE0, 0x6C, 0x00));
+                scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "mm",
+                    "4000mm", 2000, 0, 0);
+                scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "route",
+                    "route A", 2000, 0, 0);
+                scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "route",
+                    "route B", 2000, 0, 0);
+
+                var viewport = new QuickLine3dViewportControl();
+                var window = new Window
+                {
+                    Width = 420,
+                    Height = 320,
+                    Content = viewport,
+                    WindowStartupLocation = WindowStartupLocation.Manual,
+                    Left = 20,
+                    Top = 20
+                };
+                viewport.SetScene(scene);
+                window.Show();
+                Pump(3);
+
+                Canvas labels = viewport.Children.OfType<Canvas>().Single();
+                TextBlock mm = labels.Children.OfType<TextBlock>()
+                    .Single(element => element.Text == "4000mm");
+                TranslateTransform mmPosition =
+                    (TranslateTransform)mm.RenderTransform;
+                Assert.Equal(viewport.ActualWidth / 2.0,
+                    mmPosition.X + mm.DesiredSize.Width / 2.0, 1);
+                Assert.Equal(viewport.ActualHeight / 2.0,
+                    mmPosition.Y + mm.DesiredSize.Height / 2.0, 1);
+
+                double[] routeCenters = labels.Children.OfType<TextBlock>()
+                    .Where(element => element.Text.StartsWith("route ",
+                        StringComparison.Ordinal))
+                    .Select(element =>
+                    {
+                        var position =
+                            (TranslateTransform)element.RenderTransform;
+                        return position.Y + element.DesiredSize.Height / 2.0;
+                    }).ToArray();
+                Assert.Equal(2, routeCenters.Length);
+                Assert.True(Math.Abs(routeCenters[0] - routeCenters[1]) >= 15.0,
+                    "重叠路线标签应保留屏幕避让偏移");
+                window.Close();
             });
         }
 

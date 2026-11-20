@@ -19,6 +19,9 @@ namespace UNCAD.UI
         /// <summary>柱网（轴线/刻度/罗盘）——「柱网」开关。</summary>
         Grid,
 
+        /// <summary>结构柱——U1U 的独立「柱子」开关。</summary>
+        Columns,
+
         /// <summary>参照建筑模型（楼板/环氧/华夫/设备/母线玻璃/地面/标高线框）——「参照」开关。</summary>
         Reference,
 
@@ -58,6 +61,7 @@ namespace UNCAD.UI
         Tube,
         Box,
         Quad,
+        WaffleCell,
         Sphere
     }
 
@@ -196,6 +200,26 @@ namespace UNCAD.UI
                 Opacity = opacity
             };
             Primitives.Add(primitive);
+        }
+
+        /// <summary>加一块带圆孔的华夫板单元；孔圆心居中，外沿按矩形单元裁切。</summary>
+        public void AddWaffleCell(QuickLine3dSceneGroupKind group,
+            double minx, double miny, double maxx, double maxy, double z,
+            double holeRadius, Color tint, double opacity)
+        {
+            if (maxx <= minx || maxy <= miny || holeRadius <= 0
+                || holeRadius >= Math.Min(maxx - minx, maxy - miny) / 2.0)
+                return;
+            Primitives.Add(new QuickLine3dPrimitive(
+                QuickLine3dPrimitiveKind.WaffleCell)
+            {
+                Group = group,
+                A1x = minx, A1y = miny, A1z = z,
+                B1x = maxx, B1y = maxy,
+                Radius = holeRadius,
+                Tint = tint,
+                Opacity = opacity
+            });
         }
 
         /// <summary>加一个低模球。</summary>

@@ -11,7 +11,7 @@ namespace UNCAD.Tests
     public class BundleLoadingTests
     {
         private const string PreviousProductCode =
-            "{CC72B556-8A04-4FFE-9E13-4C65446A3AED}";
+            "{414BF7AA-041D-482C-8869-D2C0FC970DCD}";
 
         [Fact]
         public void Manifest_HasVersionSpecificProductAndStableUpgradeIdentity()
@@ -199,6 +199,10 @@ namespace UNCAD.Tests
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
                 "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
+                "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
+                "Web\\Preview\\index.html", "Web\\Preview\\app.js", "Web\\Preview\\styles.css",
+                "Web\\Preview\\vendor\\three\\LICENSE.txt", "Web\\Preview\\vendor\\three\\OrbitControls.js",
+                "Web\\Preview\\vendor\\three\\three.core.min.js", "Web\\Preview\\vendor\\three\\three.module.min.js",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
                 // 3.4.0：Web 页面树随 3D 内核换原生 Viewport3D 退役。
                 "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"

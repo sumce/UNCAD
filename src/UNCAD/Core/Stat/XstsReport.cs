@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Stat
@@ -53,21 +55,72 @@ namespace UNCAD.Core.Stat
     public sealed class XstsFrameIssue
     {
         public int FrameNumber { get; set; }
+        public string FrameHandle { get; set; } = "";
+        public string FrameIdText => !string.IsNullOrWhiteSpace(FrameHandle)
+            ? FrameHandle : FrameNumber > 0 ? FrameNumber.ToString() : "";
         public string MachineId { get; set; } = "";
         public string CircuitName { get; set; } = "";
         public string Description { get; set; } = "";
+    }
+
+    /// <summary>
+    /// One physical frame, including empty or unreadable frames. Items retain
+    /// source order; Cells align with the report's material columns without CAD access.
+    /// </summary>
+    public sealed class XstsFrameDetail
+    {
+        public string FrameHandle { get; set; } = "";
+        public string MachineId { get; set; } = "";
+        public string CircuitName { get; set; } = "";
+        public List<XstsFrameItem> Items { get; } = new List<XstsFrameItem>();
+        public List<XstsFrameItem> Cells { get; } = new List<XstsFrameItem>();
+    }
+
+    /// <summary>One cleaned BOQ item; text and quantities are never merged or inferred.</summary>
+    public sealed class XstsFrameItem
+    {
+        public string Number { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Unit { get; set; } = "";
+        public string Quantity { get; set; } = "";
+        public string Code { get; set; } = "";
+        public string Model
+        {
+            get
+            {
+                string model = BoqFeatureName.Extract(Description);
+                return model.Length > 0 ? model : Description;
+            }
+        }
+        public string DetailText => "序号：" + Number + "\n项目名称：" + Name
+            + "\n项目特征：" + Description + "\n单位：" + Unit
+            + "\n数量：" + Quantity + "\n编码：" + Code;
+    }
+
+    /// <summary>One material's adjacent model and quantity columns, shared by UI and Excel.</summary>
+    public sealed class XstsMaterialColumn
+    {
+        internal XstsMaterialColumn(string name, string unit, int occurrence)
+        {
+            string label = (name.Length == 0 ? "未命名项目" : name)
+                + (occurrence > 1 ? occurrence.ToString() : "");
+            ModelHeader = label + "型号";
+            QuantityHeader = label + (unit == "m" ? "米数" : "数量"
+                + (unit.Length == 0 ? "" : "（" + unit + "）"));
+        }
+
+        public string ModelHeader { get; }
+        public string QuantityHeader { get; }
     }
 
     /// <summary>Complete XSTS report, independent of AutoCAD and Excel I/O.</summary>
     public sealed class XstsReport
     {
         public List<XstsMachineSummary> Machines { get; } = new List<XstsMachineSummary>();
+        public List<XstsFrameDetail> Frames { get; } = new List<XstsFrameDetail>();
+        public List<XstsMaterialColumn> MaterialColumns { get; } = new List<XstsMaterialColumn>();
         public List<XstsFrameIssue> Issues { get; } = new List<XstsFrameIssue>();
-        /// <summary>未上图机台（档案有、全图无，3.2.0.7 盲区名单）；档案不可用
-        /// 或全图扫描失败时为空列表。</summary>
-        public List<XstsBlindMachine> BlindMachines { get; } = new List<XstsBlindMachine>();
-        /// <summary>盲区分组摘要（"PSP×10、OHVC×10…"），空名单返回空串。</summary>
-        public string BlindMachineSummary => XstsBlindAnalyzer.GroupSummary(BlindMachines);
         /// <summary>Physical selected frame count; machines are reported separately.</summary>
         public int FrameCount { get; set; }
         public XstsExpectedDataStatus ExpectedDataStatus { get; set; }
@@ -141,9 +194,9 @@ namespace UNCAD.Core.Stat
                 ExpectedDataStatus = expectedDataStatus,
                 ExpectedDataDetail = expectedDataDetail ?? ""
             };
-            AddFrameIssues(selectedRows, report);
             var selectedGroups = Group(selectedRows);
             var expectedGroups = Group(expectedRows);
+            AddFrameDetails(selectedRows, report);
             // 机台元数据按机台分组一次。旧实现每台机台都对整张 selected/expected
             // 行表做一次 Where 过滤，机台数与行数同时增长时是 O(机台×行)：
             // 1000 机台 × 20 回路实测 3.7s。分组后每行只归属一次。
@@ -202,10 +255,20 @@ namespace UNCAD.Core.Stat
             return report;
         }
 
-        private static void AddFrameIssues(IReadOnlyList<XstsCircuitRecord> selected,
+        private static void AddFrameDetails(IReadOnlyList<XstsCircuitRecord> selected,
             XstsReport report)
         {
             var identities = new HashSet<string>(IdentityTextNormalizer.Comparer);
+            var columns = new Dictionary<Tuple<string, string, int>, int>();
+            foreach (string name in new[] { "电缆", "桥架", "软管", "线管" })
+                AddColumn(name, "m", 1);
+            // Use declared catalog categories only for exact, unambiguous project names.
+            var categories = ListItemReader.ReadEmbedded()
+                .Where(item => !string.IsNullOrWhiteSpace(item.Category))
+                .GroupBy(item => item.Name, StringComparer.Ordinal)
+                .Where(group => group.Select(item => item.Category).Distinct().Count() == 1)
+                .ToDictionary(group => group.Key, group => group.First().Category,
+                    StringComparer.Ordinal);
             for (int index = 0; index < selected.Count; index++)
             {
                 XstsCircuitRecord item = selected[index];
@@ -221,14 +284,69 @@ namespace UNCAD.Core.Stat
                 if (description.Length == 0
                     && !identities.Add(machine + "\u001f" + circuit))
                     description = "机台ID/回路名称与已选图框重复";
-                if (description.Length == 0) continue;
-                report.Issues.Add(new XstsFrameIssue
+                if (description.Length > 0)
+                    report.Issues.Add(new XstsFrameIssue
+                    {
+                        FrameNumber = index + 1,
+                        FrameHandle = item?.FrameHandle ?? "",
+                        MachineId = machine,
+                        CircuitName = circuit,
+                        Description = description
+                    });
+                var frame = new XstsFrameDetail
                 {
-                    FrameNumber = index + 1,
+                    FrameHandle = item?.FrameHandle ?? "",
                     MachineId = machine,
-                    CircuitName = circuit,
-                    Description = description
-                });
+                    CircuitName = circuit
+                };
+                // Frame identity, not its material count, determines the number of rows.
+                report.Frames.Add(frame);
+                var occurrences = new Dictionary<Tuple<string, string>, int>();
+                foreach (List<string> sourceRow in item?.TableRows
+                    ?? Enumerable.Empty<List<string>>())
+                {
+                    if (sourceRow == null || sourceRow.Count < 5) continue;
+                    string[] cells = Enumerable.Range(0, 6).Select(column =>
+                        TextParser.CleanMText(column < sourceRow.Count
+                            ? sourceRow[column] : "").Trim()).ToArray();
+                    if ((TableLayoutClassifier.IsHeaderLike(cells[0], cells[1], cells[5])
+                            && (cells[3] == "单位" || cells[4] == "数量"))
+                        || cells.Skip(1).All(string.IsNullOrWhiteSpace)) continue;
+                    var detail = new XstsFrameItem
+                    {
+                        Number = cells[0],
+                        Name = cells[1],
+                        Description = cells[2],
+                        Unit = cells[3],
+                        Quantity = cells[4],
+                        Code = cells[5]
+                    };
+                    frame.Items.Add(detail);
+                    string name = categories.TryGetValue(detail.Name, out string category)
+                        ? category : detail.Name;
+                    string unit = detail.Unit.Equals("m", StringComparison.OrdinalIgnoreCase)
+                        || detail.Unit == "米" ? "m" : detail.Unit;
+                    var material = Tuple.Create(name, unit);
+                    occurrences.TryGetValue(material, out int occurrence);
+                    occurrences[material] = ++occurrence;
+                    int column = AddColumn(name, unit, occurrence);
+                    while (frame.Cells.Count <= column) frame.Cells.Add(null);
+                    frame.Cells[column] = detail;
+                }
+            }
+            foreach (XstsFrameDetail frame in report.Frames)
+                while (frame.Cells.Count < report.MaterialColumns.Count) frame.Cells.Add(null);
+
+            int AddColumn(string name, string unit, int occurrence)
+            {
+                var key = Tuple.Create(name, unit, occurrence);
+                if (!columns.TryGetValue(key, out int column))
+                {
+                    column = report.MaterialColumns.Count;
+                    columns.Add(key, column);
+                    report.MaterialColumns.Add(new XstsMaterialColumn(name, unit, occurrence));
+                }
+                return column;
             }
         }
 
@@ -323,5 +441,8 @@ namespace UNCAD.Core.Stat
         public string Error { get; }
         public string Batch { get; }
         public string Seq { get; }
+        /// <summary>Selected-frame provenance; empty for workbook baseline rows.</summary>
+        public string FrameHandle { get; set; } = "";
+        public List<List<string>> TableRows { get; } = new List<List<string>>();
     }
 }

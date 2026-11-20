@@ -29,7 +29,10 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(9600, 0, 2500),
                     QuickLineSpatialAxis.Z, 2500, true, "2500mm",
                     new QuickLineOrbitPreviewChannel(null, false, true))
-            }, "上游 48/V ↔ 下游 37/V", new List<string>(), " 48/V ", " 37/V ");
+            }, "上游 48/V ↔ 下游 37/V", new List<string>(), " 48/V ", " 37/V ",
+                new QuickLineSpatialPoint(0, 0, 0),
+                new QuickLineSpatialPoint(9600, 0, 2500),
+                directionResolved: true);
 
         [Fact]
         public void Build_NullOrEmptyModel_ReturnsNull()
@@ -138,6 +141,34 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Build_AxisLabelsArePlacedOnCenterLinesOfGrid()
+        {
+            var model = new QuickLineOrbitPreviewModel(
+                new List<QuickLineOrbitPreviewSegment>
+                {
+                    new QuickLineOrbitPreviewSegment("lower",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(9600, 0, 0),
+                        QuickLineSpatialAxis.X, 9600, true),
+                    new QuickLineOrbitPreviewSegment("upper",
+                        new QuickLineSpatialPoint(0, 9600, 0),
+                        new QuickLineSpatialPoint(9600, 9600, 0),
+                        QuickLineSpatialAxis.X, 9600, true)
+                }, "", null, "48/V", "37/T",
+                new QuickLineSpatialPoint(0, 0, 0),
+                new QuickLineSpatialPoint(9600, 9600, 0),
+                directionResolved: true);
+
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model);
+
+            Assert.All(envelope.NumericTicks,
+                label => Assert.Equal(4800.0, label.Y));
+            Assert.All(envelope.LetterLabels,
+                label => Assert.Equal(4800.0, label.X));
+        }
+
+        [Fact]
         public void Build_DegenerateZeroDirectionSegment_ChannelDropped()
         {
             var model = new QuickLineOrbitPreviewModel(new List<QuickLineOrbitPreviewSegment>
@@ -154,6 +185,35 @@ namespace UNCAD.Tests
             // 零长度段：段保留（线渲染端会跳过），通道双线无意义 → null。
             Assert.Single(envelope.Segments);
             Assert.Null(envelope.Segments[0].Channel);
+        }
+
+        [Fact]
+        public void Build_UnresolvedDirectionKeepsGridButHidesAxisPinsAndTicks()
+        {
+            var model = new QuickLineOrbitPreviewModel(
+                new List<QuickLineOrbitPreviewSegment>
+                {
+                    new QuickLineOrbitPreviewSegment("s1",
+                        new QuickLineSpatialPoint(9600, 0, 0),
+                        new QuickLineSpatialPoint(0, 9600, 0),
+                        QuickLineSpatialAxis.X, 13576, true)
+                }, "上游 bad ↔ 下游 47/U", new List<string>(),
+                "bad", "47/U", directionDiagnostics: new[]
+                {
+                    "轴位格式无效，无法确认上下游。"
+                });
+
+            QuickLineOrbitPreviewEnvelope envelope =
+                QuickLineOrbitPreviewEnvelope.Build(model);
+
+            Assert.False(envelope.DirectionResolved);
+            Assert.NotNull(envelope.GridAnchor);
+            Assert.NotEmpty(envelope.ColumnGridLines);
+            Assert.Empty(envelope.EndpointPins);
+            Assert.Empty(envelope.NumericTicks);
+            Assert.Empty(envelope.LetterLabels);
+            Assert.Contains("轴位格式无效", envelope.DirectionDiagnostics[0],
+                StringComparison.Ordinal);
         }
 
         [Fact]

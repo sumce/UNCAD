@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="XSTS · 机台回路统计"
-                 Width="920" Height="600" MinWidth="720" MinHeight="440"
+                 Width="1200" Height="600" MinWidth="720" MinHeight="440"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -74,6 +74,43 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
+            <TabItem x:Name="FrameTab" Header="图框明细">
+                <DataGrid x:Name="FrameGrid" Margin="0,8,0,0"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          FrozenColumnCount="3"
+                          CanUserAddRows="False" HeadersVisibility="Column"
+                          GridLinesVisibility="Horizontal" BorderThickness="0"
+                          RowHeight="32" FontSize="13"
+                          EnableColumnVirtualization="True"
+                          SelectionMode="Single" SelectionUnit="FullRow"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}">
+                    <DataGrid.Resources>
+                        <Style TargetType="ToolTip">
+                            <Setter Property="MaxWidth" Value="560" />
+                            <Setter Property="ContentTemplate">
+                                <Setter.Value>
+                                    <DataTemplate>
+                                        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" TextTrimming="None" />
+                                        </ScrollViewer>
+                                    </DataTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                        </Style>
+                    </DataGrid.Resources>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
+                        <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="150" />
+                        <DataGridTextColumn Header="图框ID" Binding="{Binding FrameHandle}" Width="90" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
             <TabItem x:Name="IssueTab" Header="异常图框">
                 <DataGrid x:Name="IssueGrid" Margin="0,8,0,0"
                           AutoGenerateColumns="False" IsReadOnly="True"
@@ -83,7 +120,7 @@
                           SelectionMode="Single" SelectionUnit="FullRow"
                           Background="{DynamicResource ControlFillColorDefaultBrush}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="图框" Binding="{Binding FrameNumber}" Width="60" />
+                        <DataGridTextColumn Header="图框ID" Binding="{Binding FrameIdText}" Width="90" />
                         <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
                         <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="*" />
                         <DataGridTextColumn Header="问题" Binding="{Binding Description}" Width="*">
@@ -92,31 +129,6 @@
                                     <Setter Property="VerticalAlignment" Value="Center" />
                                     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                                     <Setter Property="ToolTip" Value="{Binding Description}" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </TabItem>
-            <TabItem x:Name="BlindTab" Header="未上图机台">
-                <DataGrid x:Name="BlindGrid" Margin="0,8,0,0"
-                          AutoGenerateColumns="False" IsReadOnly="True"
-                          CanUserAddRows="False" HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal" BorderThickness="0"
-                          RowHeight="32" FontSize="13"
-                          SelectionMode="Single" SelectionUnit="FullRow"
-                          Background="{DynamicResource ControlFillColorDefaultBrush}">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130" />
-                        <DataGridTextColumn Header="区域" Binding="{Binding Region}" Width="90" />
-                        <DataGridTextColumn Header="批次" Binding="{Binding Batch}" Width="90" />
-                        <DataGridTextColumn Header="序号" Binding="{Binding Seq}" Width="70" />
-                        <DataGridTextColumn Header="近名提示（疑似画错名）" Binding="{Binding NearNameNote}" Width="*">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="VerticalAlignment" Value="Center" />
-                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                                    <Setter Property="ToolTip" Value="{Binding NearNameNote}" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>

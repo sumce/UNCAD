@@ -26,14 +26,17 @@ namespace UNCAD.UI
         public List<FillRowDiff> PreviousRows { get; set; } = new List<FillRowDiff>();
         /// <summary>右侧:本次将写入的清单(新增/改量着色)。</summary>
         public List<FillRowDiff> PlannedRows { get; set; } = new List<FillRowDiff>();
+        /// <summary>本次 frameinfo_json 更新器将记录的字段差异。</summary>
+        public List<FrameInfoJsonChange> FieldChanges { get; set; }
+            = new List<FrameInfoJsonChange>();
         /// <summary>电缆长度卡片（实测/盘内箱内/设备内/业主分解）；null = 本次无
         /// 预留数据，卡片隐藏（2026-11-04 用户要求）。</summary>
         public CableLengthCard CableCard { get; set; }
 
-        /// <summary>内容是否真的变了：行新增/移除/改量任一非零。2026-11-04 起
-        /// 弹窗门控用它而不是 HasHistory——内容没变不打扰用户预览。</summary>
+        /// <summary>清单行或持久化图框字段有变化时需要用户确认。</summary>
         public bool HasChanges
-            => AddedCount > 0 || RemovedCount > 0 || QuantityChangedCount > 0;
+            => AddedCount > 0 || RemovedCount > 0 || QuantityChangedCount > 0
+                || (FieldChanges?.Count ?? 0) > 0;
     }
 
     /// <summary>电缆长度变化卡片：本次构成分解 + 上次总长对比。</summary>
@@ -82,6 +85,8 @@ namespace UNCAD.UI
             new ObservableCollection<CompareRow>();
         private readonly ObservableCollection<CompareRow> _plannedRows =
             new ObservableCollection<CompareRow>();
+        private readonly ObservableCollection<FieldChangeRow> _fieldChanges =
+            new ObservableCollection<FieldChangeRow>();
 
         public FillUpdateCompareWindow(List<FillUpdateCompareItem> items)
         {
@@ -106,14 +111,20 @@ namespace UNCAD.UI
             FrameListHeader.Text = "内容有变化的图框（" + _items.Count + " 个）";
             foreach (FillUpdateCompareItem item in _items)
             {
-                int changed = item.AddedCount + item.RemovedCount
+                int rowChanges = item.AddedCount + item.RemovedCount
                     + item.QuantityChangedCount;
+                var details = new List<string>();
+                if (rowChanges > 0) details.Add(rowChanges + " 项清单变化");
+                int fieldChanges = item.FieldChanges?.Count ?? 0;
+                if (fieldChanges > 0)
+                    details.Add(fieldChanges + " 项字段变化");
                 FrameList.Items.Add(item.MachineId + " · " + item.DeviceName
-                    + (changed > 0 ? "  ·  " + changed + " 项变化" : ""));
+                    + (details.Count > 0 ? "  ·  " + string.Join(" / ", details) : ""));
             }
             if (_items.Count > 0) FrameList.SelectedIndex = 0;
             PreviousGrid.ItemsSource = _previousRows;
             PlannedGrid.ItemsSource = _plannedRows;
+            FieldChangesGrid.ItemsSource = _fieldChanges;
             ShowSelected();
         }
 
@@ -140,6 +151,7 @@ namespace UNCAD.UI
         {
             _previousRows.Clear();
             _plannedRows.Clear();
+            _fieldChanges.Clear();
             FillUpdateCompareItem item = Selected;
             if (item == null)
             {
@@ -147,6 +159,7 @@ namespace UNCAD.UI
                 HistoryText.Text = "";
                 SummaryText.Text = "";
                 CableCardPanel.Visibility = Visibility.Collapsed;
+                FieldChangesPanel.Visibility = Visibility.Collapsed;
                 return;
             }
             TitleText.Text = item.MachineId + " · " + item.DeviceName
@@ -155,15 +168,21 @@ namespace UNCAD.UI
                 + (string.IsNullOrWhiteSpace(item.LastUpdatedText) ? "未知" : item.LastUpdatedText)
                 + "    上次更新用户: "
                 + (string.IsNullOrWhiteSpace(item.LastUpdatedUser) ? "未知" : item.LastUpdatedUser);
-            int changed = item.AddedCount + item.RemovedCount + item.QuantityChangedCount;
-            SummaryText.Text = changed == 0
+            int rowChanges = item.AddedCount + item.RemovedCount
+                + item.QuantityChangedCount;
+            int fieldChanges = item.FieldChanges?.Count ?? 0;
+            SummaryText.Text = rowChanges == 0 && fieldChanges == 0
                 ? "✓ 本次更新与上次完全一致，清单无变化"
-                : "新增 " + item.AddedCount + " / 移除 " + item.RemovedCount
-                    + " / 改量 " + item.QuantityChangedCount;
+                : (rowChanges > 0
+                    ? "清单：新增 " + item.AddedCount + " / 移除 "
+                        + item.RemovedCount + " / 改量 " + item.QuantityChangedCount
+                    : "清单无变化")
+                    + (fieldChanges > 0 ? "    图框字段变化 " + fieldChanges + " 项" : "");
             SummaryText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty,
-                changed == 0
+                rowChanges == 0 && fieldChanges == 0
                     ? "SystemFillColorSuccessBrush" : "TextFillColorPrimaryBrush");
             ShowCableCard(item.CableCard);
+            ShowFieldChanges(item.FieldChanges);
 
             foreach (FillRowDiff row in item.PreviousRows)
                 _previousRows.Add(new CompareRow(row, row.OldQuantity,
@@ -172,6 +191,52 @@ namespace UNCAD.UI
                 _plannedRows.Add(new CompareRow(row, row.NewQuantity,
                     row.Status == FillRowDiff.StatusAdded ? "added"
                         : row.Status == FillRowDiff.StatusQuantity ? "quantity" : "normal"));
+        }
+
+        private void ShowFieldChanges(IReadOnlyList<FrameInfoJsonChange> changes)
+        {
+            if (changes == null || changes.Count == 0)
+            {
+                FieldChangesPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            FieldChangesPanel.Visibility = Visibility.Visible;
+            FieldChangesHeader.Text = "图框字段变更（" + changes.Count + "）";
+            foreach (FrameInfoJsonChange change in changes)
+                _fieldChanges.Add(new FieldChangeRow(FieldLabel(change.Field),
+                    DisplayValue(change.Before), DisplayValue(change.After)));
+        }
+
+        private static string DisplayValue(string value)
+            => string.IsNullOrWhiteSpace(value) ? "（空）" : value.Trim();
+
+        private static string FieldLabel(string field)
+        {
+            switch (field)
+            {
+                case "MachineId": return "机台 ID";
+                case "DeviceName": return "回路名称";
+                case "Region": return "区域";
+                case "OriginalCableModel": return "设备电缆型号";
+                case "BoqCableModel": return "清单电缆型号";
+                case "BoqBusPlugBoxCode": return "母线插接箱编码";
+                case "Fr": return "FR";
+                case "Detail": return "配电信息";
+                case "Seq": return "序号";
+                case "HoseDiameter": return "软管直径";
+                case "Next": return "上游编号";
+                case "UpstreamAxis": return "上游轴位";
+                case "DownstreamAxis": return "下游轴位";
+                case "DeviceFloor": return "设备楼层";
+                case "PanelFloor": return "盘柜楼层";
+                case "FacilitySwitch": return "设施开关";
+                case "MeasuredCableM": return "电缆实测长度（m）";
+                case "PanelReserveMm": return "盘内/箱内预留（mm）";
+                case "DeviceReserveMm": return "设备内预留（mm）";
+                case "TotalCableM": return "电缆总长（m）";
+                default: return field ?? "";
+            }
         }
 
         /// <summary>电缆长度卡片：无数据隐藏；有数据展示总长对比与构成分解。</summary>
@@ -219,6 +284,20 @@ namespace UNCAD.UI
             public string Quantity { get; }
             public string Code { get; }
             public string Role { get; }
+        }
+
+        public sealed class FieldChangeRow
+        {
+            public FieldChangeRow(string field, string before, string after)
+            {
+                Field = field ?? "";
+                Before = before ?? "";
+                After = after ?? "";
+            }
+
+            public string Field { get; }
+            public string Before { get; }
+            public string After { get; }
         }
     }
 }

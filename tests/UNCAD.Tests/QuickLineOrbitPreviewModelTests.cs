@@ -16,6 +16,33 @@ namespace UNCAD.Tests
     public sealed class QuickLineOrbitPreviewModelTests
     {
         [Fact]
+        public void MetricPreview_Uses2500And2000LabelsEvenWhenSketchIsMuchTaller()
+        {
+            var graph = QuickLineGraph.Build(new[]
+            {
+                new QuickLineSegment("rise", new QuickLinePoint(0, 0),
+                    new QuickLinePoint(0, 19000)),
+                new QuickLineSegment("run", new QuickLinePoint(0, 19000),
+                    new QuickLinePoint(50000, 19000)),
+                new QuickLineSegment("end", new QuickLinePoint(50000, 19000),
+                    new QuickLinePoint(50000, 35000))
+            }, 1);
+            var distances = new Dictionary<string, double>
+            {
+                ["rise"] = 2500, ["run"] = 44000, ["end"] = 2000
+            };
+            var scene = QuickLineIsometricSceneBuilder.BuildMetricPreview(
+                graph, distances, new HashSet<string> { "run" });
+            var model = QuickLineOrbitPreviewModel.FromScene(scene, "");
+            foreach (var segment in model.Segments)
+                Assert.Equal(distances[segment.Id],
+                    segment.Start.DistanceTo(segment.End), 6);
+            Assert.Equal(4500, model.Segments.Max(s => Math.Max(s.Start.Z, s.End.Z)), 6);
+            Assert.False(model.Segments.Single(s => s.Id == "rise").Completed);
+            Assert.True(model.Segments.Single(s => s.Id == "run").Completed);
+        }
+
+        [Fact]
         public void FromScene_GroundNormalizesSoMinimumZIsZero()
         {
             // 连通链：水平 1000mm + 竖直向下 4000mm——重建后末端 Z=-4000，

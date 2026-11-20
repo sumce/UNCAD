@@ -302,18 +302,12 @@ namespace UNCAD.Features.Unl
                 item => item.LineId.Handle.ToString(),
                 item => item.LabelMillimetres.Value,
                 StringComparer.OrdinalIgnoreCase);
-            var displayDistances = labelled.ToDictionary(
-                item => item.LineId.Handle.ToString(),
-                item => !item.HasCompletionMarker
-                    && QuickLineMillimeterText.IsPlaceholder(item.LabelText)
-                        ? item.Length : item.LabelMillimetres.Value,
-                StringComparer.OrdinalIgnoreCase);
             var completed = new HashSet<string>(labelled
                 .Where(item => item.HasCompletionMarker)
                 .Select(item => item.LineId.Handle.ToString()),
                 StringComparer.OrdinalIgnoreCase);
-            return QuickLineIsometricSceneBuilder.BuildAll(graph, distances,
-                displayDistances, completed);
+            return QuickLineIsometricSceneBuilder.BuildMetricPreview(graph, distances,
+                completed);
         }
 
         /// <summary>

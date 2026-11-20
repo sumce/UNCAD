@@ -24,10 +24,39 @@ namespace UNCAD.Features.Fill
     /// </summary>
     internal static class BatchFillUpdateCoordinator
     {
+        internal static bool TryHandleMultiFrameSelection(CadContext ctx,
+            FillSelection selection)
+        {
+            if (selection == null) return false;
+            if (selection?.Region != null)
+            {
+                Log.Info("U1U 图框分区: 复用选集边界（跳过重复全图扫描）");
+                return false;
+            }
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            FrameRegionCollection regions = FrameRegionCollector.Collect(
+                ctx, selection?.SourceIds);
+            clock.Stop();
+            Log.Info("U1U 图框分区: " + clock.ElapsedMilliseconds + " ms");
+            if (regions.Groups.Count == 1)
+                selection.Region = regions.Groups[0];
+            if (regions.SelectedFrameCount <= 1) return false;
+            if (regions.Errors.Count > 0)
+            {
+                foreach (string error in regions.Errors)
+                    ctx.Write("\n[U1U] 图框分区失败: " + error);
+                return true;
+            }
+            Execute(ctx, regions.Groups);
+            return true;
+        }
+
         public static void Execute(CadContext ctx, IReadOnlyList<FrameRegionGroup> regions)
         {
             if (regions == null || regions.Count < 2) return;
             FillRuntimeOptions options = FillSettings.Current();
+            FillDrawingStyleSettings drawingStyle = FillDrawingStyleSettings.Capture();
             StatisticsSettingsSnapshot statisticsSettings = StatisticsSettings.Current();
             string path = FillFeature.ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
             if (path == null) return;
@@ -60,7 +89,9 @@ namespace UNCAD.Features.Fill
             // 3.3.0（D-054）：整图只扫一次 U1L 线段（含开洞 Polyline），供逐框
             // 连通性/图层矫正/预览场景体检——逐框各扫一遍是 O(图框×实体)。
             IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> routeScanned =
-                FillRouteInspectionStage.Scan(ctx);
+                FillRouteInspectionStage.Scan(ctx, drawingStyle,
+                    regions.All(region => region.Boundary != null)
+                        ? regions.Select(region => region.Boundary).ToArray() : null);
             // 千/万级图框：进度窗让用户看到进展，不再“无响应”。
             var preflightProgress = new ProgressWindow("U1U 批量预检");
             preflightProgress.Show();
@@ -73,9 +104,14 @@ namespace UNCAD.Features.Fill
                 // 3.3.3.2（审计 #4）：平行标注归属收集同样整图只做一次——
                 // 3.3.0.1 起逐框 Inspect 内部各收一遍是 O(图框×实体)，与上面
                 // routeScanned 提批外是同一教训；逐框经 precollectedOutputs 复用。
+                var ownershipTimer = System.Diagnostics.Stopwatch.StartNew();
                 List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> parallelOutputs =
                     UNCAD.Cad.ParallelAnnotationOwnership.Collect(
                         ctx, readTransaction, null);
+                ownershipTimer.Stop();
+                Log.Info("[PERF] U1U 批量平行标注归属扫描: "
+                    + ownershipTimer.ElapsedMilliseconds + " ms，实体 "
+                    + parallelOutputs.Count);
                 int preflightDone = 0;
                 foreach (FrameRegionGroup region in regions)
                 {
@@ -155,35 +191,8 @@ namespace UNCAD.Features.Fill
             }
 
 
-            if (catalogRequests.Count > 0)
-            {
-                // 3.0 WPF 窗体（D-038）：结果用 Confirmed 表达。
-                var picker = new BatchCatalogSelectionWindow(catalogRequests);
-                UNCAD.UI.ModalWindowHost.Show(picker);
-                if (!picker.Confirmed) return;
-                // D-052-A：把用户的选择逐项应用回各框清单（全类别，不再只回写
-                // 电缆/母线插接箱第一条——其余未匹配项以前落回「未匹配固定清单」
-                // 整批取消，即现场报告的“选完了还警告/跳过生成”）。
-                foreach (BatchFillUpdatePlan plan in plans)
-                {
-                    bool replacedCable = false;
-                    foreach (BatchCatalogAssignment assignment in plan.CatalogAssignments)
-                    {
-                        if (!picker.Selections.TryGetValue(assignment.RequestKey,
-                                out UNCAD.Core.Excel.ListItem selected))
-                            continue; // 窗体确认要求全部已选，正常不可达。
-                        plan.Review.ReplaceWithCatalogItem(assignment.Item, selected,
-                            workbook.Catalog);
-                        if (assignment.Item.Category == Core.Fill.TableFillCategory.Cable)
-                            replacedCable = true;
-                    }
-                    if (replacedCable && plan.HoseWasMissingBeforeCableChoice
-                        && plan.Review.FlexibleConduitItem() != null
-                        && !FillFeature.ApplyRuanguanLength(ctx, plan.Selection,
-                            plan.Review, workbook.Catalog, options.Planning, true))
-                        return;
-                }
-            }
+            if (!BatchFillUpdateCatalogStage.Resolve(ctx, plans, catalogRequests,
+                workbook, options.Planning)) return;
 
             // A merged/deleted material row has no fixed-catalog identity. Do not write it:
             // a CAD row without a BOQ code would make the two sources disagree.
@@ -315,7 +324,8 @@ namespace UNCAD.Features.Fill
             var compareItems = plans
                 .Select(plan => FillFeature.BuildCompareItem(
                     plan.Machine, plan.Rows, plan.ExistingRows, plan.PreviousRecord,
-                    plan.Region.Handle, plan.LegacyLastUpdated, plan.Reserve))
+                    plan.Region.Handle, plan.LegacyLastUpdated, plan.Reserve,
+                    plan.Review))
                 .Where(item => item.HasChanges)
                 .ToList();
             if (compareItems.Count == 0)
@@ -335,8 +345,8 @@ namespace UNCAD.Features.Fill
                 plan.Region.Handle, plan.Machine.MachineId, plan.Machine.CircuitName,
                 plan.DeviceState, plan.Rows.Count,
                 plan.RouteInspection?.ConnectivityText)).ToList();
-            // 3.3.0（D-054 特性③）：窗开前按框预建场景，选中行切到该框预览；
-            // 特性①：整批图层矫正汇总进底部报告行。
+            // 当前填充确认窗不构建 3D 场景；保留空预览集合参数兼容窗体接口。
+            // 整批图层矫正汇总进底部报告行。
             var previewsByFrame = new Dictionary<string,
                 UNCAD.Core.QuickLine.QuickLineOrbitPreviewModel>(
                 StringComparer.OrdinalIgnoreCase);
@@ -393,6 +403,10 @@ namespace UNCAD.Features.Fill
             int attributeValues = 0;
             int migratedBridgeLabels = 0;
             int layerGovernorMoved = 0;
+            int correctedCableLabels = 0;
+            int correctedTrayRuns = 0;
+            int correctedConduitRuns = 0;
+            int correctedHoseLabels = 0;
             XFrameMigrationResult xframeMigration = new XFrameMigrationResult(0, 0, 0);
             int deviceColorBlocks = 0;
             int upstreamColorBlocks = 0;
@@ -451,6 +465,13 @@ namespace UNCAD.Features.Fill
                             FlushProgress(ctx);
                         }
                         // D-043：删除已吸收的老版设备预留横排标注。
+                        FillDrawingSettingsCorrectionResult styleCorrection =
+                            FillRouteInspectionStage.CorrectDrawingSettings(ctx,
+                                transaction, plan.RouteInspection, drawingStyle);
+                        correctedCableLabels += styleCorrection.CableLabels;
+                        correctedTrayRuns += styleCorrection.TrayRuns;
+                        correctedConduitRuns += styleCorrection.ConduitRuns;
+                        correctedHoseLabels += styleCorrection.HoseLabels;
                         DeviceReserveMarkerReader.EraseAbsorbed(transaction,
                             plan.DeviceReserveEraseIds.ToArray(), CommandIds.FillUpdate);
                         migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
@@ -481,6 +502,10 @@ namespace UNCAD.Features.Fill
                             plan.Statistics,
                             !plan.CopiedFrame
                                 && plan.Statistics.CableState == MeasurementState.Unknown,
+                            !plan.CopiedFrame
+                                && plan.Statistics.ConduitState == MeasurementState.Unknown,
+                            !plan.CopiedFrame
+                                && plan.Statistics.BridgeState == MeasurementState.Unknown,
                             !plan.CopiedFrame
                                 && plan.Statistics.ConduitState == MeasurementState.Unknown);
                         FillWriteResult device = CadBlockAttributeWriter.FillDeviceName(ctx,
@@ -639,12 +664,16 @@ namespace UNCAD.Features.Fill
                 + " frames=" + plans.Count);
             if (xframeMigration.Frames > 0 || xframeMigration.BoqTables > 0
                 || xframeMigration.DrawingInfoTables > 0)
-                ctx.Write("\n[U1U] 图框已升级：xframe_v2 " + xframeMigration.Frames
+                ctx.Write("\n[U1U] 图框已升级：" + FrameRegionCollector.CurrentFrameName
+                    + " " + xframeMigration.Frames
                     + " 个，BOQ 表替换 " + xframeMigration.BoqTables
                     + " 个，制图信息表替换 " + xframeMigration.DrawingInfoTables + " 个。");
             if (layerGovernorMoved > 0)
                 ctx.Write("\n[U1U] 图层矫正完成：" + layerGovernorMoved
                     + " 个实体已移正到法定图层（U_CABLE/U_TRAY/U_CONDUIT/U_HOSE）。");
+            FillRouteInspectionStage.WriteDrawingStyleCorrectionResult(ctx,
+                CommandIds.FillUpdate, correctedCableLabels, correctedTrayRuns,
+                correctedConduitRuns, correctedHoseLabels);
             foreach (BatchFillUpdatePlan plan in plans)
                 foreach (string handle in plan.RouteInspection?.LayerPlan
                     ?.UndeterminableHandles ?? new List<string>())

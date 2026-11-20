@@ -14,21 +14,21 @@ namespace UNCAD.Tests
     public sealed class PreviewReferenceLevelsTests
     {
         [Fact]
-        public void DefaultList_ParsesAllTwelveLevelsWithCumulativeFloors()
+        public void DefaultList_ParsesNineLevelsWithoutDemoCabinets()
         {
             var levels = PreviewReferenceLevels.Parse(
                 PreviewReferenceLevels.DefaultList);
-            Assert.Equal(12, levels.Count);
+            Assert.Equal(9, levels.Count);
             // 楼层链累计：2F工字钢顶面=7800+3200、2F葡萄架=7800+5500、
             // 3F地面=13300+1700（=11000+4000 自洽）、3F高架地板=15000+600。
             Assert.Equal(11000.0, levels.First(l => l.Label == "2F工字钢顶面").ZMillimetres);
             Assert.Equal(13300.0, levels.First(l => l.Label == "2F葡萄架顶面").ZMillimetres);
             Assert.Equal(15000.0, levels.First(l => l.Label == "3F地面").ZMillimetres);
             Assert.Equal(15600.0, levels.First(l => l.Label == "3F高架地板面").ZMillimetres);
-            // 设备高度原值。
             Assert.Equal(3660.0, levels.First(l => l.Label == "第一层母线").ZMillimetres);
             Assert.Equal(4900.0, levels.First(l => l.Label == "第三层母线").ZMillimetres);
-            Assert.Equal(2200.0, levels.First(l => l.Label == "I-L盘顶面").ZMillimetres);
+            Assert.DoesNotContain(levels, level =>
+                level.Label == "I-L盘高度" || level.Label == "插座盘安装");
             // 3.3.7：默认清单带类型（第二轮用户口径：2F=环氧地坪、3F=华夫
             // 圆孔板、母线=半透明玻璃层；页面按类型画实体几何）。
             Assert.Equal("steel", levels.First(l => l.Label == "1F工字钢顶面").Kind);
@@ -36,8 +36,6 @@ namespace UNCAD.Tests
             Assert.Equal("grating", levels.First(l => l.Label == "2F葡萄架顶面").Kind);
             Assert.Equal("waffle", levels.First(l => l.Label == "3F地面").Kind);
             Assert.Equal("raised", levels.First(l => l.Label == "3F高架地板面").Kind);
-            Assert.Equal("device", levels.First(l => l.Label == "I-L盘顶面").Kind);
-            Assert.Equal("device", levels.First(l => l.Label == "插座盘安装").Kind);
             Assert.Equal("bus", levels.First(l => l.Label == "第二层母线").Kind);
             // 三轮：默认清单带「本层=2F地面」指令（不进清单）+ 设备/母线锚定
             // 2F地面（高度相对本层地面起算）。
@@ -47,8 +45,6 @@ namespace UNCAD.Tests
             Assert.Equal("2F地面", baseFloor);
             Assert.Equal("2F地面",
                 levels.First(l => l.Label == "第一层母线").AnchorLabel);
-            Assert.Equal("2F地面",
-                levels.First(l => l.Label == "I-L盘顶面").AnchorLabel);
             Assert.Equal("",
                 levels.First(l => l.Label == "2F地面").AnchorLabel);
         }

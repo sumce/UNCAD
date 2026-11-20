@@ -41,5 +41,15 @@ namespace UNCAD.Infra
                 return v;
             return defaultValue;
         }
+
+        public static double GetNonNegativeDouble(string name, double defaultValue)
+        {
+            string s = Store.Get(name, null);
+            if (s != null &&
+                double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) &&
+                !double.IsNaN(v) && !double.IsInfinity(v) && v >= 0)
+                return v;
+            return defaultValue;
+        }
     }
 }

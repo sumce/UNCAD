@@ -8,6 +8,7 @@ using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.QuickLine;
+using UNCAD.Core.Geometry;
 using UNCAD.Infra;
 
 namespace UNCAD.Cad.QuickLine
@@ -23,6 +24,12 @@ namespace UNCAD.Cad.QuickLine
         public double LabelSearchDistance { get; set; }
 
         /// <summary>
+        /// Maximum distance for restoring an explicitly associated label after
+        /// its original entity was deleted. Null disables this recovery path.
+        /// </summary>
+        public double? StaleAssociationMaximumDistance { get; set; }
+
+        /// <summary>
         /// Include lines for which no mm label could be found.  This is useful
         /// for diagnostics; U1LX can choose to stop or report these lines.
         /// </summary>
@@ -33,6 +40,10 @@ namespace UNCAD.Cad.QuickLine
         /// The initial entity pass stays linear while label matching is limited to the route.
         /// </summary>
         public ObjectId RootLineId { get; set; } = ObjectId.Null;
+
+        /// <summary>Fill-only result scope. Ownership is resolved globally so
+        /// neighbouring frames cannot claim each other's labels.</summary>
+        public IReadOnlyList<FrameRectangle> FrameBoundaries { get; set; }
 
         public double EndpointTolerance { get; set; } = 1.0;
     }
@@ -151,7 +162,8 @@ namespace UNCAD.Cad.QuickLine
                             Point3d end = line.EndPoint;
                             if (start.DistanceTo(end) > Epsilon)
                                 lines.Add(new LineSnapshot(id, start, end,
-                                    entityOrder, ReadLayer(line), false, false));
+                                        entityOrder, ReadLayer(line), false, false,
+                                        new[] { start, end }));
                         }
                         catch
                         {
@@ -178,17 +190,21 @@ namespace UNCAD.Cad.QuickLine
                                 if (start.DistanceTo(end) > Epsilon)
                                 {
                                     bool hasBulge = false;
+                                    var vertices = new List<Point3d>(
+                                        polyline.NumberOfVertices);
                                     for (int vertex = 0;
                                         vertex < polyline.NumberOfVertices; vertex++)
+                                    {
+                                        vertices.Add(polyline.GetPoint3dAt(vertex));
                                         if (Math.Abs(polyline.GetBulgeAt(vertex))
                                             > Epsilon)
                                         {
                                             hasBulge = true;
-                                            break;
                                         }
+                                    }
                                     lines.Add(new LineSnapshot(id, start, end,
                                         entityOrder, ReadLayer(polyline), true,
-                                        hasBulge));
+                                        hasBulge, vertices));
                                 }
                             }
                         }
@@ -236,6 +252,8 @@ namespace UNCAD.Cad.QuickLine
                 }
                 tr.Commit();
             }
+            long readMilliseconds = (long)((Stopwatch.GetTimestamp() - scanStarted)
+                * 1000.0 / Stopwatch.Frequency);
 
             if (!options.RootLineId.IsNull)
                 lines = ConnectedComponent(lines, options.RootLineId,
@@ -275,6 +293,24 @@ namespace UNCAD.Cad.QuickLine
                 assignedLabels.Add(label.Id);
             }
 
+            var unresolvedAssociationLabels = new HashSet<ObjectId>(textLabels
+                .Where(item => !string.IsNullOrEmpty(item.AssociatedLineHandle)
+                    && !linesByHandle.ContainsKey(item.AssociatedLineHandle))
+                .Select(item => item.Id));
+            HashSet<ObjectId> staleAssociationLabels =
+                options.StaleAssociationMaximumDistance.HasValue
+                    ? FindDeletedAssociationLabels(ctx.Db, textLabels, linesByHandle)
+                    : new HashSet<ObjectId>();
+            var additionalLabels = new Dictionary<ObjectId, List<LabelSnapshot>>();
+            AssociateStaleLabelsWithJoinedPolylines(lines, textLabels,
+                staleAssociationLabels,
+                options.StaleAssociationMaximumDistance,
+                unresolvedAssociationLabels, assignedLines, assignedLabels,
+                additionalLabels);
+            List<LabelSnapshot> matchableTextLabels = textLabels
+                .Where(item => !unresolvedAssociationLabels.Contains(item.Id))
+                .ToList();
+
             // U1L versions before metadata was introduced commonly append a
             // line and its DBText consecutively, but some legacy drawings put
             // two lines before the corresponding text.  Resolve these local
@@ -282,7 +318,7 @@ namespace UNCAD.Cad.QuickLine
             // wins over a merely adjacent line; an immediate neighbour is a
             // last-resort fallback for labels that were moved far away.
             var linesByOrder = lines.ToDictionary(line => line.Order);
-            foreach (LabelSnapshot label in textLabels.OrderBy(item => item.Order))
+            foreach (LabelSnapshot label in matchableTextLabels.OrderBy(item => item.Order))
             {
                 if (assignedLabels.Contains(label.Id)) continue;
                 var localCandidates = new[] { label.Order - 2, label.Order - 1 }
@@ -322,7 +358,7 @@ namespace UNCAD.Cad.QuickLine
                     assignedLines.TryGetValue(line.Id, out LabelSnapshot current)
                     && QuickLineMillimeterText.IsPlaceholder(current.Text))
                 .ToList();
-            var observationLabels = textLabels.Where(label =>
+            var observationLabels = matchableTextLabels.Where(label =>
                     !assignedLabels.Contains(label.Id)
                     && IsMeasuredObservation(label))
                 .ToList();
@@ -345,7 +381,7 @@ namespace UNCAD.Cad.QuickLine
             // and leave its line unmatched; the bipartite walk preserves the
             // maximum number of one-to-one matches while still trying the
             // lowest-cost candidate first.
-            AssignRemainingLabels(lines, textLabels, options.LabelSearchDistance,
+            AssignRemainingLabels(lines, matchableTextLabels, options.LabelSearchDistance,
                 assignedLines, assignedLabels);
 
             // Resolve dimensions independently.  A dimension may point to a
@@ -357,6 +393,12 @@ namespace UNCAD.Cad.QuickLine
             AssignRemainingLabels(lines, dimensionLabels,
                 options.LabelSearchDistance, assignedDimensions,
                 new HashSet<ObjectId>());
+
+            if (options.FrameBoundaries != null)
+                lines = lines.Where(line => options.FrameBoundaries.Any(boundary =>
+                    boundary != null && boundary.Contains(
+                        (line.Start.X + line.End.X) / 2.0,
+                        (line.Start.Y + line.End.Y) / 2.0))).ToList();
 
             var result = new List<QuickLineCadSegment>(lines.Count);
             foreach (LineSnapshot line in lines)
@@ -370,13 +412,17 @@ namespace UNCAD.Cad.QuickLine
                         : label.WithObservation(dimension);
                 }
                 if (label == null && !options.IncludeUnlabelled) continue;
-                result.Add(new QuickLineCadSegment(line.Id, line.Start, line.End,
+                var segment = new QuickLineCadSegment(line.Id, line.Start, line.End,
                     label?.Id ?? ObjectId.Null,
                     label?.Text ?? string.Empty,
                     label?.Millimetres,
                     label?.HasCompletionMarker ?? false,
                     label?.SourceKind ?? string.Empty,
-                    line.IsPolyline, line.IsBridgePolyline));
+                    line.IsPolyline, line.IsBridgePolyline);
+                if (additionalLabels.TryGetValue(line.Id,
+                        out List<LabelSnapshot> related))
+                    segment.RestoredLabelIds = related.Select(item => item.Id).ToArray();
+                result.Add(segment);
             }
             long scanMilliseconds = (long)((Stopwatch.GetTimestamp() - scanStarted)
                 * 1000.0 / Stopwatch.Frequency);
@@ -387,6 +433,8 @@ namespace UNCAD.Cad.QuickLine
                     + " candidates=" + candidateCount
                     + " lines=" + lines.Count
                     + " labels=" + labels.Count
+                    + " read=" + readMilliseconds + "ms"
+                    + " match=" + (scanMilliseconds - readMilliseconds) + "ms"
                     + " segments=" + result.Count);
             }
             return result;
@@ -398,7 +446,7 @@ namespace UNCAD.Cad.QuickLine
         /// Avoids opening obviously unrelated entities (polylines, hatches,
         /// xrefs' local geometry, proxy objects) on dense drawings.
         /// </summary>
-        private static bool IsCandidateClass(ObjectId id)
+        internal static bool IsCandidateClass(ObjectId id)
         {
             try
             {
@@ -440,6 +488,108 @@ namespace UNCAD.Cad.QuickLine
                         queue.Enqueue(connection.ConnectedSegmentId);
             }
             return lines.Where(line => connected.Contains(line.Handle)).ToList();
+        }
+
+        private static void AssociateStaleLabelsWithJoinedPolylines(
+            IReadOnlyList<LineSnapshot> lines,
+            IReadOnlyList<LabelSnapshot> labels,
+            ISet<ObjectId> staleAssociationLabels,
+            double? maximumDistance,
+            ISet<ObjectId> unresolvedAssociationLabels,
+            IDictionary<ObjectId, LabelSnapshot> assignedLines,
+            ISet<ObjectId> assignedLabels,
+            IDictionary<ObjectId, List<LabelSnapshot>> additionalLabels)
+        {
+            if (!maximumDistance.HasValue) return;
+            List<LineSnapshot> candidates = lines
+                .Where(item => item.IsPolyline && !item.IsBridgePolyline).ToList();
+            IReadOnlyList<QuickLinePoint>[] paths = candidates.Select(candidate =>
+                (IReadOnlyList<QuickLinePoint>)candidate.Points.Select(point =>
+                    new QuickLinePoint(point.X, point.Y)).ToArray()).ToArray();
+            foreach (LabelSnapshot label in labels)
+            {
+                if (!staleAssociationLabels.Contains(label.Id)) continue;
+
+                int bestIndex = QuickLineStaleLabelMatcher.FindUniqueNearestPath(
+                    new QuickLinePoint(label.InsertionPoint.X,
+                        label.InsertionPoint.Y), paths,
+                    Math.Max(maximumDistance.Value, label.Height * 2.0), 1.0);
+                if (bestIndex < 0) continue;
+                LineSnapshot best = candidates[bestIndex];
+
+                if (assignedLines.TryGetValue(best.Id, out LabelSnapshot primary))
+                {
+                    if (primary.Id == label.Id) continue;
+                    if (!additionalLabels.TryGetValue(best.Id,
+                            out List<LabelSnapshot> related))
+                    {
+                        related = new List<LabelSnapshot>();
+                        additionalLabels.Add(best.Id, related);
+                    }
+                    related.Add(label);
+                }
+                else
+                {
+                    assignedLines[best.Id] = label;
+                }
+                assignedLabels.Add(label.Id);
+                unresolvedAssociationLabels.Remove(label.Id);
+            }
+        }
+
+        private static HashSet<ObjectId> FindDeletedAssociationLabels(
+            Database database, IReadOnlyList<LabelSnapshot> labels,
+            IDictionary<string, LineSnapshot> linesByHandle)
+        {
+            var result = new HashSet<ObjectId>();
+            var missingHandles = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (LabelSnapshot label in labels ?? Array.Empty<LabelSnapshot>())
+                if (!string.IsNullOrWhiteSpace(label.AssociatedLineHandle)
+                    && !linesByHandle.ContainsKey(label.AssociatedLineHandle))
+                    missingHandles.Add(label.AssociatedLineHandle);
+            if (database == null || missingHandles.Count == 0) return result;
+
+            var deletedHandles = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            using (Transaction transaction =
+                database.TransactionManager.StartTransaction())
+            {
+                foreach (string handle in missingHandles)
+                {
+                    if (!long.TryParse(handle, NumberStyles.HexNumber,
+                            CultureInfo.InvariantCulture, out long raw))
+                        continue;
+                    ObjectId sourceId;
+                    try
+                    {
+                        sourceId = database.GetObjectId(false, new Handle(raw), 0);
+                    }
+                    catch { continue; }
+                    if (sourceId.IsNull || !sourceId.IsValid)
+                    {
+                        deletedHandles.Add(handle);
+                        continue;
+                    }
+                    try
+                    {
+                        DBObject source = transaction.GetObject(sourceId,
+                            OpenMode.ForRead, true);
+                        if (source == null || source.IsErased)
+                            deletedHandles.Add(handle);
+                    }
+                    catch
+                    {
+                        // An unreadable handle is not proof that its source was deleted.
+                    }
+                }
+                transaction.Commit();
+            }
+
+            foreach (LabelSnapshot label in labels ?? Array.Empty<LabelSnapshot>())
+                if (deletedHandles.Contains(label.AssociatedLineHandle))
+                    result.Add(label.Id);
+            return result;
         }
 
         /// <summary>
@@ -886,6 +1036,13 @@ namespace UNCAD.Cad.QuickLine
                 || options.EndpointTolerance < 0.0)
                 throw new ArgumentOutOfRangeException(nameof(options.EndpointTolerance),
                     "Endpoint tolerance must be finite and non-negative.");
+            if (options.StaleAssociationMaximumDistance.HasValue
+                && (double.IsNaN(options.StaleAssociationMaximumDistance.Value)
+                    || double.IsInfinity(options.StaleAssociationMaximumDistance.Value)
+                    || options.StaleAssociationMaximumDistance.Value < 0.0))
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.StaleAssociationMaximumDistance),
+                    "Stale association distance must be finite and non-negative.");
         }
 
         private static void TryAddDbTextLabel(DBText text, ObjectId id,
@@ -904,6 +1061,7 @@ namespace UNCAD.Cad.QuickLine
                         text.TextString, out mm);
                 if (!parsed) return;
                 labels.Add(new LabelSnapshot(id, text.TextString, mm,
+                    GetTextInsertionPoint(text),
                     GetTextReferences(text), Math.Max(0.0, text.Height), order,
                     ReadLayer(text), associatedLineHandle,
                     QuickLineMetadataStore.HasCompletionMarker(text), ReadRotation(text), false,
@@ -929,6 +1087,7 @@ namespace UNCAD.Cad.QuickLine
                         attribute.TextString, out mm);
                 if (!parsed) return;
                 labels.Add(new LabelSnapshot(id, attribute.TextString, mm,
+                    GetTextInsertionPoint(attribute),
                     GetTextReferences(attribute), Math.Max(0.0, attribute.Height),
                     order, ReadLayer(attribute), associatedLineHandle,
                     QuickLineMetadataStore.HasCompletionMarker(attribute), ReadRotation(attribute), false,
@@ -953,7 +1112,7 @@ namespace UNCAD.Cad.QuickLine
                     parsed = QuickLineMillimeterText.TryParseBareNumber(
                         raw, out mm);
                 if (!parsed) return;
-                labels.Add(new LabelSnapshot(id, raw, mm,
+                labels.Add(new LabelSnapshot(id, raw, mm, text.Location,
                     GetTextReferences(text), Math.Max(0.0, text.TextHeight), order,
                     ReadLayer(text), associatedLineHandle,
                     QuickLineMetadataStore.HasCompletionMarker(text), ReadRotation(text), false,
@@ -986,7 +1145,8 @@ namespace UNCAD.Cad.QuickLine
                 AddReference(references, dimension.TextPosition);
                 AddReference(references, GetExtentsCenter(dimension));
                 labels.Add(new LabelSnapshot(id, dimension.DimensionText,
-                    mm, references, Math.Max(0.0, dimension.Dimtxt), order,
+                    mm, dimension.TextPosition, references,
+                    Math.Max(0.0, dimension.Dimtxt), order,
                     ReadLayer(dimension), QuickLineMetadataStore.ReadAssociatedLineHandle(dimension),
                     QuickLineMetadataStore.HasCompletionMarker(dimension), ReadRotation(dimension), true,
                     first, second, "Dimension"));
@@ -1183,6 +1343,13 @@ namespace UNCAD.Cad.QuickLine
             return references;
         }
 
+        private static Point3d GetTextInsertionPoint(DBText text)
+        {
+            if (text == null) return Point3d.Origin;
+            return text.Justify == AttachmentPoint.BaseLeft
+                ? text.Position : text.AlignmentPoint;
+        }
+
         private static void AddReference(List<Point3d> references, Point3d point)
         {
             foreach (Point3d existing in references)
@@ -1197,14 +1364,17 @@ namespace UNCAD.Cad.QuickLine
             IDictionary<ObjectId, LabelSnapshot> assignedLines,
             ISet<ObjectId> assignedLabels)
         {
+            var availableLabels = labels.Where(label => !assignedLabels.Contains(label.Id))
+                .ToList();
+            if (availableLabels.Count == 0) return;
+            var index = new LabelSpatialIndex(availableLabels);
             var candidates = new Dictionary<ObjectId, List<LabelMatch>>();
             foreach (LineSnapshot line in lines)
             {
                 if (assignedLines.ContainsKey(line.Id)) continue;
                 var list = new List<LabelMatch>();
-                foreach (LabelSnapshot label in labels)
+                foreach (LabelSnapshot label in index.Near(line, configuredDistance))
                 {
-                    if (assignedLabels.Contains(label.Id)) continue;
                     double score;
                     if (TryScore(line, label, configuredDistance, out score))
                         list.Add(new LabelMatch(line, label, score));
@@ -1271,6 +1441,79 @@ namespace UNCAD.Cad.QuickLine
             return string.Compare(left.Label.Id.Handle.ToString(),
                 right.Label.Id.Handle.ToString(),
                 StringComparison.OrdinalIgnoreCase);
+        }
+
+        // This broad phase only rejects impossible pairs. TryScore and the global
+        // augmenting-path assignment remain the authority for label ownership.
+        private sealed class LabelSpatialIndex
+        {
+            private readonly (Point3d Point, LabelSnapshot Label)[] _byX;
+            private readonly (Point3d Point, LabelSnapshot Label)[] _byY;
+            private readonly double _height;
+
+            public LabelSpatialIndex(IReadOnlyList<LabelSnapshot> labels)
+            {
+                _height = labels.Max(label => label.Height);
+                var points = new List<(Point3d Point, LabelSnapshot Label)>();
+                foreach (LabelSnapshot label in labels)
+                {
+                    if (label.IsDimension && label.WitnessStart.HasValue
+                        && label.WitnessEnd.HasValue)
+                    {
+                        Point3d start = label.WitnessStart.Value;
+                        points.Add((start + (label.WitnessEnd.Value - start) * 0.5, label));
+                    }
+                    else
+                        foreach (Point3d reference in label.References)
+                            points.Add((reference, label));
+                }
+                _byX = points.OrderBy(item => item.Point.X).ToArray();
+                _byY = points.OrderBy(item => item.Point.Y).ToArray();
+            }
+
+            public IEnumerable<LabelSnapshot> Near(LineSnapshot line, double distance)
+            {
+                double length = line.Start.DistanceTo(line.End);
+                double textPad = Math.Max(_height * 2, 25)
+                    + (distance > 0 ? distance : Math.Max(_height * 6, 50));
+                double dimensionPad = Math.Max(Math.Max(1, length * 0.005),
+                    distance > 0 ? distance : Math.Max(_height * 12, length * 0.25));
+                double pad = Math.Max(textPad, dimensionPad) + 1e-6;
+                double minX = Math.Min(line.Start.X, line.End.X) - pad;
+                double maxX = Math.Max(line.Start.X, line.End.X) + pad;
+                double minY = Math.Min(line.Start.Y, line.End.Y) - pad;
+                double maxY = Math.Max(line.Start.Y, line.End.Y) + pad;
+                int x0 = Bound(_byX, minX, true, false);
+                int x1 = Bound(_byX, maxX, true, true);
+                int y0 = Bound(_byY, minY, false, false);
+                int y1 = Bound(_byY, maxY, false, true);
+                bool useX = x1 - x0 <= y1 - y0;
+                var source = useX ? _byX : _byY;
+                var seen = new HashSet<ObjectId>();
+                for (int i = useX ? x0 : y0; i < (useX ? x1 : y1); i++)
+                {
+                    var item = source[i];
+                    if (item.Point.X >= minX && item.Point.X <= maxX
+                        && item.Point.Y >= minY && item.Point.Y <= maxY
+                        && seen.Add(item.Label.Id))
+                        yield return item.Label;
+                }
+            }
+
+            private static int Bound((Point3d Point, LabelSnapshot Label)[] source,
+                double value, bool x, bool upper)
+            {
+                int low = 0, high = source.Length;
+                while (low < high)
+                {
+                    int middle = low + (high - low) / 2;
+                    double coordinate = x ? source[middle].Point.X : source[middle].Point.Y;
+                    if (coordinate < value || (upper && coordinate == value))
+                        low = middle + 1;
+                    else high = middle;
+                }
+                return low;
+            }
         }
 
         private static bool TryScore(LineSnapshot line, LabelSnapshot label,
@@ -1355,7 +1598,8 @@ namespace UNCAD.Cad.QuickLine
         private sealed class LineSnapshot
         {
             public LineSnapshot(ObjectId id, Point3d start, Point3d end,
-                int order, string layer, bool isPolyline, bool isBridgePolyline)
+                int order, string layer, bool isPolyline, bool isBridgePolyline,
+                IReadOnlyList<Point3d> points)
             {
                 Id = id;
                 Start = start;
@@ -1364,6 +1608,7 @@ namespace UNCAD.Cad.QuickLine
                 Layer = layer ?? string.Empty;
                 IsPolyline = isPolyline;
                 IsBridgePolyline = isBridgePolyline;
+                Points = points ?? Array.Empty<Point3d>();
                 Handle = ReadHandle(id);
             }
 
@@ -1374,13 +1619,15 @@ namespace UNCAD.Cad.QuickLine
             public string Layer { get; }
             public bool IsPolyline { get; }
             public bool IsBridgePolyline { get; }
+            public IReadOnlyList<Point3d> Points { get; }
             public string Handle { get; }
         }
 
         private sealed class LabelSnapshot
         {
             public LabelSnapshot(ObjectId id, string text, double millimetres,
-                IReadOnlyList<Point3d> references, double height, int order,
+                Point3d insertionPoint, IReadOnlyList<Point3d> references,
+                double height, int order,
                 string layer, string associatedLineHandle, bool hasCompletionMarker,
                 double rotation, bool isDimension,
                 Point3d? witnessStart, Point3d? witnessEnd, string sourceKind)
@@ -1388,6 +1635,7 @@ namespace UNCAD.Cad.QuickLine
                 Id = id;
                 Text = text ?? string.Empty;
                 Millimetres = millimetres;
+                InsertionPoint = insertionPoint;
                 References = references ?? Array.Empty<Point3d>();
                 Height = height;
                 Order = order;
@@ -1404,6 +1652,7 @@ namespace UNCAD.Cad.QuickLine
             public ObjectId Id { get; }
             public string Text { get; }
             public double Millimetres { get; }
+            public Point3d InsertionPoint { get; }
             public IReadOnlyList<Point3d> References { get; }
             public double Height { get; }
             public int Order { get; }
@@ -1418,7 +1667,7 @@ namespace UNCAD.Cad.QuickLine
 
             public LabelSnapshot WithObservation(LabelSnapshot observation)
                 => new LabelSnapshot(Id, Text, observation.Millimetres,
-                    References, Height,
+                    InsertionPoint, References, Height,
                     Order, Layer, AssociatedLineHandle, HasCompletionMarker,
                     Rotation, IsDimension, WitnessStart, WitnessEnd,
                     observation.SourceKind);

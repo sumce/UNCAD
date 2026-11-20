@@ -179,7 +179,7 @@ namespace UNCAD.CadIntegration
             if (runs != 1)
                 throw new InvalidOperationException("桥架 run=" + runs + " 期望 1");
 
-            // ---- ④ 生产链路断言：Scan → Inspect → 预览含桥架通道 ----
+            // ---- ④ Scan → Inspect：验证路由与桥架归属；U1U 内嵌预览已停用 ----
             IReadOnlyList<QuickLineCadSegment> scanned =
                 FillRouteInspectionStage.Scan(ctx);
             Info("Scan 线段: " + scanned.Count);
@@ -187,26 +187,21 @@ namespace UNCAD.CadIntegration
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 inspection = FillRouteInspectionStage.Inspect(ctx, tr,
-                    regions.Groups[0].EntityIds, scanned, "48", "V", true,
-                    boundary, null);
+                    regions.Groups[0].EntityIds, scanned, boundary, null);
                 tr.Commit();
             }
-            if (inspection.Preview == null)
-                throw new InvalidOperationException("预览模型为空");
-            Info("预览段数: " + inspection.Preview.Segments.Count
-                + "，轴位: " + inspection.Preview.AxisSummary);
-            var envelope = QuickLineOrbitPreviewEnvelope.Build(
-                inspection.Preview, PreviewReferenceLevels.Parse(
-                    PreviewReferenceLevels.DefaultList), "2F地面");
-            int trayChannels = envelope.Segments.Count(
-                s => s.Channel != null && string.Equals(s.Channel.Kind, "tray",
+            if (inspection.Preview != null)
+                throw new InvalidOperationException(
+                    "U1U 路由检查不应构建已停用的内嵌预览");
+            Info("识别路由段数: " + inspection.Segments.Count);
+            if (inspection.Segments.Count < 3)
+                throw new InvalidOperationException("识别路由段数不足，期望 >=3");
+            int trayOutputs = inspection.ParallelOutputs.Count(
+                output => string.Equals(output.Kind, "U1Q",
                     StringComparison.OrdinalIgnoreCase));
-            Info("信封桥架通道段: " + trayChannels + "；本层基准: "
-                + envelope.BaseFloorZ);
-            if (inspection.Preview.Segments.Count < 3)
-                throw new InvalidOperationException("预览段数不足（场景链会合并连续段，期望 >=3）");
-            if (trayChannels < 1)
-                throw new InvalidOperationException("桥架通道未进预览");
+            Info("当前图框桥架输出数: " + trayOutputs);
+            if (trayOutputs < 1)
+                throw new InvalidOperationException("桥架输出未归属到图框");
 
             // ---- ⑤ SaveAs 桌面样图 ----
             string target = System.IO.Path.Combine(
@@ -214,7 +209,7 @@ namespace UNCAD.CadIntegration
                 "UNCAD-3D验收-2F回路样图.dwg");
             ctx.Db.SaveAs(target, DwgVersion.Current);
             Info("样图已保存: " + target);
-            Info("验收：开样图 → U1U → 选图框 → 确认窗左侧应见 2F 建筑模型"
+            Info("验收：开样图 → U13D → 选图框 → 应见 2F 建筑模型"
                 + "（环氧地坪=场景地面、母线玻璃层 3660/4220/4900、桥架红色"
                 + "双线沿 3900 标高、爬升 2200/4900 对齐 I-L 盘顶/第三层母线）");
             return "DONE sample=" + target;

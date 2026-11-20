@@ -76,6 +76,24 @@ namespace UNCAD.Tests
                 request.Statistics.Bridges[0].CatalogModel);
         }
 
+        [Fact]
+        public void Request_ClonesConduitCatalogModel()
+        {
+            var statistics = new CableStatResult();
+            statistics.Conduits.Add(new ConduitStat
+            {
+                Spec = "⌀20线管",
+                CatalogModel = "镀锌穿线管DN20"
+            });
+
+            var request = new TableGenerationRequest(new MachineRow(),
+                new BoqCatalogIndex(null), statistics, FillPlanningOptions.Default);
+            statistics.Conduits[0].CatalogModel = "已修改";
+
+            Assert.Equal("镀锌穿线管DN20",
+                request.Statistics.Conduits[0].CatalogModel);
+        }
+
 
         [Fact]
         public void Plan_CarriesAutoFillPolicyIntoReview()

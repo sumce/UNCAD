@@ -54,6 +54,7 @@ namespace UNCAD.Core.Submission
         public List<string> TableValues { get; } = new List<string>();
         public int TextEntityCount { get; set; }
         public List<List<string>> TableRows { get; } = new List<List<string>>();
+        public List<string> TableReadErrors { get; } = new List<string>();
 
         public void AddTableRow(params string[] values)
         {

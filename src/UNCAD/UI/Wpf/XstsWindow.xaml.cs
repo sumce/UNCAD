@@ -1,14 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using UNCAD.Core.Stat;
-using Wpf.Ui.Controls;
+using FluentWindow = Wpf.Ui.Controls.FluentWindow;
 
 namespace UNCAD.UI
 {
     /// <summary>
     /// XSTS 机台回路统计的只读汇报窗（3.0 WPF 版，D-038，P2 工作台模式）。
     /// 顶部：机台/图框总数 + 覆盖率 + 机台状态徽章行（完整/缺回路/多出/无基准）
-    /// + 下一步指引；中间两个表格页（回路统计 / 异常图框）；页脚 Excel 路径。
+    /// + 下一步指引；回路统计 / 图框明细 / 异常图框；页脚 Excel 路径。
     /// 关闭 / Esc / Enter 都只是关窗，不做任何写入。
     /// </summary>
     public sealed partial class XstsWindow : FluentWindow
@@ -20,7 +23,10 @@ namespace UNCAD.UI
         public string NextStep => _report.ExpectedDataAvailable
             ? (_report.MissingCircuitCount > 0
                 ? "下一步：把缺少的回路补画进图纸后重跑 XSTS 核对；全部机台齐全后执行 U1U 生成清单。"
-                : "下一步：回路齐全，执行 U1U 生成清单。")
+                : _report.Issues.Count > 0 || _report.UnexpectedCircuitCount > 0
+                    || _report.HasUnknownMachineBaseline
+                    ? "下一步：先核对图框明细和异常图框中的问题，再重跑 XSTS。"
+                    : "下一步：回路齐全，执行 U1U 生成清单。")
             : "下一步：先在 U1SET 刷新机台数据（" + _report.ExpectedDataDetail + "），再重跑 XSTS。";
 
         /// <summary>覆盖率摘要：数据可用时给出 缺少/多出/异常 的确切数字。</summary>
@@ -50,19 +56,35 @@ namespace UNCAD.UI
             UiShell.ApplyFluentTheme(this);
             DataContext = this;
             MachineGrid.ItemsSource = report.Machines;
+            for (int index = 0; index < report.MaterialColumns.Count; index++)
+            {
+                string path = "Cells[" + index + "]";
+                var textStyle = new Style(typeof(TextBlock));
+                textStyle.Setters.Add(new Setter(VerticalAlignmentProperty, VerticalAlignment.Center));
+                textStyle.Setters.Add(new Setter(TextBlock.TextTrimmingProperty,
+                    TextTrimming.CharacterEllipsis));
+                textStyle.Setters.Add(new Setter(ToolTipProperty,
+                    new Binding(path + ".DetailText")));
+                textStyle.Setters.Add(new Setter(ToolTipService.ShowDurationProperty, 60000));
+                FrameGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = report.MaterialColumns[index].ModelHeader,
+                    Binding = new Binding(path + ".Model"),
+                    ElementStyle = textStyle,
+                    Width = Math.Max(210, report.MaterialColumns[index].ModelHeader.Length * 13 + 20)
+                });
+                FrameGrid.Columns.Add(new DataGridTextColumn
+                {
+                    Header = report.MaterialColumns[index].QuantityHeader,
+                    Binding = new Binding(path + ".Quantity"),
+                    ElementStyle = textStyle,
+                    Width = Math.Max(100, report.MaterialColumns[index].QuantityHeader.Length * 13 + 20)
+                });
+            }
+            FrameGrid.ItemsSource = report.Frames;
+            FrameTab.Header = "图框明细 (" + report.FrameCount + " 框)";
             IssueGrid.ItemsSource = report.Issues;
             IssueTab.Header = "异常图框 (" + report.Issues.Count + ")";
-            // 3.2.0.7：未上图机台页（档案有、全图无的盲区名单）；名单为空时
-            // 整页隐藏，避免无档案/扫描失败时多一个空页签。
-            if (report.BlindMachines.Count == 0)
-            {
-                BlindTab.Visibility = System.Windows.Visibility.Collapsed;
-            }
-            else
-            {
-                BlindGrid.ItemsSource = report.BlindMachines;
-                BlindTab.Header = "未上图 (" + report.BlindMachines.Count + ")";
-            }
             BuildBadges();
             Loaded += (sender, args) => CloseButton.Focus();
         }
@@ -80,9 +102,6 @@ namespace UNCAD.UI
                 new StatusBadge("无基准 " + _report.UnknownMachineCount + " 台",
                     _report.UnknownMachineCount > 0 ? "caution" : "neutral")
             };
-            if (_report.BlindMachines.Count > 0)
-                badges.Add(new StatusBadge(
-                    "未上图 " + _report.BlindMachines.Count + " 台", "caution"));
             StatusBadgeBar.Build(BadgeBar, badges);
         }
 

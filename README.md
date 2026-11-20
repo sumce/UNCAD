@@ -1,4 +1,4 @@
-﻿Current stable: **3.4.0**（2026-11-18）：U1U 与 U13D 的 3D 预览使用 WPF 原生 `Viewport3D`，场景同步构建；WebView2+three.js 预览栈已退役，WebView2 仅保留给在线登录。U1U 保留可配置的参照建筑模型（楼板、华夫孔洞板、结构梁、设备与母线层）及桥架/线管通道；U13D 保留多图框轴位对齐、统计和诊断面板。
+﻿Current local source build: **3.4.1.6**（2026-11-19，待安装验收；本机已安装 **3.4.1.1**，正式标签和 ZIP 待发布）：`XSTS` 图框明细一框一行，固定机台 ID、回路名称、图框 ID，各类清单的型号与米数/数量分列，缺项留空；移除“近名提示”和“未上图机台”。U1F/U1U 自动迁移到 `FRAME_20261119` 并写入单行 `INFO2`；`CABLE_INFO` 型号不再加“电缆”前缀，U1SET 可配置 Xauto 占用比例和图层自动矫正。已打标签的稳定线为 **3.4.0**；当前 U1U 与 U13D 默认使用 WPF 原生 `Viewport3D`，同时支持独立进程的 WebV/Three.js 可选预览。
 
 The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 commands (since 3.3.8, when `U1L3D` was removed) (including `Xauto`, `U1B`, `U1PDF` and the online-login `UNC_LOGIN`) and does not include the removed `U1X` editor. 3.0 migrates all 21 dialogs to WPF (Fluent style), fixes the XSTS phantom-machine issue (frameinfo_json now carries a frame-handle binding and lives inside the frame block, D-040), splits fill orchestration into stage services, and adds performance and frame-migration self-test gates to the release pipeline. Machine workbooks accept local/UNC paths and HTTP/HTTPS URLs (download-only, D-041); output lands one folder per machine (D-042); device-reserve markers are auto-absorbed (D-043); U1F fills frames on partial coverage (D-044); XLAYOUT offers three arrange modes (D-045) on the shared WPF design tokens with window adaptation (D-046). `U1C20`/`U1C25`/`U1C38`/`U1C51` generate fixed BOQ conduit models. `U13D` aligns multiple selected frames by workbook axes and shows U1L/bridge meters. `U1D` is the shortcut for `U1DWG`; aligned-dimension conversion is `U1DT`. `U1DATA` refreshes the configured machine workbook; all cloud uploads stay removed (account validation stays). Older command references below are historical release notes.
 
@@ -22,7 +22,7 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 comman
 ## v3.0.0（2026-11-03 正式发布）
 
 - UI：**全部 21 个窗体迁移 WPF**（WPF-UI / Fluent，深浅色主题、卡片布局、Enter 确认/Esc 取消），WinForms 旧版同批删除；新增统一设计令牌 FluentKit 与窗口自适应（D-046），设计语言规范 `docs/UI-3.0-DESIGN.md`（D-038）。
-- 存储：**图框 JSON 随块存储**（D-040，FRAME_20261102 模板）——frameinfo_json 移入图框块内 FRAMEINFO 属性，复制/移动零丢失，四代旧图框自动迁移；修复 XSTS/身份读取幽灵机台（`meta.frameHandle` 句柄绑定）。
+- 存储：**图框 JSON 随块存储**（D-040，当前 `FRAME_20261119` 模板）——frameinfo_json 移入图框块内 FRAMEINFO 属性，复制/移动零丢失，旧图框自动迁移；修复 XSTS/身份读取幽灵机台（`meta.frameHandle` 句柄绑定）。
 - 数据：**机台数据源支持本地/UNC 与 HTTP/HTTPS**（D-041，仅下载零上传，刷新显式触发，绘图命令只读本机 SQLite 快照）。
 - 输出：**一个机台一个文件夹**（D-042，BOQ/DWG/PDF 同夹交付）；批量 U1U / U1DWG / U1PDF 结束弹结果窗，命令行只留一行摘要。
 - 预留：**设备内预留自动识别**（D-043，横排毫米标吸收并删除）；U1F **缺回路照常填写图框**、只跳过 BOQ（D-044，边画边填；U1S/U1DWG 保持硬门禁）。
@@ -470,7 +470,7 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 comman
 | `U1A` | — | 查看版本、构建时间、授权和联系方式 |
 | `U1S` | — | 只读一个或多个当前图框，将清单项目、数量和米数提交到 BOQ Excel |
 | `XLAYOUT` | — | 图框自动排版：按机台完整性 / 机台 ID / 上游编号分行，行内按机台 Excel 行序（D-045 三模式） |
-| `XSTS` | — | 机台回路统计并导出 xlsx（含「未上图机台」名单与疑似画错名提示） |
+| `XSTS` | — | 机台回路统计、完整图框清单明细及异常图框，支持导出 xlsx |
 | `Xmerge` | — | DWG 批量合并：拖入文件/文件夹，按 XLAYOUT 排布规则合并到当前图纸，坏文件点名可跳过 |
 | `U1SET` | — | 打开全部功能的统一设置中心 |
 | `U1DATA` | — | 后台刷新配置的机台工作簿（本地/UNC 或网络地址，仅下载） |

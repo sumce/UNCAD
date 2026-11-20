@@ -420,6 +420,12 @@ namespace UNCAD.Tests
                             Category = TableFillCategory.Cable, Name = "电缆",
                             Description = "1.名称:44*2+21", Quantity = "10",
                             CatalogMatched = false
+                        },
+                        new TableFillRow
+                        {
+                            Category = TableFillCategory.FlexibleConduit,
+                            Name = "38mm软管", Description = "38mm旧模板",
+                            Quantity = "1.5", Code = "3.7", CatalogMatched = true
                         }
                     };
                     var catalog = new List<ListItem>
@@ -433,6 +439,11 @@ namespace UNCAD.Tests
                         {
                             Category = "桥架", Code = "2.1", Name = "桥架",
                             Feature = "桥架模板", Unit = "m", Alias = "200*100"
+                        },
+                        new ListItem
+                        {
+                            Category = "软管", Code = "3.8", Name = "20mm软管",
+                            Feature = "20mm新模板", Unit = "m", Alias = "20mm"
                         }
                     };
                     var window = new FillReviewWindow(FillReviewData.Create(
@@ -453,6 +464,11 @@ namespace UNCAD.Tests
                     Assert.True(item.CatalogMatched);
                     Assert.Equal("1.1", item.Code);
                     Assert.Equal("3*2.5", window.CableBox.Text);
+                    FillReviewItem hose = window.Data.FlexibleConduitItem();
+                    Assert.Equal("20", window.Data.Machine.Dia);
+                    Assert.Equal("3.8", hose.Code);
+                    Assert.Equal("3.8",
+                        ((FillReviewRow)window.ReviewGrid.Items[1]).Code);
                     Assert.Contains("1.1",
                         window.Data.SelectedRows().Select(row => row.Code));
                     var row = (FillReviewRow)window.ReviewGrid.Items[0];

@@ -43,8 +43,8 @@ namespace UNCAD.Features.Conduit
             // D-050 Amendment（2026-11-15）：线管与桥架互斥（有线管的线不会有
             // 桥架），独立配置键保留，但默认落桥架车道——上侧、偏移 15，与 U1Q
             // 默认完全一致；用户显式改过的 UNC_CONDUIT_* 配置仍原样生效。
-            double lineOff = Settings.GetDouble(ConfigKeys.ConduitLineOff, 15.0);
-            double textOff = Settings.GetDouble(ConfigKeys.ConduitTextOff, 0.0);
+            double lineOff = Settings.GetNonNegativeDouble(ConfigKeys.ConduitLineOff, 15.0);
+            double textOff = Settings.GetNonNegativeDouble(ConfigKeys.ConduitTextOff, 0.0);
             string side = Settings.Get(ConfigKeys.ConduitSide, "1");
 
             // 标注第一行写固定清单的「1.名称」，管径必须先在清单里找到；

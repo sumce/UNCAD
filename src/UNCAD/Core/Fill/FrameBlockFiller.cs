@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Text;
@@ -10,13 +11,14 @@ namespace UNCAD.Core.Fill
 {
     /// <summary>
     /// 图框块属性填充：按属性标签把机台回路数据写进选中的块参照。
-    /// 标签与 xframe_v2 图框一致：
+    /// 标签与 FRAME_20261119 图框一致：
     ///   MACHINEID-DEVICE   机台ID-设备名称
     ///   MACHINEID-POWER    机台ID-POWER，例如 "MDAPT01-POWER"
-    ///   CABLE_INFO         电缆型号mm²: 实测分段(mm)+盘内+设备内+预留=总长mm
-    ///   CONDUIT_INFO       各管径线管总长度，多个用中文逗号分隔
-    /// （BRIDGE_FRAME_INFO 已随 xframe_v2 迁移移除：桥架数据只进 BOQ 表与
-    /// DATA 工作表，D-035/D-033 之后的图框不再携带该属性。）
+    ///   CABLE_INFO         型号mm²: 实测分段(mm)+盘内+设备内+预留=总长mm
+    ///   CONDUIT_INFO       旧属性兼容写入：线管型号及分段毫米数
+    ///   INFO2              桥架/刚性线管型号及分段毫米数，单行显示
+    /// （BRIDGE_FRAME_INFO 是旧属性；桥架明细现写入 INFO2，完整清单仍写入 BOQ 表与
+    /// DATA 工作表。）
     /// 可选统计标签始终返回；无数据时写空字符串，避免保留上一次填充内容。
     /// </summary>
     public static class FrameBlockFiller
@@ -25,10 +27,15 @@ namespace UNCAD.Core.Fill
         public const string TagPower = "MACHINEID-POWER";
         public const string TagCable = "CABLE_INFO";
         public const string TagConduit = "CONDUIT_INFO";
+        public const string TagInfo2 = "INFO2";
 
         private static readonly HashSet<string> KnownTags = new HashSet<string>(
-            new[] { TagDevice, TagPower, TagCable, TagConduit },
+            new[] { TagDevice, TagPower, TagCable, TagConduit, TagInfo2 },
             System.StringComparer.OrdinalIgnoreCase);
+        private static readonly Regex Info2SectionPattern = new Regex(
+            @"^(?<model>.+?)(?:\s*:\s*|\s+)(?:\d+(?:\.\d+)?"
+                + @"(?:\s*\+\s*\d+(?:\.\d+)?)*(?:\s*=\s*\d+(?:\.\d+)?)?)mm$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static bool IsKnownTag(string tag) => KnownTags.Contains(tag ?? "");
 
@@ -58,11 +65,11 @@ namespace UNCAD.Core.Fill
 
         /// <summary>
         /// 构建 标签→值 映射。统计结果来自 U1F 同一次框选，
-        /// CABLE_INFO 写电缆公式，CONDUIT_INFO 写各管径线管总长。
+        /// CABLE_INFO 写电缆公式；INFO2 写桥架和刚性线管的毫米分段。
         /// </summary>
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
             MachineRow row, CableStatResult stat)
-            => BuildValues(row, stat, false);
+            => BuildValues(row, stat, false, false, false, false, null);
 
         /// <summary>
         /// Builds frame values while optionally leaving statistics-backed attributes
@@ -72,11 +79,20 @@ namespace UNCAD.Core.Fill
             MachineRow row, CableStatResult stat,
             bool preserveMissingStatistics)
             => BuildValues(row, stat, preserveMissingStatistics,
-                preserveMissingStatistics);
+                preserveMissingStatistics, preserveMissingStatistics,
+                preserveMissingStatistics, null);
 
         public static System.Collections.Generic.Dictionary<string, string> BuildValues(
             MachineRow row, CableStatResult stat,
             bool preserveCable, bool preserveConduit)
+            => BuildValues(row, stat, preserveCable, preserveConduit,
+                preserveCable || preserveConduit,
+                preserveCable || preserveConduit, null);
+
+        public static System.Collections.Generic.Dictionary<string, string> BuildValues(
+            MachineRow row, CableStatResult stat, bool preserveCable,
+            bool preserveConduit, bool preserveBridgeInfo2,
+            bool preserveConduitInfo2, string existingInfo2)
         {
             var d = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
 
@@ -90,7 +106,7 @@ namespace UNCAD.Core.Fill
             if (stat != null && stat.CableSum > 0)
             {
                 // 与现场约定一致：全部 mm，明细统一写成「数值（说明）」，最后 =总长mm。
-                // 例：电缆ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +2000（设备内） +3000（预留）=93300mm
+                // 例：ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +2000（设备内） +3000（预留）=93300mm
                 // 3.0.0.15：段间用「 +」连接（空格在加号前）——MText 只能在空格/
                 // 汉字处断行，"1000+5400+…"纯数字串是一整个不可断词，段数一多
                 // 首行放不下整串就整串下移（首行只剩型号，用户报告 3 行实际 2 行
@@ -131,31 +147,137 @@ namespace UNCAD.Core.Fill
                 // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目
                 // 特征继续使用不带前缀的清单别名，两者不得互相污染。
                 d[TagCable] = cable.Length > 0
-                    ? "电缆" + CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
+                    ? CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
                     : formula;
             }
             else
             {
                 if (!preserveCable)
                     d[TagCable] = cable.Length > 0
-                        ? "电缆" + CableModelDisplay.WithTypePrefix(cable)
+                        ? CableModelDisplay.WithTypePrefix(cable)
                         : "";
             }
 
-            // 桥架不再写图框属性：BRIDGE_FRAME_INFO 已随 xframe_v2 移除，
-            // 桥架数据只进 BOQ 清单表与 DATA 工作表。
+            // FRAME_20261119 的 INFO2 只显示桥架和刚性线管；旧图框若仍有
+            // CONDUIT_INFO，也写相同的毫米分段格式，避免旧属性继续显示米制。
             if (stat != null && stat.Conduits.Count > 0)
-                d[TagConduit] = string.Join("，", stat.Conduits.Select(c =>
-                    c.Spec + " " + TextFormatter.FormatNum(c.TotalM) + "M"));
+                d[TagConduit] = string.Join("，", stat.Conduits.Select(conduit =>
+                    FormatMillimeterSection(
+                        string.IsNullOrWhiteSpace(conduit.CatalogModel)
+                            ? conduit.Spec : conduit.CatalogModel,
+                        conduit.LengthsMm, conduit.TotalMm)));
             else if (!preserveConduit)
                 d[TagConduit] = "";
+
+            List<string> info2 = BuildInfo2Sections(stat);
+            if (existingInfo2 != null || info2.Count > 0
+                || !(preserveBridgeInfo2 || preserveConduitInfo2))
+            {
+                List<string> preserved = PreserveInfo2Sections(existingInfo2,
+                    preserveBridgeInfo2, preserveConduitInfo2);
+                List<string> updated = info2.Where(section => !PreserveInfo2Category(
+                    section, preserveBridgeInfo2, preserveConduitInfo2)).ToList();
+                d[TagInfo2] = string.Join("；", preserved.Concat(updated));
+            }
 
             return d;
         }
 
+        private static List<string> BuildInfo2Sections(CableStatResult stat)
+        {
+            var sections = new List<string>();
+            if (stat != null)
+            {
+                foreach (BridgeStat bridge in stat.Bridges)
+                {
+                    string section = FormatInfo2Section(bridge.CatalogModel,
+                        bridge.Grids.Select(grid => grid * bridge.MmPerGrid),
+                        bridge.TotalMm);
+                    if (section.Length > 0) sections.Add(section);
+                }
+
+                foreach (ConduitStat conduit in stat.Conduits)
+                {
+                    string diameter = ConduitDiameter.NormalizeOrEmpty(conduit.Spec);
+                    string model = diameter.Length == 0
+                        || string.IsNullOrWhiteSpace(conduit.CatalogModel)
+                        ? "" : "镀锌穿线管" + diameter + "mm";
+                    string section = FormatInfo2Section(model,
+                        conduit.LengthsMm, conduit.TotalMm);
+                    if (section.Length > 0) sections.Add(section);
+                }
+            }
+            return sections;
+        }
+
+        private static string FormatInfo2Section(string model,
+            IEnumerable<double> segmentLengthsMm, double totalMm)
+        {
+            if (string.IsNullOrWhiteSpace(model)) return "";
+            string[] parts = (segmentLengthsMm ?? Enumerable.Empty<double>())
+                .Select(FormatMillimeters)
+                .Where(value => value.Length > 0).ToArray();
+            if (parts.Length == 0) return "";
+
+            string lengths = parts.Length == 1
+                ? parts[0] + "mm"
+                : string.Join(" +", parts) + " = "
+                    + FormatMillimeters(totalMm) + "mm";
+            return model.Trim() + " " + lengths;
+        }
+
+        private static string FormatMillimeterSection(string model,
+            IEnumerable<double> segmentLengthsMm, double totalMm)
+        {
+            if (string.IsNullOrWhiteSpace(model)) return "";
+            string[] parts = (segmentLengthsMm ?? Enumerable.Empty<double>())
+                .Select(FormatMillimeters)
+                .Where(value => value.Length > 0).ToArray();
+            if (parts.Length == 0) return "";
+
+            string lengths = parts.Length == 1
+                ? parts[0] + "mm"
+                : string.Join(" +", parts) + " = "
+                    + FormatMillimeters(totalMm) + "mm";
+            return model.Trim() + ": " + lengths;
+        }
+
+        private static List<string> PreserveInfo2Sections(string existingInfo2,
+            bool preserveBridge, bool preserveConduit)
+        {
+            var preserved = new List<string>();
+            if (string.IsNullOrWhiteSpace(existingInfo2)) return preserved;
+            foreach (string source in existingInfo2.Split('；'))
+            {
+                string section = (source ?? "").Trim();
+                if (section.Length == 0) continue;
+                if (PreserveInfo2Category(section, preserveBridge, preserveConduit))
+                    preserved.Add(section);
+            }
+            return preserved;
+        }
+
+        private static bool PreserveInfo2Category(string section, bool preserveBridge,
+            bool preserveConduit)
+        {
+            string model = Info2Model(section);
+            if (model.StartsWith("梯形桥架", StringComparison.OrdinalIgnoreCase))
+                return preserveBridge;
+            if (model.StartsWith("镀锌穿线管", StringComparison.OrdinalIgnoreCase))
+                return preserveConduit;
+            return false;
+        }
+
+        private static string Info2Model(string section)
+        {
+            Match match = Info2SectionPattern.Match((section ?? "").Trim());
+            return match.Success ? match.Groups["model"].Value.Trim() : "";
+        }
+
         private static string FormatMillimeters(double millimetres)
-            => TextFormatter.FormatNum(Math.Round(millimetres, 0,
-                MidpointRounding.AwayFromZero));
+            => double.IsNaN(millimetres) || double.IsInfinity(millimetres)
+                ? "" : TextFormatter.FormatNum(Math.Round(millimetres, 0,
+                    MidpointRounding.AwayFromZero));
 
         private static double ParseMeters(string value)
         {

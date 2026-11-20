@@ -319,7 +319,7 @@ namespace UNCAD.Features.Submit
         }
 
         public static SubmissionSourceData Read(Transaction transaction, ObjectId[] ids,
-            CadBlockDefinitionReader definitions = null)
+            CadBlockDefinitionReader definitions = null, bool tablesOnly = false)
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             definitions = definitions ?? new CadBlockDefinitionReader(transaction);
@@ -333,7 +333,10 @@ namespace UNCAD.Features.Submit
                     if (!CadTableLayoutClassifier.IsDrawingInfoTable(table))
                         ReadTable(table, source);
                 }
-                else if (entity is BlockReference block) ReadBlock(transaction, block, source, definitions);
+                else if (entity is BlockReference block)
+                {
+                    if (!tablesOnly) ReadBlock(transaction, block, source, definitions);
+                }
                 else if (entity is DBText || entity is MText) source.TextEntityCount++;
             }
             return source;
@@ -397,6 +400,8 @@ namespace UNCAD.Features.Submit
                     catch (System.Exception ex)
                     {
                         values[column] = "";
+                        source.TableReadErrors.Add("清单表 " + table.Handle + " 第 "
+                            + (row + 1) + " 行第 " + (column + 1) + " 列读取失败: " + ex.Message);
                         Log.Warn("automatic Excel read table cell failed: " + ex.Message);
                     }
                 }

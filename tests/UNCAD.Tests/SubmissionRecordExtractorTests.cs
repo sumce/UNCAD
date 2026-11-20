@@ -76,16 +76,19 @@ namespace UNCAD.Tests
             Assert.Equal(1, record.TableRowsRead);
         }
 
-        [Fact]
-        public void Extract_ReadsMillimeterCableInfoWithReserves()
+        [Theory]
+        [InlineData("ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
+            + "（盘内预留）+3400mm（设备预留）+0mm=8400mm")]
+        [InlineData("电缆ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
+            + "（盘内预留）+3400mm（设备预留）+0mm=8400mm")]
+        public void Extract_ReadsMillimeterCableInfoWithReserves(string cableInfo)
         {
             var source = new SubmissionSourceData();
             source.AddAttribute(FrameBlockFiller.TagPower, "MQBAN01-POWER");
             source.AddAttribute(FrameBlockFiller.TagDevice, "MQBAN01-中央实验台1-1");
             source.AddAttribute(DeviceBlockFiller.TagDeviceName, "中央实验台1-1");
             source.AddAttribute(FrameBlockFiller.TagCable,
-                "ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
-                + "（盘内预留）+3400mm（设备预留）+0mm=8400mm");
+                cableInfo);
 
             SubmissionRecord record = SubmissionRecordExtractor.Extract(source);
 

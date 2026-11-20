@@ -150,7 +150,7 @@ namespace UNCAD.CadIntegration
                 {
                     FillRouteInspection inspection = FillRouteInspectionStage
                         .Inspect(ctx, tr, region.EntityIds, scanned,
-                            "48/V", "37/V", true, region.Boundary);
+                            region.Boundary);
                     tr.Commit();
                     Info("[4] 图框 " + frameId.Handle + ": EntityIds="
                         + region.EntityIds.Count + " 实体（扫描命中 " + entityIdHit
@@ -158,10 +158,7 @@ namespace UNCAD.CadIntegration
                         + inspection.ConnectivityText);
                     Info("    图层矫正: " + (inspection.LayerCorrectionText
                         ?? "(null)"));
-                    Info("    预览: " + (inspection.Preview == null
-                        ? "NULL"
-                        : inspection.Preview.Segments.Count + " 段，柱位="
-                          + inspection.Preview.AxisSummary));
+                    Info("    已识别路由: " + inspection.Segments.Count + " 段");
                 }
             }
             Info("[5] 实际体检图框数: " + inspected);
@@ -263,7 +260,7 @@ namespace UNCAD.CadIntegration
             {
                 inspection = FillRouteInspectionStage.Inspect(ctx, tr,
                     regions.Groups[0].EntityIds, scanned,
-                    "48/V", "37/V", true, regions.Groups[0].Boundary);
+                    regions.Groups[0].Boundary);
                 tr.Commit();
             }
 
@@ -272,27 +269,14 @@ namespace UNCAD.CadIntegration
                 s => regions.Groups[0].EntityIds.Contains(s.LineId));
             Info("EntityIds 严格模式扫描命中: " + entityIdHit
                 + "（预期 0——Line 不进 EntityIds，3.3.0 缺陷根因）");
-            if (inspection.Preview == null)
-                failures.Add("预览为 NULL（3.3.0.1 修复无效？）");
-            else
-            {
-                Info("预览: " + inspection.Preview.Segments.Count + " 段，柱位="
-                    + inspection.Preview.AxisSummary);
-                if (inspection.Preview.Segments.Count != 3)
-                    failures.Add("预览段数 " + inspection.Preview.Segments.Count
-                        + " ≠ 3");
-                // 3.3.1（D-054 Amendment）：逐段毫米标原文（特性B）与上下游
-                // 轴位原文（特性C）必须从 BuildPreview 带进模型。
-                int labelled = inspection.Preview.Segments.Count(
-                    segment => segment.LabelText.Length > 0);
-                if (labelled != 3)
-                    failures.Add("预览段毫米标原文 " + labelled + " ≠ 3");
-                if (inspection.Preview.UpstreamAxisLabel != "48/V"
-                    || inspection.Preview.DownstreamAxisLabel != "37/V")
-                    failures.Add("预览轴位原文未带入: "
-                        + inspection.Preview.UpstreamAxisLabel + " / "
-                        + inspection.Preview.DownstreamAxisLabel);
-            }
+            if (inspection.Preview != null)
+                failures.Add("填充路由检查仍构建了已停用的 3D 预览");
+            if (inspection.Segments.Count != 3)
+                failures.Add("识别路由段数 " + inspection.Segments.Count + " ≠ 3");
+            int labelled = inspection.Segments.Count(
+                segment => segment.HasMillimetreLabel);
+            if (labelled != 3)
+                failures.Add("识别到毫米标的路由段数 " + labelled + " ≠ 3");
             Info("连通性: " + inspection.ConnectivityText);
             if (inspection.Connectivity == null
                 || inspection.Connectivity.Components.Count != 1

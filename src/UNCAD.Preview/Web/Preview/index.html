@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>UNCAD WebV</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <span id="title">UNCAD WebV</span>
+    <nav aria-label="三维预览">
+      <label><input type="checkbox" data-group="Grid" checked>柱网</label>
+      <label><input type="checkbox" data-group="Columns" checked>柱子</label>
+      <label><input type="checkbox" data-group="Reference" checked>参照</label>
+      <label><input type="checkbox" data-group="Detail">结构</label>
+      <label><input type="checkbox" id="labels" checked>标注</label>
+      <button id="fit" title="复位视角" aria-label="复位视角">&#8634;</button>
+      <button id="back">返回 WPF</button>
+    </nav>
+  </header>
+  <main id="viewport">
+    <div id="canvasHost"></div>
+    <div id="labelLayer" aria-hidden="true"></div>
+    <div id="error" role="alert" hidden></div>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

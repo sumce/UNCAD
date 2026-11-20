@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="U1U · 清单更新对比"
-                 Width="920" Height="640" MinWidth="860" MinHeight="480"
+                 Width="920" Height="700" MinWidth="860" MinHeight="520"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -75,6 +75,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <TextBlock x:Name="TitleText" Grid.Row="0" FontSize="14" FontWeight="SemiBold"
@@ -83,10 +84,9 @@
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                 <TextBlock x:Name="SummaryText" Grid.Row="2" Margin="0,4,0,8" FontSize="12"
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                <!-- 电缆长度卡片（2026-11-04）：本次构成 = 实测 + 盘内（箱内）
-                     预留 + 设备内预留 + 业主预留 = 总长，附上次总长与差值。 -->
+                <!-- 电缆长度卡片：本次构成 = 实测 + 各类预留。 -->
                 <Border x:Name="CableCardPanel" Grid.Row="3" Margin="0,0,0,8"
-                        Padding="12,8" CornerRadius="8"
+                        Padding="12,8" CornerRadius="4"
                         Background="{DynamicResource ControlFillColorDefaultBrush}"
                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                         BorderThickness="1" Visibility="Collapsed">
@@ -104,7 +104,36 @@
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                 </Border>
-                <Grid Grid.Row="4">
+                <Border x:Name="FieldChangesPanel" Grid.Row="4" Margin="0,0,0,8"
+                        Padding="8,6" CornerRadius="4"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1" Visibility="Collapsed">
+                    <DockPanel>
+                        <TextBlock x:Name="FieldChangesHeader" DockPanel.Dock="Top"
+                                   Margin="0,0,0,4" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <DataGrid x:Name="FieldChangesGrid"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" CanUserSortColumns="False"
+                                  HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal"
+                                  BorderThickness="0" RowHeight="24"
+                                  ColumnHeaderHeight="24" FontSize="11"
+                                  MaxHeight="128"
+                                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="字段" Binding="{Binding Field}"
+                                                    Width="150" />
+                                <DataGridTextColumn Header="上次值" Binding="{Binding Before}"
+                                                    Width="*" />
+                                <DataGridTextColumn Header="本次值" Binding="{Binding After}"
+                                                    Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Border>
+                <Grid Grid.Row="5">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="*" />

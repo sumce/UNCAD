@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/UNCAD/UNCAD.csproj" />
+    <Project Path="src/UNCAD.Preview/UNCAD.Preview.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UNCAD.CadIntegration/UNCAD.CadIntegration.csproj" />

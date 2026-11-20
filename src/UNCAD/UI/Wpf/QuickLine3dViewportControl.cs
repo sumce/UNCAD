@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Controls;
+using System.Linq;
 
 namespace UNCAD.UI
 {
@@ -34,6 +35,9 @@ namespace UNCAD.UI
                 ["directionDown"] = FromRgb(0x63, 0xC9, 0xA5),
                 ["directionUp"] = FromRgb(0xE0, 0xB0, 0x64)
             };
+        private static readonly double[] LabelCollisionOffsets =
+            { 0, -20, 20, -40, 40 };
+        private static readonly double[] FixedLabelOffset = { 0 };
 
         private readonly Viewport3D _viewport = new Viewport3D();
         private readonly Canvas _labelLayer = new Canvas
@@ -53,9 +57,14 @@ namespace UNCAD.UI
             _groupVisuals = new Dictionary<QuickLine3dSceneGroupKind,
                 ModelVisual3D>();
         private readonly List<LabelEntry> _labels = new List<LabelEntry>();
+        private readonly List<LabelEntry> _activeLabels = new List<LabelEntry>();
         private readonly List<Rect> _occupied = new List<Rect>();
         private readonly HashSet<string> _hiddenLabelKinds =
             new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<QuickLine3dSceneGroupKind> _hiddenGroups =
+            new HashSet<QuickLine3dSceneGroupKind>();
+        private ILookup<QuickLine3dSceneGroupKind, QuickLine3dPrimitive> _groupPrimitives;
+        private bool _cameraUpdatePending;
 
         private QuickLine3dScene _scene;
         private Matrix3D _worldToScreen;
@@ -78,16 +87,26 @@ namespace UNCAD.UI
             Background = new SolidColorBrush(SceneBackground);
             ClipToBounds = true;
             _viewport.ClipToBounds = true;
+            _viewport.IsHitTestVisible = false;
             Children.Add(_viewport);
             Children.Add(_labelLayer);
 
-            _viewport.MouseLeftButtonDown += OnRotateDown;
-            _viewport.MouseRightButtonDown += OnPanDown;
-            _viewport.MouseMove += OnMouseMove;
-            _viewport.MouseUp += OnMouseUp;
-            _viewport.MouseWheel += OnMouseWheel;
-            _viewport.LostMouseCapture += OnLostCapture;
+            MouseLeftButtonDown += OnRotateDown;
+            MouseRightButtonDown += OnPanDown;
+            MouseDown += (sender, args) =>
+            {
+                if (args.ChangedButton == MouseButton.Middle) OnPanDown(sender, args);
+            };
+            MouseMove += OnMouseMove;
+            MouseUp += OnMouseUp;
+            MouseWheel += OnMouseWheel;
+            LostMouseCapture += OnLostCapture;
             SizeChanged += (sender, args) => UpdateCamera();
+            Unloaded += (sender, args) =>
+            {
+                CompositionTarget.Rendering -= OnCameraFrame;
+                _cameraUpdatePending = false;
+            };
         }
 
         private static Color FromRgb(byte r, byte g, byte b)
@@ -100,6 +119,20 @@ namespace UNCAD.UI
         /// <summary>当前场景标签数（SetScene 后同步可得）。</summary>
         internal int LabelCount => _labels.Count;
 
+        /// <summary>当前已实例化的文本控件数（性能回归观测）。</summary>
+        internal int MaterializedLabelCount
+        {
+            get
+            {
+                int count = 0;
+                foreach (LabelEntry entry in _labels)
+                    if (entry.Element != null) count++;
+                return count;
+            }
+        }
+
+        internal bool UsesNonHitTestedViewport => !_viewport.IsHitTestVisible;
+
         /// <summary>本场景合并后的网格数（材质合并结果，测试观测）。</summary>
         internal int MeshCount { get; private set; }
 
@@ -109,14 +142,26 @@ namespace UNCAD.UI
         // ---- 场景装载 -----------------------------------------------------------
 
         /// <summary>装载场景（重建灯光/网格/相机/标签；同步完成，无任何异步）。</summary>
-        public void SetScene(QuickLine3dScene scene)
+        public void SetScene(QuickLine3dScene scene,
+            IEnumerable<string> initiallyHiddenLabelKinds = null,
+            IEnumerable<QuickLine3dSceneGroupKind> initiallyHiddenGroups = null)
         {
             _scene = scene ?? throw new ArgumentNullException(nameof(scene));
             _viewport.Children.Clear();
             _labelLayer.Children.Clear();
             _groupVisuals.Clear();
             _labels.Clear();
+            _activeLabels.Clear();
             _hiddenLabelKinds.Clear();
+            _hiddenGroups.Clear();
+            foreach (var kind in initiallyHiddenGroups
+                ?? new[] { QuickLine3dSceneGroupKind.Detail })
+                _hiddenGroups.Add(kind);
+            _groupPrimitives = _scene.Primitives.ToLookup(primitive => primitive.Group);
+            if (initiallyHiddenLabelKinds != null)
+                foreach (string kind in initiallyHiddenLabelKinds)
+                    if (!string.IsNullOrEmpty(kind))
+                        _hiddenLabelKinds.Add(kind);
             MeshCount = 0;
             TriangleCount = 0;
 
@@ -127,9 +172,11 @@ namespace UNCAD.UI
             sunDirection.Normalize();
             lights.Children.Add(new DirectionalLight(Color.FromRgb(140, 140, 140),
                 sunDirection));
+            lights.Freeze();
             _viewport.Children.Add(new ModelVisual3D { Content = lights });
 
-            BuildGroupMeshes();
+            foreach (var group in _groupPrimitives)
+                if (!_hiddenGroups.Contains(group.Key)) BuildGroupMeshes(group.Key);
 
             // 相机初值：取景中心 + 方位方向（构建器给的世界系方向）。
             _centerx = _scene.Centerx;
@@ -156,7 +203,7 @@ namespace UNCAD.UI
             _orthographic.FarPlaneDistance = _scene.Far;
             // 场景对角线滚轮缩放边界（防止缩到穿模/缩到无限远）。
             MinZoomDistance = diagonal * 0.01;
-            MaxZoomDistance = diagonal * 50.0;
+            MaxZoomDistance = Math.Max(diagonal * 50.0, _defaultDistance * 10.0);
 
             if (_viewport.Camera == null
                 || (_orthographicMode && !ReferenceEquals(_viewport.Camera,
@@ -177,27 +224,31 @@ namespace UNCAD.UI
         /// <summary>分组显隐（组标签随组显隐——updateLabels 每次重判）。</summary>
         public void SetGroupVisible(QuickLine3dSceneGroupKind kind, bool visible)
         {
+            bool changed = visible ? _hiddenGroups.Remove(kind) : _hiddenGroups.Add(kind);
+            if (!changed) return;
+            if (visible && !_groupVisuals.ContainsKey(kind) && HasGroup(kind))
+                BuildGroupMeshes(kind);
             // Visual3D 没有 Visibility——显隐用挂上/摘下实现（标签随
-            // UpdateLabels 里的组存在性重判）。
+            // 对应组一起激活或休眠）。
             if (_groupVisuals.TryGetValue(kind, out ModelVisual3D visual))
             {
                 bool attached = _viewport.Children.Contains(visual);
                 if (visible && !attached) _viewport.Children.Add(visual);
                 else if (!visible && attached) _viewport.Children.Remove(visual);
             }
+            RefreshActiveLabels();
             UpdateLabels();
         }
 
         public bool IsGroupVisible(QuickLine3dSceneGroupKind kind)
         {
-            return !_groupVisuals.TryGetValue(kind, out ModelVisual3D visual)
-                || _viewport.Children.Contains(visual);
+            return !_hiddenGroups.Contains(kind);
         }
 
         /// <summary>场景里是否存在该组（决定开关按钮要不要显示）。</summary>
         internal bool HasGroup(QuickLine3dSceneGroupKind kind)
         {
-            return _groupVisuals.ContainsKey(kind);
+            return _groupPrimitives?.Contains(kind) == true;
         }
 
         /// <summary>
@@ -209,6 +260,7 @@ namespace UNCAD.UI
             if (kind == null) _hiddenLabelKinds.Clear();
             else if (visible) _hiddenLabelKinds.Remove(kind);
             else _hiddenLabelKinds.Add(kind);
+            RefreshActiveLabels();
             UpdateLabels();
         }
 
@@ -221,19 +273,24 @@ namespace UNCAD.UI
             _centerx = _scene.Centerx;
             _centery = _scene.Centery;
             _centerz = _scene.Centerz;
+            Vector3D orbit = new Vector3D(_scene.Orbitx, _scene.Orbitsy, _scene.Orbitz);
+            if (orbit.LengthSquared < 1e-12) orbit = new Vector3D(-1, -1, 0.577);
+            orbit.Normalize();
+            _azimuth = Math.Atan2(orbit.Y, orbit.X);
+            _elevation = Math.Asin(Clamp(orbit.Z, -1, 1));
             UpdateCamera();
         }
 
         // ---- 网格构建（按组×材质合并） -------------------------------------------
 
-        private void BuildGroupMeshes()
+        private void BuildGroupMeshes(QuickLine3dSceneGroupKind kind)
         {
             // 每组分两批：不透明先画、半透明后画（WPF 半透明排序是粗粒度的，
             // 树序即绘制序——半透明建筑板压在路由上会糊，先实后透能把错序
             // 减到最轻）。
             var builders = new Dictionary<KeyValuePair<QuickLine3dSceneGroupKind,
                 MaterialKey>, MeshBuilder>();
-            foreach (QuickLine3dPrimitive primitive in _scene.Primitives)
+            foreach (QuickLine3dPrimitive primitive in _groupPrimitives[kind])
             {
                 var key = new KeyValuePair<QuickLine3dSceneGroupKind, MaterialKey>(
                     primitive.Group,
@@ -260,6 +317,7 @@ namespace UNCAD.UI
                     {
                         Brush = MakeBrush(built.Key.Tint, built.Key.Opacity)
                     };
+                    material.Freeze();
                     var geometryModel = new GeometryModel3D
                     {
                         Geometry = built.Mesh,
@@ -267,13 +325,14 @@ namespace UNCAD.UI
                     };
                     // 半透明板双面（从下往上看也见——桥架填充带/华夫板口径）。
                     if (built.Key.Opacity < 1.0) geometryModel.BackMaterial = material;
+                    geometryModel.Freeze();
                     groupModel.Children.Add(geometryModel);
                     MeshCount++;
                 }
+                groupModel.Freeze();
                 var visual = new ModelVisual3D { Content = groupModel };
                 _groupVisuals[pair.Key] = visual;
-                // Detail（结构）默认隐藏：建好但不挂上。
-                if (groupKind != QuickLine3dSceneGroupKind.Detail)
+                if (!_hiddenGroups.Contains(groupKind))
                     _viewport.Children.Add(visual);
             }
         }
@@ -333,6 +392,11 @@ namespace UNCAD.UI
 
         private void OnRotateDown(object sender, MouseButtonEventArgs args)
         {
+            if ((Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Control)) != 0)
+            {
+                OnPanDown(sender, args);
+                return;
+            }
             if (args.ClickCount == 2)
             {
                 ResetCamera();
@@ -342,7 +406,7 @@ namespace UNCAD.UI
             _rotating = true;
             _panning = false;
             _lastMouse = args.GetPosition(this);
-            _viewport.CaptureMouse();
+            CaptureMouse();
             args.Handled = true;
         }
 
@@ -351,7 +415,7 @@ namespace UNCAD.UI
             _panning = true;
             _rotating = false;
             _lastMouse = args.GetPosition(this);
-            _viewport.CaptureMouse();
+            CaptureMouse();
             args.Handled = true;
         }
 
@@ -364,9 +428,7 @@ namespace UNCAD.UI
             _lastMouse = position;
             if (_rotating)
             {
-                _azimuth += deltax * 0.005;
-                _elevation = Clamp(
-                    _elevation + deltay * 0.005, -1.48, 1.48);
+                OrbitBy(deltax, deltay);
             }
             else
             {
@@ -383,8 +445,30 @@ namespace UNCAD.UI
                 _centery += right.Y * shiftx + up.Y * shifty;
                 _centerz += right.Z * shiftx + up.Z * shifty;
             }
-            UpdateCamera();
+            RequestCameraUpdate();
             args.Handled = true;
+        }
+
+        internal void OrbitBy(double deltaX, double deltaY)
+        {
+            double scale = 2 * Math.PI / Math.Max(ActualHeight, 1);
+            _azimuth -= deltaX * scale;
+            _elevation = Clamp(_elevation + deltaY * scale, -1.48, 1.48);
+            RequestCameraUpdate();
+        }
+
+        private void RequestCameraUpdate()
+        {
+            if (_cameraUpdatePending) return;
+            _cameraUpdatePending = true;
+            CompositionTarget.Rendering += OnCameraFrame;
+        }
+
+        private void OnCameraFrame(object sender, EventArgs args)
+        {
+            CompositionTarget.Rendering -= OnCameraFrame;
+            _cameraUpdatePending = false;
+            UpdateCamera();
         }
 
         private void OnMouseUp(object sender, MouseButtonEventArgs args)
@@ -393,7 +477,7 @@ namespace UNCAD.UI
             {
                 _rotating = false;
                 _panning = false;
-                _viewport.ReleaseMouseCapture();
+                ReleaseMouseCapture();
                 args.Handled = true;
             }
         }
@@ -406,15 +490,31 @@ namespace UNCAD.UI
 
         private void OnMouseWheel(object sender, MouseWheelEventArgs args)
         {
-            double factor = Math.Pow(1.15, -args.Delta / 120.0);
+            ZoomAt(args.GetPosition(this), args.Delta);
+            args.Handled = true;
+        }
+
+        internal void ZoomAt(Point pointer, double delta)
+        {
+            double factor = Math.Pow(1.15, -delta / 120.0);
+            double oldHeight = _orthographicMode ? _orthoHeight
+                : 2 * _distance * Math.Tan(Math.PI / 6);
             if (_orthographicMode)
                 _orthoHeight = Clamp(_orthoHeight * factor,
                     MinZoomDistance * 0.5, MaxZoomDistance * 4.0);
             else
                 _distance = Clamp(_distance * factor,
                     MinZoomDistance, MaxZoomDistance);
+            double newHeight = _orthographicMode ? _orthoHeight
+                : 2 * _distance * Math.Tan(Math.PI / 6);
+            double shift = (oldHeight - newHeight) / Math.Max(ActualHeight, 1);
+            CameraBasis(out Vector3D right, out Vector3D up);
+            Vector3D offset = right * ((pointer.X - ActualWidth / 2) * shift)
+                + up * ((ActualHeight / 2 - pointer.Y) * shift);
+            _centerx += offset.X;
+            _centery += offset.Y;
+            _centerz += offset.Z;
             UpdateCamera();
-            args.Handled = true;
         }
 
         private double OrthoWidth()
@@ -497,21 +597,47 @@ namespace UNCAD.UI
         private void BuildLabelElements()
         {
             foreach (QuickLine3dSceneLabel label in _scene.Labels)
+                _labels.Add(new LabelEntry(label));
+            RefreshActiveLabels();
+        }
+
+        private void RefreshActiveLabels()
+        {
+            _activeLabels.Clear();
+            foreach (LabelEntry entry in _labels)
             {
-                var text = new TextBlock
+                bool groupVisible = !_hiddenGroups.Contains(entry.Scene.Group);
+                bool visible = groupVisible
+                    && !_hiddenLabelKinds.Contains(entry.Scene.Kind);
+                if (visible)
                 {
-                    Text = label.Text,
-                    FontSize = string.Equals(label.Kind, "axis",
-                        StringComparison.Ordinal) ? 11 : 12,
-                    Foreground = new SolidColorBrush(LabelColor(label.Kind)),
-                    IsHitTestVisible = false
-                };
-                Canvas.SetLeft(text, 0.0);
-                Canvas.SetTop(text, 0.0);
-                text.RenderTransform = new TranslateTransform(0, 0);
-                _labelLayer.Children.Add(text);
-                _labels.Add(new LabelEntry(label, text));
+                    if (entry.Element == null)
+                    {
+                        var text = new TextBlock
+                        {
+                            Text = entry.Scene.Text,
+                            FontSize = string.Equals(entry.Scene.Kind, "axis",
+                                StringComparison.Ordinal) ? 11 : 12,
+                            Foreground = new SolidColorBrush(
+                                LabelColor(entry.Scene.Kind)),
+                            IsHitTestVisible = false
+                        };
+                        text.Measure(new Size(double.PositiveInfinity,
+                            double.PositiveInfinity));
+                        Canvas.SetLeft(text, 0.0);
+                        Canvas.SetTop(text, 0.0);
+                        text.RenderTransform = new TranslateTransform(0, 0);
+                        entry.Element = text;
+                        _labelLayer.Children.Add(text);
+                    }
+                    _activeLabels.Add(entry);
+                }
+                else if (entry.Element != null)
+                {
+                    entry.Element.Visibility = Visibility.Hidden;
+                }
             }
+            _activeLabels.Sort(CompareLabelPriority);
         }
 
         private static Color LabelColor(string kind)
@@ -563,12 +689,8 @@ namespace UNCAD.UI
             double height = ActualHeight;
             _occupied.Clear();
 
-            // 防重叠类先按优先级排，其余类直投（顺序稳定，不闪烁）。
-            _labelOrder.Clear();
-            foreach (LabelEntry entry in _labels) _labelOrder.Add(entry);
-            _labelOrder.Sort(CompareLabelPriority);
-
-            foreach (LabelEntry entry in _labelOrder)
+            // Priority order is cached until group or label visibility changes.
+            foreach (LabelEntry entry in _activeLabels)
             {
                 Point4D clip = _worldToScreen.Transform(new Point4D(
                     entry.Scene.X, entry.Scene.Y, entry.Scene.Z, 1.0));
@@ -582,28 +704,21 @@ namespace UNCAD.UI
                         && ndcy > -1.05 && ndcy < 1.05
                         && clip.Z / clip.W > -1.0 && clip.Z / clip.W < 1.0;
                 }
-                if (shown && _hiddenLabelKinds.Contains(entry.Scene.Kind))
-                    shown = false;
-                // 组开关（挂上/摘下口径）：组不在场=组标签也藏。
-                ModelVisual3D visual;
-                bool hasGroup = _groupVisuals.TryGetValue(entry.Scene.Group,
-                    out visual);
-                if (shown && (!hasGroup || !_viewport.Children.Contains(visual)))
-                    shown = false;
-
                 if (shown)
                 {
                     double x = (ndcx * 0.5 + 0.5) * width;
                     double y = (0.5 - ndcy * 0.5) * height;
+                    double verticalOffset = 0.0;
                     if (DeOverlaps(entry.Scene.Kind))
-                        shown = PlaceWithoutOverlap(entry, x, y, width, height);
+                        shown = PlaceWithoutOverlap(entry, x, y,
+                            out verticalOffset);
                     if (shown)
                     {
                         var transform = (TranslateTransform)entry.Element
                             .RenderTransform;
-                        transform.X = x;
-                        transform.Y = y;
-                        entry.Element.TextAlignment = TextAlignment.Center;
+                        transform.X = x - entry.Element.DesiredSize.Width / 2.0;
+                        transform.Y = y + verticalOffset
+                            - entry.Element.DesiredSize.Height / 2.0;
                     }
                 }
                 entry.Element.Visibility = shown
@@ -612,8 +727,6 @@ namespace UNCAD.UI
             }
         }
 
-        private readonly List<LabelEntry> _labelOrder = new List<LabelEntry>();
-
         private static int CompareLabelPriority(LabelEntry left, LabelEntry right)
         {
             return SortPriority(left).CompareTo(SortPriority(right));
@@ -621,16 +734,18 @@ namespace UNCAD.UI
 
         /// <summary>防重叠落位（同网页：五个竖向偏移候选，全撞则隐藏）。</summary>
         private bool PlaceWithoutOverlap(LabelEntry entry, double x, double y,
-            double width, double height)
+            out double verticalOffset)
         {
-            double estimateWidth = Math.Max(entry.Scene.Text.Length * 7.0 + 12, 40);
-            double estimateHeight = 16.0;
-            double[] offsets = { 0, -20, 20, -40, 40 };
-            foreach (double offset in offsets)
+            verticalOffset = 0.0;
+            double labelWidth = entry.Element.DesiredSize.Width;
+            double labelHeight = entry.Element.DesiredSize.Height;
+            foreach (double offset in entry.Scene.Kind == "axis"
+                ? FixedLabelOffset : LabelCollisionOffsets)
             {
                 var candidate = new Rect(
-                    x - estimateWidth / 2 - 3, y + offset - estimateHeight / 2 - 3,
-                    estimateWidth + 6, estimateHeight + 6);
+                    x - labelWidth / 2.0 - 3,
+                    y + offset - labelHeight / 2.0 - 3,
+                    labelWidth + 6, labelHeight + 6);
                 bool overlaps = false;
                 foreach (Rect other in _occupied)
                 {
@@ -644,9 +759,7 @@ namespace UNCAD.UI
                 }
                 if (overlaps) continue;
                 _occupied.Add(candidate);
-                var transform = (TranslateTransform)entry.Element.RenderTransform;
-                transform.X = x;
-                transform.Y = y + offset;
+                verticalOffset = offset;
                 return true;
             }
             return false;
@@ -654,8 +767,8 @@ namespace UNCAD.UI
 
         // ---- 投影矩阵（与 WPF 相机同口径，专供标签落位） -------------------------
 
-        /// <summary>视图矩阵（行向量约定：p' = p·M；第三行取 -forward）。</summary>
-        private static Matrix3D CreateViewMatrix(Point3D eye, Point3D target)
+        /// <summary>视图矩阵（行向量约定：p' = p·M；第三列取 -forward）。</summary>
+        internal static Matrix3D CreateViewMatrix(Point3D eye, Point3D target)
         {
             Vector3D forward = new Vector3D(
                 target.X - eye.X, target.Y - eye.Y, target.Z - eye.Z);
@@ -666,9 +779,9 @@ namespace UNCAD.UI
             right.Normalize();
             Vector3D up = Vector3D.CrossProduct(right, forward);
             return new Matrix3D(
-                right.X, right.Y, right.Z, 0,
-                up.X, up.Y, up.Z, 0,
-                -forward.X, -forward.Y, -forward.Z, 0,
+                right.X, up.X, -forward.X, 0,
+                right.Y, up.Y, -forward.Y, 0,
+                right.Z, up.Z, -forward.Z, 0,
                 0, 0, 0, 1)
             {
                 OffsetX = -(right.X * eye.X + right.Y * eye.Y + right.Z * eye.Z),
@@ -745,6 +858,8 @@ namespace UNCAD.UI
         /// <summary>几何累积器：同类图元并进一张 MeshGeometry3D。</summary>
         internal sealed class MeshBuilder
         {
+            private static readonly Vector3D[] WaffleDirections =
+                CreateWaffleDirections();
             private readonly Point3DCollection _positions = new Point3DCollection();
             private readonly Vector3DCollection _normals = new Vector3DCollection();
             private readonly Int32Collection _indices = new Int32Collection();
@@ -764,6 +879,9 @@ namespace UNCAD.UI
                         break;
                     case QuickLine3dPrimitiveKind.Quad:
                         AddQuad(primitive);
+                        break;
+                    case QuickLine3dPrimitiveKind.WaffleCell:
+                        AddWaffleCell(primitive);
                         break;
                     default:
                         AddSphere(primitive);
@@ -918,53 +1036,96 @@ namespace UNCAD.UI
                 AddTriangle(ia, ic, id);
             }
 
+            private void AddWaffleCell(QuickLine3dPrimitive p)
+            {
+                const int segments = 12;
+                double centerx = (p.A1x + p.B1x) / 2.0;
+                double centery = (p.A1y + p.B1y) / 2.0;
+                double halfx = (p.B1x - p.A1x) / 2.0;
+                double halfy = (p.B1y - p.A1y) / 2.0;
+                var normal = new Vector3D(0, 0, 1);
+                int first = _positions.Count;
+                AddVertex(new Point3D(centerx + halfx, centery + halfy, p.A1z), normal);
+                AddVertex(new Point3D(centerx - halfx, centery + halfy, p.A1z), normal);
+                AddVertex(new Point3D(centerx - halfx, centery - halfy, p.A1z), normal);
+                AddVertex(new Point3D(centerx + halfx, centery - halfy, p.A1z), normal);
+                for (int index = 0; index < segments; index++)
+                {
+                    Vector3D direction = WaffleDirections[index];
+                    AddVertex(new Point3D(centerx + direction.X * p.Radius,
+                        centery + direction.Y * p.Radius, p.A1z), normal);
+                }
+                // Split each side between its two corners to stay outside the hole.
+                for (int corner = 0; corner < 4; corner++)
+                {
+                    int start = 1 + corner * 3;
+                    AddTriangle(first + corner, first + (corner + 1) % 4,
+                        first + 4 + (start + 2) % segments);
+                    for (int edge = 2; edge > 0; edge--)
+                        AddTriangle(first + corner,
+                            first + 4 + (start + edge) % segments,
+                            first + 4 + (start + edge - 1) % segments);
+                    AddTriangle(first + (corner + 1) % 4,
+                        first + 4 + (start + 3) % segments,
+                        first + 4 + (start + 2) % segments);
+                }
+            }
+
+            private static Vector3D[] CreateWaffleDirections()
+            {
+                const int segments = 12;
+                var directions = new Vector3D[segments];
+                for (int index = 0; index < segments; index++)
+                {
+                    // Align every third hole vertex with a square corner.
+                    double angle = (index + 0.5) * Math.PI * 2.0 / segments;
+                    directions[index] = new Vector3D(
+                        Math.Cos(angle), Math.Sin(angle), 0);
+                }
+                return directions;
+            }
+
             private void AddSphere(QuickLine3dPrimitive p)
             {
                 if (p.Radius <= 0) return;
                 var center = new Point3D(p.A1x, p.A1y, p.A1z);
-                const int stacks = 6;
-                const int slices = 10;
-                int[,] grid = new int[stacks + 1, slices + 1];
-                for (int stack = 0; stack <= stacks; stack++)
+                int firstVertex = _positions.Count;
+                foreach (Vector3D normal in SphereNormals)
                 {
-                    double phi = Math.PI * stack / stacks;
-                    double cosPhi = Math.Cos(phi);
-                    double sinPhi = Math.Sin(phi);
-                    for (int slice = 0; slice <= slices; slice++)
-                    {
-                        double theta = Math.PI * 2.0 * slice / slices;
-                        var normal = new Vector3D(
-                            cosPhi * Math.Cos(theta),
-                            cosPhi * Math.Sin(theta),
-                            sinPhi);
-                        grid[stack, slice] = AddVertex(
-                            center + normal * p.Radius, normal);
-                    }
+                    AddVertex(center + normal * p.Radius, normal);
                 }
-                for (int stack = 0; stack < stacks; stack++)
+                for (int index = 0; index < SphereTriangles.Length; index += 3)
                 {
-                    for (int slice = 0; slice < slices; slice++)
-                    {
-                        AddTriangle(grid[stack, slice],
-                            grid[stack + 1, slice], grid[stack + 1, slice + 1]);
-                        AddTriangle(grid[stack, slice],
-                            grid[stack + 1, slice + 1], grid[stack, slice + 1]);
-                    }
+                    AddTriangle(firstVertex + SphereTriangles[index],
+                        firstVertex + SphereTriangles[index + 1],
+                        firstVertex + SphereTriangles[index + 2]);
                 }
             }
+
+            private static readonly Vector3D[] SphereNormals =
+            {
+                new Vector3D(1, 0, 0), new Vector3D(-1, 0, 0),
+                new Vector3D(0, 1, 0), new Vector3D(0, -1, 0),
+                new Vector3D(0, 0, 1), new Vector3D(0, 0, -1)
+            };
+
+            private static readonly int[] SphereTriangles =
+            {
+                4, 0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0,
+                5, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3
+            };
         }
 
         /// <summary>标签条目（场景锚点 + 叠加层元素）。</summary>
         private sealed class LabelEntry
         {
-            internal LabelEntry(QuickLine3dSceneLabel scene, TextBlock element)
+            internal LabelEntry(QuickLine3dSceneLabel scene)
             {
                 Scene = scene;
-                Element = element;
             }
 
             internal QuickLine3dSceneLabel Scene { get; }
-            internal TextBlock Element { get; }
+            internal TextBlock Element { get; set; }
         }
 
     }

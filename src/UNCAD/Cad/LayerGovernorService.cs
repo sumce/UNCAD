@@ -154,6 +154,13 @@ namespace UNCAD.Cad
                     && TryPlanMove(ctx, transaction, segment.LabelId,
                         UncadLayerStandard.CableLayerName, planned, moves))
                     counters.CableEntities++;
+                foreach (ObjectId labelId in segment.RestoredLabelIds
+                    ?? Array.Empty<ObjectId>())
+                    if (!labelId.IsNull && labelId.IsValid
+                        && (!scoped || scopeEntityIds.Contains(labelId))
+                        && TryPlanMove(ctx, transaction, labelId,
+                            UncadLayerStandard.CableLayerName, planned, moves))
+                        counters.CableEntities++;
             }
             return new LayerGovernorPlan(moves, counters, undeterminable);
         }

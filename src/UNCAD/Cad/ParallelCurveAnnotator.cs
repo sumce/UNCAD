@@ -27,6 +27,8 @@ namespace UNCAD.Cad
 
         /// <summary>U1Q or U1C; repeated runs replace prior output for each source.</summary>
         public string AnnotationKind { get; set; }
+        /// <summary>Optional layer resolver used when regenerating existing runs.</summary>
+        public Func<Core.Geometry.ParallelRun, ObjectId> TargetLayerIdFactory { get; set; }
     }
 
     /// <summary>Creates an offset curve and its label in one CAD transaction.</summary>
@@ -69,6 +71,26 @@ namespace UNCAD.Cad
         public static int AddRuns(CadContext ctx, Transaction transaction,
             ObjectId[] ids, ParallelAnnotationOptions options,
             Func<Core.Geometry.ParallelRun, string> runLabelFactory)
+            => AddRunsCore(ctx, transaction, ids, options, runLabelFactory,
+                null, null, true, true);
+
+        internal static int AddRunsForSettingsCorrection(CadContext ctx,
+            Transaction transaction, ObjectId[] ids,
+            ParallelAnnotationOptions options,
+            Func<Core.Geometry.ParallelRun, string> runLabelFactory,
+            IReadOnlyList<ParallelAnnotationOwnershipEntry> existingOutputs,
+            Dictionary<string, double> u1lMillimetres)
+            => AddRunsCore(ctx, transaction, ids, options, runLabelFactory,
+                existingOutputs ?? Array.Empty<ParallelAnnotationOwnershipEntry>(),
+                u1lMillimetres ?? new Dictionary<string, double>(
+                    StringComparer.OrdinalIgnoreCase), false, false);
+
+        private static int AddRunsCore(CadContext ctx, Transaction transaction,
+            ObjectId[] ids, ParallelAnnotationOptions options,
+            Func<Core.Geometry.ParallelRun, string> runLabelFactory,
+            IReadOnlyList<ParallelAnnotationOwnershipEntry> existingOutputs,
+            Dictionary<string, double> suppliedU1lMillimetres,
+            bool collectLegacyCandidates, bool report)
         {
             if (ctx == null || transaction == null || ids == null || options == null
                 || runLabelFactory == null) return 0;
@@ -82,7 +104,8 @@ namespace UNCAD.Cad
                     options.AnnotationKind, out resolvedGenerated);
             if (sourceIds.Length == 0)
             {
-                ctx.Write("\n[UNCAD] 选中的对象不是可处理的独立线段，或原始线段已不存在。");
+                if (report)
+                    ctx.Write("\n[UNCAD] 选中的对象不是可处理的独立线段，或原始线段已不存在。");
                 return 0;
             }
 
@@ -122,8 +145,9 @@ namespace UNCAD.Cad
             }
             if (members.Count == 0)
             {
-                ctx.Write("\n[UNCAD] 没有可合并标注的受支持直线/二维多段线"
-                    + (skipped > 0 ? "（已跳过 " + skipped + " 条）" : "") + "。");
+                if (report)
+                    ctx.Write("\n[UNCAD] 没有可合并标注的受支持直线/二维多段线"
+                        + (skipped > 0 ? "（已跳过 " + skipped + " 条）" : "") + "。");
                 return 0;
             }
 
@@ -137,19 +161,25 @@ namespace UNCAD.Cad
             // 中途失败（CreateRunAnnotation 抛错只 skipped++）时，B 趟旧标注
             // 被删且无新输出顶上（数据丢失）。现在只删除成功趟的旧输出；
             // 一趟都没成时仍然全不删（原保护语义不变）。
-            Dictionary<string, List<ObjectId>> previousByMember = metadataReady
-                ? CollectPrevious(ctx, transaction, options.AnnotationKind,
-                    memberHandles)
-                : new Dictionary<string, List<ObjectId>>(
-                    StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, List<ObjectId>> previousByMember =
+                !metadataReady
+                    ? new Dictionary<string, List<ObjectId>>(
+                        StringComparer.OrdinalIgnoreCase)
+                    : existingOutputs == null
+                        ? CollectPrevious(ctx, transaction, options.AnnotationKind,
+                            memberHandles)
+                        : SnapshotPreviousOutputs(existingOutputs,
+                            options.AnnotationKind, memberHandles);
             var previousEntities = new List<ObjectId>();
             var previousSeen = new HashSet<ObjectId>();
             Dictionary<string, double> u1LMillimetres =
-                ParallelRunGeometry.CollectU1LMillimetresByLineHandle(ctx, transaction);
+                suppliedU1lMillimetres
+                ?? ParallelRunGeometry.CollectU1LMillimetresByLineHandle(ctx, transaction);
             ObjectId styleId = StyleManager.GetDrawingStandardStyle(ctx, transaction);
             // 旧版（无元数据）单行标注快照：整批收集一次，逐趟比对。
-            List<LegacyCandidate> legacy = CollectLegacyCandidates(ctx, transaction,
-                options.ColorIndex);
+            List<LegacyCandidate> legacy = collectLegacyCandidates
+                ? CollectLegacyCandidates(ctx, transaction, options.ColorIndex)
+                : new List<LegacyCandidate>();
 
             int created = 0;
             int mergedRuns = 0;
@@ -157,9 +187,18 @@ namespace UNCAD.Cad
             {
                 try
                 {
+                    ObjectId targetLayerId = options.TargetLayerIdFactory == null
+                        ? ObjectId.Null
+                        : options.TargetLayerIdFactory(run);
+                    if (options.TargetLayerIdFactory != null
+                        && targetLayerId.IsNull)
+                    {
+                        skipped++;
+                        continue;
+                    }
                     if (CreateRunAnnotation(ctx, transaction, run, options,
                         runLabelFactory, u1LMillimetres, metadataReady, styleId,
-                        legacy))
+                        legacy, targetLayerId))
                     {
                         created++;
                         if (run.Merged) mergedRuns++;
@@ -181,12 +220,13 @@ namespace UNCAD.Cad
             }
             // 整趟替换：新输出全部生成后才删旧输出；一趟都没成时不删（不丢标注）。
             if (created > 0) ErasePreviousEntities(transaction, previousEntities);
-            if (resolvedGenerated > 0)
+            if (report && resolvedGenerated > 0)
                 ctx.Write("\n[UNCAD] 已识别已生成的平行标注线，并回溯源线更新 "
                     + resolvedGenerated + " 条。");
-            ctx.Write("\n[UNCAD] 本次生成 " + created + " 趟连续标注"
-                + (mergedRuns > 0 ? "（其中 " + mergedRuns + " 趟由多段连续线合并）" : "")
-                + (skipped > 0 ? "；跳过 " + skipped + " 条不可偏移的源线。" : "。"));
+            if (report)
+                ctx.Write("\n[UNCAD] 本次生成 " + created + " 趟连续标注"
+                    + (mergedRuns > 0 ? "（其中 " + mergedRuns + " 趟由多段连续线合并）" : "")
+                    + (skipped > 0 ? "；跳过 " + skipped + " 条不可偏移的源线。" : "。"));
             return created;
         }
 
@@ -194,7 +234,8 @@ namespace UNCAD.Cad
             Core.Geometry.ParallelRun run, ParallelAnnotationOptions options,
             Func<Core.Geometry.ParallelRun, string> runLabelFactory,
             Dictionary<string, double> u1LMillimetres, bool metadataReady,
-            ObjectId styleId, List<LegacyCandidate> legacy)
+            ObjectId styleId, List<LegacyCandidate> legacy,
+            ObjectId targetLayerId)
         {
             run.EstimatedLengthMm = ParallelRunGeometry.EstimateRunLengthMm(run,
                 u1LMillimetres);
@@ -260,6 +301,7 @@ namespace UNCAD.Cad
             Point3d textPoint = GeoMath.Polar(labelPoint,
                 GeoMath.SideDirection(textAngle, options.Above), options.TextOffset);
             string label = runLabelFactory(run);
+            if (string.IsNullOrWhiteSpace(label)) return false;
             string labelKey = LegacyKey(options, label);
             Entity text = CreateLabel(ctx, label, textPoint, options.TextHeight,
                 textAngle,
@@ -272,20 +314,55 @@ namespace UNCAD.Cad
 
             foreach (Curve curve in outputCurves)
             {
-                curve.LayerId = ctx.CurrentLayerId;
+                curve.LayerId = targetLayerId.IsNull
+                    ? ctx.CurrentLayerId : targetLayerId;
                 if (options.ColorIndex != 0) curve.ColorIndex = options.ColorIndex;
                 ctx.AddToCurrentSpace(transaction, curve);
                 if (metadataReady)
                     ParallelAnnotationMetadata.Set(curve, options.AnnotationKind,
-                        firstHandle, runHandles);
+                        firstHandle, runHandles,
+                        ParallelAnnotationMetadata.BuildStyleStamp(
+                            options.CurveOffset, options.TextOffset,
+                            options.TextHeight, options.Above,
+                            options.ColorIndex));
             }
+            if (!targetLayerId.IsNull) text.LayerId = targetLayerId;
             ctx.AddToCurrentSpace(transaction, text);
             if (metadataReady)
                 ParallelAnnotationMetadata.Set(text, options.AnnotationKind,
-                    firstHandle, runHandles);
+                    firstHandle, runHandles,
+                    ParallelAnnotationMetadata.BuildStyleStamp(
+                        options.CurveOffset, options.TextOffset,
+                        options.TextHeight, options.Above,
+                        options.ColorIndex));
             RemoveLegacyDuplicates(transaction, legacy, text, labelKey, options,
                 outputCurves);
             return true;
+        }
+
+        private static Dictionary<string, List<ObjectId>> SnapshotPreviousOutputs(
+            IReadOnlyList<ParallelAnnotationOwnershipEntry> outputs,
+            string kind, HashSet<string> sourceHandles)
+        {
+            var result = new Dictionary<string, List<ObjectId>>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (ParallelAnnotationOwnershipEntry entry in outputs)
+            {
+                if (entry == null || entry.EntityId.IsNull
+                    || !string.Equals(entry.Kind, kind,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (string handle in entry.HostHandles)
+                {
+                    if (!sourceHandles.Contains(handle)) continue;
+                    if (!result.TryGetValue(handle, out List<ObjectId> ids))
+                    {
+                        ids = new List<ObjectId>();
+                        result.Add(handle, ids);
+                    }
+                    if (!ids.Contains(entry.EntityId)) ids.Add(entry.EntityId);
+                }
+            }
+            return result;
         }
 
         private static Polyline BuildPolyline(
@@ -500,12 +577,20 @@ namespace UNCAD.Cad
                         ctx.AddToCurrentSpace(transaction, entity);
                         if (metadataReady)
                             ParallelAnnotationMetadata.Set(entity, options.AnnotationKind,
-                                id.Handle.ToString());
+                                id.Handle.ToString(), null,
+                                ParallelAnnotationMetadata.BuildStyleStamp(
+                                    options.CurveOffset, options.TextOffset,
+                                    options.TextHeight, options.Above,
+                                    options.ColorIndex));
                     }
                     ctx.AddToCurrentSpace(transaction, text);
                     if (metadataReady)
                         ParallelAnnotationMetadata.Set(text, options.AnnotationKind,
-                            id.Handle.ToString());
+                            id.Handle.ToString(), null,
+                            ParallelAnnotationMetadata.BuildStyleStamp(
+                                options.CurveOffset, options.TextOffset,
+                                options.TextHeight, options.Above,
+                                options.ColorIndex));
                     // Remove output produced by pre-metadata versions as well. The
                     // generated ObjectIds are excluded so a metadata registration
                     // failure cannot erase the result we just added.
@@ -742,7 +827,7 @@ namespace UNCAD.Cad
                     if (entity == null || entity.IsErased) continue;
                     if (!ParallelAnnotationMetadata.TryRead(entity,
                             out string kind, out string sourceHandle,
-                            out string runHandles)) continue;
+                            out string runHandles, out string styleStamp)) continue;
                     bool changed = false;
                     if (string.Equals(sourceHandle, oldHandle,
                             StringComparison.OrdinalIgnoreCase))
@@ -760,7 +845,7 @@ namespace UNCAD.Cad
                             StringComparison.Ordinal)) changed = true;
                     if (changed)
                         ParallelAnnotationMetadata.Set(entity, kind,
-                            sourceHandle, retargeted);
+                            sourceHandle, retargeted, styleStamp);
                 }
                 catch { /* 单个输出改挂失败不阻断开洞 */ }
             }

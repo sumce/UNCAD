@@ -1,7 +1,9 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using NPOI.SS.UserModel;
+using NPOI.SS.Util;
 using NPOI.XSSF.UserModel;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Text;
@@ -58,13 +60,18 @@ namespace UNCAD.Core.Report
         {
             if (report == null) throw new ArgumentNullException(nameof(report));
             var workbook = new XSSFWorkbook();
+            ICellStyle bodyStyle = workbook.CreateCellStyle();
+            bodyStyle.WrapText = true;
+            bodyStyle.VerticalAlignment = VerticalAlignment.Top;
             ISheet sheet = workbook.CreateSheet("回路统计");
             int row = 0;
             Set(sheet.CreateRow(row++), 0, "UNCAD XSTS 机台回路统计", workbook, true);
             Set(sheet.CreateRow(row++), 0, "生成时间: " + DateTime.Now.ToString(
                 "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
-            Set(sheet.CreateRow(row++), 0, "框选机台数量");
+            Set(sheet.CreateRow(row++), 0, "框选图框数量");
             Set(sheet.GetRow(row - 1), 1, report.FrameCount);
+            Set(sheet.GetRow(row - 1), 2, "机台数量");
+            Set(sheet.GetRow(row - 1), 3, report.Machines.Count);
             Set(sheet.CreateRow(row++), 0, "回路基准状态");
             Set(sheet.GetRow(row - 1), 1, ExpectedStatusText(report));
             Set(sheet.GetRow(row - 1), 2, report.ExpectedDataDetail);
@@ -95,9 +102,59 @@ namespace UNCAD.Core.Report
             Set(sheet.GetRow(row - 1), 5, report.MissingCircuitText);
             Set(sheet.GetRow(row - 1), 6, report.UnexpectedCircuitText);
 
+            ISheet frames = workbook.CreateSheet("图框明细");
+            IRow frameHeader = frames.CreateRow(0);
+            string[] frameColumns = new[] { "机台 ID", "回路名称", "图框ID" }
+                .Concat(report.MaterialColumns.SelectMany(column =>
+                    new[] { column.ModelHeader, column.QuantityHeader })).ToArray();
+            ICellStyle frameHeaderStyle = workbook.CreateCellStyle();
+            frameHeaderStyle.CloneStyleFrom(BoldStyle(workbook));
+            frameHeaderStyle.WrapText = true;
+            frameHeader.HeightInPoints = 36;
+            for (int index = 0; index < frameColumns.Length; index++)
+            {
+                Set(frameHeader, index, frameColumns[index], workbook, true);
+                frameHeader.GetCell(index).CellStyle = frameHeaderStyle;
+            }
+            IDrawing frameNotes = frames.CreateDrawingPatriarch();
+            ICreationHelper helper = workbook.GetCreationHelper();
+            for (int index = 0; index < report.Frames.Count; index++)
+            {
+                XstsFrameDetail item = report.Frames[index];
+                IRow frameRow = frames.CreateRow(index + 1);
+                Set(frameRow, 0, item.MachineId);
+                Set(frameRow, 1, item.CircuitName);
+                // Handles are identifiers, including digit-only ones; keep them as text.
+                Set(frameRow, 2, item.FrameHandle);
+                for (int column = 0; column < item.Cells.Count; column++)
+                {
+                    XstsFrameItem material = item.Cells[column];
+                    int modelColumn = 3 + column * 2;
+                    Set(frameRow, modelColumn, material?.Model ?? "");
+                    Set(frameRow, modelColumn + 1, material?.Quantity ?? "");
+                    if (material == null) continue;
+                    IClientAnchor anchor = helper.CreateClientAnchor();
+                    anchor.Col1 = modelColumn;
+                    anchor.Col2 = modelColumn + 4;
+                    anchor.Row1 = index + 1;
+                    anchor.Row2 = index + 11;
+                    IComment note = frameNotes.CreateCellComment(anchor);
+                    note.Author = "UNCAD";
+                    note.String = helper.CreateRichTextString(material.DetailText);
+                    frameRow.GetCell(modelColumn).CellComment = note;
+                }
+                frameRow.HeightInPoints = 32;
+            }
+            int[] identityWidths = { 18, 24, 14 };
+            for (int index = 0; index < frameColumns.Length; index++)
+                frames.SetColumnWidth(index, (index < 3 ? identityWidths[index]
+                    : (index - 3) % 2 == 0 ? 38 : 18) * 256);
+            FormatTable(frames, 0, report.Frames.Count, frameColumns.Length, bodyStyle);
+            frames.CreateFreezePane(3, 1);
+
             ISheet issues = workbook.CreateSheet("异常图框");
             IRow issueHeader = issues.CreateRow(0);
-            Set(issueHeader, 0, "图框序号", workbook, true);
+            Set(issueHeader, 0, "图框ID", workbook, true);
             Set(issueHeader, 1, "机台 ID", workbook, true);
             Set(issueHeader, 2, "回路名称", workbook, true);
             Set(issueHeader, 3, "问题", workbook, true);
@@ -105,43 +162,28 @@ namespace UNCAD.Core.Report
             {
                 XstsFrameIssue issue = report.Issues[index];
                 IRow issueRow = issues.CreateRow(index + 1);
-                Set(issueRow, 0, issue.FrameNumber == 0 ? "" : issue.FrameNumber.ToString(
-                    CultureInfo.InvariantCulture));
+                Set(issueRow, 0, issue.FrameIdText);
                 Set(issueRow, 1, issue.MachineId);
                 Set(issueRow, 2, issue.CircuitName);
                 Set(issueRow, 3, issue.Description);
             }
-            // 3.2.0.7：未上图机台页（档案有、全图无的盲区名单）——此前用户要靠
-            // 手工 VLOOKUP（清单 144 − 图上命中 49 = 95 台）拼这份名单。
-            if (report.BlindMachines.Count > 0)
-            {
-                ISheet blind = workbook.CreateSheet("未上图机台");
-                Set(blind.CreateRow(0), 0, "未上图机台 " + report.BlindMachines.Count
-                    + " 台（档案有、全图扫描无图框；分组：" + report.BlindMachineSummary
-                    + "）", workbook, true);
-                IRow blindHeader = blind.CreateRow(1);
-                Set(blindHeader, 0, "机台 ID", workbook, true);
-                Set(blindHeader, 1, "区域", workbook, true);
-                Set(blindHeader, 2, "批次", workbook, true);
-                Set(blindHeader, 3, "序号", workbook, true);
-                Set(blindHeader, 4, "近名提示", workbook, true);
-                for (int index = 0; index < report.BlindMachines.Count; index++)
-                {
-                    XstsBlindMachine item = report.BlindMachines[index];
-                    IRow blindRow = blind.CreateRow(index + 2);
-                    Set(blindRow, 0, item.MachineId);
-                    Set(blindRow, 1, item.Region);
-                    Set(blindRow, 2, item.Batch);
-                    Set(blindRow, 3, item.Seq);
-                    Set(blindRow, 4, item.NearNameNote);
-                }
-                for (int i = 0; i < 5; i++)
-                    blind.SetColumnWidth(i, (i == 4 ? 52 : i == 0 ? 18 : 10) * 256);
-            }
             for (int i = 0; i < 7; i++)
                 sheet.SetColumnWidth(i, (i >= 5 ? 38 : i == 0 ? 18 : 14) * 256);
             for (int i = 0; i < 4; i++) issues.SetColumnWidth(i, (i == 3 ? 42 : 18) * 256);
+            FormatTable(sheet, 4, 4 + report.Machines.Count, 7, bodyStyle);
+            FormatTable(issues, 0, issues.LastRowNum, 4, bodyStyle);
             return workbook;
+        }
+
+        private static void FormatTable(ISheet sheet, int headerRow, int lastDataRow,
+            int columns, ICellStyle bodyStyle)
+        {
+            sheet.CreateFreezePane(0, headerRow + 1);
+            if (lastDataRow > headerRow)
+                sheet.SetAutoFilter(new CellRangeAddress(headerRow, lastDataRow, 0, columns - 1));
+            for (int row = headerRow + 1; row <= lastDataRow; row++)
+                foreach (ICell cell in sheet.GetRow(row).Cells)
+                    cell.CellStyle = bodyStyle;
         }
 
         private static string ExpectedStatusText(XstsReport report)

@@ -65,10 +65,12 @@ namespace UNCAD.Core.QuickLine
             IReadOnlyList<QuickLineColumnGridTick> numericTicks,
             IReadOnlyList<QuickLineColumnGridLetterLabel> letterLabels,
             bool numericAxisIsX,
-            QuickLineSpatialPoint upstreamEndpoint,
-            QuickLineSpatialPoint downstreamEndpoint,
+            QuickLineSpatialPoint? upstreamEndpoint,
+            QuickLineSpatialPoint? downstreamEndpoint,
+            QuickLineSpatialPoint gridAnchor,
             double minX, double minY, double maxX, double maxY,
-            double spacingMillimetres)
+            double spacingMillimetres, bool directionResolved,
+            IList<string> diagnostics = null)
         {
             Lines = lines;
             NumericTicks = numericTicks;
@@ -76,11 +78,15 @@ namespace UNCAD.Core.QuickLine
             NumericAxisIsX = numericAxisIsX;
             UpstreamEndpoint = upstreamEndpoint;
             DownstreamEndpoint = downstreamEndpoint;
+            GridAnchor = gridAnchor;
             MinX = minX;
             MinY = minY;
             MaxX = maxX;
             MaxY = maxY;
             SpacingMillimetres = spacingMillimetres;
+            DirectionResolved = directionResolved;
+            Diagnostics = diagnostics == null
+                ? Array.Empty<string>() : diagnostics.ToArray();
         }
 
         /// <summary>地面网格线（覆盖场景包络范围；空=没有线段）。</summary>
@@ -96,33 +102,34 @@ namespace UNCAD.Core.QuickLine
         /// </summary>
         public IReadOnlyList<QuickLineColumnGridLetterLabel> LetterLabels { get; }
         /// <summary>
-        /// 3.3.2：数字轴沿场景 X（true）还是 Y（false）。由上下游端点的平面位移
-        /// 决定（位移大的那向=数字轴，平手取 X）——场景 X 是重建抽象轴，与现实
-        /// 柱网方向无固定对应，不能硬编码「数字轴=X」（用户 3.3.1 现场反馈
-        /// 「轴位不应该这样显示」的根因）。
+        /// 数字轴沿场景 X（true）还是 Y（false）；按轴位区域匹配时数字沿 -Y 递增。
         /// </summary>
         public bool NumericAxisIsX { get; }
-        /// <summary>上游端点（包络内 X 最小的端点，平手取 Y 再 Z 最小）——上游轴位标签锚点。</summary>
-        public QuickLineSpatialPoint UpstreamEndpoint { get; }
-        /// <summary>下游端点（X 最大，平手取 Y 再 Z 最大——3.3.2 修订，见 Plan 注释②）。</summary>
-        public QuickLineSpatialPoint DownstreamEndpoint { get; }
+        /// <summary>由路线端点与轴位确认的上游端点；无法确认时为空。</summary>
+        public QuickLineSpatialPoint? UpstreamEndpoint { get; }
+        /// <summary>由路线端点与轴位确认的下游端点；无法确认时为空。</summary>
+        public QuickLineSpatialPoint? DownstreamEndpoint { get; }
+        /// <summary>柱网的稳定坐标锚点；方向未知时仅用于铺网，不代表上游。</summary>
+        public QuickLineSpatialPoint GridAnchor { get; }
         /// <summary>3.3.2：场景包络（刻度/标签摆位用，控件不再自行推导）。</summary>
         public double MinX { get; }
         public double MinY { get; }
         public double MaxX { get; }
         public double MaxY { get; }
         public double SpacingMillimetres { get; }
+        public bool DirectionResolved { get; }
+        public IReadOnlyList<string> Diagnostics { get; }
     }
 
     /// <summary>
     /// U1U 3D 预览的柱网/轴位标签纯规划器（3.3.1 特性C 引入，3.3.2 D-054
-    /// Amendment 扩为两向）。设计与用户确认的方案：
+    /// Amendment 扩为两向）。区域匹配成功时，按北向约定与固定柱距绘制匹配的格子；
+    /// 以下是未按区域定位的旧模型的展示规则：
     /// ① 地面（Z=0）柱网——4800mm 柱距（与 QuickLineAxisGridPlanner 同口径），
-    ///    数字轴×字母轴**两向正交网格线**覆盖场景包络范围，锚定在上游端点
-    ///    （一根柱网线恰好穿过路由上游端点）；网格可由控件开关（默认开）。
-    /// ② 端点轴位——上游端点=包络里 X 最小的端点、下游=最大（平手取 Y 再 Z
-    ///    最小，确定性），标签文字由模型 UpstreamAxisLabel/DownstreamAxisLabel
-    ///    原文提供（解析失败显示原文不猜）。
+    ///    两向网格线覆盖场景包络；方向确认时锚在上游端点，否则只以首段起点
+    ///    作为网格原点，不把它解释成上游。
+    /// ② 端点轴位——仅使用调用方按路线拓扑和轴位方向确认的两个端点；方向
+    ///    未确认时不生成端点钉或轴位插值标签。
     /// ③ 数字轴刻度——数字轴=上下游端点平面位移较大的那一向（位移平手取 X；
     ///    场景 X 是抽象轴，与现实柱网方向无对应），两端数字轴都解析出来时按
     ///    端点跨度线性插值，柱网线位置取整标数（48、47、46…）；映射方向以
@@ -150,6 +157,21 @@ namespace UNCAD.Core.QuickLine
             IReadOnlyList<QuickLineOrbitPreviewSegment> segments,
             string upstreamAxisLabel, string downstreamAxisLabel,
             double spacingMillimetres = DefaultSpacingMillimetres)
+            => Plan(segments, upstreamAxisLabel, downstreamAxisLabel,
+                null, null, false, spacingMillimetres);
+
+        /// <summary>
+        /// Plans the visible grid and places axis marks only when the supplied
+        /// route endpoints have already been direction-verified.
+        /// </summary>
+        public static QuickLineColumnGrid Plan(
+            IReadOnlyList<QuickLineOrbitPreviewSegment> segments,
+            string upstreamAxisLabel, string downstreamAxisLabel,
+            QuickLineSpatialPoint? upstreamEndpoint,
+            QuickLineSpatialPoint? downstreamEndpoint,
+            bool directionResolved,
+            double spacingMillimetres = DefaultSpacingMillimetres,
+            IEnumerable<string> diagnostics = null)
         {
             ValidateSpacing(spacingMillimetres);
             if (segments == null || segments.Count == 0) return null;
@@ -171,47 +193,77 @@ namespace UNCAD.Core.QuickLine
                 }
             }
             if (endpoints.Count == 0) return null;
-            QuickLineSpatialPoint upstream = endpoints
-                .OrderBy(point => point.X).ThenBy(point => point.Y)
-                .ThenBy(point => point.Z).First();
-            // 3.3.2 修订：下游端点平手改取 max Y（再 max Z）——3.3.1 取 min Y
-            // 会让纯 Y 向路由的上下游端点收敛到同一个节点（两端轴位钉叠在一
-            // 点、位移恒为零），数字轴向判定也随之失效；取相反端才确定。
-            QuickLineSpatialPoint downstream = endpoints
-                .OrderByDescending(point => point.X)
-                .ThenByDescending(point => point.Y)
-                .ThenByDescending(point => point.Z).First();
+            QuickLineSpatialPoint fallbackAnchor = segments
+                .Where(segment => segment != null)
+                .Select(segment => segment.Start).FirstOrDefault();
+            bool resolved = directionResolved
+                && upstreamEndpoint.HasValue && downstreamEndpoint.HasValue
+                && endpoints.Contains(upstreamEndpoint.Value)
+                && endpoints.Contains(downstreamEndpoint.Value)
+                && !upstreamEndpoint.Value.Equals(downstreamEndpoint.Value);
+            var planDiagnostics = (diagnostics ?? Enumerable.Empty<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item)).ToList();
+            if (directionResolved && !resolved)
+                planDiagnostics.Add("上下游端点无效或重合；方向相关轴位标记已隐藏。");
+            QuickLineSpatialPoint gridAnchor = resolved
+                ? upstreamEndpoint.Value : fallbackAnchor;
+            QuickLineSpatialPoint center = default;
+            QuickLineAxisCoordinate up = null;
+            bool fitted = resolved
+                && QuickLineAxisGridPlanner.TryParseAxis(upstreamAxisLabel, out up)
+                && QuickLineAxisGridPlanner.TryParseAxis(downstreamAxisLabel, out var down)
+                && QuickLineRouteDirectionPlanner.TryPlaceAxisRegions(upstreamEndpoint.Value,
+                    downstreamEndpoint.Value, up, down, spacingMillimetres, out center);
+            if (fitted)
+                gridAnchor = new QuickLineSpatialPoint(center.X, center.Y, 0);
 
             var lines = new List<QuickLineColumnGridLine>();
-            foreach (double x in GridPositions(upstream.X, minX, maxX,
+            foreach (double x in GridPositions(gridAnchor.X, minX, maxX,
                 spacingMillimetres))
                 lines.Add(new QuickLineColumnGridLine(true, x, minY, maxY));
-            foreach (double y in GridPositions(upstream.Y, minY, maxY,
+            foreach (double y in GridPositions(gridAnchor.Y, minY, maxY,
                 spacingMillimetres))
                 lines.Add(new QuickLineColumnGridLine(false, y, minX, maxX));
 
             // 3.3.2：数字轴向=端点平面位移较大的那向（平手取 X，确定性）。
-            bool numericAxisIsX = Math.Abs(downstream.X - upstream.X)
-                >= Math.Abs(downstream.Y - upstream.Y);
-
-            QuickLineAxisSpan.TryParse(upstreamAxisLabel,
-                out QuickLineAxisReference upstreamAxis);
-            QuickLineAxisSpan.TryParse(downstreamAxisLabel,
-                out QuickLineAxisReference downstreamAxis);
-
+            bool numericAxisIsX = !resolved
+                || Math.Abs(downstreamEndpoint.Value.X - upstreamEndpoint.Value.X)
+                    >= Math.Abs(downstreamEndpoint.Value.Y - upstreamEndpoint.Value.Y);
             IReadOnlyList<QuickLineColumnGridTick> numericTicks =
-                PlanNumericTicks(upstream, downstream, upstreamAxis,
-                    downstreamAxis, numericAxisIsX, minX, minY, maxX, maxY,
-                    spacingMillimetres);
+                Array.Empty<QuickLineColumnGridTick>();
             IReadOnlyList<QuickLineColumnGridLetterLabel> letterLabels =
-                PlanLetterLabels(upstream, downstream, upstreamAxis,
-                    downstreamAxis, numericAxisIsX,
-                    numericAxisIsX ? minY : minX,
-                    numericAxisIsX ? maxY : maxX,
+                Array.Empty<QuickLineColumnGridLetterLabel>();
+            if (fitted)
+            {
+                numericAxisIsX = false; // +X north increases letters, +Y west decreases numbers.
+                numericTicks = GridPositions(center.Y, minY, maxY, spacingMillimetres)
+                    .Select(y => (y, number: up.Number - Math.Round((y - center.Y) / spacingMillimetres)))
+                    .Where(mark => mark.number >= 0 && mark.number <= int.MaxValue)
+                    .Select(mark => new QuickLineColumnGridTick(mark.y, (int)mark.number))
+                    .ToList();
+                letterLabels = InterpolateLetterLabels(center.X, up.LetterIndex,
+                    center.X, up.LetterIndex, center.X, minX, maxX, spacingMillimetres);
+            }
+            else if (resolved)
+            {
+                QuickLineAxisSpan.TryParse(upstreamAxisLabel,
+                    out QuickLineAxisReference upstreamAxis);
+                QuickLineAxisSpan.TryParse(downstreamAxisLabel,
+                    out QuickLineAxisReference downstreamAxis);
+                numericTicks = PlanNumericTicks(upstreamEndpoint.Value,
+                    downstreamEndpoint.Value, upstreamAxis, downstreamAxis,
+                    numericAxisIsX, minX, minY, maxX, maxY,
                     spacingMillimetres);
+                letterLabels = PlanLetterLabels(upstreamEndpoint.Value,
+                    downstreamEndpoint.Value, upstreamAxis, downstreamAxis,
+                    numericAxisIsX, numericAxisIsX ? minY : minX,
+                    numericAxisIsX ? maxY : maxX, spacingMillimetres);
+            }
             return new QuickLineColumnGrid(lines, numericTicks, letterLabels,
-                numericAxisIsX, upstream, downstream,
-                minX, minY, maxX, maxY, spacingMillimetres);
+                numericAxisIsX, resolved ? upstreamEndpoint : null,
+                resolved ? downstreamEndpoint : null, gridAnchor,
+                minX, minY, maxX, maxY, spacingMillimetres, resolved,
+                planDiagnostics);
         }
 
         /// <summary>

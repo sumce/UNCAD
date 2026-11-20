@@ -130,7 +130,12 @@ namespace UNCAD.Tests
                 ConfigKeys.FillAutofillOutletPanel);
             Assert.Equal("UNC_FILL_AUTOFILL_BUS_PLUG_BOX",
                 ConfigKeys.FillAutofillBusPlugBox);
+            Assert.Equal("UNC_FILL_LAYER_GOVERNOR", ConfigKeys.FillLayerGovernor);
         }
+
+        [Fact]
+        public void XAutoFillRatio_HasPersistentRuntimeKey()
+            => Assert.Equal("UNC_XAUTO_FILL_RATIO", ConfigKeys.XAutoFillRatio);
 
         [Fact]
         public void StatisticsToggles_HaveIndependentPersistentKeys()

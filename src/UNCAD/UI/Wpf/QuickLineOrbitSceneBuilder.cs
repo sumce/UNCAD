@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Media;
 using UNCAD.Core.QuickLine;
 
@@ -11,7 +12,7 @@ namespace UNCAD.UI
     /// （QuickLine3dScene）。视觉公式与 3.3.5~3.3.8 的 three.js 页面
     /// （Web/QuickLineOrbit/app.js，已退役）逐条对齐：管线半径 0.0019×对角
     /// 线、桥架红双线+0.3 半透明填充带、线管青双线、参照建筑模型全套
-    /// （楼板/环氧/华夫圆孔板/工字钢/葡萄架/设备盒/母线玻璃/结构柱/地面）
+    /// （楼板/环氧/华夫圆孔板/工字钢/葡萄架/自定义设备盒/母线玻璃/结构柱/地面）
     /// 配色与尺寸公式、本层基准重定位、柱网外扩一跨的包络推算、
     /// 相机方位 -135°/俯仰约 30°、距离 1.6×对角线。
     /// </summary>
@@ -66,7 +67,13 @@ namespace UNCAD.UI
                     (raw.Kind ?? "frame").ToLowerInvariant()));
             }
 
-            Extent extent = HorizontalExtent(envelope, bounds, diagonal * 0.06);
+            QuickLinePreviewFootprint footprint = QuickLinePreviewFootprint.Plan(envelope);
+            double margin = Math.Max(400.0, diagonal * 0.06);
+            var areas = footprint.Regions.Select(area => new Extent(
+                area.MinX, area.MinY, area.MaxX, area.MaxY, margin)).ToList();
+            var extent = new Extent(areas.Min(area => area.Minx),
+                areas.Min(area => area.Miny), areas.Max(area => area.Maxx),
+                areas.Max(area => area.Maxy), margin);
             double tubeRadius = radius * 0.9;
             var devices = new List<RefLevel>();
             var buses = new List<RefLevel>();
@@ -82,57 +89,70 @@ namespace UNCAD.UI
                 switch (level.Kind)
                 {
                     case "floor":
-                        AddSlab(scene, level, extent, diagonal, FloorTint,
-                            FloorEdge, Math.Max(220.0, diagonal * 0.005),
-                            anchorRight);
+                        foreach (Extent area in areas)
+                            AddSlab(scene, level, area, FloorTint,
+                                FloorEdge, Math.Max(220.0, diagonal * 0.005));
                         break;
                     case "epoxy":
-                        AddSlab(scene, level, extent, diagonal, EpoxyTint,
-                            EpoxyEdge, Math.Max(180.0, diagonal * 0.004),
-                            anchorRight);
+                        foreach (Extent area in areas)
+                            AddSlab(scene, level, area, EpoxyTint,
+                                EpoxyEdge, Math.Max(180.0, diagonal * 0.004));
                         break;
                     case "waffle":
-                        AddWafflePlate(scene, level, extent, diagonal,
-                            anchorRight, envelope);
+                        AddWafflePlate(scene, level, footprint);
                         break;
                     case "raised":
-                        AddSlab(scene, level, extent, diagonal, RaisedTint,
-                            FloorEdge, Math.Max(140.0, diagonal * 0.003),
-                            anchorRight);
+                        foreach (Extent area in areas)
+                            AddSlab(scene, level, area, RaisedTint,
+                                FloorEdge, Math.Max(140.0, diagonal * 0.003));
                         break;
                     case "steel":
-                        AddSteelBeams(scene, level, extent, diagonal, anchorRight);
+                        foreach (Extent area in areas)
+                            AddSteelBeams(scene, level, area, diagonal);
                         break;
                     case "grating":
-                        AddGrating(scene, level, extent, diagonal, anchorRight);
+                        foreach (Extent area in areas)
+                            AddGrating(scene, level, area, diagonal);
                         break;
                     case "device":
-                        devices.Add(level);
+                        if (!IsRemovedDefaultDeviceLevel(level.Label))
+                            devices.Add(level);
                         continue;
                     case "bus":
                         buses.Add(level);
                         continue;
                     default:
-                        AddRefFrame(scene, level, extent, tubeRadius);
+                        AddFootprintLines(scene, footprint.BoundaryLines,
+                            level.Z, tubeRadius, FrameTint,
+                            QuickLine3dSceneGroupKind.Reference);
                         break;
                 }
+                AddCornerRefLabel(scene, level, LabelExtent(footprint, margin,
+                    anchorRight), level.Z, anchorRight,
+                    level.Kind == "steel" || level.Kind == "grating"
+                        ? QuickLine3dSceneGroupKind.Detail
+                        : QuickLine3dSceneGroupKind.Reference, "ref");
             }
 
-            AddDevices(scene, devices, extent, diagonal);
-            AddBusGlassLevels(scene, buses, extent, diagonal);
-            if (modelTopZ > 0.0)
-                AddGridColumns(scene, envelope, extent, diagonal, modelTopZ);
-            if (baseFloorZ == 0.0) AddGroundPlate(scene, extent, diagonal);
+            AddDevices(scene, devices, diagonal,
+                envelope.UpstreamEndpoint, envelope.DownstreamEndpoint);
+            AddBusGlassLevels(scene, buses, areas, footprint, diagonal, margin);
+            if (modelTopZ > -baseFloorZ)
+                AddGridColumns(scene, footprint, diagonal, -baseFloorZ, modelTopZ);
+            AddGroundPlate(scene, areas, LabelExtent(footprint, margin, false),
+                diagonal, -baseFloorZ);
 
-            AddGridLines(scene, envelope, diagonal);
+            AddFootprintLines(scene, footprint.GridLines, 0,
+                Math.Max(diagonal * 0.0006, 8.0), GridTint,
+                QuickLine3dSceneGroupKind.Grid);
             AddChannels(scene, envelope, radius);
             AddRoutes(scene, envelope, radius);
-            AddLabels(scene, envelope, diagonal);
+            AddLabels(scene, envelope, footprint, diagonal);
 
             // 取景：参照层高度算进去（否则整栋楼被挤到画面上半区——3.3.7
             // 实测教训原样保留）。
             double refTop = 0.0;
-            double refBottom = 0.0;
+            double refBottom = -baseFloorZ;
             foreach (RefLevel level in levels)
             {
                 if (level.Z > refTop) refTop = level.Z;
@@ -141,10 +161,10 @@ namespace UNCAD.UI
             double viewMinZ = Math.Min(bounds.Minz, refBottom);
             double viewMaxZ = Math.Max(bounds.Maxz, refTop + diagonal * 0.03);
             double viewDiagonal = Math.Max(diagonal,
-                Math.Sqrt(diagonal * diagonal
+                Math.Sqrt(extent.W * extent.W + extent.D * extent.D
                     + (viewMaxZ - viewMinZ) * (viewMaxZ - viewMinZ)));
-            scene.Centerx = bounds.Centerx;
-            scene.Centery = bounds.Centery;
+            scene.Centerx = extent.Centerx;
+            scene.Centery = extent.Centery;
             scene.Centerz = (viewMinZ + viewMaxZ) / 2.0;
             scene.Orbitx = -1.0;
             scene.Orbitsy = -1.0;
@@ -185,115 +205,51 @@ namespace UNCAD.UI
 
         public static string BuildSummary(QuickLineOrbitPreviewEnvelope envelope)
         {
-            return (string.IsNullOrEmpty(envelope.AxisSummary)
-                    ? "" : envelope.AxisSummary + "　")
+            string summary = string.IsNullOrEmpty(envelope.AxisSummary)
+                ? "" : envelope.AxisSummary + "　";
+            if (!envelope.DirectionResolved)
+            {
+                string reason = envelope.DirectionDiagnostics.Count == 0
+                    ? "路线端点或轴位不足，柜体和上下游轴位标记已隐藏。"
+                    : string.Join("；", envelope.DirectionDiagnostics);
+                summary += "上下游未确认：" + reason + "　";
+            }
+            return summary
                 + "左键拖动=旋转 · 滚轮=缩放 · 右键拖动=平移 · 双击=复位";
         }
 
         // ---- 参照建筑模型（公式=原页面 addSlab/addEpoxy/addWaffle/…） -----------
 
         private static void AddSlab(QuickLine3dScene scene, RefLevel level,
-            Extent extent, double diagonal, Color tint, Color edgeTint,
-            double thickness, bool anchorRight)
+            Extent extent, Color tint, Color edgeTint, double thickness,
+            double opacity = 0.45)
         {
             scene.AddBox(QuickLine3dSceneGroupKind.Reference,
                 extent.Centerx, extent.Centery, level.Z - thickness / 2.0,
-                extent.W, extent.D, thickness, tint, 0.45, edgeTint);
-            AddCornerRefLabel(scene, level, extent, level.Z, anchorRight,
-                QuickLine3dSceneGroupKind.Reference, "ref");
+                extent.W, extent.D, thickness, tint, opacity, edgeTint);
         }
 
         private static void AddWafflePlate(QuickLine3dScene scene, RefLevel level,
-            Extent extent, double diagonal, bool anchorRight,
-            QuickLineOrbitPreviewEnvelope envelope)
+            QuickLinePreviewFootprint footprint)
         {
-            // 真圆孔穿透板：网格采样铺设顶面（孔内格心跳过）——对齐原页面
-            // ShapeGeometry 挖孔观感。孔位：柱网分间每格 3×3。
-            GridAxisSet axes = CollectGridAxes(envelope, diagonal);
-            double cell = Math.Max(diagonal * 0.0018, 40.0);
-            var holes = new List<double[]>();   // [cx, cy, r]
-            if (axes.Xs.Count >= 2 && axes.Ys.Count >= 2)
+            foreach (QuickLinePreviewFootprint.Area bay in footprint.Bays)
             {
-                for (int i = 0; i + 1 < axes.Xs.Count; i++)
+                for (int subX = 0; subX < 3; subX++)
+                for (int subY = 0; subY < 3; subY++)
                 {
-                    double x0 = Math.Max(axes.Xs[i], extent.Minx);
-                    double x1 = Math.Min(axes.Xs[i + 1], extent.Maxx);
-                    for (int j = 0; j + 1 < axes.Ys.Count; j++)
-                    {
-                        double y0 = Math.Max(axes.Ys[j], extent.Miny);
-                        double y1 = Math.Min(axes.Ys[j + 1], extent.Maxy);
-                        double spanX = x1 - x0;
-                        double spanY = y1 - y0;
-                        if (spanX <= 0 || spanY <= 0) continue;
-                        double holeRadius = Math.Min(spanX, spanY) / 3.0
-                            * 0.5 * 0.72;
-                        for (int a = 0; a < 3; a++)
-                        {
-                            for (int b = 0; b < 3; b++)
-                            {
-                                holes.Add(new[]
-                                {
-                                    x0 + spanX * (a + 0.5) / 3.0,
-                                    y0 + spanY * (b + 0.5) / 3.0,
-                                    holeRadius
-                                });
-                            }
-                        }
-                    }
+                    double cellSize = (bay.MaxX - bay.MinX) / 3.0;
+                    double x = bay.MinX + subX * cellSize;
+                    double y = bay.MinY + subY * cellSize;
+                    scene.AddWaffleCell(QuickLine3dSceneGroupKind.Reference,
+                        x, y, x + cellSize, y + cellSize, level.Z,
+                        cellSize * 0.36, WaffleTint, 0.42);
                 }
             }
-            else
-            {
-                double span = Math.Min(extent.W, extent.D);
-                double pitch = Clamp(span / 7.0, 900.0, 2400.0);
-                double holeRadius = pitch * 0.36;
-                double inset = pitch * 0.8;
-                for (double cx = extent.Minx + inset; cx <= extent.Maxx - inset;
-                    cx += pitch)
-                {
-                    for (double cy = extent.Miny + inset;
-                        cy <= extent.Maxy - inset; cy += pitch)
-                    {
-                        holes.Add(new[] { cx, cy, holeRadius });
-                    }
-                }
-            }
-            double z = level.Z;
-            int cells = 0;
-            for (double x = extent.Minx; x < extent.Maxx; x += cell)
-            {
-                for (double y = extent.Miny; y < extent.Maxy; y += cell)
-                {
-                    double x2 = Math.Min(x + cell, extent.Maxx);
-                    double y2 = Math.Min(y + cell, extent.Maxy);
-                    double mx = (x + x2) / 2.0;
-                    double my = (y + y2) / 2.0;
-                    if (InAnyHole(holes, mx, my)) continue;
-                    scene.AddQuad(QuickLine3dSceneGroupKind.Reference,
-                        x, y, z, x2, y, z, x2, y2, z, x, y2, z,
-                        WaffleTint, 0.42);
-                    cells++;
-                    if (cells > 60000) break;
-                }
-                if (cells > 60000) break;
-            }
-            AddCornerRefLabel(scene, level, extent, z, anchorRight,
-                QuickLine3dSceneGroupKind.Reference, "ref");
-        }
-
-        private static bool InAnyHole(List<double[]> holes, double x, double y)
-        {
-            foreach (double[] hole in holes)
-            {
-                double dx = x - hole[0];
-                double dy = y - hole[1];
-                if (dx * dx + dy * dy <= hole[2] * hole[2]) return true;
-            }
-            return false;
         }
 
         private static void AddBusGlassLevels(QuickLine3dScene scene,
-            List<RefLevel> levels, Extent extent, double diagonal)
+            List<RefLevel> levels, List<Extent> areas,
+            QuickLinePreviewFootprint footprint, double diagonal, double margin)
         {
             if (levels.Count == 0) return;
             levels.Sort((a, b) => a.Z.CompareTo(b.Z));
@@ -301,72 +257,78 @@ namespace UNCAD.UI
             int flip = 0;
             foreach (RefLevel level in levels)
             {
-                scene.AddBox(QuickLine3dSceneGroupKind.Reference,
-                    extent.Centerx, extent.Centery, level.Z - thickness / 2.0,
-                    extent.W, extent.D, thickness, BusGlassTint, 0.16,
-                    Colors.Transparent);
-                AddCornerRefLabel(scene, level, extent, level.Z,
-                    flip++ % 2 == 1, QuickLine3dSceneGroupKind.Reference, "ref");
+                foreach (Extent area in areas)
+                    AddSlab(scene, level, area, BusGlassTint,
+                        Colors.Transparent, thickness, 0.16);
+                bool right = flip++ % 2 == 1;
+                AddCornerRefLabel(scene, level, LabelExtent(footprint, margin,
+                    right), level.Z, right,
+                    QuickLine3dSceneGroupKind.Reference, "ref");
             }
         }
 
-        private static void AddGridLines(QuickLine3dScene scene,
-            QuickLineOrbitPreviewEnvelope envelope, double diagonal)
+        private static void AddFootprintLines(QuickLine3dScene scene,
+            IReadOnlyList<QuickLineColumnGridLine> lines, double z,
+            double radius, Color tint, QuickLine3dSceneGroupKind group)
         {
-            double radius = Math.Max(diagonal * 0.0006, 8.0);
-            // 原页面 LineSegments 1px 线，原生用细条等价（扁平端点对 a→b）。
-            for (int index = 0; index + 1 < envelope.ColumnGridLines.Count;
-                index += 2)
+            foreach (QuickLineColumnGridLine line in lines)
             {
-                QuickLineOrbitPreviewEnvelope.EnvelopePoint a =
-                    envelope.ColumnGridLines[index];
-                QuickLineOrbitPreviewEnvelope.EnvelopePoint b =
-                    envelope.ColumnGridLines[index + 1];
-                if (a == null || b == null) continue;
-                scene.AddTube(QuickLine3dSceneGroupKind.Grid,
-                    a.X, a.Y, a.Z, b.X, b.Y, b.Z, radius, GridTint);
+                scene.AddTube(group,
+                    line.ConstantX ? line.FixedValue : line.Minimum,
+                    line.ConstantX ? line.Minimum : line.FixedValue, z,
+                    line.ConstantX ? line.FixedValue : line.Maximum,
+                    line.ConstantX ? line.Maximum : line.FixedValue, z,
+                    radius, tint);
             }
         }
 
         private static void AddGridColumns(QuickLine3dScene scene,
-            QuickLineOrbitPreviewEnvelope envelope, Extent extent,
-            double diagonal, double topZ)
+            QuickLinePreviewFootprint footprint, double diagonal,
+            double bottomZ, double topZ)
         {
-            GridAxisSet axes = CollectGridAxes(envelope, diagonal);
-            if (axes.Xs.Count == 0 || axes.Ys.Count == 0) return;
             double size = Math.Max(350.0, diagonal * 0.014);
-            int count = 0;
-            foreach (double x in axes.Xs)
+            foreach (QuickLineSpatialPoint column in footprint.Columns)
             {
-                foreach (double y in axes.Ys)
-                {
-                    if (x < extent.Minx - axes.Eps || x > extent.Maxx + axes.Eps
-                        || y < extent.Miny - axes.Eps || y > extent.Maxy + axes.Eps)
-                        continue;
-                    if (++count > 400) return;
-                    scene.AddBox(QuickLine3dSceneGroupKind.Reference,
-                        x, y, topZ / 2.0, size, size, topZ, ColumnTint, 0.95,
-                        Colors.Transparent);
-                }
+                scene.AddBox(QuickLine3dSceneGroupKind.Columns,
+                    column.X, column.Y, (topZ + bottomZ) / 2.0,
+                    size, size, topZ - bottomZ, ColumnTint, 0.95,
+                    Colors.Transparent);
+            }
+        }
+
+        private static bool IsRemovedDefaultDeviceLevel(string label)
+        {
+            switch (label)
+            {
+                case "I-L盘高度":
+                case "I-L盘顶面":
+                case "I-Line盘高度":
+                case "I-Line盘顶面":
+                case "插座盘安装":
+                case "插座盘顶面":
+                    return true;
+                default:
+                    return false;
             }
         }
 
         private static void AddGroundPlate(QuickLine3dScene scene,
-            Extent extent, double diagonal)
+            List<Extent> areas, Extent labelExtent, double diagonal, double z)
         {
             double thickness = Math.Max(60.0, diagonal * 0.0015);
-            scene.AddBox(QuickLine3dSceneGroupKind.Reference,
-                extent.Centerx, extent.Centery, -thickness / 2.0,
-                extent.W, extent.D, thickness, GroundTint, 0.5,
-                Colors.Transparent);
+            foreach (Extent area in areas)
+                scene.AddBox(QuickLine3dSceneGroupKind.Reference,
+                    area.Centerx, area.Centery, z - thickness / 2.0,
+                    area.W, area.D, thickness, GroundTint, 0.5,
+                    Colors.Transparent);
             scene.AddLabel(QuickLine3dSceneGroupKind.Reference, "ref",
-                "1F地面 0",
-                extent.Minx - extent.Margin * 0.35,
-                extent.Miny - extent.Margin * 0.35, 0.0);
+                "1F地面 " + Format(z),
+                labelExtent.Minx - labelExtent.Margin * 0.35,
+                labelExtent.Miny - labelExtent.Margin * 0.35, z);
         }
 
         private static void AddSteelBeams(QuickLine3dScene scene, RefLevel level,
-            Extent extent, double diagonal, bool anchorRight)
+            Extent extent, double diagonal)
         {
             double z = level.Z;
             double height = Math.Max(400.0, diagonal * 0.014);
@@ -390,12 +352,10 @@ namespace UNCAD.UI
                     centerx, y, z - height + flangeT / 2.0, extent.W, flange,
                     flangeT, SteelTint, 1.0, Colors.Transparent);
             }
-            AddCornerRefLabel(scene, level, extent, z, anchorRight,
-                QuickLine3dSceneGroupKind.Detail, "ref");
         }
 
         private static void AddGrating(QuickLine3dScene scene, RefLevel level,
-            Extent extent, double diagonal, bool anchorRight)
+            Extent extent, double diagonal)
         {
             double z = level.Z;
             double barHeight = Math.Max(140.0, diagonal * 0.005);
@@ -410,42 +370,77 @@ namespace UNCAD.UI
                     centerx, y, z - barHeight / 2.0, extent.W, barWidth,
                     barHeight, GratingTint, 1.0, Colors.Transparent);
             }
-            AddCornerRefLabel(scene, level, extent, z, anchorRight,
-                QuickLine3dSceneGroupKind.Detail, "ref");
         }
 
         private static void AddDevices(QuickLine3dScene scene,
-            List<RefLevel> levels, Extent extent, double diagonal)
+            List<RefLevel> levels, double diagonal,
+            QuickLineOrbitPreviewEnvelope.EnvelopePoint upstream,
+            QuickLineOrbitPreviewEnvelope.EnvelopePoint downstream)
         {
-            if (levels.Count == 0) return;
-            double footX = Math.Max(1000.0, diagonal * 0.042);
-            double footY = footX * 0.7;
+            if (levels.Count == 0 || upstream == null) return;
+
+            double cabinetWidth = Clamp(diagonal * 0.025, 700.0, 1200.0);
+            double cabinetDepth = Clamp(cabinetWidth * 0.65, 450.0, 700.0);
+            double gap = cabinetWidth * 0.2;
+            double directionX = downstream == null
+                ? 1.0 : downstream.X - upstream.X;
+            double directionY = downstream == null
+                ? 0.0 : downstream.Y - upstream.Y;
+            double directionLength = Math.Sqrt(directionX * directionX
+                + directionY * directionY);
+            if (directionLength < 1e-9)
+            {
+                directionX = 1.0;
+                directionY = 0.0;
+            }
+            else
+            {
+                directionX /= directionLength;
+                directionY /= directionLength;
+            }
+            double sideX = -directionY;
+            double sideY = directionX;
+            double connectionRadius = Math.Max(8.0, diagonal * 0.00025);
+
             for (int index = 0; index < levels.Count; index++)
             {
                 RefLevel level = levels[index];
-                double x = extent.Minx + extent.W * (index + 1)
-                    / (levels.Count + 1);
-                double y = extent.Miny + extent.Margin * 0.22 + footY / 2.0;
+                bool isSocketPanel = level.Label.IndexOf("插座盘",
+                    StringComparison.Ordinal) >= 0;
+                double height = isSocketPanel ? 1000.0
+                    : Math.Max(level.Z, 600.0);
+                double bottom = isSocketPanel
+                    ? level.Z : 0.0;
+                double connectionZ = isSocketPanel ? level.Z : bottom + height;
+                double sideOffset = (index - (levels.Count - 1) / 2.0)
+                    * (cabinetWidth + gap);
+                double x = upstream.X - directionX * cabinetDepth / 2.0
+                    + sideX * sideOffset;
+                double y = upstream.Y - directionY * cabinetDepth / 2.0
+                    + sideY * sideOffset;
+                double portX = x + directionX * cabinetDepth / 2.0;
+                double portY = y + directionY * cabinetDepth / 2.0;
                 scene.AddBox(QuickLine3dSceneGroupKind.Reference,
-                    x, y, level.Z / 2.0, footX, footY, level.Z, DeviceTint,
+                    x, y, bottom + height / 2.0,
+                    cabinetWidth, cabinetDepth, height, DeviceTint,
                     1.0, DeviceEdge);
+                scene.AddTube(QuickLine3dSceneGroupKind.Reference,
+                    upstream.X, upstream.Y, upstream.Z,
+                    portX, portY, connectionZ, connectionRadius, PinTint);
                 scene.AddLabel(QuickLine3dSceneGroupKind.Reference, "ref",
-                    level.Label + " " + Format(level.Z),
-                    x, y, level.Z + diagonal * 0.014);
+                    (isSocketPanel ? "插座盘安装" : level.Label) + " "
+                        + Format(level.Z),
+                    x, y, bottom + height + diagonal * 0.014);
             }
         }
 
-        private static void AddRefFrame(QuickLine3dScene scene, RefLevel level,
-            Extent extent, double tubeRadius)
+        private static Extent LabelExtent(QuickLinePreviewFootprint footprint,
+            double margin, bool right)
         {
-            double z = level.Z;
-            scene.AddRectOutline(QuickLine3dSceneGroupKind.Reference,
-                extent.Minx, extent.Miny, extent.Maxx, extent.Maxy, z,
-                FrameTint, tubeRadius);
-            scene.AddLabel(QuickLine3dSceneGroupKind.Reference, "ref",
-                level.Label + " " + Format(level.Z),
-                extent.Minx - extent.Margin * 0.35,
-                extent.Miny - extent.Margin * 0.35, z);
+            QuickLinePreviewFootprint.Area bay = footprint.Bays[0];
+            if (right)
+                bay = footprint.Bays.Last(candidate => candidate.MinY == bay.MinY);
+            return new Extent(bay.MinX, bay.MinY, bay.MaxX, bay.MaxY, margin);
         }
 
         private static void AddCornerRefLabel(QuickLine3dScene scene,
@@ -517,20 +512,16 @@ namespace UNCAD.UI
         }
 
         private static void AddLabels(QuickLine3dScene scene,
-            QuickLineOrbitPreviewEnvelope envelope, double diagonal)
+            QuickLineOrbitPreviewEnvelope envelope,
+            QuickLinePreviewFootprint footprint, double diagonal)
         {
             foreach (QuickLineOrbitPreviewEnvelope.EnvelopeLabel label
                 in envelope.SegmentLabels)
                 scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "mm",
                     label.Text, label.X, label.Y, label.Z);
-            foreach (QuickLineOrbitPreviewEnvelope.EnvelopeLabel tick
-                in envelope.NumericTicks)
+            foreach (var label in footprint.AxisLabels(envelope))
                 scene.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
-                    tick.Text, tick.X, tick.Y, tick.Z);
-            foreach (QuickLineOrbitPreviewEnvelope.EnvelopeLabel letter
-                in envelope.LetterLabels)
-                scene.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
-                    letter.Text, letter.X, letter.Y, letter.Z);
+                    label.Text, label.X, label.Y, label.Z);
             foreach (QuickLineOrbitPreviewEnvelope.EnvelopePin pin
                 in envelope.EndpointPins)
             {
@@ -540,86 +531,6 @@ namespace UNCAD.UI
                 scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "pin",
                     pin.Text, pin.X, pin.Y, pin.LabelZ);
             }
-        }
-
-        // ---- 包络 / 柱网推算（对齐原页面 horizontalExtent/gridAxes） -------------
-
-        private static GridAxisSet CollectGridAxes(
-            QuickLineOrbitPreviewEnvelope envelope, double diagonal)
-        {
-            double eps = Math.Max(diagonal * 0.0005, 1.0);
-            var xs = new List<double>();
-            var ys = new List<double>();
-            for (int index = 0; index + 1 < envelope.ColumnGridLines.Count;
-                index += 2)
-            {
-                QuickLineOrbitPreviewEnvelope.EnvelopePoint a =
-                    envelope.ColumnGridLines[index];
-                QuickLineOrbitPreviewEnvelope.EnvelopePoint b =
-                    envelope.ColumnGridLines[index + 1];
-                if (a == null || b == null) continue;
-                if (Math.Abs(a.X - b.X) < eps) PushUnique(xs, a.X, eps);
-                else if (Math.Abs(a.Y - b.Y) < eps) PushUnique(ys, a.Y, eps);
-            }
-            xs.Sort();
-            ys.Sort();
-            return new GridAxisSet(xs, ys, eps);
-        }
-
-        private static void PushUnique(List<double> values, double value,
-            double eps)
-        {
-            foreach (double existing in values)
-            {
-                if (Math.Abs(existing - value) < eps) return;
-            }
-            values.Add(value);
-        }
-
-        private static Extent HorizontalExtent(
-            QuickLineOrbitPreviewEnvelope envelope, Bounds bounds,
-            double margin)
-        {
-            var axes = CollectGridAxes(envelope, margin / 0.06);
-            if (axes.Xs.Count >= 2 && axes.Ys.Count >= 2)
-            {
-                double bayX = MaxGap(axes.Xs);
-                if (bayX <= 0) bayX = margin;
-                double bayY = MaxGap(axes.Ys);
-                if (bayY <= 0) bayY = margin;
-                double minx, maxx, miny, maxy;
-                SnapOut(axes.Xs, bounds.Minx, bounds.Maxx, bayX,
-                    out minx, out maxx);
-                SnapOut(axes.Ys, bounds.Miny, bounds.Maxy, bayY,
-                    out miny, out maxy);
-                return new Extent(minx, miny, maxx, maxy, margin);
-            }
-            return new Extent(bounds.Minx - margin, bounds.Miny - margin,
-                bounds.Maxx + margin, bounds.Maxy + margin, margin);
-        }
-
-        private static double MaxGap(List<double> values)
-        {
-            double best = 0.0;
-            for (int index = 1; index < values.Count; index++)
-            {
-                best = Math.Max(best, values[index] - values[index - 1]);
-            }
-            return best;
-        }
-
-        private static void SnapOut(List<double> values, double lo, double hi,
-            double bay, out double low, out double high)
-        {
-            double below = values[0];
-            double above = values[values.Count - 1];
-            foreach (double value in values)
-            {
-                if (value <= lo) below = value;
-                if (value >= hi && above > value) above = value;
-            }
-            low = Math.Min(below - bay, lo - bay);
-            high = Math.Max(above + bay, hi + bay);
         }
 
         private static Bounds MeasureBounds(
@@ -684,20 +595,6 @@ namespace UNCAD.UI
             internal string Label { get; }
             internal double Z { get; }
             internal string Kind { get; }
-        }
-
-        private sealed class GridAxisSet
-        {
-            internal GridAxisSet(List<double> xs, List<double> ys, double eps)
-            {
-                Xs = xs;
-                Ys = ys;
-                Eps = eps;
-            }
-
-            internal List<double> Xs { get; }
-            internal List<double> Ys { get; }
-            internal double Eps { get; }
         }
 
         private sealed class Extent

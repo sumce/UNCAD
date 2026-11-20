@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 
@@ -26,6 +27,7 @@ namespace UNCAD.Cad.QuickLine
             LabelKind = labelKind ?? string.Empty;
             IsPolyline = isPolyline;
             IsBridgePolyline = isBridgePolyline;
+            RestoredLabelIds = Array.Empty<ObjectId>();
         }
 
         public ObjectId LineId { get; }
@@ -45,6 +47,8 @@ namespace UNCAD.Cad.QuickLine
         public bool IsPolyline { get; }
         /// <summary>带 bulge 的开洞 Polyline（U1R/Xauto 开洞产物）。</summary>
         public bool IsBridgePolyline { get; }
+        /// <summary>Extra stale-associated labels restored to this joined path for fill correction.</summary>
+        internal IReadOnlyList<ObjectId> RestoredLabelIds { get; set; }
         /// <summary>
         /// True when U1LX has explicitly confirmed this label. Values ending
         /// in 00mm can still be treated as editable placeholders.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Media;
 
 namespace UNCAD.UI
@@ -261,24 +262,39 @@ namespace UNCAD.UI
             {
                 double offset = GetDouble(raw as IDictionary<string, object>,
                     "offsetMillimetres");
-                string label = GetStr(raw as IDictionary<string, object>, "label");
                 scene3d.AddTube(QuickLine3dSceneGroupKind.Grid,
                     offset, -extent, 0.0, offset, extent, 0.0,
                     lineRadius, GridLineTint);
-                scene3d.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
-                    label, offset, -extent, 0.0);
             }
             foreach (object raw in alphabeticMarks)
             {
                 double offset = GetDouble(raw as IDictionary<string, object>,
                     "offsetMillimetres");
-                string label = GetStr(raw as IDictionary<string, object>, "label");
                 scene3d.AddTube(QuickLine3dSceneGroupKind.Grid,
                     -extent, offset, 0.0, extent, offset, 0.0,
                     lineRadius, GridLineTint);
-                scene3d.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
-                    label, extent, offset, 0.0);
             }
+            var numberOrigin = numericMarks.OfType<IDictionary<string, object>>()
+                .OrderBy(mark => Math.Abs(GetDouble(mark, "offsetMillimetres"))).FirstOrDefault();
+            var letterOrigin = alphabeticMarks.OfType<IDictionary<string, object>>()
+                .OrderBy(mark => Math.Abs(GetDouble(mark, "offsetMillimetres"))).FirstOrDefault();
+            // Mark the two reference axes at real intersections, without creating
+            // a quadratic number of labels for a large multi-frame preview.
+            if (numberOrigin != null && letterOrigin != null)
+            {
+                foreach (object numeric in numericMarks)
+                    AddAxisLabel(numeric as IDictionary<string, object>, letterOrigin);
+                foreach (object alphabetic in alphabeticMarks)
+                    if (!ReferenceEquals(alphabetic, letterOrigin))
+                        AddAxisLabel(numberOrigin, alphabetic as IDictionary<string, object>);
+            }
+
+            void AddAxisLabel(IDictionary<string, object> numeric,
+                IDictionary<string, object> alphabetic)
+                => scene3d.AddLabel(QuickLine3dSceneGroupKind.Grid, "axis",
+                    GetStr(numeric, "label") + "/" + GetStr(alphabetic, "label"),
+                    GetDouble(numeric, "offsetMillimetres"),
+                    GetDouble(alphabetic, "offsetMillimetres"), 0);
             scene3d.AddLabel(QuickLine3dSceneGroupKind.Grid, "compass", "东 →",
                 extent, 0.0, 0.0);
             scene3d.AddLabel(QuickLine3dSceneGroupKind.Grid, "compass", "← 西",

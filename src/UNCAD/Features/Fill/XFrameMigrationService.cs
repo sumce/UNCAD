@@ -45,13 +45,14 @@ namespace UNCAD.Features.Fill
                     id => IsLegacyFrame(transaction, id));
             bool Legacy(ObjectId id) => legacyCache.TryGetValue(id, out bool legacy) && legacy;
 
-            int repairedInfoTables = targets.Where(selection =>
-                    !selection.FrameBlockIds.Any(Legacy))
+            int repairedInfoTables = targets
                 .Sum(selection => RepairSplitDrawingInfoTables(transaction, selection));
-            bool needsTemplate = targets.Any(selection =>
-                !HasCurrentDrawingInfoTable(transaction, selection));
             bool hasLegacyFrame = legacyCache.Values.Any(legacy => legacy);
-            if (!needsTemplate && !hasLegacyFrame)
+            bool needsBoqTable = targets.Any(selection =>
+                selection.TableIds == null || selection.TableIds.Length == 0);
+            bool needsDrawingInfoTable = targets.Any(selection =>
+                !HasDrawingInfoTable(transaction, selection));
+            if (!needsBoqTable && !needsDrawingInfoTable && !hasLegacyFrame)
             {
                 EnsureProjectNameDefaults(ctx.Db, transaction, targets);
                 return new XFrameMigrationResult(0, 0, repairedInfoTables);
@@ -74,13 +75,17 @@ namespace UNCAD.Features.Fill
                     BlockTable sourceBlocks = (BlockTable)source.GetObject(
                         template.BlockTableId, OpenMode.ForRead);
                     if (!sourceBlocks.Has(FrameRegionCollector.CurrentFrameName))
-                        throw new InvalidDataException("新版图框模板中缺少 xframe_v2 定义。");
+                        throw new InvalidDataException("新版图框模板中缺少 "
+                            + FrameRegionCollector.CurrentFrameName + " 定义。");
                     ObjectId sourceDefinitionId = sourceBlocks[
                         FrameRegionCollector.CurrentFrameName];
                     ObjectId targetDefinitionId = EnsureDefinition(ctx.Db, transaction,
                         template, sourceDefinitionId);
-                    FindTemplateTables(source, sourceBlocks, out ObjectId sourceBoqTableId,
-                        out ObjectId sourceInfoTableId);
+                    ObjectId sourceBoqTableId = ObjectId.Null;
+                    ObjectId sourceInfoTableId = ObjectId.Null;
+                    if (needsBoqTable || needsDrawingInfoTable)
+                        FindTemplateTables(source, sourceBlocks, out sourceBoqTableId,
+                            out sourceInfoTableId);
 
                     int migrated = 0;
                     int boqTables = 0;
@@ -98,33 +103,25 @@ namespace UNCAD.Features.Fill
 
                         ObjectId frame = selection.FrameBlockIds.FirstOrDefault();
                         if (frame.IsNull) continue;
-                        if (legacyFrames.Length > 0)
+                        if (selection.TableIds == null || selection.TableIds.Length == 0)
                         {
-                            ObjectId[] oldTables = (selection.TableIds ?? Array.Empty<ObjectId>())
-                                .Concat(selection.DrawingInfoTableIds
-                                    ?? Array.Empty<ObjectId>()).Distinct().ToArray();
-                            EraseTables(transaction, oldTables);
                             ObjectId boqId = CloneTable(ctx.Db, transaction, template,
                                 sourceBoqTableId, frame);
-                            ObjectId infoId = CloneTable(ctx.Db, transaction, template,
-                                sourceInfoTableId, frame);
                             selection.TableIds = new[] { boqId };
-                            selection.DrawingInfoTableIds = new[] { infoId };
-                            ReplaceSourceIds(selection, oldTables, boqId, infoId);
+                            ReplaceSourceIds(selection, Array.Empty<ObjectId>(), boqId);
                             boqTables++;
-                            infoTables++;
-                            continue;
                         }
 
-                        if (HasCurrentDrawingInfoTable(transaction, selection)) continue;
-                        ObjectId[] oldInfoTables = selection.DrawingInfoTableIds
-                            ?? Array.Empty<ObjectId>();
-                        EraseTables(transaction, oldInfoTables);
-                        ObjectId tableId = CloneTable(ctx.Db, transaction, template,
-                            sourceInfoTableId, frame);
-                        selection.DrawingInfoTableIds = new[] { tableId };
-                        ReplaceSourceIds(selection, oldInfoTables, tableId);
-                        infoTables++;
+                        if (!HasDrawingInfoTable(transaction, selection))
+                        {
+                            ObjectId tableId = CloneTable(ctx.Db, transaction, template,
+                                sourceInfoTableId, frame);
+                            selection.DrawingInfoTableIds =
+                                (selection.DrawingInfoTableIds ?? Array.Empty<ObjectId>())
+                                .Concat(new[] { tableId }).Distinct().ToArray();
+                            ReplaceSourceIds(selection, Array.Empty<ObjectId>(), tableId);
+                            infoTables++;
+                        }
                     }
                     EnsureProjectNameDefaults(ctx.Db, transaction, targets);
                     source.Commit();
@@ -140,11 +137,11 @@ namespace UNCAD.Features.Fill
             return FrameRegionCollector.IsLegacyFrame(transaction, frame);
         }
 
-        private static bool HasCurrentDrawingInfoTable(Transaction transaction,
+        private static bool HasDrawingInfoTable(Transaction transaction,
             FillSelection selection)
         {
             return (selection.DrawingInfoTableIds ?? Array.Empty<ObjectId>()).Any(id =>
-                CadDrawingInfoTableWriter.IsCurrentDrawingInfoTable(
+                CadDrawingInfoTableWriter.IsDrawingInfoTable(
                     transaction.GetObject(id, OpenMode.ForRead, true) as Table));
         }
 
@@ -169,7 +166,8 @@ namespace UNCAD.Features.Fill
                 DuplicateRecordCloning.Ignore, false);
             ObjectId cloned = mapping[sourceDefinitionId].Value;
             if (cloned.IsNull)
-                throw new InvalidOperationException("无法导入 xframe_v2 图框定义。");
+                throw new InvalidOperationException("无法导入 "
+                    + FrameRegionCollector.CurrentFrameName + " 图框定义。");
             return cloned;
         }
 
@@ -207,15 +205,6 @@ namespace UNCAD.Features.Fill
             table.TransformBy(frame.BlockTransform);
             table.RecordGraphicsModified(true);
             return cloneId;
-        }
-
-        private static void EraseTables(Transaction transaction, IEnumerable<ObjectId> ids)
-        {
-            foreach (ObjectId id in ids ?? Enumerable.Empty<ObjectId>())
-            {
-                Table table = transaction.GetObject(id, OpenMode.ForWrite, true) as Table;
-                if (table != null && !table.IsErased) table.Erase();
-            }
         }
 
         private static void ReplaceSourceIds(FillSelection selection,

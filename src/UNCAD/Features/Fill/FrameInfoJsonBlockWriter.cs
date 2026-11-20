@@ -312,7 +312,7 @@ namespace UNCAD.Features.Fill
             bool inheritLegacyStandaloneRecord = true)
         {
             // D-040（2026-11-02，用户模板）：JSON 主存储 = 图框块内的 FRAMEINFO
-            // 文字属性（FRAME_20261102 模板自带）。元数据跟着图框实体走，复制/
+            // 文字属性（当前 FRAME_20261119 模板自带）。元数据跟着图框实体走，复制/
             // 移动零丢失，几何“就近归属”的整类问题就此消失。独立 frameinfo_json
             // 块与旧内嵌 FRAMEINFO_JSON 属性降级为遗留读源：读取照常，写入后
             // 清空属于本框的遗留副本。
@@ -420,7 +420,7 @@ namespace UNCAD.Features.Fill
             return new FillWriteResult(blocks, values);
         }
 
-        /// <summary>图框块内 JSON 的首选属性名（2026-11-02 用户模板 FRAME_20261102）。</summary>
+        /// <summary>图框块内 JSON 的首选属性名（当前模板 FRAME_20261119）。</summary>
         internal const string FrameInfoTag = "FRAMEINFO";
 
         /// <summary>写 JSON 到图框块的 FRAMEINFO 属性；缺失时从块定义补建属性引用。
@@ -779,7 +779,7 @@ namespace UNCAD.Features.Fill
         private static bool IsJsonTag(string tag)
         {
             string value = tag ?? "";
-            // FRAMEINFO：2026-11-02 用户模板（FRAME_20261102）的块内 JSON 属性名；
+            // FRAMEINFO：图框块内 JSON 的属性名；当前模板为 FRAME_20261119。
             // 旧体系用 FRAMEINFO_JSON / 含 JSON 的标签。
             return value.IndexOf("JSON", StringComparison.OrdinalIgnoreCase) >= 0
                 || string.Equals(value, "FRAMEINFO", StringComparison.OrdinalIgnoreCase);

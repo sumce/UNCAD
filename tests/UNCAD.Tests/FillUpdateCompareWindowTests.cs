@@ -233,7 +233,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void HasChanges_GatesOnRowDiffsOnly()
+        public void HasChanges_IncludesFrameFieldDifferences()
         {
             var noChanges = Item("M1");
             Assert.False(noChanges.HasChanges);
@@ -243,6 +243,109 @@ namespace UNCAD.Tests
             var removed = Item("M3");
             removed.RemovedCount = 2;
             Assert.True(removed.HasChanges);
+            var fieldChanged = Item("M4");
+            fieldChanged.FieldChanges.Add(new FrameInfoJsonChange
+            {
+                Field = "Next",
+                Before = "UP-1",
+                After = "UP-2"
+            });
+            Assert.True(fieldChanged.HasChanges);
+        }
+
+        [Fact]
+        public void BuildCompareItem_DetectsJsonFieldChangesWithoutRowDiffs()
+        {
+            var machine = new UNCAD.Core.Excel.MachineRow
+            {
+                MachineId = "M1",
+                CircuitName = "设备A",
+                Region = "R1",
+                Cable = "C1",
+                Fr = "FR",
+                Detail = "DETAIL",
+                Seq = "01",
+                Dia = "38",
+                Next = "UP-2",
+                UpstreamAxis = "A1",
+                DownstreamAxis = "A2",
+                DeviceFloor = "2F",
+                PanelFloor = "2F",
+                FacilitySwitch = "是"
+            };
+            var previous = new FrameInfoJsonRecord
+            {
+                MachineId = "M1",
+                DeviceName = "设备A",
+                Region = "R1",
+                OriginalCableModel = "C1",
+                BoqCableModel = "C1",
+                Fr = "FR",
+                Detail = "DETAIL",
+                Seq = "01",
+                HoseDiameter = "38",
+                Next = "UP-1",
+                UpstreamAxis = "A1",
+                DownstreamAxis = "A2",
+                DeviceFloor = "2F",
+                PanelFloor = "2F",
+                FacilitySwitch = "是",
+                LastModifiedUtc = "2026-11-18T10:00:00.0000000Z",
+                LastModifiedUser = "tester"
+            };
+            FillReviewData review = FillReviewData.Create(machine,
+                new TableFillRow[0]);
+
+            FillUpdateCompareItem item = FillReviewStage.BuildCompareItem(machine,
+                new List<TableFillRow>(), new List<TableFillRow>(), previous,
+                "2A", "", null, review);
+
+            Assert.Equal(0, item.AddedCount + item.RemovedCount
+                + item.QuantityChangedCount);
+            FrameInfoJsonChange change = Assert.Single(item.FieldChanges);
+            Assert.Equal("Next", change.Field);
+            Assert.Equal("UP-1", change.Before);
+            Assert.Equal("UP-2", change.After);
+            Assert.True(item.HasChanges);
+        }
+
+        [Fact]
+        public void FieldChanges_AreShownAsBeforeAndAfterValues()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var item = Item("M1");
+                    item.FieldChanges.Add(new FrameInfoJsonChange
+                    {
+                        Field = "Next",
+                        Before = "UP-1",
+                        After = "UP-2"
+                    });
+                    var window = new FillUpdateCompareWindow(
+                        new List<FillUpdateCompareItem> { item });
+                    window.Show();
+                    Pump(3);
+
+                    Assert.Equal(System.Windows.Visibility.Visible,
+                        window.FieldChangesPanel.Visibility);
+                    Assert.Contains("图框字段变化 1 项", window.SummaryText.Text);
+                    Assert.Contains("字段变化", window.FrameList.Items[0].ToString());
+                    var change = Assert.Single(window.FieldChangesGrid.Items
+                        .Cast<FillUpdateCompareWindow.FieldChangeRow>());
+                    Assert.Equal("上游编号", change.Field);
+                    Assert.Equal("UP-1", change.Before);
+                    Assert.Equal("UP-2", change.After);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
         }
 
         [Fact]

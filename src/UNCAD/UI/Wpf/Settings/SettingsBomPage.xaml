@@ -110,6 +110,13 @@
                                 <TextBlock Style="{DynamicResource UncadToggleHint}"
                                            Text="该机台所有回路都在本次选集中才生成 BOQ / DWG；关闭后允许只画部分回路。" />
                             </StackPanel>
+                            <StackPanel Margin="0,10,0,0">
+                                <ui:ToggleSwitch x:Name="FillLayerGovernor" x:FieldModifier="internal"
+                                                 Style="{DynamicResource UncadToggle}" Margin="0"
+                                                 Content="U1F/U1U 图层自动矫正" />
+                                <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                           Text="将可识别的电缆、桥架和线管输出移到对应规范图层；无法判定的对象不移动。" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>

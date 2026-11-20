@@ -148,6 +148,12 @@ namespace UNCAD.Core.Fill
             catalog = catalog ?? new BoqCatalogIndex(null);
             foreach (BridgeStat bridge in stat.Bridges)
                 ResolveBridgeCatalogItem(catalog, bridge);
+            foreach (ConduitStat conduit in stat.Conduits)
+            {
+                ListItem item = catalog.FindRigidConduit(ExtractNumber(conduit.Spec));
+                conduit.CatalogModel = item == null
+                    ? "" : BoqFeatureName.Extract(item.Feature);
+            }
         }
 
         private static ListItem ResolveBridgeCatalogItem(BoqCatalogIndex catalog,
@@ -166,6 +172,8 @@ namespace UNCAD.Core.Fill
             {
                 string diameter = ExtractNumber(conduit.Spec);
                 ListItem item = catalog.FindRigidConduit(diameter);
+                conduit.CatalogModel = item == null
+                    ? "" : BoqFeatureName.Extract(item.Feature);
                 rows.Add(FromItem(TableFillCategory.RigidConduit, 300 + index++, item,
                     conduit.Spec, "1.名称:" + conduit.Spec, "M",
                     TextFormatter.FormatNum(conduit.TotalM)));

@@ -53,7 +53,11 @@ namespace UNCAD.Core.Fill
             }
             foreach (ConduitStat conduit in source.Conduits)
             {
-                var item = new ConduitStat { Spec = conduit.Spec };
+                var item = new ConduitStat
+                {
+                    Spec = conduit.Spec,
+                    CatalogModel = conduit.CatalogModel
+                };
                 item.LengthsMm.AddRange(conduit.LengthsMm);
                 clone.Conduits.Add(item);
             }

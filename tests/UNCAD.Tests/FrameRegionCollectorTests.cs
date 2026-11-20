@@ -18,6 +18,8 @@ namespace UNCAD.Tests
         [InlineData("XFRAME_V2$12$$3$")]
         [InlineData("FRAME_20261102")]
         [InlineData("FRAME_20261102$0$")]
+        [InlineData("FRAME_20261119")]
+        [InlineData("FRAME_20261119$0$")]
         [InlineData("FRAME_20260812$12$$3$")]
         public void SupportedFrameNamesIncludeLegacyAndCurrentDefinitions(string name)
         {
@@ -46,15 +48,18 @@ namespace UNCAD.Tests
             // 2026-11-02（D-040）：xframe_v2 降为上一代，随旧定义一起迁移。
             Assert.True(FrameRegionCollector.IsLegacyFrameName("xframe_v2"));
             Assert.True(FrameRegionCollector.IsLegacyFrameName("XFRAME_V2$12$$3$"));
-            Assert.False(FrameRegionCollector.IsLegacyFrameName("FRAME_20261102"));
+            Assert.True(FrameRegionCollector.IsLegacyFrameName("FRAME_20261102"));
+            Assert.False(FrameRegionCollector.IsLegacyFrameName("FRAME_20261119"));
             Assert.False(FrameRegionCollector.IsLegacyFrameName("frameinfo_json"));
         }
 
         [Fact]
-        public void CurrentTemplateBlockIsFrame20261102()
+        public void CurrentTemplateBlockIsFrame20261119()
         {
-            Assert.Equal("FRAME_20261102", FrameRegionCollector.CurrentFrameName);
-            Assert.Equal("frame_20260812/frame/xframe/xframe_v2/FRAME_20261102",
+            Assert.Equal("FRAME_20261119", FrameRegionCollector.CurrentFrameName);
+            Assert.Equal("FRAME_20261102", FrameRegionCollector.PreviousFrameName);
+            Assert.Equal(
+                "frame_20260812/frame/xframe/xframe_v2/FRAME_20261102/FRAME_20261119",
                 FrameRegionCollector.SupportedFrameDescription);
         }
 
@@ -66,8 +71,11 @@ namespace UNCAD.Tests
 
             Assert.Contains("FrameRegionCollector.CurrentFrameName", source);
             Assert.DoesNotContain("FrameRegionCollector.XFrameName", source);
-            Assert.Contains("新版图框模板中缺少 xframe_v2 定义", source);
-            Assert.Contains("无法导入 xframe_v2 图框定义", source);
+            Assert.Contains("新版图框模板中缺少 ", source);
+            Assert.Contains("无法导入 ", source);
+            Assert.Contains("DuplicateRecordCloning.Ignore", source);
+            Assert.Contains("ReplaceDefinition(ctx.Db, transaction, frameId",
+                source);
         }
 
         [Fact]
@@ -93,6 +101,8 @@ namespace UNCAD.Tests
             Assert.NotNull(export);
             Assert.Contains("xframe_v2", submit.Notes);
             Assert.Contains("xframe_v2", export.Function);
+            Assert.Contains("FRAME_20261119", submit.Notes);
+            Assert.Contains("FRAME_20261119", export.Function);
         }
 
         [Fact]

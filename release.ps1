@@ -59,7 +59,7 @@ $buildFrameTemplate = Join-Path (Split-Path -Parent $buildOutput) "Resources\XFr
 $bundleFrameTemplate = Join-Path $bundle "Resources\XFrameTemplate.dwg"
 if (-not (Test-Path $buildOutput -PathType Leaf)) { throw "Build output is missing: $buildOutput" }
 if ($NoBuild) {
-    $sourceInputs = @(Get-ChildItem (Join-Path $root "src\UNCAD") -Recurse -File |
+    $sourceInputs = @(Get-ChildItem (Join-Path $root "src") -Recurse -File |
         Where-Object { $_.Extension -in @(".cs", ".csproj", ".tsv", ".svg", ".xlsx", ".dwg", ".html", ".css", ".js", ".txt") })
     $sourceInputs += @(Get-Item (Join-Path $root "BOQ_Template.xlsx"))
     # Scripts and manifests affect the package without touching UNCAD.dll;
@@ -80,6 +80,9 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
 }
 Assert-FileMatches $buildFrameTemplate $bundleFrameTemplate "Resources\XFrameTemplate.dwg"
 Assert-TreeMatches (Split-Path -Parent $buildOutput) $bundle "DLL payload" "*.dll"
+Assert-FileMatches (Join-Path (Split-Path -Parent $buildOutput) "UNCAD.Preview.exe") (Join-Path $bundle "UNCAD.Preview.exe") "WebV viewer"
+Assert-FileMatches (Join-Path (Split-Path -Parent $buildOutput) "UNCAD.Preview.exe.config") (Join-Path $bundle "UNCAD.Preview.exe.config") "WebV configuration"
+Assert-TreeMatches (Join-Path (Split-Path -Parent $buildOutput) "Web") (Join-Path $bundle "Web") "WebV assets"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.

@@ -117,9 +117,10 @@ namespace UNCAD.Tests
             Assert.True(transactionStart >= 0 && apply > transactionStart
                 && commit > apply,
                 "图层矫正必须落在既有写事务内（一次 U 连同填充一起回退）。");
-            // 编排只调阶段类；确认窗把体检结果传给 ShowReview（预览+矫正报告）。
+            // 编排只调阶段类；确认窗接收体检报告。U1U 3D 预览保持停用。
             Assert.Contains("FillRouteInspectionStage.InspectSelectionAndReport", fill);
             Assert.Contains("out FillReviewData review, routeInspection", fill);
+            Assert.Contains("不构建 3D 场景", fill);
 
             // 阶段类承载报告口径：连通性报告级（不拦截）+ 图层矫正文案。
             string stage = Source("src", "UNCAD", "Features", "Fill",
@@ -130,12 +131,16 @@ namespace UNCAD.Tests
             Assert.Contains("ConfigKeys.FillLayerGovernor", stage);
             Assert.Contains("LayerGovernorService.Plan", stage);
             Assert.Contains("ParallelAnnotationOwnership.Collect", stage);
-            Assert.Contains("QuickLineAxisSpan.Describe", stage);
+            Assert.DoesNotContain("inspection.Preview = BuildPreview", stage);
 
             string batch = Source("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");
             Assert.Contains("LayerGovernorService.Apply", batch);
-            Assert.Contains("FillRouteInspectionStage.Scan(ctx)", batch);
+            Assert.Contains("FillRouteInspectionStage.Scan(ctx, drawingStyle,", batch);
+            Assert.Contains("FillRouteInspectionStage.CorrectDrawingSettings",
+                fill);
+            Assert.Contains("FillRouteInspectionStage.CorrectDrawingSettings",
+                batch);
             Assert.Contains("BatchFillConfirmationWindow(confirmationRows",
                 batch);
             string preflight = Source("src", "UNCAD", "Features", "Fill",
@@ -158,6 +163,38 @@ namespace UNCAD.Tests
             string xauto = Source("src", "UNCAD", "Features", "XAuto",
                 "XAutoFeature.cs");
             Assert.Contains("item.IsPolyline, item.IsBridgePolyline", xauto);
+        }
+
+        [Fact]
+        public void JoinedU1lLabels_RequireStaleUniqueAssociationAndReachCorrections()
+        {
+            string service = Source("src", "UNCAD", "Cad", "QuickLine",
+                "QuickLineCadService.cs");
+            Assert.Contains("AssociateStaleLabelsWithJoinedPolylines", service);
+            Assert.Contains("item.IsPolyline && !item.IsBridgePolyline", service);
+            Assert.Contains("linesByHandle.ContainsKey(label.AssociatedLineHandle)",
+                service);
+            Assert.Contains("FindDeletedAssociationLabels", service);
+            Assert.Contains("options.StaleAssociationMaximumDistance.HasValue",
+                service);
+            Assert.Contains("database.GetObjectId(false, new Handle(raw), 0)",
+                service);
+            Assert.Contains("QuickLineStaleLabelMatcher.FindUniqueNearestPath",
+                service);
+            string stage = Source("src", "UNCAD", "Features", "Fill",
+                "FillRouteInspectionStage.cs");
+            Assert.Contains("StaleAssociationMaximumDistance", stage);
+            Assert.Contains("styleSettings.StaleLabelAssociationMaximumDistance",
+                stage);
+
+            string layerGovernor = Source("src", "UNCAD", "Cad",
+                "LayerGovernorService.cs");
+            string styleCorrector = Source("src", "UNCAD", "Cad",
+                "FillDrawingSettingsCorrector.cs");
+            Assert.Contains("segment.RestoredLabelIds", layerGovernor);
+            Assert.Contains("segment.RestoredLabelIds", styleCorrector);
+            Assert.Contains("BuildStyleStamp", styleCorrector);
+            Assert.Contains("QuickLineStaleLabelMatcher", service);
         }
 
         private static string Source(params string[] parts)

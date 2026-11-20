@@ -10,7 +10,7 @@ namespace UNCAD.Tests
     /// 1. **最后一轮**——单框对比必须用清单确认窗之后、插座/容量/米数同步
     ///    之后的最终行构建；批量对比必须在预留/目录确认窗之后、最终确认与
     ///    写事务之前构建。展示 = 实际写入。
-    /// 2. **无变化不弹窗**——门控是 HasChanges（行新增/移除/改量），不是
+    /// 2. **无变化不弹窗**——门控是 HasChanges（清单行或图框字段有变化），不是
     ///    HasHistory；内容没变时单框直接更新并提示，批量跳过弹窗。
     /// 3. **电缆长度卡片**——BuildCompareItem 必须接收 CableReserveInfo，
     ///    卡片展示 实测/盘内（箱内）/设备内/业主 分解与上次总长对比。
@@ -37,6 +37,7 @@ namespace UNCAD.Tests
             Assert.True(sync > capacity, "米数同步必须在容量确认之后");
             Assert.True(compare > sync,
                 "U1U 对比窗必须在最终轮（预留/米数同步）之后构建——展示必须等于写入");
+            Assert.Contains("cableReserve, review)", fill);
         }
 
         [Fact]
@@ -67,8 +68,9 @@ namespace UNCAD.Tests
             Assert.True(finalConfirm > compare,
                 "最终确认窗必须在对比窗之后");
 
-            // 卡片数据来自 plan.Reserve；门控是 HasChanges；全部无变化直接更新。
-            Assert.Contains("plan.Reserve))", batch);
+            // 卡片和字段差异来自最终预留与最终确认后的 review。
+            Assert.Contains("plan.Reserve,", batch);
+            Assert.Contains("plan.Review))", batch);
             Assert.Contains(".Where(item => item.HasChanges)", batch);
             Assert.Contains("所选图框内容均无变化，跳过对比，直接更新", batch);
 
@@ -91,6 +93,21 @@ namespace UNCAD.Tests
             Assert.Contains("BuildCableCard(previous, reserve)", review);
             // 上次总长只取本框自己的记录（复制框记录已被句柄校验拒掉）。
             Assert.Contains("TotalCableM", review);
+        }
+
+        [Fact]
+        public void CompareProjectsFrameChangesWithTheSameJsonUpdaterAsWrite()
+        {
+            string review = Source("src", "UNCAD", "Features", "Fill",
+                "FillReviewStage.cs");
+            Assert.Contains("FrameInfoJsonRecordUpdater.Update(", review);
+            Assert.Contains("finalReview", review);
+            Assert.Contains("FieldChanges = fieldChanges", review);
+
+            string window = Source("src", "UNCAD", "UI", "Wpf",
+                "FillUpdateCompareWindow.xaml.cs");
+            Assert.Contains("(FieldChanges?.Count ?? 0) > 0", window);
+            Assert.Contains("ShowFieldChanges(item.FieldChanges)", window);
         }
 
         private static string Source(params string[] parts)

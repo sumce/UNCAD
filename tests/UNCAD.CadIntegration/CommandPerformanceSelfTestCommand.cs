@@ -10,6 +10,7 @@ using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Stat;
 using UNCAD.Features.Fill;
 using UNCAD.Features.Submit;
 
@@ -118,6 +119,55 @@ namespace UNCAD.CadIntegration
                         Require(record.UpstreamAxis == "A/1" && record.DownstreamAxis == "B/2", "axis values");
                     }
                 }
+            });
+            // The XSTS detail export must retain a drawn item without a catalog code.
+            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var table = (Table)transaction.GetObject(groups[0][5], OpenMode.ForWrite);
+                string[] manual = { "manual", "Custom item", "User model", "set", "0", "CUSTOM-01" };
+                for (int column = 0; column < manual.Length; column++)
+                    table.Cells[3, column].TextString = manual[column];
+                transaction.Commit();
+            }
+            Measure(report, "Read 1000 XSTS frame lists", () =>
+            {
+                var selected = new List<XstsCircuitRecord>();
+                using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
+                {
+                    var definitions = new CadBlockDefinitionReader(transaction);
+                    foreach (ObjectId[] ids in groups)
+                    {
+                        var source = CadSubmissionReader.Read(transaction, ids, definitions,
+                            tablesOnly: true);
+                        Require(source.Attributes.Count == 0, "XSTS must not reread block attributes");
+                        Require(source.TableRows.Count == 13, "drawing info table must be excluded");
+                        Require(source.TableReadErrors.Count == 0, "XSTS table cell read");
+                        var frame = new XstsCircuitRecord("PERF", "CIRCUIT")
+                        {
+                            FrameHandle = ids[0].Handle.ToString()
+                        };
+                        frame.TableRows.AddRange(source.TableRows);
+                        selected.Add(frame);
+                    }
+                }
+                XstsReport details = XstsReportBuilder.Build(selected,
+                    new[] { new XstsCircuitRecord("PERF", "CIRCUIT") });
+                Require(details.FrameCount == groups.Count, "XSTS physical frame count");
+                Require(details.SelectedCircuitCount == 1, "XSTS circuit deduplication");
+                Require(details.Frames.Count == groups.Count, "XSTS one row per physical frame");
+                Require(details.Frames.Sum(frame => frame.Items.Count) == groups.Count + 1,
+                    "XSTS all drawn items");
+                Require(details.Frames[0].Items.Count == 2, "XSTS same-frame items");
+                Require(details.Frames[0].Items[0].Model == "3*2.5", "XSTS cable model");
+                Require(details.Frames[0].Items[1].Code == "CUSTOM-01"
+                    && details.Frames[0].Items[1].Quantity == "0", "XSTS custom item and zero quantity");
+                Require(details.Frames[0].FrameHandle == groups[0][0].Handle.ToString(),
+                    "XSTS frame ID");
+                Require(details.Frames.All(frame => frame.Cells.Count == details.MaterialColumns.Count),
+                    "XSTS material column alignment");
+                int customColumn = details.Frames[0].Cells.FindIndex(item => item?.Code == "CUSTOM-01");
+                Require(customColumn >= 0 && details.Frames[1].Cells[customColumn] == null,
+                    "XSTS absent material stays blank");
             });
             Measure(report, "Scan 1000 connected line labels", () =>
             {

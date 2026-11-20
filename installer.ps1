@@ -145,6 +145,10 @@ function Get-PackageInfo {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
+        "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
+        "Web\Preview\index.html", "Web\Preview\app.js", "Web\Preview\styles.css",
+        "Web\Preview\vendor\three\LICENSE.txt", "Web\Preview\vendor\three\OrbitControls.js",
+        "Web\Preview\vendor\three\three.core.min.js", "Web\Preview\vendor\three\three.module.min.js",
         "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
     )
     foreach ($file in $payloadFiles) {

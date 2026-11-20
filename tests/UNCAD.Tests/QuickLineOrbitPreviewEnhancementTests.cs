@@ -20,6 +20,31 @@ namespace UNCAD.Tests
     /// </summary>
     public sealed class QuickLineOrbitPreviewEnhancementTests
     {
+        private static QuickLineColumnGrid PlanForKnownTestEndpoints(
+            IReadOnlyList<QuickLineOrbitPreviewSegment> segments,
+            string upstreamAxis, string downstreamAxis,
+            double spacingMillimetres = QuickLineColumnGridPlanner
+                .DefaultSpacingMillimetres)
+        {
+            QuickLineSpatialPoint[] points = (segments
+                ?? Array.Empty<QuickLineOrbitPreviewSegment>())
+                .Where(segment => segment != null)
+                .SelectMany(segment => new[] { segment.Start, segment.End })
+                .Distinct().ToArray();
+            if (points.Length == 0)
+                return QuickLineColumnGridPlanner.Plan(segments,
+                    upstreamAxis, downstreamAxis, spacingMillimetres);
+
+            QuickLineSpatialPoint upstream = points.OrderBy(point => point.X)
+                .ThenBy(point => point.Y).ThenBy(point => point.Z).First();
+            QuickLineSpatialPoint downstream = points
+                .OrderByDescending(point => point.X)
+                .ThenByDescending(point => point.Y)
+                .ThenByDescending(point => point.Z).First();
+            return QuickLineColumnGridPlanner.Plan(segments, upstreamAxis,
+                downstreamAxis, upstream, downstream, true, spacingMillimetres);
+        }
+
         // ---- 特性C（3.3.2 两向）：柱网 + 数字轴刻度 + 字母轴标签 ----------------
 
         [Fact]
@@ -36,14 +61,14 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(52800, 0, 0),
                     QuickLineSpatialAxis.X, 52800, true)
             };
-            QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 segments, "48/V", "37/V");
 
             Assert.NotNull(grid);
             Assert.Equal(12, grid.Lines.Count(line => line.ConstantX));
             Assert.Equal(1, grid.Lines.Count(line => !line.ConstantX));
-            Assert.Equal(0.0, grid.UpstreamEndpoint.X, 6);
-            Assert.Equal(52800.0, grid.DownstreamEndpoint.X, 6);
+            Assert.Equal(0.0, grid.UpstreamEndpoint.Value.X, 6);
+            Assert.Equal(52800.0, grid.DownstreamEndpoint.Value.X, 6);
             Assert.Equal(4800.0, grid.SpacingMillimetres, 6);
 
             // 数字轴向=位移大的那向（X，|ΔX|=52800 > |ΔY|=0）。
@@ -65,7 +90,7 @@ namespace UNCAD.Tests
             Assert.Equal(0.0, grid.LetterLabels[0].Position, 6);
 
             // 反过来 37 在上游：刻度方向翻转（不按 X 正方向硬编码）。
-            QuickLineColumnGrid flipped = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid flipped = PlanForKnownTestEndpoints(
                 segments, "37/V", "48/V");
             Assert.Equal(37, flipped.NumericTicks[0].Number);
             Assert.Equal(48, flipped.NumericTicks[flipped.NumericTicks.Count - 1].Number);
@@ -90,7 +115,7 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(9600, 9600, 0),
                     QuickLineSpatialAxis.Y, 9600, true)
             };
-            QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 segments, "48/V", "37/V");
             Assert.True(grid.NumericAxisIsX);
             // 字母轴锚在上游 Y=0（V）：包络 [0,9600] → 0(V)、4800(W)、9600(X)。
@@ -114,7 +139,7 @@ namespace UNCAD.Tests
             };
             // 位移全在 Y → 数字轴=Y、字母轴=X；两端字母 V/U 但两端 X 重合
             //（场景上无法定序）→ 字母不标（不猜）。
-            QuickLineColumnGrid degenerate = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid degenerate = PlanForKnownTestEndpoints(
                 segments, "48/V", "37/U");
             Assert.False(degenerate.NumericAxisIsX);
             Assert.Empty(degenerate.LetterLabels);
@@ -129,7 +154,7 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(9600, 9600, 0),
                     QuickLineSpatialAxis.X, 13606, true)
             };
-            QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 diagonal, "48/V", "37/U");
             Assert.True(grid.NumericAxisIsX);
             Assert.Equal(new[] { "V", "U" },
@@ -147,7 +172,7 @@ namespace UNCAD.Tests
                     QuickLineSpatialAxis.X, 9600, true)
             };
             // 任一端解析失败（「轴A」）：数字刻度与字母标签都不画（不猜）。
-            QuickLineColumnGrid bad = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid bad = PlanForKnownTestEndpoints(
                 segments, "轴A", "37/V");
             Assert.Empty(bad.NumericTicks);
             Assert.Empty(bad.LetterLabels);
@@ -155,12 +180,12 @@ namespace UNCAD.Tests
             // 两端都能解析但都没有数字轴（纯字母 V→P）：数字刻度不画；字母
             // 不同但两端字母轴坐标重合（路由纯 X 向、字母轴=X 两端同为 0）
             //——场景上无法定序，不猜，字母也不标。
-            QuickLineColumnGrid letters = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid letters = PlanForKnownTestEndpoints(
                 segments, "V", "P");
             Assert.Empty(letters.NumericTicks);
             Assert.Empty(letters.LetterLabels);
             // 半边值（一端数字一端字母）：两向都不算。
-            QuickLineColumnGrid mixed = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid mixed = PlanForKnownTestEndpoints(
                 segments, "48", "V");
             Assert.Empty(mixed.NumericTicks);
             Assert.Empty(mixed.LetterLabels);
@@ -178,7 +203,7 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(100, 9600, 0),
                     QuickLineSpatialAxis.Y, 9600, true)
             };
-            QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 segments, "48/V", "46/V");
             Assert.False(grid.NumericAxisIsX);
             Assert.Equal(new[] { 48, 47, 46 },
@@ -198,13 +223,13 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(100, 200, 4000),
                     QuickLineSpatialAxis.Z, 4000, true)
             };
-            QuickLineColumnGrid zOnly = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid zOnly = PlanForKnownTestEndpoints(
                 vertical, "48/V", "37/V");
             Assert.Empty(zOnly.NumericTicks);
             Assert.Equal("V", zOnly.LetterLabels.Single().Letter);
             Assert.NotEmpty(zOnly.Lines);
-            Assert.Equal(100.0, zOnly.UpstreamEndpoint.X, 6);
-            Assert.Equal(100.0, zOnly.DownstreamEndpoint.X, 6);
+            Assert.Equal(100.0, zOnly.UpstreamEndpoint.Value.X, 6);
+            Assert.Equal(100.0, zOnly.DownstreamEndpoint.Value.X, 6);
         }
 
         [Fact]
@@ -220,12 +245,12 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(9600, 9600, 0),
                     QuickLineSpatialAxis.X, 13576, true)
             };
-            QuickLineColumnGrid grid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 diagonal, "48/V", "37/V");
             Assert.True(grid.NumericAxisIsX, "位移平手取 X（不猜另一个）");
-            Assert.Equal(0.0, grid.UpstreamEndpoint.Y, 6);
+            Assert.Equal(0.0, grid.UpstreamEndpoint.Value.Y, 6);
             // 下游端点平手取 max Y——两端钉分开。
-            Assert.Equal(9600.0, grid.DownstreamEndpoint.Y, 6);
+            Assert.Equal(9600.0, grid.DownstreamEndpoint.Value.Y, 6);
 
             var pureY = new List<QuickLineOrbitPreviewSegment>
             {
@@ -234,11 +259,11 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(100, 9600, 0),
                     QuickLineSpatialAxis.Y, 9600, true)
             };
-            QuickLineColumnGrid yGrid = QuickLineColumnGridPlanner.Plan(
+            QuickLineColumnGrid yGrid = PlanForKnownTestEndpoints(
                 pureY, "48/V", "46/V");
             Assert.False(yGrid.NumericAxisIsX);
-            Assert.Equal(0.0, yGrid.UpstreamEndpoint.Y, 6);
-            Assert.Equal(9600.0, yGrid.DownstreamEndpoint.Y, 6);
+            Assert.Equal(0.0, yGrid.UpstreamEndpoint.Value.Y, 6);
+            Assert.Equal(9600.0, yGrid.DownstreamEndpoint.Value.Y, 6);
         }
 
         [Fact]
