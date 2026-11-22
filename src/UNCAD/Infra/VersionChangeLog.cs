@@ -31,7 +31,10 @@ namespace UNCAD.Infra
         public static readonly IReadOnlyList<VersionChangeLogEntry> Entries =
                 new List<VersionChangeLogEntry>
             {
-                new VersionChangeLogEntry("3.4.1", "2026-11-19",
+                new VersionChangeLogEntry("3.4.1", "2026-11-22",
+                    "新增（3.4.1.10）：U1SET 可选开启 U1F/U1U 毫米标位置/角度归位，按当前 U1L 位置和偏移设置贴合关联线段；默认关闭，不改文字内容或字高。轻微角度误差的旧标注识别容差最高 15°。",
+                    "修正（3.4.1.8）：U1F 不再自动矫正 U1L 毫米标、桥架和线管样式，也不再迁移旧桥架标注；U1B 软管标注和图层归位不变。U1U 吸收设备预留后若无法删除原标记文字，会回滚整次填充。",
+                    "修正（3.4.1.9）：新写入的 CABLE_INFO 在型号前增加“电缆 ”（如“电缆 ZB-YJVR-3*2.5”）；无测量值时同样显示。旧格式仍可读取，BOQ 型号匹配不变。",
                     "修正（3.4.1.6）：CABLE_INFO 型号直接显示 ZB-YJV-/ZB-YJVR- 工程前缀，不再加“电缆”二字；旧格式仍可读取。U1SET 增加 Xauto 图框占用比例（0.2–1.0）和 U1F/U1U 图层自动矫正开关。",
                     "修正（3.4.1.5）：INFO2 只显示桥架和刚性线管；线管型号简写为“镀锌穿线管38mm”，与长度空格分隔，如“镀锌穿线管38mm 4000mm”；多段仍显示分段和合计。软管不再写入 INFO2，U1U 保留未知桥架/线管旧值并清除旧软管项；独立 Ruanguan 块更新不变。",
                     "修正（3.4.1.4）：图框桥架和线管长度统一以毫米显示；单段只显示如 4000mm，多段显示如 2000 +2500 = 4500mm。旧图框 CONDUIT_INFO 兼容属性也采用此格式；不改变清单工程量或统计报表单位。",

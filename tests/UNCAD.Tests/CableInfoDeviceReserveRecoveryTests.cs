@@ -12,6 +12,7 @@ namespace UNCAD.Tests
     {
         [Theory]
         [InlineData("电缆ZB-YJVR-5*4mm²: 1000+700+3400（盘内）+800（设备内）+3000（预留）=8900mm", 800d)]
+        [InlineData("电缆 ZB-YJVR-5*4mm²: 1000+700+3400（盘内）+800（设备内）+3000（预留）=8900mm", 800d)]
         [InlineData("电缆ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +800（设备内） +3000（预留）=8900mm", 800d)] // 3.0.0.15 段间空格
         [InlineData("电缆ZB-YJVR-5*4mm²: 1000+1500.5（设备内）=2500.5mm", 1500.5d)]
         [InlineData("1000(设备内)", 1000d)]                                 // 半角括号
@@ -85,6 +86,23 @@ namespace UNCAD.Tests
             // 默认开关值与 U1SET 开关键名。
             string keys = File.ReadAllText(RepoFile("src", "UNCAD", "Infra", "ConfigKeys.cs"));
             Assert.Contains("UNC_FILL_DEVICE_RESERVE_AUTO", keys);
+        }
+
+        [Fact]
+        public void EraseAbsorbed_FailureAbortsInsteadOfCommittingReserveOnly()
+        {
+            string reader = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "DeviceReserveMarkerReader.cs"));
+            int start = reader.IndexOf("internal static int EraseAbsorbed(",
+                System.StringComparison.Ordinal);
+            Assert.True(start >= 0);
+            string erase = reader.Substring(start);
+
+            Assert.Contains("transaction.GetObject(id, OpenMode.ForWrite, true)", erase);
+            Assert.Contains("if (!entity.IsErased) entity.Erase();", erase);
+            Assert.Contains("if (!entity.IsErased)", erase);
+            Assert.Contains("throw new InvalidOperationException(", erase);
+            Assert.DoesNotContain("Log.Warn(commandLabel + \" 删除设备预留标记失败", erase);
         }
 
         [Fact]

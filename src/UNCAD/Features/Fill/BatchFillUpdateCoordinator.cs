@@ -401,7 +401,6 @@ namespace UNCAD.Features.Fill
             int tableRows = 0;
             int frameBlocks = 0;
             int attributeValues = 0;
-            int migratedBridgeLabels = 0;
             int layerGovernorMoved = 0;
             int correctedCableLabels = 0;
             int correctedTrayRuns = 0;
@@ -467,15 +466,16 @@ namespace UNCAD.Features.Fill
                         // D-043：删除已吸收的老版设备预留横排标注。
                         FillDrawingSettingsCorrectionResult styleCorrection =
                             FillRouteInspectionStage.CorrectDrawingSettings(ctx,
-                                transaction, plan.RouteInspection, drawingStyle);
+                                transaction, plan.RouteInspection, drawingStyle,
+                                correctCableLabelPlacement:
+                                    drawingStyle.CorrectCableLabelPlacement,
+                                correctCableTrayConduitStyles: false);
                         correctedCableLabels += styleCorrection.CableLabels;
                         correctedTrayRuns += styleCorrection.TrayRuns;
                         correctedConduitRuns += styleCorrection.ConduitRuns;
                         correctedHoseLabels += styleCorrection.HoseLabels;
                         DeviceReserveMarkerReader.EraseAbsorbed(transaction,
                             plan.DeviceReserveEraseIds.ToArray(), CommandIds.FillUpdate);
-                        migratedBridgeLabels += BridgeLabelMigrationWriter.Migrate(
-                            transaction, plan.Selection.TextIds, options.MmPerGrid);
                         int filled = FillTableModule.Write(ctx, transaction,
                             plan.Selection.TableIds, options.StartRow, options.ClearRows,
                             plan.Rows, options.TextHeight);
@@ -711,8 +711,6 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 批量完成：图框 " + plans.Count + " 个 / 机台 "
                 + resultRows.Count + " 台，表格 " + tableRows + " 行、块 " + frameBlocks
                 + " 个共更新 " + attributeValues + " 项属性"
-                + (migratedBridgeLabels > 0 ? "；旧桥架标注升级/角度修复 "
-                    + migratedBridgeLabels + " 个" : "")
                 + "；明细见结果窗。"
                 + (coverageFailed.Count > 0
                     ? " 有 " + coverageFailed.Count + " 台回路不全（其中 "

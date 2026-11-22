@@ -17,6 +17,24 @@ namespace UNCAD.Core.Excel
         public string WorkbookHash { get; set; }
         public string RefreshedUtc { get; set; }
         public int RowCount { get; set; }
+        public int MissingMachineIdRowCount { get; set; }
+        public IReadOnlyList<int> MissingMachineIdRowNumbers { get; set; }
+
+        internal string MissingMachineIdWarning
+        {
+            get
+            {
+                if (MissingMachineIdRowCount <= 0) return "";
+                string rows = string.Join("、", (MissingMachineIdRowNumbers
+                    ?? Array.Empty<int>()).Select(row =>
+                        row.ToString(CultureInfo.InvariantCulture)));
+                if (MissingMachineIdRowCount > (MissingMachineIdRowNumbers?.Count ?? 0))
+                    rows += (rows.Length > 0 ? "、" : "") + "等";
+                return "另有 " + MissingMachineIdRowCount
+                    + " 行回路名称非空但 U_机台ID 为空，未导入（Excel 行 "
+                    + rows + "）。请将在线表 U_ 列填充到新增回路行后重新刷新。";
+            }
+        }
     }
 
     /// <summary>
@@ -103,11 +121,15 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
             // versions. An invalid or unstable workbook cannot remove the last
             // valid snapshot.
             string beforeHash = HashFile(workbookPath);
-            List<MachineRow> rows = ExcelMachineReader.ReadRows(workbookPath);
+            MachineWorkbookReadResult read =
+                ExcelMachineReader.ReadRowsWithDiagnostics(workbookPath);
             string afterHash = HashFile(workbookPath);
             if (!string.Equals(beforeHash, afterHash, StringComparison.OrdinalIgnoreCase))
                 throw new IOException("机台数据 Excel 在读取期间发生变化，请保存完成后重新点击“刷新”。");
-            return Replace(source, rows, afterHash);
+            MachineWorkbookSnapshotInfo snapshot = Replace(source, read.Rows, afterHash);
+            snapshot.MissingMachineIdRowCount = read.MissingMachineIdRowCount;
+            snapshot.MissingMachineIdRowNumbers = read.MissingMachineIdRowNumbers;
+            return snapshot;
         }
 
         internal MachineWorkbookSnapshotInfo RefreshRows(string source,

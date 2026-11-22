@@ -82,5 +82,47 @@ namespace UNCAD.Tests
             }
             finally { workbook.Close(); }
         }
+
+        [Fact]
+        public void ReadAllWithDiagnostics_ReportsRowsWithCircuitButNoMachineId()
+        {
+            var workbook = new XSSFWorkbook();
+            var sheet = workbook.CreateSheet("机台数据");
+            string[] headers = {
+                "U_区域", "U_机台ID", "回路名称", "U_设备楼层", "U_设备轴位",
+                "U_上游编号", "U_上游楼层", "U_上游轴位", "U_配电信息",
+                "U_电缆型号", "U_上游类型"
+            };
+            var header = sheet.CreateRow(0);
+            for (int index = 0; index < headers.Length; index++)
+                header.CreateCell(index).SetCellValue(headers[index]);
+
+            var valid = sheet.CreateRow(1);
+            valid.CreateCell(0).SetCellValue("ETCH");
+            valid.CreateCell(1).SetCellValue("M01");
+            valid.CreateCell(2).SetCellValue("有效回路");
+
+            var missingIdentity = sheet.CreateRow(2);
+            missingIdentity.CreateCell(2).SetCellValue("新增回路");
+
+            var deleted = sheet.CreateRow(3);
+            deleted.CreateCell(2).SetCellValue("已删除回路");
+            var strikeFont = workbook.CreateFont();
+            strikeFont.IsStrikeout = true;
+            var strikeStyle = workbook.CreateCellStyle();
+            strikeStyle.SetFont(strikeFont);
+            deleted.GetCell(2).CellStyle = strikeStyle;
+
+            try
+            {
+                MachineWorkbookReadResult result =
+                    ExcelMachineReader.ReadAllWithDiagnostics(workbook);
+
+                Assert.Single(result.Rows);
+                Assert.Equal(1, result.MissingMachineIdRowCount);
+                Assert.Equal(new[] { 3 }, result.MissingMachineIdRowNumbers);
+            }
+            finally { workbook.Close(); }
+        }
     }
 }

@@ -5,16 +5,22 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source build: `3.4.1.6` (2026-11-19); the installed assembly is
-  `3.4.1.6`. The local release ZIP was generated on 2026-11-20 at
+- Current local source version: `3.4.1.10` (2026-11-22), not packaged or
+  installed; the installed assembly is `3.4.1.1`.
+  The previous local release
+  ZIP was generated on 2026-11-20 at
   `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
   `DCA972DB7532FB9B34582C6F125E29FAA14B701892939DC86385540A46EC7C90`).
   It has not been uploaded. Its bundle checksum differs from the installed
   bundle, and user-drawing acceptance is pending. XSTS frame details use one row per frame, with separate model
   and quantity columns for all drawn BOQ items and blank cells for missing
   items. Near-name hints and the whole-drawing "not drawn" list are removed.
-  The local `v3.4.1` tag and ZIP are created.
-- Current stable release line: `3.4.1` (current patch `3.4.1.6`, 2026-11-20;
+  The local `v3.4.1` tag is present. The `3.4.1.7` archive was published as
+  latest on 2026-11-22; size 6,625,853 bytes, SHA-256
+  `1AB481606D8BB56E7AEDE77449324A7D0E17E7351260AF3F1666C32A3B729DB8`.
+  Server metadata and anonymous download were verified byte-for-byte.
+- Current stable release line: `3.4.1` (source patch `3.4.1.10`; latest
+  published patch `3.4.1.7`, 2026-11-20;
   D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
   optional WebView2/Three.js window launched in a separate process; both
   render identical millimetre geometry, so browser startup cannot block CAD.
@@ -35,7 +41,17 @@ shorter than the historical release notes.
   matches, branches, or invalid axes show a diagnostic and no guessed
   cabinet/endpoint markers. Since patch .3, reference geometry follows occupied
   route bays plus one neighboring bay, preserving nine waffle holes per
-  bay; 1F ground remains visible after floor rebasing.
+  bay; 1F ground remains visible after floor rebasing. Patch .7 disabled U1U
+  style correction for U1L millimetre labels, U1Q trays, U1C conduits, and
+  legacy bridge-label migration. Source patch .8 disables the same corrections
+  and migration for U1F. U1B label-height and governed-layer correction remain
+  enabled; an absorbed reserve marker that cannot be erased now aborts the fill
+  transaction instead of leaving the text behind.
+  Patch .9 prefixes new CABLE_INFO model displays with `电缆 `; existing
+  prefixed and unprefixed frame values remain readable. Patch .10 adds a
+  default-off U1SET option to align associated U1L millimetre labels to their
+  line using the configured position/offset; it changes neither text nor
+  height, and widens only the legacy adjacent-label angle fallback to 15°.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
@@ -159,6 +175,8 @@ XLAYOUT/XSTS
   `0mm` marker is absorbed unconditionally. CABLE_INFO uses millimetres only,
   writes every detail as value（label）, ends with =totalmm, and omits the
   redundant `电缆` prefix before the model; old prefixed values remain readable.
+- Current CABLE_INFO output prefixes the displayed model with `电缆 ` as of
+  patch .9; historical prefixed and unprefixed values remain readable.
 - Existing socket quantities are preserved; an absent socket row may add one.
 - U1LX values are display/annotation data only until the deferred decision is
   revisited.

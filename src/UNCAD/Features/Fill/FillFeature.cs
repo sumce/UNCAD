@@ -305,7 +305,7 @@ namespace UNCAD.Features.Fill
             }
 
             int filled;
-            int migratedBridgeLabels, layerGovernorMoved = 0;
+            int layerGovernorMoved = 0;
             var drawingStyleCorrection = new FillDrawingSettingsCorrectionResult();
             XFrameMigrationResult xframeMigration;
             FillWriteResult frameResult, deviceResult, ruanguanResult, frameInfoResult,
@@ -339,7 +339,10 @@ namespace UNCAD.Features.Fill
                     layerGovernorMoved = LayerGovernorService.Apply(ctx, transaction, routeInspection.LayerPlan);
                     drawingStyleCorrection =
                         FillRouteInspectionStage.CorrectDrawingSettings(ctx,
-                            transaction, routeInspection, drawingStyle);
+                            transaction, routeInspection, drawingStyle,
+                            correctCableLabelPlacement:
+                                drawingStyle.CorrectCableLabelPlacement,
+                            correctCableTrayConduitStyles: false);
                     // D-043：删除已吸收的老版设备预留横排标注（吸收判定在读阶段）。
                     DeviceReserveMarkerReader.EraseAbsorbed(transaction,
                         deviceReserveEraseIds.ToArray(),
@@ -350,8 +353,6 @@ namespace UNCAD.Features.Fill
                         throw new InvalidOperationException("图框迁移后的新版清单表容量只有 "
                             + migratedCapacity + " 行，当前清单需要 " + tableRows.Count
                             + " 行；本次已回滚，请删除清单项后重试。");
-                    migratedBridgeLabels = BridgeLabelMigrationWriter.Migrate(transaction,
-                        selection.TextIds, options.MmPerGrid);
                     filled = FillTableModule.Write(ctx, transaction, selection.TableIds,
                         startRow, clearRowCount, tableRows, textHeight);
                     // 3.2.0.6（审计修复）：写表失败不再静默返回——此前单框只无声
@@ -516,11 +517,6 @@ namespace UNCAD.Features.Fill
                 + upstreamInfoResult.Blocks + " 个，upstream 状态 "
                 + upstreamStateResult.Blocks + " 个，上游轴位 " + upstreamAxisResult.Blocks
                 + " 个，下游轴位 " + downstreamAxisResult.Blocks + " 个。");
-            if (migratedBridgeLabels > 0)
-                ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
-                    + "] 已处理 " + migratedBridgeLabels
-                    + " 个旧桥架标注（升级 BOQ 两行样式或修复角度）；格数按 "
-                    + TextFormatter.FormatNum(options.MmPerGrid) + " mm/格换算。");
             FillRouteInspectionStage.WriteWriteResult(ctx, command, routeInspection, layerGovernorMoved);
             FillRouteInspectionStage.WriteDrawingStyleCorrectionResult(ctx,
                 command, drawingStyleCorrection);

@@ -42,17 +42,20 @@ namespace UNCAD.Features.Fill
     {
         internal static FillDrawingSettingsCorrectionResult CorrectDrawingSettings(
             CadContext ctx, Transaction transaction,
-            FillRouteInspection inspection, FillDrawingStyleSettings settings)
+            FillRouteInspection inspection, FillDrawingStyleSettings settings,
+            bool correctCableLabelPlacement,
+            bool correctCableTrayConduitStyles)
             => FillDrawingSettingsCorrector.Apply(ctx, transaction,
                 inspection?.Segments, inspection?.ParallelOutputs, settings,
-                inspection?.LayerPlan != null);
+                inspection?.LayerPlan != null, correctCableLabelPlacement,
+                correctCableTrayConduitStyles);
 
         internal static void WriteDrawingStyleCorrectionResult(CadContext ctx,
             string command, int cableLabels, int trayRuns, int conduitRuns,
             int hoseLabels)
         {
             if (cableLabels + trayRuns + conduitRuns + hoseLabels <= 0) return;
-            ctx.Write("\n[" + command + "] U1SET 绘图样式已矫正：毫米标 "
+            ctx.Write("\n[" + command + "] U1SET 绘图内容已矫正：毫米标位置/角度 "
                 + cableLabels + " 个，桥架 " + trayRuns + " 趟，线管 "
                 + conduitRuns + " 趟，软管标 " + hoseLabels + " 个。");
         }
@@ -77,8 +80,12 @@ namespace UNCAD.Features.Fill
                 FrameBoundaries = boundaries
             };
             if (styleSettings != null)
+            {
                 options.StaleAssociationMaximumDistance =
                     styleSettings.StaleLabelAssociationMaximumDistance;
+                options.AdjacentLabelAngleToleranceRadians =
+                    styleSettings.AdjacentLabelAngleToleranceRadians;
+            }
             IReadOnlyList<QuickLineCadSegment> segments =
                 QuickLineCadService.Scan(ctx, options);
             timer.Stop();

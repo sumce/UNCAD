@@ -506,6 +506,10 @@ rewrite an existing entry.
 - Consequence: an empty or uncached formula result in `U_机台ID` cannot abort
   the workbook refresh; other valid machine rows continue into the SQLite
   snapshot.
+- Amendment (2026-11-22): rows excluded for a blank `U_机台ID` are reported
+  after refresh with their count and the first eight physical Excel row
+  numbers. They remain excluded; refresh does not fill down fields or infer an
+  identity from another column or row.
 
 ## D-014: 350A Bus Plug Box Uses The 400A Catalog Item (2026-09-07)
 
@@ -588,6 +592,11 @@ rewrite an existing entry.
   automatically" clause for bridge labels only. Migration occurs only when
   the catalog model exists and the resulting two-line label collapses back to
   the same statistics input; otherwise the original text is preserved.
+- Amendment (2026-11-20, 3.4.1.7): U1F retains this migration. Single-frame and
+  batch U1U no longer rewrite or rotation-repair legacy bridge labels; existing
+  annotations remain as drawn.
+- Amendment (2026-11-22, 3.4.1.8): U1F also leaves legacy bridge labels as drawn;
+  neither U1F nor U1U migrates them automatically.
 
 ## D-020: Machine Batch And Sequence Metadata (2026-09-18)
 
@@ -900,6 +909,10 @@ rewrite an existing entry.
   `ZB-YJVR-3*2.5mm²`) without the redundant word `电缆`. The same applies to
   model-only values when there are no measurements. Existing values with the
   old `电缆` prefix remain readable for U1U and submission extraction.
+- Amendment (2026-11-22, 3.4.1.9): new CABLE_INFO values prefix displayed cable
+  models with `电缆 ` (for example, `电缆 ZB-YJVR-3*2.5mm²`), including
+  model-only values without measurements. Existing prefixed and unprefixed
+  values remain readable; BOQ model matching is unchanged.
 
 ## D-053: Xauto Proportion Relay And Camera-Depth Hops (2026-11-15)
 
@@ -1519,3 +1532,25 @@ rewrite an existing entry.
      frame filtering occurs only after global assignment, preserving competing
      labels across frame boundaries. Synthetic CAD timing is not evidence of
      end-to-end performance on the customer's large drawing.
+- Amendment (2026-11-20, 3.4.1.7 — U1U annotation correction removed):
+  U1U no longer applies U1SET styles to U1L millimetre labels, U1Q tray runs,
+  or U1C conduit runs, in either single-frame or batch updates. U1F retains
+  these corrections. U1B hose-label height correction and governed-layer
+  correction remain unchanged; legacy bridge-label migration follows D-019.
+- Amendment (2026-11-22, 3.4.1.8 — U1F annotation correction removed):
+  U1F no longer applies U1SET styles to U1L millimetre labels, U1Q tray runs,
+  or U1C conduit runs, and no longer migrates legacy bridge labels. U1B
+  hose-label height correction and governed-layer correction remain enabled.
+  If a detected U1U device-reserve marker cannot be erased in the fill write
+  transaction, the transaction fails and rolls back rather than committing the
+  reserve value while leaving its source text.
+- Amendment (2026-11-22, 3.4.1.10 — opt-in millimetre-label placement):
+  U1SET's drawing page adds a default-off switch for U1F/U1U to position and
+  rotate associated U1L millimetre labels using the configured label position
+  and offset. It does not change label text or height, nor tray/conduit output.
+  With the switch on, the legacy adjacent-label fallback accepts up to 15
+  degrees of label-angle difference (the existing approximately 10-degree
+  limit remains when off). Edits stay inside the fill write transaction.
+  U1R's retargeted label metadata and unique stale-label recovery for deleted
+  straight-line joins remain the only supported ownership paths; ambiguous
+  labels are not guessed.

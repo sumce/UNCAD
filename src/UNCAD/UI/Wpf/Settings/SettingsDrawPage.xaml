@@ -64,6 +64,12 @@
                                           Minimum="0" Maximum="100000" />
                         </StackPanel>
                     </Grid>
+                    <ui:ToggleSwitch x:Name="CorrectCableLabelPlacement"
+                                     x:FieldModifier="internal"
+                                     Style="{DynamicResource UncadToggle}"
+                                     Margin="0,12,0,0"
+                                     Content="U1F/U1U 矫正毫米标位置与角度"
+                                     ToolTip="默认关闭。开启后只归位带 U1L 关联的毫米标，使用本页的位置和偏移设置；不改文字内容或字高。识别旧标注时允许最多 15° 的轻微角度偏差。" />
                 </StackPanel>
             </ui:Card>
 

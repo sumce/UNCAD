@@ -142,20 +142,29 @@ namespace UNCAD.Features.Fill
         internal static int EraseAbsorbed(Transaction transaction,
             ObjectId[] entityIds, string commandLabel)
         {
-            if (transaction == null || entityIds == null || entityIds.Length == 0)
-                return 0;
+            if (entityIds == null || entityIds.Length == 0) return 0;
+            if (transaction == null)
+                throw new ArgumentNullException(nameof(transaction));
             int erased = 0;
             foreach (ObjectId id in entityIds)
             {
+                string handle = id.IsNull ? "<null>" : id.ToString();
                 try
                 {
-                    DBObject entity = transaction.GetObject(id, OpenMode.ForWrite);
+                    if (id.IsNull || !id.IsValid)
+                        throw new InvalidOperationException("对象句柄无效");
+                    handle = id.Handle.ToString();
+                    DBObject entity = transaction.GetObject(id, OpenMode.ForWrite, true);
                     if (!entity.IsErased) entity.Erase();
+                    if (!entity.IsErased)
+                        throw new InvalidOperationException("删除后实体仍未标记为已删除");
                     erased++;
                 }
                 catch (System.Exception ex)
                 {
-                    Log.Warn(commandLabel + " 删除设备预留标记失败: " + ex.Message);
+                    throw new InvalidOperationException((commandLabel ?? "填充命令")
+                        + " 已识别设备预留，但无法删除标记文字（句柄 " + handle
+                        + "）；本次图纸写入已回滚。", ex);
                 }
             }
             if (erased > 0)

@@ -55,6 +55,22 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void AdjacentLabelAngleTolerance_OnlyAcceptsConfiguredDeviation()
+        {
+            double twelveDegrees = 12.0 * System.Math.PI / 180.0;
+            Assert.False(QuickLineCadService.IsLabelAngleWithinTolerance(
+                0.0, twelveDegrees, 0.18));
+            Assert.True(QuickLineCadService.IsLabelAngleWithinTolerance(
+                0.0, twelveDegrees, System.Math.PI / 12.0));
+            Assert.True(QuickLineCadService.IsLabelAngleWithinTolerance(
+                179.0 * System.Math.PI / 180.0,
+                -1.0 * System.Math.PI / 180.0,
+                3.0 * System.Math.PI / 180.0));
+            Assert.False(QuickLineCadService.IsLabelAngleWithinTolerance(
+                0.0, double.NaN, System.Math.PI / 12.0));
+        }
+
+        [Fact]
         public void StaleLabelMatcher_RejectsUnrelatedOrAmbiguousPaths()
         {
             var unrelated = new IReadOnlyList<QuickLinePoint>[]

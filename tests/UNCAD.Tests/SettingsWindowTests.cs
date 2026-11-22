@@ -202,6 +202,9 @@ namespace UNCAD.Tests
                     box => (box.Text ?? "").Contains("桥架"));
                 Assert.Equal("2000mm", page.UnlText.Text);
                 Assert.Contains(FindAll<TextBlock>(page), block => block.Text == "文字高度");
+                Assert.Equal(Settings.GetBool(
+                    ConfigKeys.FillCorrectCableLabelPlacement, false),
+                    page.CorrectCableLabelPlacement.IsChecked);
                 window.Close();
             });
         }
@@ -537,7 +540,7 @@ namespace UNCAD.Tests
                 "FillAutofillBusPlugBox",
                 "CableReserveILine", "CableReserveSocket", "CableReserveBusbar",
                 "FillDeviceReserveAutoDetect", "FillRequireAllCircuits",
-                "FillLayerGovernor",
+                "FillLayerGovernor", "FillCorrectCableLabelPlacement",
                 "LogLevel", "LogRetentionDays", "HistoryRetentionMonths"
             };
             string[] missing = expected.Except(found).ToArray();
@@ -550,6 +553,8 @@ namespace UNCAD.Tests
                 @"ConfigKeys\.XAutoFillRatio\b").Count);
             Assert.Equal(2, Regex.Matches(source,
                 @"ConfigKeys\.FillLayerGovernor\b").Count);
+            Assert.Equal(2, Regex.Matches(source,
+                @"ConfigKeys\.FillCorrectCableLabelPlacement\b").Count);
         }
 
         [Fact]

@@ -30,44 +30,54 @@ namespace UNCAD.Cad
         internal static FillDrawingSettingsCorrectionResult Apply(CadContext ctx,
             Transaction transaction, IReadOnlyList<QuickLineCadSegment> segments,
             IReadOnlyList<ParallelAnnotationOwnershipEntry> parallelOutputs,
-            FillDrawingStyleSettings settings, bool governLayers)
+            FillDrawingStyleSettings settings, bool governLayers,
+            bool correctCableLabelPlacement,
+            bool correctCableTrayConduitStyles)
         {
             var result = new FillDrawingSettingsCorrectionResult();
             if (ctx == null || transaction == null
                 || settings == null) return result;
 
-            var segmentsByHandle = new Dictionary<string, QuickLineCadSegment>(
-                StringComparer.OrdinalIgnoreCase);
-            var u1lMillimetres = new Dictionary<string, double>(
-                StringComparer.OrdinalIgnoreCase);
-            foreach (QuickLineCadSegment segment in segments
-                ?? Array.Empty<QuickLineCadSegment>())
+            if (correctCableLabelPlacement || correctCableTrayConduitStyles)
             {
-                string handle = segment.LineId.Handle.ToString();
-                if (!segmentsByHandle.ContainsKey(handle))
-                    segmentsByHandle.Add(handle, segment);
-                if (segment.LabelMillimetres.HasValue)
-                    u1lMillimetres[handle] = segment.LabelMillimetres.Value;
+                var segmentsByHandle = new Dictionary<string, QuickLineCadSegment>(
+                    StringComparer.OrdinalIgnoreCase);
+                var u1lMillimetres = new Dictionary<string, double>(
+                    StringComparer.OrdinalIgnoreCase);
+                foreach (QuickLineCadSegment segment in segments
+                    ?? Array.Empty<QuickLineCadSegment>())
+                {
+                    string handle = segment.LineId.Handle.ToString();
+                    if (!segmentsByHandle.ContainsKey(handle))
+                        segmentsByHandle.Add(handle, segment);
+                    if (segment.LabelMillimetres.HasValue)
+                        u1lMillimetres[handle] = segment.LabelMillimetres.Value;
+                }
+
+                result.CableLabels = CorrectCableLabels(ctx, transaction,
+                    segmentsByHandle.Values, settings,
+                    correctCableTrayConduitStyles);
+                if (correctCableTrayConduitStyles)
+                {
+                    result.TrayRuns = CorrectParallelRuns(ctx, transaction,
+                        parallelOutputs, segmentsByHandle,
+                        u1lMillimetres, settings, governLayers,
+                        UncadLayerStandard.TrayAnnotationKind);
+                    result.ConduitRuns = CorrectParallelRuns(ctx, transaction,
+                        parallelOutputs, segmentsByHandle,
+                        u1lMillimetres, settings, governLayers,
+                        UncadLayerStandard.ConduitAnnotationKind);
+                }
             }
 
-            result.CableLabels = CorrectCableLabels(ctx, transaction,
-                segmentsByHandle.Values, settings);
             result.HoseLabels = CorrectHoseLabels(transaction,
                 parallelOutputs, settings.CableTextHeight);
-            result.TrayRuns = CorrectParallelRuns(ctx, transaction,
-                parallelOutputs, segmentsByHandle,
-                u1lMillimetres, settings, governLayers,
-                UncadLayerStandard.TrayAnnotationKind);
-            result.ConduitRuns = CorrectParallelRuns(ctx, transaction,
-                parallelOutputs, segmentsByHandle,
-                u1lMillimetres, settings, governLayers,
-                UncadLayerStandard.ConduitAnnotationKind);
             return result;
         }
 
         private static int CorrectCableLabels(CadContext ctx,
             Transaction transaction, IEnumerable<QuickLineCadSegment> segments,
-            FillDrawingStyleSettings settings)
+            FillDrawingStyleSettings settings, bool correctHeight)
         {
             int changed = 0;
             foreach (QuickLineCadSegment segment in segments
@@ -110,14 +120,14 @@ namespace UNCAD.Cad
                     bool entityChanged = false;
                     if (entity is DBText dbText)
                     {
-                        entityChanged = Math.Abs(dbText.Height
-                                - settings.CableTextHeight) > 1e-6
+                        entityChanged = (correctHeight && Math.Abs(dbText.Height
+                                - settings.CableTextHeight) > 1e-6)
                             || Math.Abs(NormalizeAngle(dbText.Rotation - angle)) > 1e-6
                             || currentAnchor.DistanceTo(point) > 1e-4
                             || dbText.Justify != alignment;
                         if (!entityChanged) continue;
                         dbText.UpgradeOpen();
-                        dbText.Height = settings.CableTextHeight;
+                        if (correctHeight) dbText.Height = settings.CableTextHeight;
                         dbText.Rotation = angle;
                         dbText.Justify = alignment;
                         if (alignment == AttachmentPoint.BaseLeft)
@@ -131,14 +141,15 @@ namespace UNCAD.Cad
                     }
                     else if (entity is MText multiText)
                     {
-                        entityChanged = Math.Abs(multiText.TextHeight
-                                - settings.CableTextHeight) > 1e-6
+                        entityChanged = (correctHeight && Math.Abs(multiText.TextHeight
+                                - settings.CableTextHeight) > 1e-6)
                             || Math.Abs(NormalizeAngle(multiText.Rotation - angle)) > 1e-6
                             || currentAnchor.DistanceTo(point) > 1e-4
                             || multiText.Attachment != alignment;
                         if (!entityChanged) continue;
                         multiText.UpgradeOpen();
-                        multiText.TextHeight = settings.CableTextHeight;
+                        if (correctHeight)
+                            multiText.TextHeight = settings.CableTextHeight;
                         multiText.Rotation = angle;
                         multiText.Attachment = alignment;
                         multiText.Location = point;

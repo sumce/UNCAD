@@ -23,6 +23,9 @@ namespace UNCAD.Cad.QuickLine
         /// </summary>
         public double LabelSearchDistance { get; set; }
 
+        /// <summary>Maximum angle difference for the legacy adjacent-label fallback.</summary>
+        public double AdjacentLabelAngleToleranceRadians { get; set; } = 0.18;
+
         /// <summary>
         /// Maximum distance for restoring an explicitly associated label after
         /// its original entity was deleted. Null disables this recovery path.
@@ -324,7 +327,8 @@ namespace UNCAD.Cad.QuickLine
                 var localCandidates = new[] { label.Order - 2, label.Order - 1 }
                     .Where(linesByOrder.ContainsKey).Select(orderKey => linesByOrder[orderKey])
                     .Where(line => !assignedLines.ContainsKey(line.Id)
-                        && IsLikelyAdjacentLabel(line, label))
+                        && IsLikelyAdjacentLabel(line, label,
+                            options.AdjacentLabelAngleToleranceRadians))
                     .Select(line =>
                     {
                         double score;
@@ -1031,6 +1035,13 @@ namespace UNCAD.Cad.QuickLine
                 || options.LabelSearchDistance < 0.0)
                 throw new ArgumentOutOfRangeException(nameof(options.LabelSearchDistance),
                     "Label search distance must be finite and non-negative.");
+            if (double.IsNaN(options.AdjacentLabelAngleToleranceRadians)
+                || double.IsInfinity(options.AdjacentLabelAngleToleranceRadians)
+                || options.AdjacentLabelAngleToleranceRadians < 0.0
+                || options.AdjacentLabelAngleToleranceRadians > Math.PI / 2.0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(options.AdjacentLabelAngleToleranceRadians),
+                    "Adjacent label angle tolerance must be between 0 and 90 degrees.");
             if (double.IsNaN(options.EndpointTolerance)
                 || double.IsInfinity(options.EndpointTolerance)
                 || options.EndpointTolerance < 0.0)
@@ -1264,7 +1275,7 @@ namespace UNCAD.Cad.QuickLine
         }
 
         private static bool IsLikelyAdjacentLabel(LineSnapshot line,
-            LabelSnapshot label)
+            LabelSnapshot label, double angleToleranceRadians)
         {
             if (string.IsNullOrEmpty(line.Layer)
                 || string.IsNullOrEmpty(label.Layer)) return false;
@@ -1274,10 +1285,23 @@ namespace UNCAD.Cad.QuickLine
             if (direction.Length < Epsilon || double.IsNaN(label.Rotation)
                 || double.IsInfinity(label.Rotation)) return false;
             double lineAngle = Math.Atan2(direction.Y, direction.X);
+            return IsLabelAngleWithinTolerance(lineAngle, label.Rotation,
+                angleToleranceRadians);
+        }
+
+        internal static bool IsLabelAngleWithinTolerance(double lineAngle,
+            double labelAngle, double toleranceRadians)
+        {
+            if (double.IsNaN(lineAngle) || double.IsInfinity(lineAngle)
+                || double.IsNaN(labelAngle) || double.IsInfinity(labelAngle)
+                || double.IsNaN(toleranceRadians)
+                || double.IsInfinity(toleranceRadians)
+                || toleranceRadians < 0.0 || toleranceRadians > Math.PI / 2.0)
+                return false;
             double difference = Math.Abs(NormalizeAngle(lineAngle)
-                - NormalizeAngle(label.Rotation));
+                - NormalizeAngle(labelAngle));
             difference = Math.Min(difference, Math.PI - difference);
-            return difference <= 0.18; // approximately ten degrees
+            return difference <= toleranceRadians;
         }
 
         private static double NormalizeAngle(double angle)

@@ -40,6 +40,22 @@ namespace UNCAD.Core.Excel
         }
     }
 
+    internal sealed class MachineWorkbookReadResult
+    {
+        internal MachineWorkbookReadResult(List<MachineRow> rows,
+            int missingMachineIdRowCount, IReadOnlyList<int> missingMachineIdRowNumbers)
+        {
+            Rows = rows ?? new List<MachineRow>();
+            MissingMachineIdRowCount = missingMachineIdRowCount;
+            MissingMachineIdRowNumbers = missingMachineIdRowNumbers
+                ?? Array.Empty<int>();
+        }
+
+        internal List<MachineRow> Rows { get; }
+        internal int MissingMachineIdRowCount { get; }
+        internal IReadOnlyList<int> MissingMachineIdRowNumbers { get; }
+    }
+
     /// <summary>
     /// Reads only the unified machine schema. No legacy aliases, inferred values,
     /// or fallback columns are accepted.
@@ -78,6 +94,9 @@ namespace UNCAD.Core.Excel
         }
 
         public static List<MachineRow> ReadRows(string filePath)
+            => ReadRowsWithDiagnostics(filePath).Rows;
+
+        internal static MachineWorkbookReadResult ReadRowsWithDiagnostics(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("机台数据 Excel 路径不能为空。", nameof(filePath));
@@ -85,7 +104,7 @@ namespace UNCAD.Core.Excel
                 FileShare.ReadWrite | FileShare.Delete))
             {
                 var workbook = new XSSFWorkbook(fs);
-                try { return ReadAll(workbook); }
+                try { return ReadAllWithDiagnostics(workbook); }
                 finally { workbook.Close(); }
             }
         }
@@ -102,6 +121,9 @@ namespace UNCAD.Core.Excel
         }
 
         internal static List<MachineRow> ReadAll(IWorkbook workbook)
+            => ReadAllWithDiagnostics(workbook).Rows;
+
+        internal static MachineWorkbookReadResult ReadAllWithDiagnostics(IWorkbook workbook)
         {
             if (workbook == null) throw new ArgumentNullException(nameof(workbook));
 
@@ -118,10 +140,12 @@ namespace UNCAD.Core.Excel
             return ReadBoundRows(workbook, sheet, columns);
         }
 
-        private static List<MachineRow> ReadBoundRows(IWorkbook workbook, ISheet sheet,
+        private static MachineWorkbookReadResult ReadBoundRows(IWorkbook workbook, ISheet sheet,
             MachineColumns columns)
         {
             var result = new List<MachineRow>();
+            var missingMachineIdRows = new List<int>();
+            int missingMachineIdRowCount = 0;
             var strikeoutByFontIndex = new Dictionary<short, bool>();
             for (int rowIndex = columns.HeaderRow + 1; rowIndex <= sheet.LastRowNum; rowIndex++)
             {
@@ -138,13 +162,19 @@ namespace UNCAD.Core.Excel
 
                 MachineRow machine = ToUnifiedRow(row, columns);
                 if (string.IsNullOrWhiteSpace(machine.MachineId))
+                {
                     // A circuit without an identity cannot be associated with a
                     // frame. Ignore that physical row and keep refreshing the
                     // remaining valid machine rows.
+                    missingMachineIdRowCount++;
+                    if (missingMachineIdRows.Count < 8)
+                        missingMachineIdRows.Add(rowIndex + 1);
                     continue;
+                }
                 result.Add(machine);
             }
-            return result;
+            return new MachineWorkbookReadResult(result, missingMachineIdRowCount,
+                missingMachineIdRows.ToArray());
         }
 
         internal static List<MachineRow> FindRows(IEnumerable<MachineRow> rows, string keyword)

@@ -63,7 +63,7 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row());
             Assert.Equal("MDAPT01-泵1", v[FrameBlockFiller.TagDevice]);
             Assert.Equal("MDAPT01-POWER", v[FrameBlockFiller.TagPower]);
-            Assert.Equal("ZB-YJV-3*70+1*35", v[FrameBlockFiller.TagCable]);
+            Assert.Equal("电缆 ZB-YJV-3*70+1*35", v[FrameBlockFiller.TagCable]);
             Assert.Equal("", v[FrameBlockFiller.TagConduit]);
         }
 
@@ -240,7 +240,7 @@ namespace UNCAD.Tests
             }, 250.0);
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
-            Assert.Equal("ZB-YJV-3*70+1*35mm²: 2000 +3000 +3000 +4000 +4400mm",
+            Assert.Equal("电缆 ZB-YJV-3*70+1*35mm²: 2000 +3000 +3000 +4000 +4400mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -255,7 +255,7 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "ZB-YJV-3*70+1*35mm²: 2000 +3000 +3400（盘内） +500（设备内）"
+                "电缆 ZB-YJV-3*70+1*35mm²: 2000 +3000 +3400（盘内） +500（设备内）"
                 + " +3000（预留）=11900mm",
                 v[FrameBlockFiller.TagCable]);
         }
@@ -268,7 +268,7 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "ZB-YJV-3*70+1*35mm²: 2000 +1000（盘内） +500（设备内）"
+                "电缆 ZB-YJV-3*70+1*35mm²: 2000 +1000（盘内） +500（设备内）"
                 + " +3000（预留）=6500mm",
                 v[FrameBlockFiller.TagCable]);
         }
@@ -281,7 +281,7 @@ namespace UNCAD.Tests
             var v = FrameBlockFiller.BuildValues(Row(), stat);
 
             Assert.Equal(
-                "ZB-YJV-3*70+1*35mm²: 2000 +3400（盘内） +3000（预留）=8400mm",
+                "电缆 ZB-YJV-3*70+1*35mm²: 2000 +3400（盘内） +3000（预留）=8400mm",
                 v[FrameBlockFiller.TagCable]);
         }
 
@@ -297,7 +297,8 @@ namespace UNCAD.Tests
             var stat = StatCalculator.Calculate(new[] { "2000mm" }, 250.0);
             var v = FrameBlockFiller.BuildValues(row, stat);
 
-            Assert.Equal(expected + "mm²: 2000mm", v[FrameBlockFiller.TagCable]);
+            Assert.Equal("电缆 " + expected + "mm²: 2000mm",
+                v[FrameBlockFiller.TagCable]);
         }
 
         [Fact]
@@ -308,11 +309,11 @@ namespace UNCAD.Tests
             row.Cable = "3*2.5";
             var v = FrameBlockFiller.BuildValues(row, new CableStatResult());
 
-            Assert.Equal("ZB-YJVR-3*2.5", v[FrameBlockFiller.TagCable]);
+            Assert.Equal("电缆 ZB-YJVR-3*2.5", v[FrameBlockFiller.TagCable]);
         }
 
         [Fact]
-        public void BuildValues_CableInfoMatchesMillimetreFormulaWithoutCableWord()
+        public void BuildValues_CableInfoPrefixesCableLabelAndKeepsMillimetreFormula()
         {
             var row = Row();
             row.Cable = "3*2.5";
@@ -335,11 +336,11 @@ namespace UNCAD.Tests
                 FrameBlockFiller.TagCable];
 
             Assert.Equal(
-                "ZB-YJVR-3*2.5mm²: 2300 +18500 +1500 +1500 +27000 +1500 +1500"
+                "电缆 ZB-YJVR-3*2.5mm²: 2300 +18500 +1500 +1500 +27000 +1500 +1500"
                 + " +500 +2500 +6000 +2000 +5000 +500 +300 +1000（盘内）"
                 + " +3000（预留）=74600mm",
                 info);
-            Assert.DoesNotContain("电缆", info);
+            Assert.StartsWith("电缆 ZB-", info);
         }
 
 

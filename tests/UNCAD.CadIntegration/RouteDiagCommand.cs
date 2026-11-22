@@ -432,7 +432,7 @@ namespace UNCAD.CadIntegration
         /// ——①垃圾关联 "0"（ObjectId.Null 存出的字面量）必须进吸收候选
         /// （3.2.0.6 旧判"非空即排除"的现场病灶）；②关联指向活 Line 的
         /// （真 U1LX 标注）必须被排除（3.2.0.6 的本意不回归）；③无关联的
-        /// 照常进候选。DeviceReserveMarkerReader.CollectInSelection 直调。
+        /// 照常进候选；再验证两个吸收标记提交后确实已删除、活关联毫米标仍保留。
         /// </summary>
         private static string RunMarkerSelfTestCore()
         {
@@ -496,6 +496,32 @@ namespace UNCAD.CadIntegration
                 failures.Add("无关联横标未被收为候选");
             if (result.Hits.Any(hit => hit.Millimeters == 5000))
                 failures.Add("活关联的真标注被误收（3.2.0.6 本意回归）");
+
+            int erasedCount;
+            using (Transaction transaction =
+                ctx.Db.TransactionManager.StartTransaction())
+            {
+                erasedCount = DeviceReserveMarkerReader.EraseAbsorbed(transaction,
+                    result.EntityIds.ToArray(), "UNCAD_MARKER_SELFTEST");
+                transaction.Commit();
+            }
+            if (erasedCount != 2)
+                failures.Add("吸收候选删除数 " + erasedCount + " ≠ 2");
+            using (Transaction transaction =
+                ctx.Db.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in result.EntityIds)
+                {
+                    DBObject marker = transaction.GetObject(id, OpenMode.ForRead, true);
+                    if (marker == null || !marker.IsErased)
+                        failures.Add("吸收的预留文字未从图纸删除，句柄 " + id.Handle);
+                }
+                DBObject linkedLabel = transaction.GetObject(liveTextId,
+                    OpenMode.ForRead, true);
+                if (linkedLabel == null || linkedLabel.IsErased)
+                    failures.Add("U1LX 活关联毫米标被错误删除");
+                transaction.Commit();
+            }
             return failures.Count == 0 ? "DONE" : "FAIL " + string.Join("；", failures);
         }
 

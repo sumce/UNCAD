@@ -66,8 +66,14 @@ namespace UNCAD.Infra
                     return;
                 }
                 int rows = result.Snapshot?.RowCount ?? 0;
-                Log.Info("机台数据后台刷新完成: " + rows + " 行"
-                    + Detail(result.Warning));
+                string missingMachineIds = result.Snapshot?.MissingMachineIdWarning;
+                string summary = "机台数据后台刷新完成: " + rows + " 行"
+                    + Detail(result.Warning)
+                    + Detail(missingMachineIds);
+                if (string.IsNullOrWhiteSpace(missingMachineIds))
+                    Log.Info(summary);
+                else
+                    Log.Warn(summary);
             }
             catch (Exception ex)
             {

@@ -81,6 +81,8 @@ namespace UNCAD.Tests
             + "（盘内预留）+3400mm（设备预留）+0mm=8400mm")]
         [InlineData("电缆ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
             + "（盘内预留）+3400mm（设备预留）+0mm=8400mm")]
+        [InlineData("电缆 ZB-YJV-3*70+1*35mm²: 2000+3000=5000mm"
+            + "（盘内预留）+3400mm（设备预留）+0mm=8400mm")]
         public void Extract_ReadsMillimeterCableInfoWithReserves(string cableInfo)
         {
             var source = new SubmissionSourceData();

@@ -269,6 +269,8 @@ namespace UNCAD.UI
             DrawPage.UnlPos.SelectedValue =
                 UnlPosValue(Settings.Get(ConfigKeys.UnlPos, "1"));
             SetNumber(DrawPage.UnlOffset, Settings.GetDouble(ConfigKeys.UnlOffset, 0.0));
+            DrawPage.CorrectCableLabelPlacement.IsChecked = Settings.GetBool(
+                ConfigKeys.FillCorrectCableLabelPlacement, false);
 
             SetNumber(DrawPage.UnqHeight, Settings.GetDouble(ConfigKeys.UnqHeight, 180.0));
             SetNumber(DrawPage.UnqLineOff, Settings.GetDouble(ConfigKeys.UnqLineOff, 15.0));
@@ -478,6 +480,8 @@ namespace UNCAD.UI
             Settings.Set(ConfigKeys.UnlPos,
                 Convert.ToString(DrawPage.UnlPos.SelectedValue ?? "1"));
             Settings.Set(ConfigKeys.UnlOffset, NumberText(DrawPage.UnlOffset));
+            Settings.SetBool(ConfigKeys.FillCorrectCableLabelPlacement,
+                IsOn(DrawPage.CorrectCableLabelPlacement));
 
             // 桥架（偏移允许 0=自动/贴线）；规格由 U1Q1/U1Q2/U1Q4 固定传入，不写配置。
             Settings.Set(ConfigKeys.UnqHeight, NumberText(DrawPage.UnqHeight));
@@ -679,6 +683,9 @@ namespace UNCAD.UI
                         : "机台 Excel 已解析并写入 SQLite 快照。";
                 if (!result.UsedCachedFallback && result.Snapshot != null)
                     message += " 有效回路: " + result.Snapshot.RowCount + " 行。";
+                string missingMachineIds = result.Snapshot?.MissingMachineIdWarning;
+                if (!string.IsNullOrWhiteSpace(missingMachineIds))
+                    message += " " + missingMachineIds;
                 if (!string.IsNullOrWhiteSpace(result.Warning))
                     message += " " + result.Warning;
                 Log.Info("U1SET 机台数据刷新完成: " + message);
@@ -686,6 +693,7 @@ namespace UNCAD.UI
                 UpdateMachineSnapshotStatus();
                 ShowMachineInfo(
                     result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
+                        || !string.IsNullOrWhiteSpace(missingMachineIds)
                         ? InfoBarSeverity.Warning : InfoBarSeverity.Success, message);
             }
             catch (Exception ex)

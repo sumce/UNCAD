@@ -104,6 +104,9 @@ namespace UNCAD.Infra
         // 输出目录结构（"1"=开启，默认开启）：按图纸名建子目录 / BOQ、DWG、PDF 分目录。
         // 整机回路校验：生成 BOQ/DWG 前要求该机台的所有回路都在本次选集中（"1"=开启，默认开启）。
         public const string FillDeviceReserveAutoDetect = "UNC_FILL_DEVICE_RESERVE_AUTO";
+        // U1F/U1U 可选地按 U1SET 位置/偏移归位 U1L 毫米标；默认关闭。
+        public const string FillCorrectCableLabelPlacement =
+            "UNC_FILL_CORRECT_CABLE_LABEL_PLACEMENT";
         // 3.3.0（D-054 特性①）：图层规范自动矫正——U1U/U1F 写入事务里把识别出的
         // 电缆路由/桥架/线管实体移到法定图层 U_CABLE/U_TRAY/U_CONDUIT
         // （"1"=开启，默认开启；关=不矫正、不报告）。

@@ -14,7 +14,7 @@ namespace UNCAD.Core.Fill
     /// 标签与 FRAME_20261119 图框一致：
     ///   MACHINEID-DEVICE   机台ID-设备名称
     ///   MACHINEID-POWER    机台ID-POWER，例如 "MDAPT01-POWER"
-    ///   CABLE_INFO         型号mm²: 实测分段(mm)+盘内+设备内+预留=总长mm
+    ///   CABLE_INFO         电缆 型号mm²: 实测分段(mm)+盘内+设备内+预留=总长mm
     ///   CONDUIT_INFO       旧属性兼容写入：线管型号及分段毫米数
     ///   INFO2              桥架/刚性线管型号及分段毫米数，单行显示
     /// （BRIDGE_FRAME_INFO 是旧属性；桥架明细现写入 INFO2，完整清单仍写入 BOQ 表与
@@ -103,10 +103,12 @@ namespace UNCAD.Core.Fill
             if (pwr.Length > 0) d[TagPower] = pwr;
 
             string cable = (row.Cable ?? "").Trim();
+            string cableDisplay = cable.Length > 0
+                ? "电缆 " + CableModelDisplay.WithTypePrefix(cable) : "";
             if (stat != null && stat.CableSum > 0)
             {
                 // 与现场约定一致：全部 mm，明细统一写成「数值（说明）」，最后 =总长mm。
-                // 例：ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +2000（设备内） +3000（预留）=93300mm
+                // 例：电缆 ZB-YJVR-5*4mm²: 1000 +700 +3400（盘内） +2000（设备内） +3000（预留）=93300mm
                 // 3.0.0.15：段间用「 +」连接（空格在加号前）——MText 只能在空格/
                 // 汉字处断行，"1000+5400+…"纯数字串是一整个不可断词，段数一多
                 // 首行放不下整串就整串下移（首行只剩型号，用户报告 3 行实际 2 行
@@ -143,19 +145,16 @@ namespace UNCAD.Core.Fill
                 {
                     formula = string.Join(" +", parts) + "mm";
                 }
-                // 图框显示带工程前缀的完整型号（ZB-YJV- / ZB-YJVR-，由型号是否含
-                // "+" 决定）。该前缀只出现在图框属性上；BOQ 清单编码与表格项目
-                // 特征继续使用不带前缀的清单别名，两者不得互相污染。
+                // 图框电缆信息使用“电缆 型号”格式；工程型号前缀只出现在图框属性，
+                // BOQ 清单编码与表格项目特征继续使用原清单别名。
                 d[TagCable] = cable.Length > 0
-                    ? CableModelDisplay.WithTypePrefix(cable) + "mm²: " + formula
+                    ? cableDisplay + "mm²: " + formula
                     : formula;
             }
             else
             {
                 if (!preserveCable)
-                    d[TagCable] = cable.Length > 0
-                        ? CableModelDisplay.WithTypePrefix(cable)
-                        : "";
+                    d[TagCable] = cableDisplay;
             }
 
             // FRAME_20261119 的 INFO2 只显示桥架和刚性线管；旧图框若仍有

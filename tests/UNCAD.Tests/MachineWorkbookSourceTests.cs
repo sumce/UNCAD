@@ -41,6 +41,33 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Refresh_LocalWorkbookReportsUnfilledUnifiedMachineIdRows()
+        {
+            string root = TempDirectory("source_missing_identity");
+            try
+            {
+                string workbookPath = Path.Combine(root, "machines.xlsx");
+                File.WriteAllBytes(workbookPath,
+                    WorkbookBytes(includeUnboundCircuit: true));
+                var store = new MachineWorkbookSnapshotStore(
+                    Path.Combine(root, "machine.db"));
+
+                MachineWorkbookSourceResult result = MachineWorkbookSource.Refresh(
+                    workbookPath, store);
+
+                Assert.Equal(1, result.Snapshot.RowCount);
+                Assert.Equal(1, result.Snapshot.MissingMachineIdRowCount);
+                Assert.Equal(new[] { 3 }, result.Snapshot.MissingMachineIdRowNumbers);
+                Assert.Contains("U_机台ID 为空", result.Snapshot.MissingMachineIdWarning);
+                Assert.Contains("Excel 行 3", result.Snapshot.MissingMachineIdWarning);
+            }
+            finally
+            {
+                DeleteDirectory(root);
+            }
+        }
+
+        [Fact]
         public void Refresh_LocalWorkbookMissing_ReportsChinesePath()
         {
             string missing = Path.Combine(Path.GetTempPath(),
@@ -170,7 +197,8 @@ namespace UNCAD.Tests
             catch { }
         }
 
-        private static byte[] WorkbookBytes(bool includeData = true)
+        private static byte[] WorkbookBytes(bool includeData = true,
+            bool includeUnboundCircuit = false)
         {
             var workbook = new XSSFWorkbook();
             var sheet = workbook.CreateSheet("机台数据");
@@ -191,6 +219,8 @@ namespace UNCAD.Tests
                 for (int index = 0; index < headers.Length; index++)
                     row.CreateCell(index).SetCellValue(values[index]);
             }
+            if (includeData && includeUnboundCircuit)
+                sheet.CreateRow(2).CreateCell(2).SetCellValue("新增回路");
             using (var stream = new MemoryStream())
             {
                 workbook.Write(stream);

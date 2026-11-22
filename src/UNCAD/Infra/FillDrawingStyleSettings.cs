@@ -15,6 +15,9 @@ namespace UNCAD.Infra
         public double CableTextHeight { get; private set; }
         public double CableTextOffset { get; private set; }
         public string CableTextPosition { get; private set; }
+        public bool CorrectCableLabelPlacement { get; private set; }
+        public double AdjacentLabelAngleToleranceRadians
+            => CorrectCableLabelPlacement ? Math.PI / 12.0 : 0.18;
         public double StaleLabelAssociationMaximumDistance
             => Math.Max(CableTextOffset, CableTextHeight * 2.0)
                 + Math.Max(1.0, CableTextHeight * 0.1);
@@ -37,6 +40,8 @@ namespace UNCAD.Infra
                 CableTextHeight = Positive(ConfigKeys.UnlHeight, 180.0),
                 CableTextOffset = NonNegative(ConfigKeys.UnlOffset, 0.0),
                 CableTextPosition = cablePosition,
+                CorrectCableLabelPlacement = Settings.GetBool(
+                    ConfigKeys.FillCorrectCableLabelPlacement, false),
                 TrayTextHeight = Positive(ConfigKeys.UnqHeight, 180.0),
                 TrayLineOffset = NonNegative(ConfigKeys.UnqLineOff, 15.0),
                 TrayTextOffset = NonNegative(ConfigKeys.UnqTextOff, 0.0),
