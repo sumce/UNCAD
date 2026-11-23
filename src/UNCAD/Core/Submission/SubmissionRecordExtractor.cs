@@ -129,6 +129,8 @@ namespace UNCAD.Core.Submission
                 DroppedRows = droppedRows,
                 MachineId = machineId,
                 DeviceName = deviceName,
+                // D-056：把持久身份键带到提交侧（U1S/U1DWG 的整机回路校验用）。
+                CircuitKey = (persistedIdentity?.CircuitKey ?? "").Trim(),
                 PanelType = InferPanelType(source.DynamicValues)
                     ?? InferPanelType(source.TableValues) ?? "未指定",
                 OriginalCable = originalCable,

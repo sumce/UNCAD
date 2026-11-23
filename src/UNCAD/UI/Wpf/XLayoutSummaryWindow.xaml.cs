@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UNCAD.Core.Dwg;
 using Wpf.Ui.Controls;
@@ -26,7 +27,14 @@ namespace UNCAD.UI
             }
         }
 
-        public string Footer => "机台标签颜色与本统计只反映本次实际参与重排的回路。";
+        public string Footer => "机台标签颜色与本统计只反映本次实际参与重排的回路。"
+            + (_skippedInPlace > 0 ? " 原位跳过 " + _skippedInPlace + " 个图框。" : "");
+
+        /// <summary>
+        /// 导出回调（Features 注入，D-055）：写出 Excel 并返回文件路径；
+        /// 抛异常=失败（异常消息进提示文本）。UI 只消费结果，不落盘。
+        /// </summary>
+        public Func<string> ExportRequested { get; set; }
 
         private readonly int _frameCount;
         private readonly int _rowCount;
@@ -34,12 +42,14 @@ namespace UNCAD.UI
         private readonly int _warningMachines;
         private readonly int _missingMachines;
         private readonly int _unknownMachines;
+        private readonly int _skippedInPlace;
 
         public XLayoutSummaryWindow(IReadOnlyList<XLayoutMachineSummary> summaries,
-            int frameCount)
+            int frameCount, int skippedInPlace = 0)
         {
             _frameCount = frameCount;
             _rowCount = summaries?.Count ?? 0;
+            _skippedInPlace = Math.Max(0, skippedInPlace);
             foreach (XLayoutMachineSummary summary in summaries
                 ?? (IReadOnlyList<XLayoutMachineSummary>)new List<XLayoutMachineSummary>())
             {
@@ -68,5 +78,26 @@ namespace UNCAD.UI
         }
 
         private void OnClose(object sender, System.Windows.RoutedEventArgs e) => Close();
+
+        private void OnExportExcel(object sender, System.Windows.RoutedEventArgs e)
+        {
+            Func<string> export = ExportRequested;
+            if (export == null)
+            {
+                ExportPathText.Text = "导出不可用。";
+                return;
+            }
+            ExportButton.IsEnabled = false;
+            try
+            {
+                string path = export();
+                ExportPathText.Text = "已导出：" + path;
+            }
+            catch (System.Exception ex)
+            {
+                ExportButton.IsEnabled = true;
+                ExportPathText.Text = "导出失败：" + ex.Message;
+            }
+        }
     }
 }

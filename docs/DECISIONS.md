@@ -4,6 +4,111 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-056: Circuit Identity Key For Same-Name Circuits (2026-11-23)
+
+- Status: accepted
+- Problem: one machine may carry multiple circuits with the **same name but
+  different upstream feeders** (e.g. two `ECS` rows fed from different panels).
+  U1U matched by machine+name and took the first row (`FirstOrDefault`), so a
+  live workbook refresh that reorders rows could silently attach the frame's
+  quantities to the wrong same-name circuit. The U1S/U1DWG whole-machine
+  coverage check deduplicated by circuit name, collapsing same-name circuits
+  into one and passing incomplete machines.
+- Decision (3.5.0.1):
+  1. **Circuit identity key** = normalized `U_机台ID + 回路名称 + U_上游编号`
+     (NFKC width folding, whitespace stripped, case-folded; circuit names keep
+     parentheses — `AC Rack (630A)` ≠ `AC Rack`; upstream codes drop trailing
+     annotations: first `(` cuts the axis note, then only the first
+     whitespace-separated token is kept, so `2U-UPS5D1-PP-02 40-42(41/Ab)`
+     normalizes to `2u-ups5d1-pp-02`). Volatile construction attributes
+     (facility switch, cable model, floors, axes) are **not** part of identity;
+     they flow through the existing per-field change history.
+  2. **The key is derived on demand, never persisted** (amendment after the
+     first implementation stored a hash in `identity.circuitKey`): the three
+     plaintext components are already persisted in frameinfo_json
+     (machineId/deviceName/fr), so the key is a computed property of the
+     record. The JSON stays byte-identical to before, remains human-readable
+     and reversible; both sides (workbook row vs. frame record) compute with
+     the same normalizer, so the comparison cannot drift.
+  3. **U1U matching order**: key match (exact, unique) → single name match →
+     same-name ambiguity returns the candidate rows to the caller. Single
+     frame and batch U1U show the CircuitAmbiguityWindow (dense candidate
+     grid: circuit/upstream/switch/cable/floor+axis/type, full-field detail
+     strip; double-click or confirm returns the choice, cancel skips that
+     frame). The user's pick writes the plaintext identity through the normal
+     U1F/U1U path, so the next run's computed key matches directly — no
+     persistent marker. Paths without a picker (U1PDF naming, 3D preview)
+     report the ambiguity and skip. Two workbook rows with the same key
+     (same name AND same upstream) are a data error and are reported, never
+     guessed. An upstream re-home (frame key stale, name now unique) still
+     updates in place; the `Fr` field change is recorded as usual.
+  4. **Coverage by key**: U1S hard gate, U1U soft gate (BOQ skip), and U1DWG
+     evaluation compare expected workbook rows against selected frames by
+     computed key first, falling back to name matching (legacy frames).
+     Matching is one-to-one (a selected frame satisfies at most one expected
+     circuit), so two same-name circuits with only one drawn frame correctly
+     report the other missing; missing same-name entries display an upstream
+     suffix (`ECS（上游 3N-11B1A-PP-02）`). U1DWG's per-machine circuit count
+     deduplicates by key.
+  5. **Refresh diagnostics**: machine-workbook refresh (U1SET and background)
+     reports same-machine rows whose computed keys collide (same name and
+     upstream) with their Excel row numbers, so duplicates are fixed at the
+     source before they can reach matching.
+  6. **UI compaction** (user request「能展示更多内容」): the U1U compare
+     window becomes a master-detail layout — a dense frame grid (one row per
+     frame: machine/circuit/upstream/switch/added/removed/quantity, row
+     height 24) above the selected frame's detail (field changes, cable card,
+     side-by-side tables), one window size for single and multi frame. The
+     batch confirmation window gains upstream/switch columns (row height 28)
+     and a collapsible selected-row detail strip; the batch result window
+     gains a key-deduplicated circuit count column.
+- Rationale: row order in a live workbook is not identity; a name alone is not
+  identity when same-name circuits exist; but hashing identity into the JSON
+  adds an opaque, non-reversible field that duplicates data already stored in
+  plaintext. Deriving the key from the persisted plaintext at comparison time
+  keeps the JSON unchanged and readable while making the comparison stable.
+
+## D-055: XLAYOUT Filter-List Import And Result Export (2026-11-22)
+
+- Status: accepted
+- Decision: two XLAYOUT additions (3.5.0):
+  1. **Filter-list import = pre-check, not a hard filter.** The selection
+     window gains an「导入清单…」button that loads a machine/circuit list from
+     an Excel (.xlsx) or CSV file. Matching entries get checked, everything
+     else unchecked, and a summary names the entries not found on the drawing;
+     the user can still adjust any check before confirming. The file dialog
+     and parsing live in the Features layer (UI never reads files). Columns
+     are auto-detected by header aliases — machine:
+     `机台ID/U_机台ID/机台/MachineID/机台编号`; circuit:
+     `回路名称/U_回路名称/设备名称/回路/设备` — matched whitespace-insensitively;
+     the circuit column is optional (a machine-only row pre-checks the whole
+     machine). An unrecognized machine column aborts the import with the
+     acceptable header list (no positional guessing). CSV supports UTF-8 BOM,
+     strict-UTF-8, and GBK (936) fallback, with the delimiter (`,` `;` TAB)
+     sniffed from the header line. Rows with an empty machine ID are skipped;
+     duplicate machine+circuit entries are collapsed. Matching follows
+     IdentityTextNormalizer (D-021: internal whitespace ignored).
+  2. **Result export, list-anchored.** After the layout completes, the
+     statistics window gains an「导出 Excel」button that writes
+     `<输出根>\UNCAD_XLAYOUT_<时间戳>.xlsx` (same root rule as XSTS, D-035;
+     normalized root written back, write-occupancy prechecked, atomic
+     tmp+replace write). When a list was imported, the workbook's 清单结果
+     sheet has one row per list entry with the outcome `Done` (matched and
+     arranged this run, frame handles listed), `未参与排版` (matched on the
+     drawing but unchecked for this run), or `找不到` (no matching frame),
+     plus machine-level notes (missing/duplicate circuits). The 排版图框 sheet
+     always lists every arranged frame. Without an imported list only the
+     frame sheet exists. Export failures show in the window and never affect
+     the completed layout.
+- Rationale: field crews stage layout scopes from external machine lists and
+  need a Done/not-found receipt after arranging — pasting IDs into the filter
+  box (3.2.0.9) covered finding, not selection receipts.
+- Consequence: the imported list influences only pre-checked state; every
+  existing selection-window capability (region filter, arrange modes, manual
+  checks) is unchanged. Identity for matching comes from the frame's own
+  attributes (D-045 amendment, 3.4.1.11), so list matching is
+  selection-independent.
+
 ## D-040: Frame Metadata Lives Inside The Frame Block (FRAME_20261102, 2026-11-02)
 
 - Status: accepted
@@ -130,6 +235,21 @@ rewrite an existing entry.
 - Consequence: rows are no longer guaranteed one-machine-only in upstream mode,
   so per-machine statistics aggregate across rows; the trailing
   "\\未配上游\\" row signals workbook gaps to fix.
+- Amendment (2026-11-22, 3.4.1.11 — layout identity reads frame attributes
+  only): XLAYOUT frame identity comes exclusively from the frame's own
+  `MACHINEID-POWER`/`MACHINEID-DEVICE` attributes (plus the FRAMEINFO JSON
+  with unchanged arbitration); device-block `DEVICENAME` never participates,
+  so the "frame attribute vs DEVICENAME mismatch" abort is structurally
+  impossible on the layout path. Field case (2204-frame whole-drawing run):
+  eight MTPWM04 frames aborted the layout on `Hot DIW-1`/`LP` device values
+  while selecting the same machine's frames alone succeeded — device blocks
+  are attributed to frame regions by insert point, and the whole-drawing vs
+  single-machine boundary sets differ, so the attributed device set (and thus
+  the read identity) drifted with the selection. Decoupling identity from
+  device-block attribution makes both selections read the same identity. The
+  DEVICENAME hard check stays for U1S/U1F/U1U, which match Excel circuits by
+  it; frames without composite attributes still fail per the existing
+  semantics.
 
 ## D-046: WPF Design Tokens And Window Adaptation (2026-11-03)
 

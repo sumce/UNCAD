@@ -5,8 +5,10 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.4.1.10` (2026-11-22), not packaged or
-  installed; the installed assembly is `3.4.1.1`.
+- Current local source version: `3.5.0.0` (2026-11-22, D-055: XLAYOUT
+  filter-list import + result export), not packaged or installed; the
+  installed assembly is `3.5.0.0` (local acceptance build, not
+  a tagged release).
   The previous local release
   ZIP was generated on 2026-11-20 at
   `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
@@ -19,7 +21,7 @@ shorter than the historical release notes.
   latest on 2026-11-22; size 6,625,853 bytes, SHA-256
   `1AB481606D8BB56E7AEDE77449324A7D0E17E7351260AF3F1666C32A3B729DB8`.
   Server metadata and anonymous download were verified byte-for-byte.
-- Current stable release line: `3.4.1` (source patch `3.4.1.10`; latest
+- Current stable release line: `3.4.1` (source patch `3.4.1.11`; latest
   published patch `3.4.1.7`, 2026-11-20;
   D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
   optional WebView2/Three.js window launched in a separate process; both

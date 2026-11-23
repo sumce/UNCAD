@@ -23,6 +23,19 @@ namespace UNCAD.UI
         public string BoqStatus { get; set; } = "—";
         public string BoqPath { get; set; } = "";
         public List<string> Notes { get; } = new List<string>();
+        private readonly HashSet<string> _circuitKeys =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>D-056：回路数（按身份键去重，同名回路不塌缩）。</summary>
+        public int Circuits => _circuitKeys.Count;
+
+        /// <summary>按身份键计数一条回路（无键回退按名）。</summary>
+        public void CountCircuit(string circuitKey, string circuitName)
+        {
+            string key = string.IsNullOrWhiteSpace(circuitKey)
+                ? "n:" + (circuitName ?? "").Trim() : "k:" + circuitKey.Trim();
+            if (key.Length > 2) _circuitKeys.Add(key);
+        }
 
         /// <summary>备注去重后拼接（同一机台多张图框常产生相同提示）。</summary>
         public string NoteText => string.Join("；", Notes.Distinct(

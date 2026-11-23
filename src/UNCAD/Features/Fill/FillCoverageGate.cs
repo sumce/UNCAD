@@ -35,6 +35,19 @@ namespace UNCAD.Features.Fill
         internal static bool EnsureCircuitCoverage(CadContext ctx,
             FillWorkbookSnapshot workbook, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => EnsureCircuitCoverage(ctx, workbook, command,
+                (machineCircuits ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                    .Select(pair => new CircuitSelection
+                    {
+                        MachineId = pair.Key, CircuitName = pair.Value
+                    }));
+
+        /// <summary>
+        /// D-056 硬拦截版（带回路身份键）：同名回路按上游编号区分，不再塌缩。
+        /// </summary>
+        internal static bool EnsureCircuitCoverage(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<CircuitSelection> machineCircuits)
         {
             List<CircuitCoverageResult> failed = EvaluateCircuitCoverage(
                 ctx, workbook, command, machineCircuits);
@@ -53,25 +66,39 @@ namespace UNCAD.Features.Fill
         internal static List<CircuitCoverageResult> EvaluateCircuitCoverage(
             CadContext ctx, FillWorkbookSnapshot workbook, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => EvaluateCircuitCoverage(ctx, workbook, command,
+                (machineCircuits ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                    .Select(pair => new CircuitSelection
+                    {
+                        MachineId = pair.Key, CircuitName = pair.Value
+                    }));
+
+        /// <summary>
+        /// D-056 评估版（带回路身份键）：期望侧键由快照行计算，已选侧键来自
+        /// frameinfo_json（老图框为空 → 回退按名匹配）。
+        /// </summary>
+        internal static List<CircuitCoverageResult> EvaluateCircuitCoverage(
+            CadContext ctx, FillWorkbookSnapshot workbook, string command,
+            IEnumerable<CircuitSelection> machineCircuits)
         {
             var failed = new List<CircuitCoverageResult>();
             if (ctx == null || workbook == null) return failed;
             if (!Settings.GetBool(ConfigKeys.FillRequireAllCircuits, true)) return failed;
-            List<KeyValuePair<string, string>> pairs = (machineCircuits
-                    ?? Enumerable.Empty<KeyValuePair<string, string>>())
-                .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            List<CircuitSelection> pairs = (machineCircuits
+                    ?? Enumerable.Empty<CircuitSelection>())
+                .Where(pair => !string.IsNullOrWhiteSpace(pair.MachineId))
                 .ToList();
             if (pairs.Count == 0) return failed;
 
-            foreach (IGrouping<string, KeyValuePair<string, string>> group in pairs
-                .GroupBy(pair => pair.Key.Trim(), IdentityTextNormalizer.Comparer))
+            foreach (IGrouping<string, CircuitSelection> group in pairs
+                .GroupBy(pair => pair.MachineId.Trim(), IdentityTextNormalizer.Comparer))
             {
                 string machineId = group.Key;
-                List<string> expected;
+                List<CircuitSelection> expected;
                 try
                 {
                     expected = workbook.FindRows(machineId)
-                        .Select(row => row.CircuitName).ToList();
+                        .Select(CircuitSelection.Of).ToList();
                 }
                 catch (System.Exception ex)
                 {
@@ -86,7 +113,7 @@ namespace UNCAD.Features.Fill
                 }
                 if (expected.Count == 0) continue;
                 CircuitCoverageResult result = CircuitCoverage.Evaluate(machineId,
-                    expected, group.Select(pair => pair.Value));
+                    expected, group);
                 if (!result.Complete) failed.Add(result);
             }
             if (failed.Count == 0) return failed;
@@ -111,6 +138,17 @@ namespace UNCAD.Features.Fill
         internal static List<string> CoverageIncompleteMachines(CadContext ctx,
             FillWorkbookSnapshot workbook, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => CoverageIncompleteMachines(ctx, workbook, command,
+                (machineCircuits ?? Enumerable.Empty<KeyValuePair<string, string>>())
+                    .Select(pair => new CircuitSelection
+                    {
+                        MachineId = pair.Key, CircuitName = pair.Value
+                    }));
+
+        /// <summary>D-056：带回路身份键的按机台未通过清单。</summary>
+        internal static List<string> CoverageIncompleteMachines(CadContext ctx,
+            FillWorkbookSnapshot workbook, string command,
+            IEnumerable<CircuitSelection> machineCircuits)
             => EvaluateCircuitCoverage(ctx, workbook, command, machineCircuits)
                 .Select(result => result.MachineId).ToList();
 

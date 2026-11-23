@@ -72,6 +72,10 @@
                        Margin="14,0,0,0" Click="OnExpandAll" />
             <ui:Button x:Name="CollapseAllButton" Grid.Column="7" Content="折叠全部"
                        Margin="8,0,0,0" Click="OnCollapseAll" />
+            <ui:Button x:Name="ImportListButton" Grid.Column="8" Content="导入清单…"
+                       Margin="14,0,0,0" HorizontalAlignment="Left"
+                       ToolTip="从 Excel/CSV 清单导入机台ID+回路名称，按清单预勾选（可继续手动调整）"
+                       Click="OnImportList" />
         </Grid>
 
         <TreeView x:Name="SelectionTree" Grid.Row="3" Margin="24,12,24,8"

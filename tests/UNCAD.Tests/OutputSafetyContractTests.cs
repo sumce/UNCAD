@@ -113,7 +113,9 @@ namespace UNCAD.Tests
         {
             string submit = File.ReadAllText(Repo("src", "UNCAD", "Features", "Submit",
                 "SubmitFeature.cs"));
-            Assert.Contains("Operation?.Machine(identity.Key, identity.Value)", submit);
+            // D-056：identities 换 CircuitSelection（带回路身份键），取值随之改名。
+            Assert.Contains(
+                "Operation?.Machine(identity.MachineId, identity.CircuitName)", submit);
             Assert.Contains("Operation?.Output(\"BOQ\"", submit);
 
             string dwg = File.ReadAllText(Repo("src", "UNCAD", "Features", "DwgExport",

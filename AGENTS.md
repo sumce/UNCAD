@@ -32,8 +32,13 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.4.1.10` (2026-11-22), not packaged or
-  installed; the installed assembly is `3.4.1.1`.
+- Current local source version: `3.5.0.1` (2026-11-23, D-056: circuit
+  identity key derived from persisted plaintext — same-name circuits with
+  different upstreams no longer misroute U1U; ambiguity picker window;
+  key-based coverage; U1U window compaction; on top of D-055: XLAYOUT
+  filter-list import + result export), not packaged or installed; the
+  installed assembly is `3.5.0.0` (local acceptance build, not
+  a tagged release).
   The previous release ZIP
   was generated locally on 2026-11-20 at
   `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
@@ -46,7 +51,7 @@ when their version numbers or counts are stale.
   `3.4.1.7` archive was published as latest on 2026-11-22; size 6,625,853
   bytes, SHA-256 `1AB481606D8BB56E7AEDE77449324A7D0E17E7351260AF3F1666C32A3B729DB8`.
   Server metadata and anonymous download were verified byte-for-byte.
-- Product: `UNCAD Pro`. Stable line: `3.4.1` (source patch `3.4.1.10`,
+- Product: `UNCAD Pro`. Stable line: `3.4.1` (source patch `3.4.1.11`,
   latest published patch `3.4.1.7`;
   U1U/U13D 3D preview kernel
   switched to the in-box WPF Viewport3D — synchronous scene build, no browser

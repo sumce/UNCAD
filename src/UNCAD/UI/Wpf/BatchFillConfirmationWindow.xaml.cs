@@ -12,7 +12,8 @@ namespace UNCAD.UI
     {
         public BatchFillConfirmationRow(string frameHandle, string machineId,
             string deviceName, string deviceState, int rowCount,
-            string connectivityText = null)
+            string connectivityText = null, string upstreamId = null,
+            string facilitySwitch = null)
         {
             FrameHandle = frameHandle ?? "";
             MachineId = machineId ?? "";
@@ -21,6 +22,8 @@ namespace UNCAD.UI
             RowCount = rowCount;
             ConnectivityText = string.IsNullOrWhiteSpace(connectivityText)
                 ? "—" : connectivityText;
+            UpstreamId = upstreamId ?? "";
+            FacilitySwitch = facilitySwitch ?? "";
         }
 
         public string FrameHandle { get; }
@@ -30,6 +33,10 @@ namespace UNCAD.UI
         public int RowCount { get; }
         /// <summary>3.3.0（D-054 特性②）：连通性列文案（✔ N 段一条链 / ⚠ 孤立段…）。</summary>
         public string ConnectivityText { get; }
+        /// <summary>D-056：上游编号（同名回路区分）。</summary>
+        public string UpstreamId { get; }
+        /// <summary>D-056：厂务开关。</summary>
+        public string FacilitySwitch { get; }
     }
 
     /// <summary>
@@ -96,7 +103,22 @@ namespace UNCAD.UI
 
         private void OnGridSelectionChanged(object sender,
             SelectionChangedEventArgs e)
-            => ShowPreviewForSelectedRow();
+        {
+            ShowPreviewForSelectedRow();
+            // D-056：详情条同步选中行的关键差异字段（同名回路一眼可辨）。
+            if (BatchGrid.SelectedItem is BatchFillConfirmationRow row)
+                DetailText.Text = "机台 " + row.MachineId + " · 回路 " + row.DeviceName
+                    + " · 上游编号 " + (row.UpstreamId.Length > 0 ? row.UpstreamId : "—")
+                    + " · 厂务开关 " + (row.FacilitySwitch.Length > 0 ? row.FacilitySwitch : "—")
+                    + " · 图框 " + row.FrameHandle + " · 清单项 " + row.RowCount;
+        }
+
+        private void OnDetailToggle(object sender, RoutedEventArgs e)
+        {
+            bool expanded = DetailText.Visibility != Visibility.Visible;
+            DetailText.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+            DetailToggle.Content = expanded ? "详情 ▴" : "详情 ▾";
+        }
 
         /// <summary>选中行 → 该图框的预建场景；没有场景的行显示占位提示。</summary>
         private void ShowPreviewForSelectedRow()

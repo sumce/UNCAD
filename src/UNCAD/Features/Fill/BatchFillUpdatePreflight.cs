@@ -80,7 +80,9 @@ namespace UNCAD.Features.Fill
             List<BatchCatalogRequest> catalogRequests,
             CadBlockDefinitionReader definitions, StatisticsSettingsSnapshot statisticsSettings,
             IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> scanned = null,
-            List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> precollectedOutputs = null)
+            List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> precollectedOutputs = null,
+            MachineRow resolvedMachine = null,
+            List<CircuitAmbiguityCase> ambiguities = null)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
@@ -105,10 +107,28 @@ namespace UNCAD.Features.Fill
             {
                 errors.Add(prefix + identityError);
             }
+            else if (resolvedMachine != null)
+            {
+                // D-056：用户已在同名回路选择窗指认，直接采用（同一快照内的行）。
+                machine = resolvedMachine;
+            }
             else
             {
                 machine = ExistingFillIdentityResolver.MatchMachine(identity,
-                    workbook.FindRows(identity.MachineId), out matchError);
+                    workbook.FindRows(identity.MachineId),
+                    out IReadOnlyList<MachineRow> ambiguous, out matchError);
+                if (machine == null && ambiguous.Count > 0)
+                {
+                    // 读事务内不弹窗：只记录待选案例，协调器在事务关闭后
+                    // 统一弹窗并在用户指认后重跑本图框预检。
+                    ambiguities?.Add(new CircuitAmbiguityCase
+                    {
+                        Region = region,
+                        Identity = identity,
+                        Candidates = ambiguous
+                    });
+                    return;
+                }
                 if (machine == null) errors.Add(prefix + matchError);
             }
             if (machine != null)

@@ -84,6 +84,20 @@ namespace UNCAD.Features.Submit
             }
         }
 
+        /// <summary>D-056：带回路身份键的身份校验（U1S 用）。</summary>
+        public static void ValidateIdentityKeys(
+            IEnumerable<UNCAD.Core.Fill.CircuitSelection> identities)
+        {
+            foreach (UNCAD.Core.Fill.CircuitSelection identity in identities
+                ?? Enumerable.Empty<UNCAD.Core.Fill.CircuitSelection>())
+            {
+                string machineId = (identity?.MachineId ?? "").Trim();
+                string deviceName = (identity?.CircuitName ?? "").Trim();
+                if (machineId.Length == 0 || deviceName.Length == 0)
+                    throw new InvalidDataException("机台ID和设备名称不能为空。");
+            }
+        }
+
         public static AutomaticSubmissionWriteResult Write(CadContext ctx, string filePath,
             IEnumerable<ObjectId[]> sourceGroups)
             // U1S is the explicit migration path for drawings whose table predates

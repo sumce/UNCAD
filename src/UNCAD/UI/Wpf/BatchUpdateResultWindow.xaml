@@ -43,6 +43,15 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
+                <!-- D-056：回路数按身份键去重，同名回路不塌缩。 -->
+                <DataGridTextColumn Header="回路" Binding="{Binding Circuits}" Width="56">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Right" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
                 <DataGridTextColumn Header="表格行" Binding="{Binding TableRows}" Width="64">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">

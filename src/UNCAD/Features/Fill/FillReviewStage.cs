@@ -66,7 +66,10 @@ namespace UNCAD.Features.Fill
                     new ExistingFillIdentity
                     {
                         MachineId = review.Machine?.MachineId,
-                        DeviceName = review.Machine?.CircuitName
+                        DeviceName = review.Machine?.CircuitName,
+                        // D-056：复核行来自之前的键/指认匹配，重算键可让
+                        // 同名回路复核确定性命中，不再落进歧义分支。
+                        CircuitKey = UNCAD.Core.Fill.CircuitIdentityKey.Of(review.Machine)
                     }, workbook.FindRows(review.Machine?.MachineId), out string identityError);
                 if (validated == null)
                 {
@@ -151,6 +154,9 @@ namespace UNCAD.Features.Fill
             {
                 MachineId = machine.MachineId ?? "",
                 DeviceName = machine.CircuitName ?? "",
+                // D-056：密排帧行直接展示上游编号/厂务开关，同名回路一眼可辨。
+                UpstreamId = machine.Fr ?? "",
+                FacilitySwitch = machine.FacilitySwitch ?? "",
                 FrameHandle = selectedHandle ?? "",
                 LastUpdatedText = lastUpdated,
                 LastUpdatedUser = hasHistory ? previous.LastModifiedUser ?? "" : "",

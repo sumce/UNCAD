@@ -43,7 +43,8 @@ namespace UNCAD.Tests
                     Pump(4);
 
                     Assert.Equal(2, window.RowsGrid.Items.Count);
-                    Assert.Equal(7, window.RowsGrid.Columns.Count);
+                    // D-056：新增「回路」列（按身份键去重计数）。
+                    Assert.Equal(8, window.RowsGrid.Columns.Count);
                     Assert.Contains("4 个图框 / 2 个机台", window.Heading);
                     Assert.Contains("表格写入 16 行", window.SummaryText);
                     Assert.Contains("BOQ 新建 1 / 覆盖 0", window.SummaryText);

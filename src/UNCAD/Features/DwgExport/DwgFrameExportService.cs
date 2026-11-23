@@ -36,13 +36,21 @@ namespace UNCAD.Features.DwgExport
     /// <summary>Source frame with the recognized machine and device identity.</summary>
     internal sealed class DwgExportFrame : DwgFrameLayoutItem
     {
-        public DwgExportFrame(FrameRegionGroup group, string machineId, string deviceName)
+        public DwgExportFrame(FrameRegionGroup group, string machineId, string deviceName,
+            string circuitKey = "", string upstreamId = "")
             : base(machineId, deviceName, group.Boundary)
         {
             Group = group;
+            CircuitKey = circuitKey ?? "";
+            UpstreamId = upstreamId ?? "";
         }
 
         public FrameRegionGroup Group { get; }
+
+        /// <summary>D-056：frameinfo_json 的回路身份键（老图框为空串）。</summary>
+        public string CircuitKey { get; }
+        /// <summary>上游编号（同名回路显示区分用）。</summary>
+        public string UpstreamId { get; }
     }
 
     /// <summary>Exports selected frame contents without modifying the active source database.</summary>
@@ -69,7 +77,8 @@ namespace UNCAD.Features.DwgExport
                 ValidatePathPart(machineId, "机台ID");
                 if (deviceName.Length == 0)
                     throw new InvalidDataException("第 " + index + " 个图框缺少设备名称。");
-                frames.Add(new DwgExportFrame(group, machineId, deviceName));
+                frames.Add(new DwgExportFrame(group, machineId, deviceName,
+                    (record.CircuitKey ?? "").Trim(), (record.Fr ?? "").Trim()));
             }
             if (frames.Count == 0)
                 throw new InvalidDataException("没有可导出的有效图框。");
@@ -132,11 +141,16 @@ namespace UNCAD.Features.DwgExport
                 {
                     MachineId = machine.Key,
                     FilePath = paths[exportIndex],
-                    // 回路 = 图框的设备名；去重保持顺序，空名不上报。
+                    // 回路 = 图框的设备名；去重保持顺序，空名不上报。D-056：
+                    // 同名回路按身份键区分计数（老图框无键回退按名）。
                     Frames = machine.Count(),
-                    Circuits = machine.Select(frame => (frame.DeviceName ?? "").Trim())
-                        .Where(name => name.Length > 0)
-                        .Distinct(StringComparer.Ordinal)
+                    Circuits = machine
+                        .Where(frame => !string.IsNullOrWhiteSpace(frame.DeviceName))
+                        .GroupBy(frame => frame.CircuitKey.Length > 0
+                            ? "k:" + frame.CircuitKey
+                            : "n:" + (frame.DeviceName ?? "").Trim(),
+                            StringComparer.OrdinalIgnoreCase)
+                        .Select(group => group.First().DeviceName.Trim())
                         .ToList()
                 });
             }

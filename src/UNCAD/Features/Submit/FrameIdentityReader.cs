@@ -41,6 +41,27 @@ namespace UNCAD.Features.Submit
             return identity;
         }
 
+        /// <summary>
+        /// XLAYOUT 专用身份读取（D-045 修订，2026-11-22）：物理身份只读图框自身
+        /// 的 MACHINEID-POWER/MACHINEID-DEVICE 属性，设备块 DEVICENAME 不参与，
+        /// 也就不存在「图框属性与设备块不一致」的布局中止。设备块按插入点归属
+        /// 分区，全图与单机选择的边界集不同会把外来块归进区域——布局身份必须
+        /// 与选择集无关。JSON 读取与仲裁语义与 ReadIdentity 完全一致。
+        /// </summary>
+        internal static ExistingFillIdentity ReadLayoutIdentity(Transaction transaction,
+            FrameRegionGroup region, CadBlockDefinitionReader definitions)
+        {
+            if (transaction == null) throw new ArgumentNullException(nameof(transaction));
+            if (region == null) throw new ArgumentNullException(nameof(region));
+            FillSelection selection = FillSelectionCollector.Split(transaction,
+                region.EntityIds.ToArray(), false, definitions);
+            if (!FillSelectionCollector.TryReadExistingIdentity(transaction, selection,
+                    region.Handle, out ExistingFillIdentity identity, out string error,
+                    out _, false))
+                throw new InvalidDataException(error);
+            return identity;
+        }
+
         public static SubmissionRecord Read(CadContext ctx, FrameRegionGroup region)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));

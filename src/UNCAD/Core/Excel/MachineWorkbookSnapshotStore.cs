@@ -19,6 +19,8 @@ namespace UNCAD.Core.Excel
         public int RowCount { get; set; }
         public int MissingMachineIdRowCount { get; set; }
         public IReadOnlyList<int> MissingMachineIdRowNumbers { get; set; }
+        /// <summary>D-056：同机台「同名且同上游编号」重复行提示（刷新时回填，不落库）。</summary>
+        public IReadOnlyList<string> DuplicateCircuitKeyNotes { get; set; }
 
         internal string MissingMachineIdWarning
         {
@@ -35,6 +37,12 @@ namespace UNCAD.Core.Excel
                     + rows + "）。请将在线表 U_ 列填充到新增回路行后重新刷新。";
             }
         }
+
+        /// <summary>D-056：重复身份键告警文案（空串=无重复）。</summary>
+        internal string DuplicateCircuitKeyWarning
+            => (DuplicateCircuitKeyNotes == null || DuplicateCircuitKeyNotes.Count == 0)
+                ? ""
+                : string.Join(" ", DuplicateCircuitKeyNotes);
     }
 
     /// <summary>
@@ -129,6 +137,7 @@ ON machine_rows(source_key, machine_id COLLATE NOCASE, circuit_name)";
             MachineWorkbookSnapshotInfo snapshot = Replace(source, read.Rows, afterHash);
             snapshot.MissingMachineIdRowCount = read.MissingMachineIdRowCount;
             snapshot.MissingMachineIdRowNumbers = read.MissingMachineIdRowNumbers;
+            snapshot.DuplicateCircuitKeyNotes = read.DuplicateCircuitKeyNotes;
             return snapshot;
         }
 

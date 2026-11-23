@@ -7,6 +7,8 @@ namespace UNCAD.Core.Submission
     {
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
+        /// <summary>D-056：frameinfo_json 的回路身份键（老图框为空串）。</summary>
+        public string CircuitKey { get; set; } = "";
         public string PanelType { get; set; } = "";
         // Preserved from the device block when the edited table uses a BOQ substitute.
         public string OriginalCable { get; set; } = "";

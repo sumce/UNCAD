@@ -105,6 +105,15 @@ namespace UNCAD.UI
         public IReadOnlyList<XLayoutFrameItem> SelectedItems { get; private set; }
             = Array.Empty<XLayoutFrameItem>();
 
+        /// <summary>
+        /// 「导入清单」回调（Features 注入，D-055）：文件对话框与 Excel/CSV 解析
+        /// 都在 Features 完成（UI 不读文件），窗口只消费结果——预勾选 + 摘要。
+        /// </summary>
+        public Func<XLayoutFilterImportResult> ImportListRequested { get; set; }
+
+        /// <summary>已导入的清单（确认后由 Features 取走用于结果导出）；未导入为 null。</summary>
+        public XLayoutFilterList ImportedFilter { get; private set; }
+
         /// <summary>用户选择的排列方案（D-045）；未动下拉时 = 构造传入的初始值。</summary>
         public Core.Dwg.XLayoutArrangeMode ArrangeMode => SelectedArrangeMode();
 
@@ -436,6 +445,67 @@ namespace UNCAD.UI
 
         private void OnCheckAll(object sender, System.Windows.RoutedEventArgs e)
             => SetVisibleChecked(true);
+
+        // ---------- 导入清单（D-055） ----------
+
+        private void OnImportList(object sender, System.Windows.RoutedEventArgs e)
+        {
+            Func<XLayoutFilterImportResult> request = ImportListRequested;
+            if (request == null) return;
+            XLayoutFilterImportResult result = request();
+            if (result == null || result.Cancelled) return;
+            if (result.List == null)
+            {
+                // 解析失败：保留现有勾选不动，错误进提示条。
+                WarningBar.Message = result.Error;
+                WarningBar.IsOpen = true;
+                return;
+            }
+            ApplyImportedList(result.List);
+        }
+
+        /// <summary>
+        /// 应用导入清单：命中=勾选、未命中=取消（D-055 预勾选语义——清单不是
+        /// 硬过滤，用户可继续手动增删），并显示命中摘要（找不到的条目点名）。
+        /// </summary>
+        internal void ApplyImportedList(XLayoutFilterList list)
+        {
+            ImportedFilter = list ?? throw new ArgumentNullException(nameof(list));
+            var matched = new HashSet<XLayoutFrameItem>();
+            foreach (XLayoutFrameItem item in _items)
+                if (ImportedFilter.IsMatched(item)) matched.Add(item);
+            _suppressCascade = true;
+            try
+            {
+                _checked.Clear();
+                foreach (XLayoutFrameItem item in matched) _checked.Add(item);
+                foreach (XLayoutSelectionNode machine in _roots)
+                {
+                    if (machine.IsPlaceholder) continue;
+                    foreach (XLayoutSelectionNode circuit in machine.Children)
+                        circuit.IsChecked = matched.Contains(circuit.Item);
+                    SyncMachineCheckState(machine);
+                }
+            }
+            finally { _suppressCascade = false; }
+            ShowImportSummary();
+            UpdateSelectionCount();
+        }
+
+        private void ShowImportSummary()
+        {
+            IReadOnlyList<XLayoutFilterMatch> matches = ImportedFilter.MatchAll(_items);
+            var missing = matches.Where(match => !match.Found).ToList();
+            string detail = missing.Count == 0 ? "，全部命中"
+                : "，找不到 " + missing.Count + "（"
+                    + string.Join("、", missing.Take(3).Select(match =>
+                        match.Entry.DisplayText))
+                    + (missing.Count > 3 ? " 等 " + missing.Count + " 条" : "") + "）";
+            WarningBar.Message = "已导入清单 " + ImportedFilter.Entries.Count
+                + " 条：命中 " + (matches.Count - missing.Count) + detail
+                + "。已按清单预勾选，可继续手动调整。";
+            WarningBar.IsOpen = true;
+        }
 
         private void OnUncheckAll(object sender, System.Windows.RoutedEventArgs e)
             => SetVisibleChecked(false);

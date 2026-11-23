@@ -334,12 +334,18 @@ namespace UNCAD.Tests
         public void FrameCircuit_IsResolvedByTheSameResolverAsU1FAndU1U()
         {
             // 与 FillFeature 的 U1U 路径同一套：FrameIdentityReader 读持久身份 +
-            // ExistingFillIdentityResolver.MatchMachine 匹配快照行；回路名取匹配行的 CircuitName。
+            // ExistingFillIdentityResolver.MatchMachine 匹配快照行；回路名取匹配行的
+            // CircuitName。D-056 后单框 U1U 经 CircuitAmbiguityPrompt.MatchOrPrompt
+            // 调用同一匹配器（同名歧义时弹窗指认），同源约束不变。
             string fill = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
                 "FillFeature.cs"));
-            Assert.Contains("ExistingFillIdentityResolver.MatchMachine(identity,", fill);
+            Assert.Contains("CircuitAmbiguityPrompt.MatchOrPrompt(identity,", fill);
             Assert.Contains("internal static bool TryResolveFrameCircuit(", fill);
             Assert.Contains("workbook.FindRows(identity.MachineId)", fill);
+
+            string prompt = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+                "CircuitAmbiguityPrompt.cs"));
+            Assert.Contains("ExistingFillIdentityResolver.MatchMachine(", prompt);
 
             string pdf = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
                 "PdfExportFeature.cs"));

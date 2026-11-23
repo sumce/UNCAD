@@ -1,0 +1,56 @@
+<ui:FluentWindow x:Class="UNCAD.UI.XLayoutFailureWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="XLAYOUT · 诊断"
+                 Width="820" Height="540" MinWidth="620" MinHeight="360"
+                 FontFamily="Microsoft YaHei UI, Segoe UI"
+                 WindowBackdropType="None" WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True" ResizeMode="CanResize"
+                 Background="{DynamicResource ApplicationBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="XLAYOUT · 诊断" ShowMaximize="False" />
+
+        <StackPanel Grid.Row="1" Margin="24,10,24,8">
+            <TextBlock FontSize="20" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                       Text="{Binding Heading, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+            <TextBlock Margin="2,6,0,0" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="完整诊断如下；异常堆栈会写入文件日志。" />
+        </StackPanel>
+
+        <ui:TextBox x:Name="DetailsBox" Grid.Row="2" Margin="24,4,24,8"
+                    IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Auto"
+                    FontFamily="Cascadia Mono, Consolas"
+                    Text="{Binding Details, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+
+        <Grid Grid.Row="3" Margin="24,8,24,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Margin="0,0,12,0"
+                       VerticalAlignment="Center" FontSize="12"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding LogPath, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}"
+                       Text="{Binding LogPath, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+            <ui:Button Grid.Column="1" Content="复制诊断" MinWidth="110"
+                       Margin="0,0,10,0" Icon="{ui:SymbolIcon Copy24}"
+                       Click="OnCopy" />
+            <ui:Button Grid.Column="2" Content="关闭" MinWidth="100"
+                       IsCancel="True" IsDefault="True" Click="OnClose" />
+        </Grid>
+    </Grid>
+</ui:FluentWindow>

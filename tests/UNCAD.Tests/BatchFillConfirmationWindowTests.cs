@@ -37,8 +37,8 @@ namespace UNCAD.Tests
                         "Fluent 主题字典必须按窗口合并");
 
                     Assert.Equal(54, window.BatchGrid.Items.Count);
-                    // 3.3.0（D-054 特性②）：新增「连通性」列（报告级，不拦截）。
-                    Assert.Equal(6, window.BatchGrid.Columns.Count);
+                    // 3.3.0（D-054 特性②）「连通性」；D-056 新增「上游编号」「厂务开关」。
+                    Assert.Equal(8, window.BatchGrid.Columns.Count);
                     Assert.Equal("M1",
                         ((BatchFillConfirmationRow)window.BatchGrid.Items[0]).MachineId);
                     Assert.Equal("确认更新", window.ConfirmButton.Content);

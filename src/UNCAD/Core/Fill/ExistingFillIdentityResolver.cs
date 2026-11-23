@@ -10,6 +10,12 @@ namespace UNCAD.Core.Fill
     {
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
+
+        /// <summary>
+        /// D-056 回路身份键（frameinfo_json identity.circuitKey）。老图框为空串，
+        /// 匹配回退到「按名匹配 + 同名歧义交还调用方」。
+        /// </summary>
+        public string CircuitKey { get; set; } = "";
     }
 
     public static class ExistingFillIdentityResolver
@@ -51,7 +57,22 @@ namespace UNCAD.Core.Fill
         public static MachineRow MatchMachine(ExistingFillIdentity identity,
             IEnumerable<MachineRow> candidates, out string error)
         {
+            return MatchMachine(identity, candidates,
+                out IReadOnlyList<MachineRow> _, out error);
+        }
+
+        /// <summary>
+        /// D-056 匹配次序：① CircuitKey 精确匹配（唯一命中；多行同键=表格数据错误）；
+        /// ② 按回路名匹配（唯一命中放行——含“上游改挂导致帧键过期”的更新场景）；
+        /// ③ 同名多行 → 不猜，把候选行交还调用方（弹窗让用户选）；
+        /// ④ 空设备名单行兜底保留。行序/实时刷新不再影响结果。
+        /// </summary>
+        public static MachineRow MatchMachine(ExistingFillIdentity identity,
+            IEnumerable<MachineRow> candidates,
+            out IReadOnlyList<MachineRow> ambiguousCandidates, out string error)
+        {
             error = "";
+            ambiguousCandidates = new List<MachineRow>();
             identity = identity ?? new ExistingFillIdentity();
             List<MachineRow> machines = (candidates ?? Enumerable.Empty<MachineRow>())
                 .Where(row => IdentityTextNormalizer.Equals(row.MachineId,
@@ -61,21 +82,58 @@ namespace UNCAD.Core.Fill
                 error = "Excel中未找到机台ID “" + identity.MachineId + "”。";
                 return null;
             }
-            MachineRow match = machines.FirstOrDefault(row =>
-                IdentityTextNormalizer.Equals(row.CircuitName, identity.DeviceName));
+
+            if (!string.IsNullOrWhiteSpace(identity.CircuitKey))
+            {
+                List<MachineRow> keyed = machines
+                    .Where(row => CircuitIdentityKey.Of(row) == identity.CircuitKey)
+                    .ToList();
+                if (keyed.Count == 1) return Adopt(keyed[0], identity);
+                if (keyed.Count > 1)
+                {
+                    error = "机台 “" + identity.MachineId + "” 的Excel中存在 "
+                        + keyed.Count + " 行相同的回路身份键（同名且同上游编号），"
+                        + "请先修正表格中的重复行。";
+                    return null;
+                }
+                // 键未命中：上游可能已改挂，落到按名匹配（唯一同名仍放行）。
+            }
+
+            List<MachineRow> byName = machines
+                .Where(row => IdentityTextNormalizer.Equals(row.CircuitName,
+                    identity.DeviceName))
+                .ToList();
+            if (byName.Count == 1) return Adopt(byName[0], identity);
+            if (byName.Count > 1)
+            {
+                // 同名回路（上游不同）是不同回路；按行序静默取第一条会把 U1U
+                // 的量更新到另一条回路上。候选交还调用方，由用户选择。
+                ambiguousCandidates = byName;
+                error = "机台 “" + identity.MachineId + "” 存在 " + byName.Count
+                    + " 条同名回路 “" + identity.DeviceName + "”（上游编号不同），"
+                    + "请选择本图框对应的回路。";
+                return null;
+            }
+
             // U1U is an update operation, so an existing device name is an identity
             // key, not a hint.  Falling back to the only row would let a renamed or
             // stale frame redirect its quantities to an unrelated Excel circuit.
             // A blank device name is the only safe case for the legacy single-row
             // fallback (old frames may not have carried the device attribute).
-            if (match == null && string.IsNullOrWhiteSpace(identity.DeviceName)
-                && machines.Count == 1) match = machines[0];
+            MachineRow match = null;
+            if (string.IsNullOrWhiteSpace(identity.DeviceName) && machines.Count == 1)
+                match = machines[0];
             if (match == null)
             {
                 error = "机台 “" + identity.MachineId + "” 在Excel中有多个回路，"
                     + "但未找到设备 “" + identity.DeviceName + "”。请使用普通清单填充重新选择。";
                 return null;
             }
+            return Adopt(match, identity);
+        }
+
+        private static MachineRow Adopt(MachineRow match, ExistingFillIdentity identity)
+        {
             MachineRow result = Clone(match);
             result.MachineId = identity.MachineId;
             result.CircuitName = string.IsNullOrWhiteSpace(identity.DeviceName)

@@ -43,17 +43,22 @@ namespace UNCAD.Core.Excel
     internal sealed class MachineWorkbookReadResult
     {
         internal MachineWorkbookReadResult(List<MachineRow> rows,
-            int missingMachineIdRowCount, IReadOnlyList<int> missingMachineIdRowNumbers)
+            int missingMachineIdRowCount, IReadOnlyList<int> missingMachineIdRowNumbers,
+            IReadOnlyList<string> duplicateCircuitKeyNotes = null)
         {
             Rows = rows ?? new List<MachineRow>();
             MissingMachineIdRowCount = missingMachineIdRowCount;
             MissingMachineIdRowNumbers = missingMachineIdRowNumbers
                 ?? Array.Empty<int>();
+            DuplicateCircuitKeyNotes = duplicateCircuitKeyNotes
+                ?? Array.Empty<string>();
         }
 
         internal List<MachineRow> Rows { get; }
         internal int MissingMachineIdRowCount { get; }
         internal IReadOnlyList<int> MissingMachineIdRowNumbers { get; }
+        /// <summary>D-056：同机台「同名且同上游编号」的重复行提示（数据错误，需修表）。</summary>
+        internal IReadOnlyList<string> DuplicateCircuitKeyNotes { get; }
     }
 
     /// <summary>
@@ -146,6 +151,8 @@ namespace UNCAD.Core.Excel
             var result = new List<MachineRow>();
             var missingMachineIdRows = new List<int>();
             int missingMachineIdRowCount = 0;
+            // D-056：Excel 物理行号 + 行数据，供重复身份键诊断。
+            var numbered = new List<System.ValueTuple<int, MachineRow>>();
             var strikeoutByFontIndex = new Dictionary<short, bool>();
             for (int rowIndex = columns.HeaderRow + 1; rowIndex <= sheet.LastRowNum; rowIndex++)
             {
@@ -172,9 +179,14 @@ namespace UNCAD.Core.Excel
                     continue;
                 }
                 result.Add(machine);
+                numbered.Add(System.ValueTuple.Create(rowIndex + 1, machine));
             }
+            // D-056：同名且同上游的重复行是数据错误，刷新时即报出（修表责任
+            // 在用户，不能拖到 U1U 匹配才失败）。计算在 Core.Fill 的
+            // CircuitIdentityKey，保证与匹配用的键完全同口径。
             return new MachineWorkbookReadResult(result, missingMachineIdRowCount,
-                missingMachineIdRows.ToArray());
+                missingMachineIdRows.ToArray(),
+                UNCAD.Core.Fill.CircuitIdentityKey.FindDuplicateNotes(numbered));
         }
 
         internal static List<MachineRow> FindRows(IEnumerable<MachineRow> rows, string keyword)

@@ -269,6 +269,84 @@ namespace UNCAD.Tests
             });
         }
 
+        [Fact]
+        public void ImportedFilter_PrechecksMatchesAndUnchecksTheRest()
+        {
+            RunSta(() =>
+            {
+                var window = new XLayoutSelectionWindow(Items());
+                window.Show();
+                Pump(2);
+                var list = new XLayoutFilterList(new[]
+                {
+                    new XLayoutFilterEntry("MQBAN01", "回路A"),
+                    new XLayoutFilterEntry("MQIMA02", ""),   // 机台级：整台命中
+                    new XLayoutFilterEntry("M999", "Ghost")  // 图上没有
+                }, "list.csv");
+
+                window.ApplyImportedList(list);
+                Pump(2);
+
+                Assert.Same(list, window.ImportedFilter);
+                // D-055 预勾选语义：命中=勾选，其余取消；清单不是硬过滤。
+                string[] selected = window.ComputeSelectedItems()
+                    .Select(item => item.MachineId + "/" + item.DeviceName)
+                    .OrderBy(text => text, StringComparer.Ordinal).ToArray();
+                Assert.Equal(new[] { "MQBAN01/回路A", "MQIMA02/主机" }, selected);
+                Assert.Contains("找不到 1", window.WarningBar.Message,
+                    StringComparison.Ordinal);
+                Assert.Contains("M999", window.WarningBar.Message,
+                    StringComparison.Ordinal);
+                Assert.Contains("预勾选", window.WarningBar.Message,
+                    StringComparison.Ordinal);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void ImportCallback_ErrorShowsMessageAndKeepsChecks()
+        {
+            RunSta(() =>
+            {
+                var window = new XLayoutSelectionWindow(Items());
+                window.Show();
+                Pump(2);
+                window.ImportListRequested =
+                    () => new XLayoutFilterImportResult(null, "清单文件不存在：x.csv");
+
+                Click(window.ImportListButton);
+                Pump(1);
+
+                // 解析失败不动现有勾选；错误进提示条。
+                Assert.Equal(5, window.ComputeSelectedItems().Count);
+                Assert.Contains("清单文件不存在", window.WarningBar.Message,
+                    StringComparison.Ordinal);
+                Assert.Null(window.ImportedFilter);
+                window.Close();
+            });
+        }
+
+        [Fact]
+        public void ImportCallback_CancelledKeepsEverythingUntouched()
+        {
+            RunSta(() =>
+            {
+                var window = new XLayoutSelectionWindow(Items());
+                window.Show();
+                Pump(2);
+                window.ImportListRequested =
+                    () => new XLayoutFilterImportResult(null, "");
+
+                Click(window.ImportListButton);
+                Pump(1);
+
+                Assert.Equal(5, window.ComputeSelectedItems().Count);
+                Assert.False(window.WarningBar.IsOpen);
+                Assert.Null(window.ImportedFilter);
+                window.Close();
+            });
+        }
+
         private static IReadOnlyList<XLayoutFrameItem> RegionItems() => new[]
         {
             Item("M651", "RCM", 0),

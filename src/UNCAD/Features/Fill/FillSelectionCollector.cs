@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
+using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
@@ -197,6 +198,19 @@ namespace UNCAD.Features.Fill
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, string expectedFrameHandle,
             out ExistingFillIdentity identity, out string error, out string foreignJsonNote)
+            => TryReadExistingIdentity(transaction, selection, expectedFrameHandle,
+                out identity, out error, out foreignJsonNote, true);
+
+        /// <summary>
+        /// 带设备块开关的身份读取。includeDeviceBlocks=false 供 XLAYOUT 使用
+        /// （D-045 修订，2026-11-22）：设备块按插入点归属分区，全图与单机选择的
+        /// 边界集不同会把外来块归进区域——同一图框在不同选择下可能读出不同的
+        /// DEVICENAME，布局身份必须只认图框自身属性才与选择集无关。
+        /// </summary>
+        internal static bool TryReadExistingIdentity(Transaction transaction,
+            FillSelection selection, string expectedFrameHandle,
+            out ExistingFillIdentity identity, out string error,
+            out string foreignJsonNote, bool includeDeviceBlocks)
         {
             // D-040 后 JSON 主存储 = 图框块 FRAMEINFO 属性，独立块仅遗留读源：
             // 读身份必须用 ReadSources（含图框块），只传独立块会漏读新模板。
@@ -210,14 +224,17 @@ namespace UNCAD.Features.Fill
                 jsonIdentity = new ExistingFillIdentity
                 {
                     MachineId = json.MachineId.Trim(),
-                    DeviceName = json.DeviceName.Trim()
+                    DeviceName = json.DeviceName.Trim(),
+                    // D-056：键只在 JSON 身份胜出时生效（物理标注胜出=旧键
+                    // 属于他机回路，必须丢弃，走按名匹配+歧义弹窗）。
+                    CircuitKey = (json.CircuitKey ?? "").Trim()
                 };
             }
 
             ExistingFillIdentity physicalIdentity = null;
             string physicalError = "";
             if (!TryReadPhysicalIdentity(transaction, selection,
-                    out physicalIdentity, out physicalError))
+                    out physicalIdentity, out physicalError, includeDeviceBlocks))
             {
                 physicalIdentity = null;
             }
@@ -241,16 +258,24 @@ namespace UNCAD.Features.Fill
             return false;
         }
 
-        /// <summary>从图框/设备块的 MACHINEID 属性与标注推断物理身份。</summary>
+        /// <summary>
+        /// 从图框/设备块的 MACHINEID 属性与标注推断物理身份。includeDeviceBlocks=false
+        /// 时设备块完全缺席：只读图框自身的 MACHINEID-POWER/MACHINEID-DEVICE，
+        /// DEVICENAME 一律不收集（连图框块自带的同名属性也不读）——XLAYOUT 布局
+        /// 身份与选择集边界无关（D-045 修订，2026-11-22）。
+        /// </summary>
         private static bool TryReadPhysicalIdentity(Transaction transaction,
-            FillSelection selection, out ExistingFillIdentity identity, out string error)
+            FillSelection selection, out ExistingFillIdentity identity,
+            out string error, bool includeDeviceBlocks)
         {
             var powers = new List<string>();
             var composites = new List<string>();
             var devices = new List<string>();
+            var deviceBlocks = new List<ObjectId>();
             var ids = new HashSet<ObjectId>();
             foreach (ObjectId id in selection.FrameBlockIds) ids.Add(id);
-            foreach (ObjectId id in selection.DeviceBlockIds) ids.Add(id);
+            if (includeDeviceBlocks)
+                foreach (ObjectId id in selection.DeviceBlockIds) ids.Add(id);
             foreach (ObjectId id in ids)
             {
                 var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;
@@ -261,13 +286,89 @@ namespace UNCAD.Features.Fill
                 if (TryGetBlockValue(transaction, block, FrameBlockFiller.TagDevice,
                     out string composite))
                     composites.Add(NormalizeIdentityValue(composite));
-                if (TryGetBlockValue(transaction, block, DeviceBlockFiller.TagDeviceName,
-                    out string device))
+                if (includeDeviceBlocks
+                    && TryGetBlockValue(transaction, block, DeviceBlockFiller.TagDeviceName,
+                        out string device))
+                {
                     devices.Add(NormalizeIdentityValue(device));
+                    deviceBlocks.Add(id);
+                }
             }
-            return ExistingFillIdentityResolver.TryResolve(
+            bool resolved = ExistingFillIdentityResolver.TryResolve(
                 powers, composites, devices, out identity, out error);
+            if (!resolved && error.IndexOf("DEVICENAME",
+                StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                List<string> candidates = deviceBlocks.Distinct()
+                    .Select(id => DescribeDeviceNameCandidate(transaction, id))
+                    .Where(item => item.Length > 0)
+                    .ToList();
+                if (candidates.Count > 0)
+                    error += Environment.NewLine + "DEVICENAME 候选块诊断："
+                        + Environment.NewLine + string.Join(Environment.NewLine, candidates);
+            }
+            return resolved;
         }
+
+        private static string DescribeDeviceNameCandidate(Transaction transaction,
+            ObjectId id)
+        {
+            BlockReference block;
+            try
+            {
+                block = transaction.GetObject(id, OpenMode.ForRead, true)
+                    as BlockReference;
+            }
+            catch { return ""; }
+            if (block == null) return "";
+            if (!TryGetBlockValue(transaction, block, DeviceBlockFiller.TagDeviceName,
+                    out string value, out string valueSource,
+                    out Point3d? attributePosition)) return "";
+
+            string definitionName = "";
+            foreach (ObjectId definitionId in DefinitionIds(block))
+            {
+                try
+                {
+                    BlockTableRecord definition = transaction.GetObject(definitionId,
+                        OpenMode.ForRead, true) as BlockTableRecord;
+                    if (string.IsNullOrWhiteSpace(definition?.Name)) continue;
+                    definitionName = definition.Name;
+                    if (!definitionName.StartsWith("*", StringComparison.Ordinal)) break;
+                }
+                catch { }
+            }
+
+            string detail = "块句柄 " + block.Handle
+                + "，块名“" + (definitionName.Length > 0
+                    ? definitionName : SafeBlockName(block)) + "”"
+                + "，插入点" + FormatPoint(block.Position)
+                + "，DEVICENAME=【" + NormalizeIdentityValue(value)
+                + "】，取值来源=" + valueSource;
+            if (attributePosition.HasValue)
+                detail += "，属性位置" + FormatPoint(attributePosition.Value);
+            try
+            {
+                Extents3d extents = block.GeometricExtents;
+                var center = new Point3d(
+                    (extents.MinPoint.X + extents.MaxPoint.X) / 2d,
+                    (extents.MinPoint.Y + extents.MaxPoint.Y) / 2d,
+                    (extents.MinPoint.Z + extents.MaxPoint.Z) / 2d);
+                detail += "，可见几何中心" + FormatPoint(center);
+            }
+            catch { }
+            return detail;
+        }
+
+        private static string SafeBlockName(BlockReference block)
+        {
+            try { return block?.Name ?? ""; }
+            catch { return ""; }
+        }
+
+        private static string FormatPoint(Point3d point)
+            => "(" + TextFormatter.FormatNum(point.X) + ","
+                + TextFormatter.FormatNum(point.Y) + ")";
 
         internal static FillSelection Split(CadContext ctx, ObjectId[] ids,
             bool statisticsScopeComplete = false)
@@ -527,7 +628,15 @@ namespace UNCAD.Features.Fill
 
         private static bool TryGetBlockValue(Transaction tr, BlockReference block,
             string name, out string value)
+            => TryGetBlockValue(tr, block, name, out value, out _, out _);
+
+        private static bool TryGetBlockValue(Transaction tr, BlockReference block,
+            string name, out string value, out string valueSource,
+            out Point3d? valuePosition)
         {
+            value = "";
+            valueSource = "";
+            valuePosition = null;
             foreach (ObjectId attributeId in block.AttributeCollection)
             {
                 var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
@@ -536,6 +645,9 @@ namespace UNCAD.Features.Fill
                     StringComparison.OrdinalIgnoreCase))
                 {
                     value = attribute.TextString ?? "";
+                    valueSource = "实例 AttributeReference";
+                    try { valuePosition = attribute.Position; }
+                    catch { }
                     return true;
                 }
             }
@@ -548,6 +660,7 @@ namespace UNCAD.Features.Fill
                     if (!string.Equals(property.PropertyName, name,
                         StringComparison.OrdinalIgnoreCase)) continue;
                     value = Convert.ToString(property.Value) ?? "";
+                    valueSource = "动态块属性";
                     return true;
                 }
             }
@@ -580,11 +693,11 @@ namespace UNCAD.Features.Fill
                     if (definition == null || !string.Equals(definition.Tag, name,
                         StringComparison.OrdinalIgnoreCase)) continue;
                     value = definition.TextString ?? "";
+                    valueSource = "块定义 AttributeDefinition 默认值";
                     return true;
                 }
             }
 
-            value = "";
             return false;
         }
 

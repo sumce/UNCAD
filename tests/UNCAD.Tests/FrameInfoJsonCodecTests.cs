@@ -85,6 +85,26 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void CircuitKey_DerivedFromPlaintextNotPersisted()
+        {
+            // D-056 修订：身份键由明文即时计算，JSON 不落盘任何新键。
+            var source = new FrameInfoJsonRecord
+            {
+                MachineId = "M01",
+                DeviceName = "ECS",
+                Fr = "3N-11B1A-PP-02"
+            };
+
+            string json = FrameInfoJsonCodec.Serialize(source);
+            Assert.DoesNotContain("circuitKey", json);
+            FrameInfoJsonRecord actual = FrameInfoJsonCodec.Parse(json);
+
+            Assert.NotNull(actual);
+            Assert.Equal(CircuitIdentityKey.Of("M01", "ECS", "3N-11B1A-PP-02"),
+                actual.CircuitKey);
+        }
+
+        [Fact]
         public void RoundTrip_PreservesCableReserveFields()
         {
             var source = new FrameInfoJsonRecord

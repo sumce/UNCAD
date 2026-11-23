@@ -116,7 +116,8 @@ namespace UNCAD.Features.Fill
                     ctx.Write("\n[U1U] " + identityError);
                     return;
                 }
-                picked = ExistingFillIdentityResolver.MatchMachine(identity,
+                // D-056：键/唯一同名直接命中；同名歧义弹窗指认（CircuitAmbiguityPrompt）。
+                picked = CircuitAmbiguityPrompt.MatchOrPrompt(identity,
                     workbook.FindRows(identity.MachineId), out string matchError);
                 if (picked == null)
                 {
@@ -164,8 +165,8 @@ namespace UNCAD.Features.Fill
                 ctx, workbook, updateMode ? CommandIds.FillUpdate : CommandIds.Fill,
                 new[]
                 {
-                    new KeyValuePair<string, string>(
-                        picked.MachineId, picked.CircuitName)
+                    // D-056：选中的行带回路身份键参与整机校验。
+                    UNCAD.Core.Fill.CircuitSelection.Of(picked)
                 });
             bool boqBlockedByCoverage = coverageFailures.Count > 0;
             bool boqForcedByUser = false;

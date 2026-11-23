@@ -17,7 +17,7 @@ namespace UNCAD.Tests
     public sealed class FillUpdateCompareWindowTests
     {
         [Fact]
-        public void MultipleFrames_ShowsFrameList_AndSelectsFirst()
+        public void MultipleFrames_ShowsFrameGrid_AndSelectsFirst()
         {
             Exception failure = null;
             var thread = new Thread(() =>
@@ -31,13 +31,12 @@ namespace UNCAD.Tests
                     window.Show();
                     Pump(3);
 
-                    Assert.Equal(System.Windows.Visibility.Visible,
-                        window.FrameListPanel.Visibility);
-                    Assert.Equal(2, window.FrameList.Items.Count);
-                    Assert.Equal(0, window.FrameList.SelectedIndex);
+                    // D-056：顶部密排图框网格（一行一图框，单框也显示）。
+                    Assert.Equal(2, window.FrameGrid.Items.Count);
+                    Assert.Equal(0, window.FrameGrid.SelectedIndex);
                     Assert.Contains("M1", window.TitleText.Text);
 
-                    window.FrameList.SelectedIndex = 1;
+                    window.FrameGrid.SelectedIndex = 1;
                     Pump(2);
                     Assert.Contains("M2", window.TitleText.Text);
                     window.Close();
@@ -51,7 +50,7 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void SingleFrame_HidesFrameList()
+        public void SingleFrame_AlsoShowsFrameGrid()
         {
             Exception failure = null;
             var thread = new Thread(() =>
@@ -65,8 +64,7 @@ namespace UNCAD.Tests
                     window.Show();
                     Pump(3);
 
-                    Assert.Equal(System.Windows.Visibility.Collapsed,
-                        window.FrameListPanel.Visibility);
+                    Assert.Equal(1, window.FrameGrid.Items.Count);
                     Assert.Contains("M1", window.TitleText.Text);
                     window.Close();
                 }
@@ -217,7 +215,7 @@ namespace UNCAD.Tests
                     window.Show();
                     Pump(3);
 
-                    Assert.Single(window.FrameList.Items);
+                    Assert.Single(window.FrameGrid.Items);
                     Assert.Contains("M9", window.TitleText.Text);
                     Click(window.ContinueButton);
                     Pump(2);
@@ -332,7 +330,8 @@ namespace UNCAD.Tests
                     Assert.Equal(System.Windows.Visibility.Visible,
                         window.FieldChangesPanel.Visibility);
                     Assert.Contains("图框字段变化 1 项", window.SummaryText.Text);
-                    Assert.Contains("字段变化", window.FrameList.Items[0].ToString());
+                    // D-056：帧行是 FillUpdateCompareItem 对象（密排网格直绑）。
+                    Assert.Single(window.FrameGrid.Items);
                     var change = Assert.Single(window.FieldChangesGrid.Items
                         .Cast<FillUpdateCompareWindow.FieldChangeRow>());
                     Assert.Equal("上游编号", change.Field);

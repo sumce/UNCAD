@@ -67,10 +67,13 @@ namespace UNCAD.Infra
                 }
                 int rows = result.Snapshot?.RowCount ?? 0;
                 string missingMachineIds = result.Snapshot?.MissingMachineIdWarning;
+                string duplicateKeys = result.Snapshot?.DuplicateCircuitKeyWarning;
                 string summary = "机台数据后台刷新完成: " + rows + " 行"
                     + Detail(result.Warning)
-                    + Detail(missingMachineIds);
-                if (string.IsNullOrWhiteSpace(missingMachineIds))
+                    + Detail(missingMachineIds)
+                    + Detail(duplicateKeys);
+                if (string.IsNullOrWhiteSpace(missingMachineIds)
+                    && string.IsNullOrWhiteSpace(duplicateKeys))
                     Log.Info(summary);
                 else
                     Log.Warn(summary);

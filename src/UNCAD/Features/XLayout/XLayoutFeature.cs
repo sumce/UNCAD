@@ -13,6 +13,7 @@ using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
+using UNCAD.Core.Report;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Cad.QuickLine;
@@ -95,8 +96,7 @@ namespace UNCAD.Features.XLayout
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[XLAYOUT] SQLite 机台快照读取失败，行序/上游排列退回图上位置: "
-                    + ex.Message);
+                Log.Error("[XLAYOUT] SQLite 机台快照读取失败，行序/上游排列退回图上位置。", ex);
             }
             return context;
         }
@@ -125,7 +125,7 @@ namespace UNCAD.Features.XLayout
             }
             catch (System.Exception ex)
             {
-                Log.Info("[XLAYOUT] 区域信息读取失败（区域筛选不可用）: " + ex.Message);
+                Log.Error("[XLAYOUT] 区域信息读取失败，区域筛选不可用。", ex);
                 return null;
             }
         }
@@ -136,13 +136,31 @@ namespace UNCAD.Features.XLayout
 
         protected override void Execute(CadContext ctx)
         {
+            try
+            {
+                ExecuteLayout(ctx);
+            }
+            catch (Autodesk.AutoCAD.Runtime.Exception ex)
+                when (ex.ErrorStatus == ErrorStatus.UserBreak)
+            {
+                throw;
+            }
+            catch (System.Exception ex)
+            {
+                ReportException(ctx, ex);
+            }
+        }
+
+        private void ExecuteLayout(CadContext ctx)
+        {
             ProductMetadata.EnsureCommandAllowed(CommandIds.XLayout);
             ObjectId[] selected = SelectionService.PickFirstOrPrompt(ctx,
                 "\n请框选或点选需要排版的图框（" + FrameRegionCollector.SupportedFrameDescription + "）: ",
                 new TypedValue(0, "INSERT"));
             if (selected == null || selected.Length == 0)
             {
-                ctx.Write("\n[XLAYOUT] 未选择图框，未执行排版。");
+                ctx.Operation?.Cancel("未选择图框");
+                Log.Info("[XLAYOUT] cancelled: no frames selected");
                 return;
             }
 
@@ -151,13 +169,15 @@ namespace UNCAD.Features.XLayout
             long collectMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (regions.Errors.Count > 0)
             {
-                foreach (string error in regions.Errors)
-                    ctx.Write("\n[XLAYOUT] 图框识别失败: " + error);
+                ReportFailure(ctx, "图框识别失败",
+                    XLayoutDiagnostics.FormatFailures(regions.Errors));
                 return;
             }
             if (regions.Groups.Count == 0)
             {
-                ctx.Write("\n[XLAYOUT] 未找到有效图框（" + FrameRegionCollector.SupportedFrameDescription + "）。");
+                ReportFailure(ctx, "未找到有效图框",
+                    "所选对象不包含受支持的图框（"
+                        + FrameRegionCollector.SupportedFrameDescription + "）。");
                 return;
             }
 
@@ -184,14 +204,17 @@ namespace UNCAD.Features.XLayout
                     ExistingFillIdentity identity;
                     try
                     {
-                        identity = FrameIdentityReader.ReadIdentity(readTransaction, group,
-                            definitions);
+                        // D-045 修订（2026-11-22）：布局身份只读图框自身属性，
+                        // 设备块 DEVICENAME 不参与——全图/单机选择必须读出同一身份。
+                        identity = FrameIdentityReader.ReadLayoutIdentity(readTransaction,
+                            group, definitions);
                     }
                     catch (System.Exception ex)
                     {
                         string error = DescribeFrameIdentityFailure(group, index,
                             regions.Groups.Count, ex.Message);
                         identityErrors.Add(error);
+                        Log.Error("[XLAYOUT] 图框身份读取异常：" + error, ex);
                         if (firstIdentityError == null) firstIdentityError = group;
                         continue;
                     }
@@ -205,6 +228,7 @@ namespace UNCAD.Features.XLayout
                         continue;
                     }
                     string deviceName = (identity.DeviceName ?? "").Trim();
+                    ctx.Operation?.Machine(machineId, deviceName);
                     var item = new XLayoutFrameItem(machineId, deviceName, group.Boundary, group.Handle);
                     items.Add(item);
                     groupsByItem[item] = group;
@@ -223,23 +247,24 @@ namespace UNCAD.Features.XLayout
             long identityMilliseconds = phaseWatch.ElapsedMilliseconds;
             if (identityErrors.Count > 0)
             {
-                const int maxReportedErrors = 20;
-                ctx.Write("\n[XLAYOUT] 发现 " + identityErrors.Count
-                    + " 个图框身份异常，未执行排版：");
-                foreach (string error in identityErrors.Take(maxReportedErrors))
-                    ctx.Write("\n  " + error);
-                if (identityErrors.Count > maxReportedErrors)
-                    ctx.Write("\n  其余 " + (identityErrors.Count - maxReportedErrors)
-                        + " 个异常未在命令行展开。");
                 if (firstIdentityError?.Boundary != null)
                 {
                     Point3d center = new Point3d(
                         (firstIdentityError.Boundary.MinX + firstIdentityError.Boundary.MaxX) / 2d,
                         (firstIdentityError.Boundary.MinY + firstIdentityError.Boundary.MaxY) / 2d,
                         0d);
-                    if (QuickLineCadService.TryCenterView(ctx, center))
-                        ctx.Write("\n[XLAYOUT] 视图已定位到第一个异常图框。");
+                    try
+                    {
+                        QuickLineCadService.TryCenterView(ctx, center);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Log.Error("[XLAYOUT] 无法定位到首个异常图框。", ex);
+                    }
                 }
+                ReportFailure(ctx, "发现 " + identityErrors.Count
+                    + " 个图框身份异常，未执行排版",
+                    XLayoutDiagnostics.FormatFailures(identityErrors));
                 return;
             }
 
@@ -256,6 +281,9 @@ namespace UNCAD.Features.XLayout
             // 排版前让用户挑选机台/回路：树形勾选 + 关键词筛选（空格/逗号分隔，AND）。
             // 只有"勾选且命中当前筛选"的回路参与重排，其余图框保持原位。
             IReadOnlyList<XLayoutFrameItem> arrangedItems = items;
+            // D-055：导入的机台/回路清单（选择窗「导入清单…」按钮；单框路径
+            // 不开选择窗，清单为 null，结果导出退化为全部参与图框为纲）。
+            XLayoutFilterList importedFilter = null;
             if (items.Count > 1)
             {
                 // 3.0 WPF 窗体（D-038）：确认与否用 Confirmed 表达，取消/关闭/Esc 一律 false。
@@ -263,14 +291,17 @@ namespace UNCAD.Features.XLayout
                 // 手拼 AMHS 机台清单防不住同号/近名混入，区域才是可靠口径）。
                 var selector = new XLayoutSelectionWindow(items, _arrangeMode,
                     LoadRegionByMachine(items));
+                selector.ImportListRequested = ImportFilterList;
                 UNCAD.UI.ModalWindowHost.Show(selector);
                 if (!selector.Confirmed)
                 {
                     SelectionService.ClearPickFirst(ctx);
-                    ctx.Write("\n[XLAYOUT] 已取消，未执行排版。");
+                    ctx.Operation?.Cancel("用户取消机台/回路选择");
+                    Log.Info("[XLAYOUT] cancelled in machine/circuit selection");
                     return;
                 }
                 arrangedItems = selector.SelectedItems;
+                importedFilter = selector.ImportedFilter;
                 _arrangeMode = selector.ArrangeMode;
                 Settings.Set(ConfigKeys.XLayoutArrangeMode,
                     Core.Dwg.XLayoutArrangeModes.Value(_arrangeMode));
@@ -278,7 +309,8 @@ namespace UNCAD.Features.XLayout
             if (arrangedItems.Count == 0)
             {
                 SelectionService.ClearPickFirst(ctx);
-                ctx.Write("\n[XLAYOUT] 没有选择任何回路，未执行排版。");
+                ctx.Operation?.Cancel("没有选择参与排版的回路");
+                Log.Info("[XLAYOUT] cancelled: no circuits selected for arrangement");
                 return;
             }
             Dictionary<string, XLayoutMachineSummary> arrangedSummaries =
@@ -290,12 +322,14 @@ namespace UNCAD.Features.XLayout
             if (!TryGetLayoutOrigin(ctx, out Point3d layoutOrigin))
             {
                 SelectionService.ClearPickFirst(ctx);
-                ctx.Write("\n[XLAYOUT] 已取消位置选择，未执行排版。");
+                ctx.Operation?.Cancel("用户取消位置选择");
+                Log.Info("[XLAYOUT] cancelled while selecting layout origin");
                 return;
             }
 
             phaseWatch.Restart();
             long commitMilliseconds = 0;
+            int skippedInPlace = 0;
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
                 HashSet<string> targetHandles = new HashSet<string>(
@@ -303,7 +337,7 @@ namespace UNCAD.Features.XLayout
                     StringComparer.OrdinalIgnoreCase);
                 RemoveDuplicateMarkers(ctx, transaction, targetHandles);
                 var moved = new HashSet<ObjectId>();
-                int written = 0, skippedInPlace = 0;
+                int written = 0;
                 // 千/万级图框：进度窗 + 边写边刷，替代“无响应到最后一次性蹦完”。
                 var progress = new ProgressWindow("XLAYOUT 排版写入");
                 progress.Show();
@@ -350,9 +384,6 @@ namespace UNCAD.Features.XLayout
                 // 不再“进度条飞完后死画面”。
                 progress.SetIndeterminate("提交变更：AutoCAD 正在重生成 "
                     + written + " 个图框（大图可能需要几十秒）…");
-                if (skippedInPlace > 0)
-                    ctx.Write("\n[XLAYOUT] " + skippedInPlace
-                        + " 个图框已在目标位，未重复改写。");
 
                 ObjectId textStyle = StyleManager.GetDrawingStandardStyle(ctx, transaction);
                 foreach (IGrouping<int, XLayoutPlacement> row in placements.GroupBy(
@@ -413,37 +444,118 @@ namespace UNCAD.Features.XLayout
             }
 
             SelectionService.ClearPickFirst(ctx);
-            ctx.Write("\n[XLAYOUT] 排版完成：" + arrangedItems.Count
-                + " 个图框，" + arrangedSummaries.Count + " 个机台；图框间距 10000。");
-            // 与 XSTS 同样的可诊断性：非完整机台逐台写日志，命令行点名列出
-            // 缺少/多出/重复（最多 10 台），避免"红标签但不知道缺什么"。
-            int attention = 0;
+            Log.Info("[XLAYOUT] 排版完成：参与 " + arrangedItems.Count
+                + " 个图框，" + arrangedSummaries.Count + " 个机台；原位跳过 "
+                + skippedInPlace + " 个。");
+            // 统计窗展示所有非完整机台，文件日志保留逐机台诊断。
             foreach (XLayoutMachineSummary summary in arrangedSummaries.Values
                 .Where(item => !item.IsComplete))
             {
-                attention++;
                 Log.Info("[XLAYOUT] 机台 " + summary.MachineId + "：应有 "
                     + summary.ExpectedCircuitCount + " 回路，本次参与 "
                     + summary.CircuitCount + " 框，"
                     + summary.StatusText
                     + (summary.DetailText.Length > 0
                         ? "（" + summary.DetailText + "）" : ""));
-                if (attention <= 10)
-                    ctx.Write("\n[XLAYOUT] 机台 " + summary.MachineId + " "
-                        + summary.StatusText
-                        + (summary.DetailText.Length > 0
-                            ? "（" + summary.DetailText + "）" : ""));
             }
-            if (attention > 10)
-                ctx.Write("\n[XLAYOUT] 其余 " + (attention - 10)
-                    + " 个机台详见统计窗。");
-            if (attention > 0)
-                ctx.Write("\n[XLAYOUT] 红色=缺回路（应有的回路本次没见到）；黄色=重复或多出，不算缺。");
 
-            // 3.0 WPF 窗体（D-038）：只读统计窗。
+            // 3.0 WPF 窗体（D-038）：统计窗 + 结果导出（D-055：导入清单时以清单
+            // 为纲逐条 Done/找不到；未导入时导出全部参与图框）。
+            XLayoutResultReport resultReport = XLayoutResultReport.Build(
+                importedFilter, items, arrangedItems, arrangedSummaries);
             var summaryWindow = new XLayoutSummaryWindow(arrangedSummaries.Values.ToList(),
-                arrangedItems.Count);
+                arrangedItems.Count, skippedInPlace);
+            summaryWindow.ExportRequested = () => ExportResultReport(ctx, resultReport);
             UNCAD.UI.ModalWindowHost.Show(summaryWindow);
+        }
+
+        /// <summary>
+        /// 选择窗「导入清单…」回调（D-055）：文件对话框 + Core 解析都在 Features
+        /// （UI 不读文件）。用户关掉对话框 = Cancelled（窗口静默）。
+        /// </summary>
+        private static XLayoutFilterImportResult ImportFilterList()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择机台/回路清单（Excel 或 CSV：机台ID 必需，回路名称可选）",
+                Filter = "机台/回路清单 (*.xlsx;*.csv;*.txt)|*.xlsx;*.csv;*.txt"
+                    + "|Excel 工作簿 (*.xlsx)|*.xlsx|CSV 文本 (*.csv;*.txt)|*.csv;*.txt"
+            };
+            if (dialog.ShowDialog() != true)
+                return new XLayoutFilterImportResult(null, "");
+            if (!XLayoutFilterListReader.TryRead(dialog.FileName,
+                    out XLayoutFilterList list, out string error))
+            {
+                Log.Error("[XLAYOUT] 清单解析失败：" + error);
+                return new XLayoutFilterImportResult(null, error);
+            }
+            Log.Info("[XLAYOUT] 已导入清单 " + dialog.FileName + "："
+                + list.Entries.Count + " 条。");
+            return new XLayoutFilterImportResult(list, "");
+        }
+
+        /// <summary>结果报表路径（XSTS 同款 D-035 口径：直接放输出根目录 + 时间戳）。</summary>
+        internal static string ResolveResultOutputFile(string root, DateTime now)
+        {
+            return Path.Combine(root, "UNCAD_XLAYOUT_"
+                + now.ToString("yyyyMMdd_HHmmss_fff") + ".xlsx");
+        }
+
+        /// <summary>
+        /// 写出结果报表（D-055）：目录创建 + 默认根写回 + 写占用预检 + Core 原子写。
+        /// 失败抛出带中文原因的异常（由结果窗显示），不影响已完成的排版。
+        /// </summary>
+        private string ExportResultReport(CadContext ctx, XLayoutResultReport report)
+        {
+            string configuredRoot = Settings.Get(ConfigKeys.SubmitFolder, "").Trim();
+            string root = OutputLayout.NormalizeRoot(configuredRoot);
+            Directory.CreateDirectory(root);
+            if (!string.Equals(configuredRoot, root, StringComparison.OrdinalIgnoreCase))
+                Settings.Set(ConfigKeys.SubmitFolder, root);
+            string path = ResolveResultOutputFile(root, DateTime.Now);
+            OutputLayout.ValidateNotLocked(new[] { path });
+            XLayoutResultExcelReporter.WriteToFile(report, path);
+            ctx.Operation?.Output("XLAYOUT结果", path);
+            Log.Info("[XLAYOUT] 结果已导出：" + path);
+            return path;
+        }
+
+        private static void ReportFailure(CadContext ctx, string heading, string details)
+        {
+            string report = heading + Environment.NewLine
+                + (details ?? "未提供诊断详情。");
+            ctx.Operation?.Fail(report);
+            Log.Error("[XLAYOUT] " + report
+                .Replace("\r\n", " | ").Replace("\n", " | "));
+            ShowFailureWindow(heading, report);
+        }
+
+        private static void ReportException(CadContext ctx, System.Exception ex)
+        {
+            ctx.Operation?.Fail("XLAYOUT 执行失败", ex);
+            Log.Error("[XLAYOUT] 执行失败。", ex);
+            ShowFailureWindow("XLAYOUT 执行失败",
+                ex?.ToString() ?? "未提供异常详情。");
+        }
+
+        private static void ShowFailureWindow(string heading, string details)
+        {
+            try
+            {
+                UNCAD.UI.ModalWindowHost.Show(
+                    new XLayoutFailureWindow(heading, details));
+            }
+            catch (System.Exception ex)
+            {
+                Log.Error("[XLAYOUT] 无法显示诊断窗口。", ex);
+                try
+                {
+                    System.Windows.MessageBox.Show(details, heading,
+                        System.Windows.MessageBoxButton.OK,
+                        System.Windows.MessageBoxImage.Error);
+                }
+                catch { }
+            }
         }
 
         /// <summary>
@@ -589,7 +701,7 @@ namespace UNCAD.Features.XLayout
             }
             catch (System.Exception ex)
             {
-                ctx.Write("\n[XLAYOUT] SQLite 机台快照读取失败，机台状态暂不判断: " + ex.Message);
+                Log.Error("[XLAYOUT] SQLite 机台快照读取失败，机台状态暂不判断。", ex);
                 return null;
             }
         }

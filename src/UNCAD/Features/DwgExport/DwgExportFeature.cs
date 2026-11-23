@@ -63,8 +63,14 @@ namespace UNCAD.Features.DwgExport
             // 关闭时全部直接导出。过滤必须发生在写盘之前。
             List<CircuitCoverageResult> coverageFailed = CircuitCoverageGuard.Evaluate(
                 ctx, CommandIds.DwgExport,
-                frames.Select(frame => new KeyValuePair<string, string>(
-                    frame.MachineId, frame.DeviceName)));
+                frames.Select(frame => new UNCAD.Core.Fill.CircuitSelection
+                {
+                    MachineId = frame.MachineId,
+                    CircuitName = frame.DeviceName,
+                    // D-056：带身份键评估，同名回路不塌缩（老图框键为空回退按名）。
+                    CircuitKey = frame.CircuitKey,
+                    UpstreamId = frame.UpstreamId
+                }));
             if (coverageFailed.Count > 0)
             {
                 HashSet<string> failedIds = new HashSet<string>(

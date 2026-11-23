@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Windows.Threading;
 using UNCAD.Core.Dwg;
@@ -84,6 +85,84 @@ namespace UNCAD.Tests
                 Dispatcher.PushFrame(frame);
                 Thread.Sleep(30);
             }
+        }
+
+        [Fact]
+        public void ExportButton_InvokesCallbackShowsPathAndDisables()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var window = new XLayoutSummaryWindow(
+                        new List<XLayoutMachineSummary>
+                        {
+                            new XLayoutMachineSummary("M-01")
+                            { CircuitCount = 2, StatusKnown = true, IsComplete = true }
+                        }, 2);
+                    window.ExportRequested = () => @"C:\out\UNCAD_XLAYOUT_1.xlsx";
+                    window.Show();
+                    Pump(2);
+
+                    Assert.True(window.ExportButton.IsEnabled);
+                    Click(window.ExportButton);
+                    Pump(1);
+
+                    Assert.Equal("已导出：C:\\out\\UNCAD_XLAYOUT_1.xlsx",
+                        window.ExportPathText.Text);
+                    Assert.False(window.ExportButton.IsEnabled);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        [Fact]
+        public void ExportButton_FailureShowsErrorAndKeepsButtonEnabled()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var window = new XLayoutSummaryWindow(
+                        new List<XLayoutMachineSummary>
+                        {
+                            new XLayoutMachineSummary("M-01")
+                            { CircuitCount = 1, StatusKnown = true, IsComplete = true }
+                        }, 1);
+                    window.ExportRequested = () => throw new IOException("磁盘已满");
+                    window.Show();
+                    Pump(2);
+
+                    Click(window.ExportButton);
+                    Pump(1);
+
+                    Assert.Contains("导出失败", window.ExportPathText.Text,
+                        StringComparison.Ordinal);
+                    Assert.Contains("磁盘已满", window.ExportPathText.Text,
+                        StringComparison.Ordinal);
+                    Assert.True(window.ExportButton.IsEnabled);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
+        private static void Click(System.Windows.Controls.Primitives.ButtonBase button)
+        {
+            Assert.NotNull(button);
+            button.RaiseEvent(new System.Windows.RoutedEventArgs(
+                System.Windows.Controls.Primitives.ButtonBase.ClickEvent, button));
         }
     }
 }

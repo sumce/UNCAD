@@ -686,6 +686,9 @@ namespace UNCAD.UI
                 string missingMachineIds = result.Snapshot?.MissingMachineIdWarning;
                 if (!string.IsNullOrWhiteSpace(missingMachineIds))
                     message += " " + missingMachineIds;
+                string duplicateCircuitKeys = result.Snapshot?.DuplicateCircuitKeyWarning;
+                if (!string.IsNullOrWhiteSpace(duplicateCircuitKeys))
+                    message += " " + duplicateCircuitKeys;
                 if (!string.IsNullOrWhiteSpace(result.Warning))
                     message += " " + result.Warning;
                 Log.Info("U1SET 机台数据刷新完成: " + message);
@@ -694,6 +697,7 @@ namespace UNCAD.UI
                 ShowMachineInfo(
                     result.UsedCachedFallback || !string.IsNullOrWhiteSpace(result.Warning)
                         || !string.IsNullOrWhiteSpace(missingMachineIds)
+                        || !string.IsNullOrWhiteSpace(duplicateCircuitKeys)
                         ? InfoBarSeverity.Warning : InfoBarSeverity.Success, message);
             }
             catch (Exception ex)

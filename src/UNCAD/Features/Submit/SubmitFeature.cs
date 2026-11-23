@@ -44,7 +44,7 @@ namespace UNCAD.Features.Submit
                 return;
             }
 
-            var identities = new List<KeyValuePair<string, string>>();
+            var identities = new List<UNCAD.Core.Fill.CircuitSelection>();
             IReadOnlyList<SubmissionRecord> records = FrameIdentityReader.ReadAll(ctx,
                 regions.Groups);
             for (int index = 0; index < regions.Groups.Count; index++)
@@ -54,8 +54,14 @@ namespace UNCAD.Features.Submit
                 if (record.Materials.Count == 0)
                     throw new InvalidDataException("图框 " + region.Handle
                         + " 的当前清单没有可提交项目，Excel 未修改。");
-                identities.Add(new KeyValuePair<string, string>(record.MachineId,
-                    record.DeviceName));
+                // D-056：身份带上回路身份键，同名回路的整机校验不塌缩。
+                identities.Add(new UNCAD.Core.Fill.CircuitSelection
+                {
+                    MachineId = record.MachineId,
+                    CircuitName = record.DeviceName,
+                    CircuitKey = record.CircuitKey,
+                    UpstreamId = record.Fr
+                });
                 ctx.Write("\n[U1S] 预检图框 " + region.Handle + "："
                     + record.MachineId + " / " + record.DeviceName + "，清单 "
                     + record.Materials.Count + " 项（含当前 M 数量）。");
@@ -80,8 +86,8 @@ namespace UNCAD.Features.Submit
                 ctx.Write("\n[U1S] 提交已中止，CAD 图纸未修改：\n[U1S]   " + ex.Message);
                 return;
             }
-            foreach (KeyValuePair<string, string> identity in identities)
-                ctx.Operation?.Machine(identity.Key, identity.Value);
+            foreach (UNCAD.Core.Fill.CircuitSelection identity in identities)
+                ctx.Operation?.Machine(identity.MachineId, identity.CircuitName);
             foreach (string path in (result.FilePath ?? "").Split(
                 new[] { "; " }, System.StringSplitOptions.RemoveEmptyEntries))
                 ctx.Operation?.Output("BOQ", path);

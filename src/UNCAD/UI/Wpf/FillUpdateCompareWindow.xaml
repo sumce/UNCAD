@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="U1U · 清单更新对比"
-                 Width="920" Height="700" MinWidth="860" MinHeight="520"
+                 Width="1120" Height="720" MinWidth="860" MinHeight="520"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -43,33 +43,71 @@
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
             <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="左为上次清单（表格现有内容），右为本次将写入的清单；变化行着色。继续更新前请核对差异。" />
+                       Text="上表一行一个图框（点击切换详情），下方为选中图框的差异：左为上次清单（表格现有内容），右为本次将写入的清单；变化行着色。继续更新前请核对差异。" />
         </StackPanel>
 
         <Grid Grid.Row="2" Margin="24,12,24,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="FrameListColumn" Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <!-- D-056：密排图框网格（一行一图框，单框也显示，不再左右分栏）。 -->
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-            <!-- 左侧：图框列表（仅多框） -->
-            <Grid x:Name="FrameListPanel" Grid.Column="0" Width="240" Margin="0,0,12,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="FrameListHeader" Grid.Row="0" FontSize="12"
-                           FontWeight="SemiBold" Margin="0,0,0,6"
-                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                <ListBox x:Name="FrameList" Grid.Row="1"
-                         SelectionChanged="OnFrameSelected"
-                         Background="{DynamicResource ControlFillColorDefaultBrush}"
-                         BorderThickness="1"
-                         BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" />
-            </Grid>
+            <DataGrid x:Name="FrameGrid" Grid.Row="0" Margin="0,0,0,10"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal" BorderThickness="0"
+                      RowHeight="24" FontSize="12" MaxHeight="196"
+                      SelectionMode="Single" SelectionUnit="FullRow"
+                      SelectionChanged="OnFrameSelected"
+                      Background="{DynamicResource ControlFillColorDefaultBrush}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="110" />
+                    <DataGridTextColumn Header="回路" Binding="{Binding DeviceName}" Width="*" >
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding DeviceName}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="上游编号" Binding="{Binding UpstreamId}" Width="180">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding UpstreamId}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="厂务开关" Binding="{Binding FacilitySwitch}" Width="100" />
+                    <DataGridTextColumn Header="新增" Binding="{Binding AddedCount}" Width="50">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="移除" Binding="{Binding RemovedCount}" Width="50">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="改量" Binding="{Binding QuantityChangedCount}" Width="50">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Right" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="图框" Binding="{Binding FrameHandle}" Width="70" />
+                </DataGrid.Columns>
+            </DataGrid>
 
-            <!-- 右侧：标题 + 更新信息 + 电缆卡片 + 并排清单 -->
-            <Grid Grid.Column="1">
+            <!-- 选中图框：标题 + 更新信息 + 电缆卡片 + 字段变更 + 并排清单 -->
+            <Grid Grid.Row="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -150,7 +188,7 @@
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" HeadersVisibility="Column"
                                   GridLinesVisibility="Horizontal" BorderThickness="0"
-                                  RowHeight="30" FontSize="12"
+                                  RowHeight="26" FontSize="12"
                                   SelectionMode="Single" SelectionUnit="FullRow"
                                   Background="{DynamicResource ControlFillColorDefaultBrush}"
                                   RowStyle="{StaticResource CompareRowStyle}">
@@ -175,7 +213,7 @@
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserAddRows="False" HeadersVisibility="Column"
                                   GridLinesVisibility="Horizontal" BorderThickness="0"
-                                  RowHeight="30" FontSize="12"
+                                  RowHeight="26" FontSize="12"
                                   SelectionMode="Single" SelectionUnit="FullRow"
                                   Background="{DynamicResource ControlFillColorDefaultBrush}"
                                   RowStyle="{StaticResource CompareRowStyle}">

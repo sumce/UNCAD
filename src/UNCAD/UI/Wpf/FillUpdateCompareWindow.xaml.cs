@@ -15,6 +15,10 @@ namespace UNCAD.UI
     {
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
+        /// <summary>D-056：上游编号（密排帧行展示，同名回路区分）。</summary>
+        public string UpstreamId { get; set; } = "";
+        /// <summary>D-056：厂务开关（密排帧行展示）。</summary>
+        public string FacilitySwitch { get; set; } = "";
         public string FrameHandle { get; set; } = "";
         public string LastUpdatedText { get; set; } = "";
         public string LastUpdatedUser { get; set; } = "";
@@ -93,35 +97,13 @@ namespace UNCAD.UI
             // 2026-11-04：弹不弹、弹哪些由调用方门控（HasChanges——内容有变化
             // 才弹），窗口只负责渲染传入清单，不再按 HasHistory 二次过滤。
             _items = (items ?? new List<FillUpdateCompareItem>()).ToList();
-            bool multiple = _items.Count > 1;
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
             DataContext = this;
-            if (!multiple)
-            {
-                Width = 920;
-                FrameListPanel.Visibility = Visibility.Collapsed;
-                FrameListColumn.Width = new GridLength(0);
-            }
-            else
-            {
-                Width = 1180;
-            }
-
-            FrameListHeader.Text = "内容有变化的图框（" + _items.Count + " 个）";
-            foreach (FillUpdateCompareItem item in _items)
-            {
-                int rowChanges = item.AddedCount + item.RemovedCount
-                    + item.QuantityChangedCount;
-                var details = new List<string>();
-                if (rowChanges > 0) details.Add(rowChanges + " 项清单变化");
-                int fieldChanges = item.FieldChanges?.Count ?? 0;
-                if (fieldChanges > 0)
-                    details.Add(fieldChanges + " 项字段变化");
-                FrameList.Items.Add(item.MachineId + " · " + item.DeviceName
-                    + (details.Count > 0 ? "  ·  " + string.Join(" / ", details) : ""));
-            }
-            if (_items.Count > 0) FrameList.SelectedIndex = 0;
+            // D-056：顶部密排图框网格（一行一图框，单框也显示），统一窗宽，
+            // 不再按单/多框切换 920/1180。
+            FrameGrid.ItemsSource = _items;
+            if (_items.Count > 0) FrameGrid.SelectedIndex = 0;
             PreviousGrid.ItemsSource = _previousRows;
             PlannedGrid.ItemsSource = _plannedRows;
             FieldChangesGrid.ItemsSource = _fieldChanges;
@@ -144,8 +126,8 @@ namespace UNCAD.UI
         }
 
         private FillUpdateCompareItem Selected
-            => FrameList.SelectedIndex >= 0 && FrameList.SelectedIndex < _items.Count
-                ? _items[FrameList.SelectedIndex] : null;
+            => FrameGrid.SelectedIndex >= 0 && FrameGrid.SelectedIndex < _items.Count
+                ? _items[FrameGrid.SelectedIndex] : null;
 
         private void ShowSelected()
         {
@@ -218,6 +200,7 @@ namespace UNCAD.UI
                 case "MachineId": return "机台 ID";
                 case "DeviceName": return "回路名称";
                 case "Region": return "区域";
+                case "CircuitKey": return "回路身份键";
                 case "OriginalCableModel": return "设备电缆型号";
                 case "BoqCableModel": return "清单电缆型号";
                 case "BoqBusPlugBoxCode": return "母线插接箱编码";

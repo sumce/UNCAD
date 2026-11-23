@@ -72,6 +72,12 @@ namespace UNCAD.Tests
         [Fact]
         public void Update_PreservesConfirmedCableOverrideAndDoesNotMutatePreviousHistory()
         {
+            var machine = new MachineRow
+            {
+                MachineId = "M1",
+                CircuitName = "A",
+                Cable = "EXCEL_DEFAULT"
+            };
             var previous = new FrameInfoJsonRecord
             {
                 MachineId = "M1",
@@ -80,12 +86,6 @@ namespace UNCAD.Tests
                 BoqCableModel = "CONFIRMED"
             };
             previous.Changes.Add(new FrameInfoJsonChange { Field = "Existing" });
-            var machine = new MachineRow
-            {
-                MachineId = "M1",
-                CircuitName = "A",
-                Cable = "EXCEL_DEFAULT"
-            };
 
             FrameInfoJsonRecord updated = FrameInfoJsonRecordUpdater.Update(previous,
                 machine, null, "U1U", new DateTime(2026, 9, 2, 0, 0, 0,
@@ -209,6 +209,33 @@ namespace UNCAD.Tests
             Assert.Equal("0", updated.PanelReserveMm);
             Assert.Equal("500.5", updated.DeviceReserveMm);
             Assert.Equal("12.846", updated.TotalCableM);
+        }
+
+        [Fact]
+        public void Update_CircuitKeyDerivedFromPlaintextIdentity()
+        {
+            // D-056 修订：键不落盘、不进变更历史，随明文身份（含 Fr）即时计算。
+            var machine = new MachineRow
+                { MachineId = "M01", CircuitName = "ECS", Fr = "3N-11B1A-PP-02" };
+            FrameInfoJsonRecord updated = FrameInfoJsonRecordUpdater.Update(null,
+                machine, null, "U1U", new DateTime(2026, 11, 23, 0, 0, 0,
+                    DateTimeKind.Utc));
+
+            Assert.Equal(CircuitIdentityKey.Of("M01", "ECS", "3N-11B1A-PP-02"),
+                updated.CircuitKey);
+            Assert.DoesNotContain(updated.Changes, change => change.Field == "CircuitKey");
+
+            // 上游改挂：Fr 变更照记 Fr 字段，键随之换新（计算值）。
+            var rehomed = new MachineRow
+                { MachineId = "M01", CircuitName = "ECS", Fr = "3N-NEW-PP-01" };
+            FrameInfoJsonRecord afterRehome = FrameInfoJsonRecordUpdater.Update(
+                updated, rehomed, null, "U1U", new DateTime(2026, 11, 24, 0, 0, 0,
+                    DateTimeKind.Utc));
+            Assert.Equal(CircuitIdentityKey.Of("M01", "ECS", "3N-NEW-PP-01"),
+                afterRehome.CircuitKey);
+            Assert.Contains(afterRehome.Changes, change => change.Field == "Fr");
+            Assert.DoesNotContain(afterRehome.Changes,
+                change => change.Field == "CircuitKey");
         }
     }
 }

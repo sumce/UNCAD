@@ -81,6 +81,8 @@ namespace UNCAD.Features.Fill
             var plans = new List<BatchFillUpdatePlan>();
             var errors = new List<string>();
             var catalogRequests = new List<BatchCatalogRequest>();
+            // D-056：同名回路待指认案例（预检读事务里只记录，事务外弹窗）。
+            var circuitAmbiguities = new List<CircuitAmbiguityCase>();
             // 分阶段 PERF：大批量“无响应”排查靠这行数据（对齐 XLAYOUT/XSTS 的口径）。
             var perfTotal = System.Diagnostics.Stopwatch.StartNew();
             long perfPreflight = 0, perfWrite = 0, perfBoq = 0;
@@ -96,6 +98,8 @@ namespace UNCAD.Features.Fill
             var preflightProgress = new ProgressWindow("U1U 批量预检");
             preflightProgress.Show();
             int preflightStep = Math.Max(1, regions.Count / 100);
+            // D-056：同名回路重跑预检需要复用整图扫描结果，声明提到 try 外。
+            List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> parallelOutputs = null;
             try
             {
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
@@ -105,7 +109,7 @@ namespace UNCAD.Features.Fill
                 // 3.3.0.1 起逐框 Inspect 内部各收一遍是 O(图框×实体)，与上面
                 // routeScanned 提批外是同一教训；逐框经 precollectedOutputs 复用。
                 var ownershipTimer = System.Diagnostics.Stopwatch.StartNew();
-                List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> parallelOutputs =
+                parallelOutputs =
                     UNCAD.Cad.ParallelAnnotationOwnership.Collect(
                         ctx, readTransaction, null);
                 ownershipTimer.Stop();
@@ -118,7 +122,8 @@ namespace UNCAD.Features.Fill
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
                         options, workbook, plans, errors, catalogRequests,
-                        definitions, statisticsSettings, routeScanned, parallelOutputs);
+                        definitions, statisticsSettings, routeScanned, parallelOutputs,
+                        null, circuitAmbiguities);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
@@ -137,6 +142,35 @@ namespace UNCAD.Features.Fill
             finally { preflightProgress.CloseByOwner(); }
             perfPreflight = perfPhase.ElapsedMilliseconds;
             ctx.Write("\n[U1U] 批量预检完成，开始生成更新计划...");
+
+            // D-056：同名回路指认在读事务外统一处理——弹窗确认后用所指回路
+            // 重跑该图框预检；取消则记为预检错误，走下方既有错误门。
+            if (circuitAmbiguities.Count > 0)
+            {
+                ctx.Write("\n[U1U] 有 " + circuitAmbiguities.Count
+                    + " 个图框存在同名回路，请在窗口中指认对应回路...");
+                foreach (CircuitAmbiguityCase ambiguity in circuitAmbiguities)
+                {
+                    MachineRow resolved = CircuitAmbiguityPrompt.Resolve(
+                        ambiguity.Identity, ambiguity.Candidates);
+                    if (resolved == null)
+                    {
+                        errors.Add("图框 " + ambiguity.Region.Handle
+                            + "：已取消同名回路选择，该图框未纳入本批更新。");
+                        continue;
+                    }
+                    using (Transaction retryTransaction =
+                        ctx.Db.TransactionManager.StartTransaction())
+                    {
+                        BatchFillUpdatePreflight.Build(ctx, retryTransaction,
+                            ambiguity.Region, options, workbook, plans, errors,
+                            catalogRequests, new CadBlockDefinitionReader(retryTransaction),
+                            statisticsSettings, routeScanned, parallelOutputs, resolved);
+                        retryTransaction.Commit();
+                    }
+                }
+                circuitAmbiguities.Clear();
+            }
 
             // 3.0.0.16：预检错误门必须先于一切询问窗——旧顺序先弹设备内预留
             // 填写窗再报“预检失败整批取消”，用户白填一窗。
@@ -270,8 +304,8 @@ namespace UNCAD.Features.Fill
             // 结果窗备注列标注。勾选与否都不拦图纸更新。
             List<CircuitCoverageResult> coverageFailed = FillCoverageGate
                 .EvaluateCircuitCoverage(ctx, workbook, CommandIds.FillUpdate,
-                    plans.Select(plan => new KeyValuePair<string, string>(
-                        plan.Machine.MachineId, plan.Machine.CircuitName)));
+                    plans.Select(plan =>
+                        UNCAD.Core.Fill.CircuitSelection.Of(plan.Machine)));
             var coverageSet = new HashSet<string>(
                 coverageFailed.Select(result => result.MachineId),
                 UNCAD.Core.Text.IdentityTextNormalizer.Comparer);
@@ -344,7 +378,9 @@ namespace UNCAD.Features.Fill
             var confirmationRows = plans.Select(plan => new BatchFillConfirmationRow(
                 plan.Region.Handle, plan.Machine.MachineId, plan.Machine.CircuitName,
                 plan.DeviceState, plan.Rows.Count,
-                plan.RouteInspection?.ConnectivityText)).ToList();
+                plan.RouteInspection?.ConnectivityText,
+                // D-056：带上上游编号/厂务开关，同名回路在确认窗直接可辨。
+                plan.Machine.Fr, plan.Machine.FacilitySwitch)).ToList();
             // 当前填充确认窗不构建 3D 场景；保留空预览集合参数兼容窗体接口。
             // 整批图层矫正汇总进底部报告行。
             var previewsByFrame = new Dictionary<string,
@@ -561,6 +597,9 @@ namespace UNCAD.Features.Fill
                             machineStats[machineKey] = machineRow =
                                 new BatchUpdateMachineRow(machineKey);
                         machineRow.Frames++;
+                        machineRow.CountCircuit(
+                            UNCAD.Core.Fill.CircuitIdentityKey.Of(plan.Machine),
+                            plan.Machine.CircuitName);
                         machineRow.TableRows += filled;
                         machineRow.AttributeValues += frame.Values + device.Values
                             + ruanguan.Values + frameInfo.Values + upstreamInfo.Values

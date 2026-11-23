@@ -23,6 +23,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <!-- 3.3.1（D-054 Amendment）：预览与清单对半分（两个 Star 列 +
@@ -52,16 +53,32 @@
                       AutoGenerateColumns="False" IsReadOnly="True"
                       CanUserAddRows="False" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" BorderThickness="0"
-                      RowHeight="32" FontSize="13"
+                      RowHeight="28" FontSize="12"
                       SelectionMode="Single" SelectionUnit="FullRow"
                       SelectionChanged="OnGridSelectionChanged"
                       Background="{DynamicResource ControlFillColorDefaultBrush}">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="图框" Binding="{Binding FrameHandle}" Width="90" />
-                    <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
-                    <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DeviceName}" Width="*" />
-                    <DataGridTextColumn Header="Device" Binding="{Binding DeviceState}" Width="120" />
-                    <DataGridTextColumn Header="连通性" Binding="{Binding ConnectivityText}" Width="190">
+                    <DataGridTextColumn Header="图框" Binding="{Binding FrameHandle}" Width="80" />
+                    <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="110" />
+                    <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DeviceName}" Width="*" >
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding DeviceName}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="上游编号" Binding="{Binding UpstreamId}" Width="170">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding UpstreamId}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="厂务开关" Binding="{Binding FacilitySwitch}" Width="95" />
+                    <DataGridTextColumn Header="Device" Binding="{Binding DeviceState}" Width="100" />
+                    <DataGridTextColumn Header="连通性" Binding="{Binding ConnectivityText}" Width="180">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -69,7 +86,7 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="清单项" Binding="{Binding RowCount}" Width="70">
+                    <DataGridTextColumn Header="清单项" Binding="{Binding RowCount}" Width="64">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="HorizontalAlignment" Value="Right" />
@@ -78,6 +95,19 @@
                     </DataGridTextColumn>
                 </DataGrid.Columns>
             </DataGrid>
+            <!-- D-056：选中行详情条（默认收起；点名同名回路差异字段）。 -->
+            <Grid x:Name="DetailStrip" Grid.Row="3" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                  Visibility="Visible">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ToggleButton x:Name="DetailToggle" Grid.Column="0" Margin="0,0,8,0"
+                              Content="详情 ▴" FontSize="12" Click="OnDetailToggle" />
+                <TextBlock x:Name="DetailText" Grid.Column="1" FontSize="11"
+                           TextWrapping="Wrap" VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </Grid>
         </Grid>
 
         <Grid Grid.Row="2" Margin="24,8,24,20">

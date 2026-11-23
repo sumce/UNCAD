@@ -26,10 +26,16 @@ namespace UNCAD.Features.Submit
         /// <summary>校验整机回路覆盖；返回 false 时调用方必须中止且不写任何文件。</summary>
         internal static bool Ensure(CadContext ctx, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => Ensure(ctx, command, ToSelections(machineCircuits));
+
+        /// <summary>D-056：带回路身份键的硬拦截版。</summary>
+        internal static bool Ensure(CadContext ctx, string command,
+            IEnumerable<UNCAD.Core.Fill.CircuitSelection> machineCircuits)
         {
             FillWorkbookSnapshot workbook = TryLoadSnapshot(ctx, command);
             if (workbook == null) return true;
-            return FillFeature.EnsureCircuitCoverage(ctx, workbook, command, machineCircuits);
+            return FillCoverageGate.EnsureCircuitCoverage(ctx, workbook, command,
+                machineCircuits);
         }
 
         /// <summary>
@@ -39,11 +45,24 @@ namespace UNCAD.Features.Submit
         /// </summary>
         internal static List<CircuitCoverageResult> Evaluate(CadContext ctx, string command,
             IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => Evaluate(ctx, command, ToSelections(machineCircuits));
+
+        /// <summary>D-056：带回路身份键的评估版。</summary>
+        internal static List<CircuitCoverageResult> Evaluate(CadContext ctx, string command,
+            IEnumerable<UNCAD.Core.Fill.CircuitSelection> machineCircuits)
         {
             FillWorkbookSnapshot workbook = TryLoadSnapshot(ctx, command);
             return FillCoverageGate.EvaluateCircuitCoverage(ctx, workbook, command,
                 machineCircuits);
         }
+
+        private static IEnumerable<UNCAD.Core.Fill.CircuitSelection> ToSelections(
+            IEnumerable<KeyValuePair<string, string>> machineCircuits)
+            => (machineCircuits ?? new KeyValuePair<string, string>[0])
+                .Select(pair => new UNCAD.Core.Fill.CircuitSelection
+                {
+                    MachineId = pair.Key, CircuitName = pair.Value
+                });
 
         /// <summary>只读上次成功刷新的 SQLite 快照；不可用时返回 null（跳过校验）。</summary>
         internal static FillWorkbookSnapshot TryLoadSnapshot(CadContext ctx, string command)

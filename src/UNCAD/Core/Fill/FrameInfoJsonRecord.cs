@@ -16,6 +16,13 @@ namespace UNCAD.Core.Fill
         public string MachineId { get; set; } = "";
         public string DeviceName { get; set; } = "";
         public string Region { get; set; } = "";
+
+        /// <summary>
+        /// 回路身份键（D-056 修订）：由持久明文（机台ID+回路名+上游编号）即时
+        /// 计算，**不落盘**——JSON 保持明文可读、可人工反推；需要键的场合
+        /// （U1U 匹配、整机回路校验）随取随算，两侧口径永远一致。
+        /// </summary>
+        public string CircuitKey => CircuitIdentityKey.Of(MachineId, DeviceName, Fr);
         public string OriginalCableModel { get; set; } = "";
         public string BoqCableModel { get; set; } = "";
         public string BoqBusPlugBoxCode { get; set; } = "";

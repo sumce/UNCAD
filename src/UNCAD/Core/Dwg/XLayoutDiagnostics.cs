@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Text;
 
@@ -9,6 +12,18 @@ namespace UNCAD.Core.Dwg
     /// </summary>
     public static class XLayoutDiagnostics
     {
+        public static string FormatFailures(IEnumerable<string> failures)
+        {
+            List<string> details = (failures ?? Array.Empty<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => item.Trim())
+                .ToList();
+            return details.Count == 0
+                ? "未提供诊断详情。"
+                : "诊断条目：" + details.Count + Environment.NewLine
+                    + string.Join(Environment.NewLine, details);
+        }
+
         public static string DescribeFrameIdentityFailure(string handle,
             FrameRectangle boundary, int index, int total, int entityCount, string reason)
         {

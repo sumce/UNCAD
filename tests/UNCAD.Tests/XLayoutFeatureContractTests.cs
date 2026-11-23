@@ -36,6 +36,55 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void Feature_ReportsFailuresInUiAndKeepsCommandLineForCadPromptsOnly()
+        {
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "XLayout", "XLayoutFeature.cs"));
+
+            Assert.Contains("ReportFailure(ctx", source);
+            Assert.Contains("ctx.Operation?.Fail", source);
+            Assert.Contains("ctx.Operation?.Cancel", source);
+            Assert.Contains("XLayoutFailureWindow", source);
+            Assert.Contains("Log.Error(\"[XLAYOUT]", source);
+            Assert.DoesNotContain("ctx.Write(", source);
+        }
+
+        [Fact]
+        public void IdentityConflictDiagnosticsIncludeDeviceBlockProvenance()
+        {
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "FillSelectionCollector.cs"));
+
+            Assert.Contains("DEVICENAME 候选块诊断", collector);
+            Assert.Contains("block.Handle", collector);
+            Assert.Contains("block.Position", collector);
+            Assert.Contains("AttributeReference", collector);
+            Assert.Contains("AttributeDefinition 默认值", collector);
+            Assert.Contains("attributePosition", collector);
+        }
+
+        [Fact]
+        public void LayoutIdentityComesFromFrameAttributesOnly()
+        {
+            // D-045 修订（2026-11-22，XLAYOUT 现场报告「全图报 DEVICENAME 冲突、
+            // 单机正常」）：布局身份只读图框自身属性，设备块 DEVICENAME 不参与，
+            // 「图框属性与设备块不一致」在布局路径结构性不可能发生。
+            string feature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "XLayout", "XLayoutFeature.cs"));
+            string reader = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Submit", "FrameIdentityReader.cs"));
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
+                "Fill", "FillSelectionCollector.cs"));
+
+            Assert.Contains("FrameIdentityReader.ReadLayoutIdentity(readTransaction", feature);
+            Assert.DoesNotContain("FrameIdentityReader.ReadIdentity(", feature);
+            Assert.Contains("internal static ExistingFillIdentity ReadLayoutIdentity", reader);
+            Assert.Contains("out _, false)", reader);
+            Assert.Contains("bool includeDeviceBlocks", collector);
+            Assert.Contains("if (includeDeviceBlocks)", collector);
+        }
+
+        [Fact]
         public void ExportAndLayoutUseAnchorOwnershipForAllEntities()
         {
             string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",

@@ -72,11 +72,23 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock VerticalAlignment="Center" FontSize="12"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="{Binding Footer, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
-            <ui:Button x:Name="CloseButton" Grid.Column="1" Content="关闭" MinWidth="100"
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding Footer, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
+                <TextBlock x:Name="ExportPathText" x:FieldModifier="internal"
+                           Margin="0,2,0,0" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="" />
+            </StackPanel>
+            <ui:Button x:Name="ExportButton" x:FieldModifier="internal" Grid.Column="1"
+                       Content="导出 Excel" MinWidth="100" Margin="0,0,10,0"
+                       Appearance="Primary"
+                       ToolTip="把本次清单结果/排版图框导出为 Excel（D-055）"
+                       Click="OnExportExcel" />
+            <ui:Button x:Name="CloseButton" Grid.Column="2" Content="关闭" MinWidth="100"
                        IsCancel="True" IsDefault="True" Click="OnClose" />
         </Grid>
     </Grid>

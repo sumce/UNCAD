@@ -1,3 +1,4 @@
+using System.Linq;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Dwg;
 using Xunit;
@@ -19,6 +20,24 @@ namespace UNCAD.Tests
             Assert.Contains("范围X[100..500] Y[200..800]", message);
             Assert.Contains("包含实体 7 个", message);
             Assert.Contains("未读取到设备名称", message);
+        }
+
+        [Fact]
+        public void FormatFailuresKeepsEveryDiagnosticInsteadOfTruncatingTheList()
+        {
+            string[] failures = Enumerable.Range(1, 25)
+                .Select(index => "frame-" + index)
+                .ToArray();
+
+            string report = XLayoutDiagnostics.FormatFailures(failures);
+
+            Assert.Contains("诊断条目：25", report);
+            Assert.Contains("frame-1", report);
+            Assert.Contains("frame-20", report);
+            Assert.Contains("frame-21", report);
+            Assert.Contains("frame-25", report);
+            Assert.Equal(25, report.Split('\n').Count(line =>
+                line.StartsWith("frame-")));
         }
     }
 }
