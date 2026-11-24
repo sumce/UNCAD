@@ -7,6 +7,16 @@ deferred, or important for support diagnosis.
 
 - U1LX-entered distances are not part of U1U/U1F statistics. This is an
   explicit scope decision, not an accidental omission.
+- `UNCAD_XFRAME_SELFTEST` (tests/UNCAD.CadIntegration, not a release gate)
+  still asserts migration behaviour that no longer exists: it expects the
+  migration to replace an existing BOQ table and erase the old one, while
+  `XFrameMigrationService` clones a BOQ table only when the selection has none
+  and never erases user tables. By its assertion order the command fails before
+  it reaches its drawing-info write check (read from the sources on
+  2026-11-25; the console log carries no exception text). The release gates
+  are PERF_SMOKE and MIGRATION_SELFTEST; the latter carries the drawing-info
+  template write check since 3.6.0. The self-test needs rewriting to the
+  current migration contract.
 
 ## Intentional Behavior
 
