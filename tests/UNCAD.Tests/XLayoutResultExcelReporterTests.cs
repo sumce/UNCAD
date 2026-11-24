@@ -37,6 +37,7 @@ namespace UNCAD.Tests
             {
                 MachineId = "M1",
                 CircuitName = "A",
+                UpstreamId = "3N-11B1A-PP-02",
                 FrameHandle = "001234",
                 Note = ""
             });
@@ -57,14 +58,19 @@ namespace UNCAD.Tests
                         ISheet filter = workbook.GetSheet("清单结果");
                         // 0 标题、1 生成时间、2 表头、3+ 数据。
                         Assert.Equal("机台ID", filter.GetRow(2).GetCell(0).StringCellValue);
-                        Assert.Equal("Done", filter.GetRow(3).GetCell(2).StringCellValue);
-                        Assert.Equal("找不到", filter.GetRow(4).GetCell(2).StringCellValue);
+                        // D-057：回路名后插入“上游编号”列（同机台同名回路靠它认领），
+                        // 状态/句柄/备注顺移一位。
+                        Assert.Equal("上游编号", filter.GetRow(2).GetCell(2).StringCellValue);
+                        Assert.Equal("Done", filter.GetRow(3).GetCell(3).StringCellValue);
+                        Assert.Equal("找不到", filter.GetRow(4).GetCell(3).StringCellValue);
                         // 句柄按文本写（防 Excel 数值化丢前导零）。
                         ISheet frames = workbook.GetSheet("排版图框");
+                        Assert.Equal("上游编号", frames.GetRow(2).GetCell(2).StringCellValue);
+                        Assert.Equal("3N-11B1A-PP-02", frames.GetRow(3).GetCell(2).StringCellValue);
                         Assert.Equal(CellType.String,
-                            frames.GetRow(3).GetCell(2).CellType);
+                            frames.GetRow(3).GetCell(3).CellType);
                         Assert.Equal("001234",
-                            frames.GetRow(3).GetCell(2).StringCellValue);
+                            frames.GetRow(3).GetCell(3).StringCellValue);
                         var typed = (XSSFSheet)filter;
                         Assert.True(typed.PaneInformation.IsFreezePane());
                         // 行冻结在第 3 行（表头下方）：NPOI 里水平分割线的行位

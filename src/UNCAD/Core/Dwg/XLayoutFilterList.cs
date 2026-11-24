@@ -12,24 +12,36 @@ namespace UNCAD.Core.Dwg
     /// </summary>
     public sealed class XLayoutFilterEntry
     {
-        public XLayoutFilterEntry(string machineId, string circuitName)
+        public XLayoutFilterEntry(string machineId, string circuitName,
+            string upstreamId = "")
         {
             MachineId = (machineId ?? "").Trim();
             CircuitName = (circuitName ?? "").Trim();
+            UpstreamId = (upstreamId ?? "").Trim();
         }
 
         public string MachineId { get; }
         public string CircuitName { get; }
+        /// <summary>D-057：可选的上游编号——同机台同名回路靠它指认是哪一条。</summary>
+        public string UpstreamId { get; }
 
         public string MachineKey => IdentityTextNormalizer.Key(MachineId);
         public string CircuitKey => IdentityTextNormalizer.Key(CircuitName);
+        public string UpstreamKey => UNCAD.Core.Fill.CircuitIdentityKey.UpstreamKey(UpstreamId);
 
         /// <summary>机台级条目（回路为空，命中该机台全部回路）。</summary>
         public bool IsMachineLevel => CircuitName.Length == 0;
+        /// <summary>条目点名到了具体上游（可用于区分同名回路）。</summary>
+        public bool HasUpstream => UpstreamKey.Length > 0;
+
+        /// <summary>条目的去重键（机台 + 回路 + 上游）。</summary>
+        public string IdentityKey => MachineKey + "\u001f" + CircuitKey
+            + "\u001f" + UpstreamKey;
 
         public string DisplayText => IsMachineLevel
             ? MachineId + "（整台）"
-            : MachineId + "-" + CircuitName;
+            : MachineId + "-" + CircuitName
+                + (UpstreamId.Length > 0 ? "（上游 " + UpstreamId + "）" : "");
     }
 
     /// <summary>一条清单条目对图框集合的命中结果：命中零个 = 图纸上找不到。</summary>
@@ -87,14 +99,21 @@ namespace UNCAD.Core.Dwg
 
         public bool IsEmpty => Entries.Count == 0;
 
-        /// <summary>条目是否命中该图框（机台相等且回路为空或相等）。</summary>
+        /// <summary>条目是否命中该图框：机台相等；机台级条目命中全部回路；
+        /// 回路级条目要求回路名相等，且条目带了上游编号时上游也要对上
+        /// （D-057：同机台同名回路只认那一条）。</summary>
         public static bool Matches(XLayoutFilterEntry entry, XLayoutFrameItem item)
         {
             if (entry == null || item == null) return false;
             if (!IdentityTextNormalizer.Equals(entry.MachineId, item.MachineId))
                 return false;
-            return entry.IsMachineLevel
-                || IdentityTextNormalizer.Equals(entry.CircuitName, item.DeviceName);
+            if (entry.IsMachineLevel) return true;
+            if (!IdentityTextNormalizer.Equals(entry.CircuitName, item.DeviceName))
+                return false;
+            // 条目不带上游：同名图框全部命中（是否齐全由结果报表判）。
+            return !entry.HasUpstream
+                || entry.UpstreamKey == UNCAD.Core.Fill.CircuitIdentityKey
+                    .UpstreamKey(item.UpstreamId);
         }
 
         /// <summary>图框是否被清单中任一条目命中（选择窗预勾选的判据）。</summary>

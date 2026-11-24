@@ -21,15 +21,20 @@ namespace UNCAD.UI
         private bool _isExpanded;
 
         internal XLayoutSelectionNode(string header, string machineId, string deviceName,
-            bool isPlaceholder, XLayoutFrameItem item = null)
+            bool isPlaceholder, XLayoutFrameItem item = null, string detail = "")
         {
             Header = header;
             MachineId = machineId ?? "";
             DeviceName = deviceName ?? "";
             IsPlaceholder = isPlaceholder;
             Item = item;
+            Detail = detail ?? "";
             Children = new ObservableCollection<XLayoutSelectionNode>();
         }
+
+        /// <summary>D-057：叶子标题后的一行次要信息（“上游 X · 图框 h”）。</summary>
+        public string Detail { get; }
+        public bool ShowDetail => Detail.Length > 0;
 
         public string Header
         {
@@ -184,7 +189,7 @@ namespace UNCAD.UI
             return _items.Where(item => _checked.Contains(item)
                 && RegionAllows(item.MachineId)
                 && XLayoutSelectionFilter.MatchesCircuit(item.MachineId,
-                    item.DeviceName, _terms, _knownMachineIds)).ToList();
+                    item.DeviceName, item.UpstreamId, _terms, _knownMachineIds)).ToList();
         }
 
         // ---------- 区域筛选（3.2.0.10，台账 U_区域） ----------
@@ -312,7 +317,7 @@ namespace UNCAD.UI
                 List<XLayoutFrameItem> shown = machineMatches
                     ? machine.ToList()
                     : machine.Where(item => XLayoutSelectionFilter.MatchesCircuit(
-                        item.MachineId, item.DeviceName, terms,
+                        item.MachineId, item.DeviceName, item.UpstreamId, terms,
                         _knownMachineIds)).ToList();
                 if (shown.Count == 0) continue;
 
@@ -323,12 +328,31 @@ namespace UNCAD.UI
                 var machineNode = new XLayoutSelectionNode(
                     header,
                     machine.Key, "", false);
+                // D-057：机台内有同名回路（上游编号不同）时，叶子上带上游编号区分；
+                // 没记录上游的同名图框点明“上游未记录”（需 U1F/U1U 指认）。
+                var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 foreach (XLayoutFrameItem item in shown)
                 {
+                    string countKey = IdentityTextNormalizer.Key(item.DeviceName ?? "");
+                    nameCounts.TryGetValue(countKey, out int count);
+                    nameCounts[countKey] = count + 1;
+                }
+                foreach (XLayoutFrameItem item in shown)
+                {
+                    string name = (item.DeviceName ?? "").Length == 0
+                        ? "(未识别回路)" : item.DeviceName;
+                    if (nameCounts.TryGetValue(IdentityTextNormalizer.Key(item.DeviceName ?? ""),
+                            out int sameName) && sameName > 1)
+                        name += item.UpstreamId.Length > 0
+                            ? "（上游 " + item.UpstreamId + "）"
+                            : "（上游未记录）";
+                    string upstream = Core.Fill.CircuitIdentityKey.UpstreamDisplay(
+                        item.UpstreamId);
                     var circuitNode = new XLayoutSelectionNode(
-                        (item.DeviceName ?? "").Length == 0
-                            ? "(未识别回路)" : item.DeviceName,
-                        item.MachineId, item.DeviceName, false, item)
+                        name,
+                        item.MachineId, item.DeviceName, false, item,
+                        (upstream.Length > 0 ? "上游 " + upstream + "   ·   " : "")
+                            + "图框 " + (item.Handle ?? ""))
                     {
                         IsChecked = _checked.Contains(item),
                         IsExpanded = true

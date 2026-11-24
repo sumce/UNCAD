@@ -9,6 +9,14 @@ namespace UNCAD.Core.Submission
         public string DeviceName { get; set; } = "";
         /// <summary>D-056：frameinfo_json 的回路身份键（老图框为空串）。</summary>
         public string CircuitKey { get; set; } = "";
+        /// <summary>
+        /// D-057：清单（BOQ）设备列的列名。同机台有同名回路（上游编号不同）时为
+        /// “回路名（上游 X）”，否则等于 <see cref="DeviceName"/>。由
+        /// <see cref="BoqDeviceLabels.Apply"/> 在写清单前补上；空 = 未补，按回路名。
+        /// </summary>
+        public string DeviceLabel { get; set; } = "";
+        /// <summary>D-057：回路的上游编号（已去掉槽位/轴位标注）；清单 DATA 行按它区分同名回路。</summary>
+        public string UpstreamId { get; set; } = "";
         public string PanelType { get; set; } = "";
         // Preserved from the device block when the edited table uses a BOQ substitute.
         public string OriginalCable { get; set; } = "";

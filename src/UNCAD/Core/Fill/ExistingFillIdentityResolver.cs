@@ -16,6 +16,13 @@ namespace UNCAD.Core.Fill
         /// 匹配回退到「按名匹配 + 同名歧义交还调用方」。
         /// </summary>
         public string CircuitKey { get; set; } = "";
+
+        /// <summary>
+        /// D-057：图框记录的上游编号明文（frameinfo_json identity.fr）。只在 JSON
+        /// 身份胜出时才有值；物理标注身份没有上游，保持空串。统计/排版用它给
+        /// 同名回路标注“（上游 …）”，不参与匹配（匹配走 CircuitKey）。
+        /// </summary>
+        public string UpstreamId { get; set; } = "";
     }
 
     public static class ExistingFillIdentityResolver

@@ -27,8 +27,16 @@ namespace UNCAD.Tests
             Assert.Contains("AllowNone = true", source);
             Assert.Contains("layoutOrigin.X", source);
             Assert.Contains("layoutOrigin.Y", source);
-            Assert.Contains("MachineLabelTextHeight = 25000d", source);
-            Assert.Contains("MachineLabelLeftDistance = 300000d", source);
+            // D-057：标签字高/离框距离与图框间距改为 U1SET「图框与排版」可配
+            //（XLayoutRuntimeOptions 一次快照），默认值即旧常量 25000 / 300000。
+            Assert.Contains("XLayoutSettings.Current()", source);
+            Assert.Contains("layout.LabelTextHeight", source);
+            Assert.Contains("layout.LabelLeftDistance", source);
+            Assert.Contains("layout.Spacing", source);
+            string options = File.ReadAllText(RepoFile("src", "UNCAD", "Core", "Dwg",
+                "XLayoutRuntimeOptions.cs"));
+            Assert.Contains("DefaultLabelTextHeight = 25000d", options);
+            Assert.Contains("DefaultLabelLeftDistance = 300000d", options);
             Assert.Contains("placement.TranslationX + placement.Item.Boundary.MinX", source);
             Assert.Contains("AttachmentPoint.BaseLeft", source);
             Assert.Contains("EntityFactory.DBText", source);

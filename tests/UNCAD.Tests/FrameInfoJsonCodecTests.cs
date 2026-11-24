@@ -79,7 +79,10 @@ namespace UNCAD.Tests
                 "measuredM", "panelReserveMm", "deviceReserveMm", "totalM");
             AssertAllEmptyStrings(root, "drawing", "detail", "seq", "hoseDiameter");
             // 2.11.0 起 meta 还必出 frameHandle（框句柄绑定，空串=老图无绑定）。
-            AssertAllEmptyStrings(root, "meta", "updatedUtc", "updatedBy", "frameHandle");
+            // D-057：创建时间（最近一次 U1F）与最近一次写入的命令——制图信息表
+            // (U1F创建时间)/(U1U更新时间) 占位符的数据源；老图无记录时为空串。
+            AssertAllEmptyStrings(root, "meta", "updatedUtc", "updatedBy", "frameHandle",
+                "filledUtc", "lastCommand");
             var changes = Assert.IsAssignableFrom<IEnumerable>(root["changes"]);
             Assert.Empty(changes);
         }

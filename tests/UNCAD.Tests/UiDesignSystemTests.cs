@@ -235,7 +235,7 @@ namespace UNCAD.Tests
             Assert.Contains("SizeToContent", shell);
             Assert.Contains("WindowStartupLocation.CenterScreen", shell);
 
-            // 11 个设置页 + 机台选择窗都挂了卡片令牌（观感一致）。
+            // 12 个设置页 + 机台选择窗都挂了卡片令牌（观感一致）。
             string[] tokenPages =
             {
                 "Settings/SettingsOverviewPage.xaml",
@@ -248,6 +248,8 @@ namespace UNCAD.Tests
                 "Settings/SettingsDownstreamPage.xaml",
                 "Settings/SettingsColorPage.xaml",
                 "Settings/SettingsOutputPage.xaml",
+                // 3.6.0（D-057）：图框与排版
+                "Settings/SettingsFramePage.xaml",
                 "Settings/SettingsLogsPage.xaml"
             };
             foreach (string page in tokenPages)

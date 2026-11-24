@@ -14,6 +14,8 @@ namespace UNCAD.Core.Fill
         public string CircuitName { get; set; } = "";
         public string CircuitKey { get; set; } = "";
         public string UpstreamId { get; set; } = "";
+        /// <summary>来源图框句柄（仅用于提示里点名定位，不参与比较；台账行为空）。</summary>
+        public string Handle { get; set; } = "";
 
         public static CircuitSelection Of(MachineRow row)
         {

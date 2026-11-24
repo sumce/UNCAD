@@ -32,25 +32,18 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.5.0.1` (2026-11-23, D-056: circuit
-  identity key derived from persisted plaintext — same-name circuits with
-  different upstreams no longer misroute U1U; ambiguity picker window;
-  key-based coverage; U1U window compaction; on top of D-055: XLAYOUT
-  filter-list import + result export), not packaged or installed; the
-  installed assembly is `3.5.0.0` (local acceptance build, not
-  a tagged release).
-  The previous release ZIP
-  was generated locally on 2026-11-20 at
-  `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
-  `DCA972DB7532FB9B34582C6F125E29FAA14B701892939DC86385540A46EC7C90`).
-  It has not been uploaded; current bundle hash differs from the installed
-  bundle, and user-drawing acceptance remains pending. XSTS frame details use
-  one row per frame, with separate model and quantity columns for every drawn
-  BOQ item and blank cells for missing items. Near-name hints and the "not
-  drawn" list are removed. The local `v3.4.1` tag is present. The
-  `3.4.1.7` archive was published as latest on 2026-11-22; size 6,625,853
-  bytes, SHA-256 `1AB481606D8BB56E7AEDE77449324A7D0E17E7351260AF3F1666C32A3B729DB8`.
-  Server metadata and anonymous download were verified byte-for-byte.
+- Current local source version: `3.6.0.0` (2026-11-24, D-057: same-name
+  circuits handled by one pairing rule in XSTS / XLAYOUT / BOQ / PDF / DWG;
+  drawing-info table column templates; BOQ title templates; XLAYOUT layout
+  options; on top of D-056 circuit identity key and D-055 XLAYOUT
+  filter-list import + result export), not installed and not published.
+  The latest published release is `3.5.0.1` (2026-11-23, tag `v3.5.0`;
+  `UNCAD-Pro-v3.5.0.1.zip`, 6,525,340 bytes, SHA-256
+  `1EBF6508B855911EEDB8E48F3FB8088CBB5DD3FBE15BF6B8D4352EAB30202331`),
+  installed user-scope and verified byte-for-byte on the server and by
+  anonymous download. XSTS frame details use one row per frame, with separate
+  model and quantity columns for every drawn BOQ item and blank cells for
+  missing items. Near-name hints and the "not drawn" list are removed.
 - Product: `UNCAD Pro`. Stable line: `3.4.1` (source patch `3.4.1.11`,
   latest published patch `3.4.1.7`;
   U1U/U13D 3D preview kernel
@@ -110,6 +103,19 @@ when their version numbers or counts are stale.
   PDF together (D-042; the drawing-name and kind layers and their two toggles are
   gone). Write-occupancy is checked before the CAD transaction. Batch U1U reports
   per-machine results in a window, not by dumping paths to the command line.
+- Same-name circuits (D-056, D-057): a circuit is identified by the key over
+  machine ID + circuit name + upstream number, derived on demand from the
+  persisted plaintext and never stored. Every consumer that compares frames
+  with the workbook (XSTS, XLAYOUT, the whole-machine gate, BOQ columns, DATA
+  rows, PDF names, DWG counts) goes through `Core/Fill/CircuitMatcher`: key
+  pairing first, name pairing only for a name unique in the machine, and a
+  same-name frame without a usable key is reported as pending (待确认), never
+  guessed and never counted as covered. Do not reintroduce grouping by circuit
+  name alone.
+- The drawing-info table's six columns (专业 / 楼层 / 制图 / 审核 / 日期 / 版本)
+  come from the U1SET templates (`UNC_FILL_INFO_*`); an empty template leaves
+  the cell untouched. `(U1F创建时间)` reads `meta.filledUtc`, which U1F
+  re-stamps (redefine mode) and U1U preserves.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

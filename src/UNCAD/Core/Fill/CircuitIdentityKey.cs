@@ -126,6 +126,14 @@ namespace UNCAD.Core.Fill
         /// ambiguous and are handled by the matcher, not guessed here).
         /// </summary>
         private static string NormalizeUpstream(string value)
+            => NormalizeIdentityText(UpstreamDisplay(value));
+
+        /// <summary>
+        /// 上游编号的展示形态（D-057）：去掉槽位区间/轴位标注，只留编号本身
+        /// （“3U-UPS10D1-PP-03 36(43/AC)”→“3U-UPS10D1-PP-03”）。XLAYOUT 按上游
+        /// 排版用它做行首标签，同一上游的不同写法归进同一行。
+        /// </summary>
+        public static string UpstreamDisplay(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "";
             string folded = value.Normalize(NormalizationForm.FormKC);
@@ -133,7 +141,11 @@ namespace UNCAD.Core.Fill
             if (cut >= 0) folded = folded.Substring(0, cut);
             string first = folded.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)
                 .FirstOrDefault() ?? "";
-            return NormalizeIdentityText(first);
+            return first.Trim();
         }
+
+        /// <summary>上游编号的分组键：展示形态再折叠全半角/空白/大小写。</summary>
+        public static string UpstreamKey(string value)
+            => NormalizeIdentityText(UpstreamDisplay(value));
     }
 }

@@ -105,7 +105,8 @@ namespace UNCAD.Core.Fill
             double downstreamSocketAmps, double downstreamPanelAmps,
             bool downstreamSocketEnabled, bool downstreamPanelEnabled,
             double cableOwnerReserveMillimeters, CableReserveSettings cableReserve,
-            bool deviceReserveAutoDetect = true)
+            bool deviceReserveAutoDetect = true,
+            DrawingInfoTemplates drawingInfo = null, BoqTitleTemplates boqTitles = null)
         {
             MachineWorkbookPath = machineWorkbookPath;
             StartRow = startRow;
@@ -121,6 +122,8 @@ namespace UNCAD.Core.Fill
             CableOwnerReserveMillimeters = cableOwnerReserveMillimeters;
             CableReserve = cableReserve ?? CableReserveSettings.Default;
             DeviceReserveAutoDetect = deviceReserveAutoDetect;
+            DrawingInfo = drawingInfo ?? DrawingInfoTemplates.Default;
+            BoqTitles = boqTitles ?? BoqTitleTemplates.Default;
         }
 
         public string MachineWorkbookPath { get; }
@@ -168,6 +171,15 @@ namespace UNCAD.Core.Fill
         /// </summary>
         public bool DeviceReserveAutoDetect { get; }
 
+        /// <summary>
+        /// D-057：制图信息表（图框内小表）六列的内容模板（U1SET「图框与排版」）。
+        /// 留空的列不写——图框里现有的内容保留。默认与 3.5.0 行为一致。
+        /// </summary>
+        public DrawingInfoTemplates DrawingInfo { get; }
+
+        /// <summary>D-057：清单（BOQ）工作簿标题三行模板；留空用模板 xlsx 里的文字。</summary>
+        public BoqTitleTemplates BoqTitles { get; }
+
         public static FillRuntimeOptions Create(string machineWorkbookPath,
             int startRow, int clearRows, double textHeight, double mmPerGrid,
             FillPlanningOptions planning,
@@ -178,7 +190,9 @@ namespace UNCAD.Core.Fill
             bool downstreamPanelEnabled = DefaultDownstreamEnabled,
             double cableOwnerReserveMillimeters = DefaultCableOwnerReserveMillimeters,
             CableReserveSettings cableReserve = null,
-            bool deviceReserveAutoDetect = true)
+            bool deviceReserveAutoDetect = true,
+            DrawingInfoTemplates drawingInfo = null,
+            BoqTitleTemplates boqTitles = null)
         {
             return new FillRuntimeOptions(
                 (machineWorkbookPath ?? "").Trim(),
@@ -196,7 +210,9 @@ namespace UNCAD.Core.Fill
                 downstreamSocketEnabled, downstreamPanelEnabled,
                 ReserveWithin(cableOwnerReserveMillimeters),
                 cableReserve ?? CableReserveSettings.Default,
-                deviceReserveAutoDetect);
+                deviceReserveAutoDetect,
+                drawingInfo ?? DrawingInfoTemplates.Default,
+                boqTitles ?? BoqTitleTemplates.Default);
         }
 
         private static int Clamp(int value, int minimum, int maximum, int fallback)

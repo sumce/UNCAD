@@ -19,7 +19,7 @@ namespace UNCAD.Core.Fill
     ///  "cable":{"original","boq","busPlugBoxCode","measuredM","panelReserveMm",
     ///           "deviceReserveMm","totalM"},
     ///  "drawing":{"detail","seq","hoseDiameter"},
-    ///  "meta":{"updatedUtc","updatedBy","frameHandle"},
+    ///  "meta":{"updatedUtc","updatedBy","frameHandle","filledUtc","lastCommand"},
     ///  "changes":[{"ts","cmd","field","from","to"}]}
     /// </c>
     /// Every key is always emitted (empty strings instead of nulls), the history is
@@ -123,7 +123,11 @@ namespace UNCAD.Core.Fill
                 ["meta"] = Section(
                     ("updatedUtc", Text(record.LastModifiedUtc)),
                     ("updatedBy", Text(record.LastModifiedUser)),
-                    ("frameHandle", Text(record.FrameHandle))),
+                    ("frameHandle", Text(record.FrameHandle)),
+                    // D-057：创建时间（最近一次 U1F）与最近一次写入的命令——
+                    // 制图信息表的 (U1F创建时间)/(U1U更新时间) 占位符的数据源。
+                    ("filledUtc", Text(record.FilledUtc)),
+                    ("lastCommand", Text(record.LastCommand))),
                 ["changes"] = changes.Select(change => Section(
                     ("ts", Text(change.TimestampUtc)),
                     ("cmd", Text(change.Command)),
@@ -186,7 +190,10 @@ namespace UNCAD.Core.Fill
                 LastModifiedUtc = Get(meta, "updatedUtc"),
                 LastModifiedUser = Get(meta, "updatedBy"),
                 // 2.11.0 起写入的绑定；老 JSON 无此键 → 空串（读取方按兼容语义放行）。
-                FrameHandle = Get(meta, "frameHandle")
+                FrameHandle = Get(meta, "frameHandle"),
+                // D-057 起写入；老 JSON 无这两个键 → 空串（展示时退回 updatedUtc）。
+                FilledUtc = Get(meta, "filledUtc"),
+                LastCommand = Get(meta, "lastCommand")
             };
             ReadChanges(root, record);
             return record;

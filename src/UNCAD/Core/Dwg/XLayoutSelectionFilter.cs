@@ -67,13 +67,23 @@ namespace UNCAD.Core.Dwg
 
         public static bool MatchesCircuit(string machineId, string deviceName,
             IReadOnlyList<string> terms, IReadOnlyList<string> knownMachineIds)
+            => MatchesCircuit(machineId, deviceName, "", terms, knownMachineIds);
+
+        /// <summary>
+        /// D-057：上游编号也参与匹配——同机台同名回路可以直接按上游编号筛出
+        /// 是哪一条（按上游排版时尤其顺手）。
+        /// </summary>
+        public static bool MatchesCircuit(string machineId, string deviceName,
+            string upstreamId, IReadOnlyList<string> terms,
+            IReadOnlyList<string> knownMachineIds)
         {
             // 机台号被精确词命中 → 该机台全部回路可见（与机台节点口径一致）。
             List<string> remainder = SplitOutExactIdTerms(terms, knownMachineIds,
                 machineId, out bool exactHit, out bool hadExactTerms);
             if (exactHit) return true;
             if (hadExactTerms && remainder.Count == 0) return false;
-            return MatchesAny((machineId ?? "") + " " + (deviceName ?? ""), remainder);
+            return MatchesAny((machineId ?? "") + " " + (deviceName ?? "") + " "
+                + (upstreamId ?? ""), remainder);
         }
 
         /// <summary>把"恰好等于已知完整机台号"的正向词从包含池里拆出来按精确

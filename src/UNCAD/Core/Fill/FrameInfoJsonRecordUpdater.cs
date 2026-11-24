@@ -60,6 +60,8 @@ namespace UNCAD.Core.Fill
                 LastModifiedUtc = utcNow.ToUniversalTime().ToString("o"),
                 LastModifiedUser = FirstNonEmpty(updateUser, Environment.UserName,
                     Environment.MachineName),
+                FilledUtc = ResolveFilledUtc(previous, commandName, utcNow),
+                LastCommand = NormalizeCommand(commandName),
                 // 框句柄绑定跨更新保留；写入方（FrameInfoJsonBlockWriter）负责盖章。
                 FrameHandle = previous.FrameHandle ?? "",
                 MeasuredCableM = reserve == null
@@ -85,6 +87,30 @@ namespace UNCAD.Core.Fill
                     .Skip(next.Changes.Count - FrameInfoJsonCodec.MaxChanges).ToList();
             }
             return next;
+        }
+
+        /// <summary>
+        /// 命令名归一（"U1F"/"U1U"；未知按 U1F——与变更历史的兜底一致）。
+        /// 写记录与制图信息表取时间共用，保证两处口径一致。
+        /// </summary>
+        public static string NormalizeCommand(string commandName)
+            => string.Equals((commandName ?? "").Trim(), "U1U", StringComparison.OrdinalIgnoreCase)
+                ? "U1U" : "U1F";
+
+        /// <summary>
+        /// D-057：创建时间的取法。U1F 是重定义——每次 U1F 都算重新创建，取本次
+        /// 时间；U1U 沿用上一条记录的创建时间。老记录没有创建时间：退回它的
+        /// 最后写入时间（U1U 接手老图框时不把创建时间丢掉）。
+        /// </summary>
+        public static string ResolveFilledUtc(FrameInfoJsonRecord previous,
+            string commandName, DateTime utcNow)
+        {
+            string now = utcNow.ToUniversalTime().ToString("o");
+            if (NormalizeCommand(commandName) == "U1F") return now;
+            string inherited = (previous?.FilledUtc ?? "").Trim();
+            if (inherited.Length > 0) return inherited;
+            string legacy = (previous?.LastModifiedUtc ?? "").Trim();
+            return legacy.Length > 0 ? legacy : now;
         }
 
         private static FrameInfoJsonChange CloneChange(FrameInfoJsonChange change)

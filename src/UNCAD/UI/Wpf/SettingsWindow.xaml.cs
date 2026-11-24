@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
@@ -44,14 +45,15 @@ namespace UNCAD.UI
         internal SettingsDownstreamPage DownstreamPage => _downstream;
         internal SettingsColorPage ColorPage => _color;
         internal SettingsOutputPage OutputPage => _output;
+        internal SettingsFramePage FramePage => _frame;
         internal SettingsLogsPage LogsPage => _logs;
 
-        /// <summary>侧边栏顺序：概览 → 绘制 → 统计/样式/启动 → 机台数据 → 清单 → Downstream → 颜色 → 输出 → 日志。</summary>
+        /// <summary>侧边栏顺序：概览 → 绘制 → 统计/样式/启动 → 机台数据 → 清单 → Downstream → 颜色 → 输出 → 图框与排版 → 日志。</summary>
         internal static readonly string[] PageTitles =
         {
             "概览", "绘制标注", "统计汇总", "文字样式", "界面与启动",
             "机台数据", "清单与表格", "Downstream 自动添加", "颜色",
-            "输出与分享", "日志与记录"
+            "输出与分享", "图框与排版", "日志与记录"
         };
 
         private readonly SettingsOverviewPage _overview = new SettingsOverviewPage();
@@ -64,6 +66,7 @@ namespace UNCAD.UI
         private readonly SettingsDownstreamPage _downstream = new SettingsDownstreamPage();
         private readonly SettingsColorPage _color = new SettingsColorPage();
         private readonly SettingsOutputPage _output = new SettingsOutputPage();
+        private readonly SettingsFramePage _frame = new SettingsFramePage();
         private readonly SettingsLogsPage _logs = new SettingsLogsPage();
 
         /// <summary>模板内容 Frame（PART_NavigationViewContentPresenter）缓存，ShowPage 首次定位。</summary>
@@ -91,7 +94,7 @@ namespace UNCAD.UI
             _menuItems = new List<NavigationViewItem>
             {
                 NavOverview, NavDraw, NavStat, NavStyle, NavStartup, NavMachine,
-                NavBom, NavDownstream, NavColor, NavOutput, NavLogs
+                NavBom, NavDownstream, NavColor, NavOutput, NavFrame, NavLogs
             };
             _pageTypes = new List<Type>
             {
@@ -100,12 +103,12 @@ namespace UNCAD.UI
                 typeof(SettingsStartupPage), typeof(SettingsMachinePage),
                 typeof(SettingsBomPage), typeof(SettingsDownstreamPage),
                 typeof(SettingsColorPage), typeof(SettingsOutputPage),
-                typeof(SettingsLogsPage)
+                typeof(SettingsFramePage), typeof(SettingsLogsPage)
             };
             _pages = new object[]
             {
                 _overview, _draw, _stat, _style, _startup, _machine,
-                _bom, _downstream, _color, _output, _logs
+                _bom, _downstream, _color, _output, _frame, _logs
             };
             _initialPage = Math.Max(0, Math.Min(pageIndex, _pageTypes.Count - 1));
 
@@ -183,7 +186,16 @@ namespace UNCAD.UI
             LogsPage.OpenLogsButton.Click += (sender, args) => OpenFolder(LogDirectory());
             LogsPage.OpenHistoryButton.Click += (sender, args) => OperationLog.OpenFolder();
             LogsPage.RefreshButton.Click += (sender, args) => RefreshOperationLog();
+            // D-057：图框与排版页——占位符插入条、预览、恢复默认。
+            _frameInteraction = new SettingsFramePageInteraction(FramePage);
+            FramePage.ResetTemplatesButton.Click += (sender, args) =>
+                _frameInteraction.ResetDefaults();
         }
+
+        private SettingsFramePageInteraction _frameInteraction;
+
+        /// <summary>图框与排版页的交互对象（测试用）。</summary>
+        internal SettingsFramePageInteraction FrameInteraction => _frameInteraction;
 
         // ---------- 保存（权威校验在“保存”按钮里做） ----------
 
@@ -389,6 +401,34 @@ namespace UNCAD.UI
                 ConfigKeys.LogRetentionDays, FileLogger.DefaultRetentionDays));
             SetNumber(LogsPage.HistoryRetentionMonths, Settings.GetDouble(
                 ConfigKeys.HistoryRetentionMonths, OperationLog.DefaultRetentionMonths));
+            // D-057：图框与排版（制图信息表模板 / 清单标题 / XLAYOUT 参数）
+            FramePage.InfoProfession.Text = Settings.Get(ConfigKeys.FillInfoProfession,
+                DrawingInfoTemplates.DefaultProfession);
+            FramePage.InfoFloor.Text = Settings.Get(ConfigKeys.FillInfoFloor,
+                DrawingInfoTemplates.DefaultFloor);
+            FramePage.InfoDrafter.Text = Settings.Get(ConfigKeys.FillInfoDrafter,
+                DrawingInfoTemplates.DefaultDrafter);
+            FramePage.InfoReviewer.Text = Settings.Get(ConfigKeys.FillInfoReviewer,
+                DrawingInfoTemplates.DefaultReviewer);
+            FramePage.InfoDate.Text = Settings.Get(ConfigKeys.FillInfoDate,
+                DrawingInfoTemplates.DefaultDate);
+            FramePage.InfoVersion.Text = Settings.Get(ConfigKeys.FillInfoVersion,
+                DrawingInfoTemplates.DefaultVersion);
+            FramePage.BoqTitle1.Text = Settings.Get(ConfigKeys.BoqTitleLine1,
+                BoqTitleTemplates.DefaultLine1);
+            FramePage.BoqTitle2.Text = Settings.Get(ConfigKeys.BoqTitleLine2,
+                BoqTitleTemplates.DefaultLine2);
+            FramePage.BoqTitle3.Text = Settings.Get(ConfigKeys.BoqTitleLine3,
+                BoqTitleTemplates.DefaultLine3);
+            SetNumber(FramePage.XLayoutSpacing, Settings.GetDouble(ConfigKeys.XLayoutSpacing,
+                XLayoutRuntimeOptions.DefaultSpacing));
+            SetNumber(FramePage.XLayoutLabelTextHeight, Settings.GetDouble(
+                ConfigKeys.XLayoutLabelTextHeight, XLayoutRuntimeOptions.DefaultLabelTextHeight));
+            SetNumber(FramePage.XLayoutLabelDistance, Settings.GetNonNegativeDouble(
+                ConfigKeys.XLayoutLabelDistance, XLayoutRuntimeOptions.DefaultLabelLeftDistance));
+            FramePage.XLayoutWarningMarker.IsChecked = Settings.GetBool(
+                ConfigKeys.XLayoutWarningMarker, XLayoutRuntimeOptions.DefaultWarningMarker);
+            _frameInteraction?.UpdatePreview();
             RefreshOperationLog();
             RefreshOverviewStatus();
         }
@@ -545,6 +585,23 @@ namespace UNCAD.UI
             Settings.SetBool(ConfigKeys.FillDownstreamPanelEnabled,
                 IsOn(DownstreamPage.DownstreamPanelEnabled));
             Settings.Set(ConfigKeys.SubmitFolder, OutputPage.SubmitFolder.Text.Trim());
+            // D-057：图框与排版（制图信息表模板 / 清单标题 / XLAYOUT 参数）
+            Settings.Set(ConfigKeys.FillInfoProfession, FramePage.InfoProfession.Text.Trim());
+            Settings.Set(ConfigKeys.FillInfoFloor, FramePage.InfoFloor.Text.Trim());
+            Settings.Set(ConfigKeys.FillInfoDrafter, FramePage.InfoDrafter.Text.Trim());
+            Settings.Set(ConfigKeys.FillInfoReviewer, FramePage.InfoReviewer.Text.Trim());
+            Settings.Set(ConfigKeys.FillInfoDate, FramePage.InfoDate.Text.Trim());
+            Settings.Set(ConfigKeys.FillInfoVersion, FramePage.InfoVersion.Text.Trim());
+            Settings.Set(ConfigKeys.BoqTitleLine1, FramePage.BoqTitle1.Text.Trim());
+            Settings.Set(ConfigKeys.BoqTitleLine2, FramePage.BoqTitle2.Text.Trim());
+            Settings.Set(ConfigKeys.BoqTitleLine3, FramePage.BoqTitle3.Text.Trim());
+            Settings.Set(ConfigKeys.XLayoutSpacing, NumberText(FramePage.XLayoutSpacing));
+            Settings.Set(ConfigKeys.XLayoutLabelTextHeight,
+                NumberText(FramePage.XLayoutLabelTextHeight));
+            Settings.Set(ConfigKeys.XLayoutLabelDistance,
+                NumberText(FramePage.XLayoutLabelDistance));
+            Settings.SetBool(ConfigKeys.XLayoutWarningMarker,
+                IsOn(FramePage.XLayoutWarningMarker));
             Settings.Set(ConfigKeys.FillDeviceColorIndex,
                 SelectedColorIndex(ColorPage.DeviceColorBox,
                     FillColorSettings.DefaultDeviceColorIndex)

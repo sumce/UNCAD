@@ -19,6 +19,19 @@ deferred, or important for support diagnosis.
   Near-name hints and the whole-drawing "not drawn" list were removed at the
   user's request on 2026-11-19, including their extra scan and analysis.
 - Repeating XLAYOUT can create another machine-ID label.
+- Same-name circuits of one machine (D-056, D-057) are only paired with their
+  workbook rows by the identity key. A frame of such a machine that has no
+  recorded upstream number (frame older than the v2 record, or a copied frame
+  whose source JSON was rejected) is reported as pending (待确认) by XSTS,
+  XLAYOUT and the whole-machine gate; it is never guessed, and U1S/U1DWG do
+  not export that machine until a U1F/U1U run on the frame records the
+  upstream. U1PDF skips such a frame with a command-line reason (no picker on
+  that path).
+- BOQ files written before 3.6.0 may hold one merged column for a machine's
+  same-name circuits. The first 3.6.0 write renames that column to the first
+  circuit (`回路名（上游 X）`) and rewrites its quantities from that frame; run
+  U1F/U1U (or U1S) on all same-name circuits of the machine once so the other
+  circuit gets its own column.
 - U1F/U1U do not write automatic upstream connection geometry to the drawing.
   The U1U 3D preview may show a schematic cabinet connection from its inferred
   upstream endpoint; that line exists only inside the read-only preview.

@@ -114,8 +114,10 @@ namespace UNCAD.Features.PdfExport
                         + "：机台ID含非法文件名字符，不能作为输出文件夹名。");
                     continue;
                 }
+                // D-057：机台内有同名回路（上游编号不同）时文件名带上上游编号——
+                // 旧版靠 -2/-3 后缀按选择顺序区分，只重出其中一条会顶掉另一条的 PDF。
                 string fileName = PdfExportNaming.AllocateFileName(target.MachineId,
-                    target.CircuitName, usedNames);
+                    target.CircuitName, usedNames, target.UpstreamId);
                 target.FilePath = OutputLayout.ComposePdfPath(root, target.MachineId,
                     fileName);
                 try
@@ -266,7 +268,7 @@ namespace UNCAD.Features.PdfExport
                 {
                     if (!FillFeature.TryResolveFrameCircuit(transaction, region, workbook,
                         definitions, out string machineId, out string circuitName,
-                        out string frameError))
+                        out string upstreamId, out string frameError))
                     {
                         problems.Add("图框 " + region.Handle + "：" + frameError);
                         continue;
@@ -275,6 +277,8 @@ namespace UNCAD.Features.PdfExport
                     {
                         MachineId = machineId,
                         CircuitName = circuitName,
+                        // D-057：机台内有同名回路时非空，文件名带上它。
+                        UpstreamId = upstreamId,
                         FrameHandle = region.Handle
                     });
                     regionsByHandle[region.Handle] = region;

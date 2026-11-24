@@ -30,10 +30,24 @@ namespace UNCAD.Core.Stat
         public string Seq { get; set; } = "";
         public int SelectedCircuitCount { get; set; }
         public int ExpectedCircuitCount { get; set; }
+        public int UnexpectedCircuitCount => UnexpectedCircuits.Count;
         public bool ExpectedDataAvailable { get; set; }
         public List<string> SelectedCircuits { get; } = new List<string>();
         public List<string> MissingCircuits { get; } = new List<string>();
         public List<string> UnexpectedCircuits { get; } = new List<string>();
+        /// <summary>D-057：没画的回路张数。同名回路各算一条；同名组里有待确认
+        /// 图框时该组在 <see cref="MissingCircuits"/> 里只有一条合并说明，
+        /// 所以张数不等于文案条数。</summary>
+        public int MissingCircuitCount { get; set; }
+        /// <summary>
+        /// D-057 待确认：机台内有同名回路，而图框没有可用的回路身份键
+        /// （未记录上游编号），无法判定对应哪一条。不算核实，也不算缺——
+        /// 对该图框执行 U1F/U1U 指认后即消除。
+        /// </summary>
+        public int UnresolvedCircuitCount { get; set; }
+        public List<string> UnresolvedCircuits { get; } = new List<string>();
+        /// <summary>同一回路画了不止一张图框（机台/回路/上游编号相同）。</summary>
+        public int DuplicateFrameCount { get; set; }
 
         public string ExpectedCircuitText => ExpectedDataAvailable
             ? ExpectedCircuitCount.ToString()
@@ -41,7 +55,7 @@ namespace UNCAD.Core.Stat
 
         public string MissingText => !ExpectedDataAvailable
             ? "无法判断"
-            : MissingCircuits.Count == 0
+            : MissingCircuitCount == 0
             ? "无"
             : string.Join("、", MissingCircuits);
 
@@ -50,6 +64,10 @@ namespace UNCAD.Core.Stat
             : UnexpectedCircuits.Count == 0
                 ? "无"
                 : string.Join("、", UnexpectedCircuits);
+
+        public string UnresolvedText => UnresolvedCircuitCount == 0
+            ? "无"
+            : string.Join("、", UnresolvedCircuits);
     }
 
     public sealed class XstsFrameIssue
@@ -60,6 +78,8 @@ namespace UNCAD.Core.Stat
             ? FrameHandle : FrameNumber > 0 ? FrameNumber.ToString() : "";
         public string MachineId { get; set; } = "";
         public string CircuitName { get; set; } = "";
+        /// <summary>图框记录的上游编号（frameinfo_json 明文；老图框可能为空）。</summary>
+        public string UpstreamId { get; set; } = "";
         public string Description { get; set; } = "";
     }
 
@@ -72,6 +92,8 @@ namespace UNCAD.Core.Stat
         public string FrameHandle { get; set; } = "";
         public string MachineId { get; set; } = "";
         public string CircuitName { get; set; } = "";
+        /// <summary>D-057：图框记录的上游编号——同名回路靠它区分。</summary>
+        public string UpstreamId { get; set; } = "";
         public List<XstsFrameItem> Items { get; } = new List<XstsFrameItem>();
         public List<XstsFrameItem> Cells { get; } = new List<XstsFrameItem>();
     }
@@ -128,28 +150,37 @@ namespace UNCAD.Core.Stat
         public string ExpectedDataDetail { get; set; } = "";
         public bool ExpectedDataAvailable
             => ExpectedDataStatus == XstsExpectedDataStatus.Available;
+        /// <summary>已选回路张数（D-057：同名回路各算一条，含待确认的图框）。</summary>
         public int SelectedCircuitCount => Machines.Sum(item => item.SelectedCircuitCount);
         public int ExpectedCircuitCount => Machines.Sum(item => item.ExpectedCircuitCount);
-        public int MissingCircuitCount => Machines.Sum(item => item.MissingCircuits.Count);
+        public int MissingCircuitCount => Machines.Sum(item => item.MissingCircuitCount);
         public int UnexpectedCircuitCount => Machines.Sum(item => item.UnexpectedCircuits.Count);
+        /// <summary>D-057：同名回路里对应关系待确认的图框数。</summary>
+        public int UnresolvedCircuitCount => Machines.Sum(item => item.UnresolvedCircuitCount);
+        public int DuplicateFrameCount => Machines.Sum(item => item.DuplicateFrameCount);
         public int UnknownMachineCount => Machines.Count(item => !item.ExpectedDataAvailable);
-        /// <summary>回路齐全（无缺、无多出）的机台数——只统计有 Excel 基准的机台。</summary>
+        /// <summary>有同名回路待确认图框的机台数。</summary>
+        public int MachinesWithUnresolvedCount => Machines.Count(item =>
+            item.ExpectedDataAvailable && item.UnresolvedCircuitCount > 0);
+        /// <summary>回路齐全（无缺、无多出、无待确认）的机台数——只统计有 Excel 基准的机台。</summary>
         public int CompleteMachineCount => Machines.Count(item =>
-            item.ExpectedDataAvailable && item.MissingCircuits.Count == 0
-            && item.UnexpectedCircuits.Count == 0);
+            item.ExpectedDataAvailable && item.MissingCircuitCount == 0
+            && item.UnexpectedCircuits.Count == 0 && item.UnresolvedCircuitCount == 0);
         /// <summary>缺回路的机台数（哪怕同时有多出也算缺）。</summary>
         public int MachinesWithMissingCount => Machines.Count(item =>
-            item.ExpectedDataAvailable && item.MissingCircuits.Count > 0);
+            item.ExpectedDataAvailable && item.MissingCircuitCount > 0);
         /// <summary>只有多出回路（图纸有、Excel 基准没有）的机台数。</summary>
         public int MachinesWithExtraOnlyCount => Machines.Count(item =>
-            item.ExpectedDataAvailable && item.MissingCircuits.Count == 0
+            item.ExpectedDataAvailable && item.MissingCircuitCount == 0
             && item.UnexpectedCircuits.Count > 0);
         /// <summary>机台状态分布一句话（徽章行/命令行摘要共用口径）。</summary>
         public string MachineStatusText
             => "完整 " + CompleteMachineCount + " 台 · 缺回路 "
                 + MachinesWithMissingCount + " 台 · 多出 "
                 + MachinesWithExtraOnlyCount + " 台 · 无基准 "
-                + UnknownMachineCount + " 台";
+                + UnknownMachineCount + " 台"
+                + (UnresolvedCircuitCount > 0
+                    ? " · 同名回路待确认 " + MachinesWithUnresolvedCount + " 台" : "");
         public bool HasUnknownMachineBaseline
             => ExpectedDataAvailable && UnknownMachineCount > 0;
         public string ExpectedCircuitText => ExpectedDataAvailable
@@ -196,7 +227,6 @@ namespace UNCAD.Core.Stat
             };
             var selectedGroups = Group(selectedRows);
             var expectedGroups = Group(expectedRows);
-            AddFrameDetails(selectedRows, report);
             // 机台元数据按机台分组一次。旧实现每台机台都对整张 selected/expected
             // 行表做一次 Where 过滤，机台数与行数同时增长时是 O(机台×行)：
             // 1000 机台 × 20 回路实测 3.7s。分组后每行只归属一次。
@@ -204,6 +234,12 @@ namespace UNCAD.Core.Stat
                 GroupRowsByMachine(expectedRows);
             Dictionary<string, List<XstsCircuitRecord>> selectedByMachine =
                 GroupRowsByMachine(selectedRows);
+            // D-057：每个机台走统一配对内核（CircuitMatcher）——同名回路按身份键
+            // （上游编号）一一配对，不再按回路名 Distinct 塌缩。反查表让重复/
+            // 待确认的问题行找回自己的图框序号与句柄。
+            var sources = new Dictionary<CircuitSelection, XstsCircuitRecord>();
+            var matches = new Dictionary<string, CircuitMatchResult>(
+                IdentityTextNormalizer.Comparer);
             // The report is selection-scoped: expected-only machines are deliberately
             // omitted. XSTS answers which circuits are missing from the machines the
             // user framed, not which circuits are missing from the whole workbook.
@@ -225,22 +261,32 @@ namespace UNCAD.Core.Stat
                 // instead of presenting an empty expected set as "0 missing".
                 row.ExpectedDataAvailable = report.ExpectedDataAvailable
                     && expectedGroups.ContainsKey(machineId);
-                HashSet<string> selectedNames = selectedGroups.TryGetValue(machineId,
-                    out HashSet<string> selectedSet) ? selectedSet : new HashSet<string>(IdentityTextNormalizer.Comparer);
-                HashSet<string> expectedNames = expectedGroups.TryGetValue(machineId,
-                    out HashSet<string> expectedSet) ? expectedSet : new HashSet<string>(IdentityTextNormalizer.Comparer);
-                row.SelectedCircuitCount = selectedNames.Count;
-                row.SelectedCircuits.AddRange(selectedNames.OrderBy(value => value,
-                    StringComparer.OrdinalIgnoreCase));
+                List<CircuitSelection> drawn = ToSelections(selectedByMachine,
+                    machineId, sources);
+                List<CircuitSelection> baseline = row.ExpectedDataAvailable
+                    ? ToSelections(expectedByMachine, machineId, sources)
+                    : new List<CircuitSelection>();
+                CircuitMatchResult match = CircuitMatcher.Pair(machineId, baseline,
+                    drawn, row.ExpectedDataAvailable);
+                matches[machineId] = match;
+                row.SelectedCircuitCount = match.DistinctDrawnCount;
+                row.SelectedCircuits.AddRange(CircuitMatchText.Selected(match));
+                row.DuplicateFrameCount = match.Duplicates.Count(
+                    duplicate => duplicate.Certain);
+                row.UnresolvedCircuits.AddRange(CircuitMatchText.Unresolved(match));
                 if (row.ExpectedDataAvailable)
                 {
-                    row.ExpectedCircuitCount = expectedNames.Count;
-                    row.MissingCircuits.AddRange(expectedNames.Except(selectedNames,
-                        IdentityTextNormalizer.Comparer).OrderBy(value => value,
-                        StringComparer.OrdinalIgnoreCase));
-                    row.UnexpectedCircuits.AddRange(selectedNames.Except(expectedNames,
-                        IdentityTextNormalizer.Comparer).OrderBy(value => value,
-                        StringComparer.OrdinalIgnoreCase));
+                    row.ExpectedCircuitCount = match.Expected.Count;
+                    row.MissingCircuits.AddRange(CircuitMatchText.Missing(match));
+                    row.MissingCircuitCount = CircuitMatchText.MissingCount(match);
+                    row.UnexpectedCircuits.AddRange(CircuitMatchText.Extra(match));
+                    row.UnresolvedCircuitCount = match.Unresolved.Count;
+                }
+                else
+                {
+                    // 无基准：同键 = 确定重复；同名且都无键 = 只能确定“同名”。
+                    row.UnresolvedCircuitCount = match.Duplicates.Count(
+                        duplicate => !duplicate.Certain);
                 }
                 if (report.ExpectedDataAvailable && !expectedGroups.ContainsKey(machineId))
                 {
@@ -252,13 +298,40 @@ namespace UNCAD.Core.Stat
                 }
                 report.Machines.Add(row);
             }
+            AddFrameDetails(selectedRows, report, matches.Values, sources);
             return report;
         }
 
-        private static void AddFrameDetails(IReadOnlyList<XstsCircuitRecord> selected,
-            XstsReport report)
+        /// <summary>把一个机台的报表行转成配对条目，并登记反查表。</summary>
+        private static List<CircuitSelection> ToSelections(
+            Dictionary<string, List<XstsCircuitRecord>> rows, string machineId,
+            Dictionary<CircuitSelection, XstsCircuitRecord> sources)
         {
-            var identities = new HashSet<string>(IdentityTextNormalizer.Comparer);
+            var result = new List<CircuitSelection>();
+            if (!rows.TryGetValue(machineId, out List<XstsCircuitRecord> records))
+                return result;
+            foreach (XstsCircuitRecord record in records)
+            {
+                if (string.IsNullOrWhiteSpace(record.CircuitName)) continue;
+                var selection = new CircuitSelection
+                {
+                    MachineId = record.MachineId.Trim(),
+                    CircuitName = record.CircuitName.Trim(),
+                    UpstreamId = record.UpstreamId ?? "",
+                    CircuitKey = record.CircuitKey ?? "",
+                    Handle = record.FrameHandle ?? ""
+                };
+                sources[selection] = record;
+                result.Add(selection);
+            }
+            return result;
+        }
+
+        private static void AddFrameDetails(IReadOnlyList<XstsCircuitRecord> selected,
+            XstsReport report, IEnumerable<CircuitMatchResult> matches,
+            IReadOnlyDictionary<CircuitSelection, XstsCircuitRecord> sources)
+        {
+            var numbers = new Dictionary<XstsCircuitRecord, int>();
             var columns = new Dictionary<Tuple<string, string, int>, int>();
             foreach (string name in new[] { "电缆", "桥架", "软管", "线管" })
                 AddColumn(name, "m", 1);
@@ -281,9 +354,6 @@ namespace UNCAD.Core.Stat
                         : circuit.Length == 0 ? "缺少回路名称" : "";
                 if (!string.IsNullOrWhiteSpace(item?.Error))
                     description = item.Error.Trim();
-                if (description.Length == 0
-                    && !identities.Add(machine + "\u001f" + circuit))
-                    description = "机台ID/回路名称与已选图框重复";
                 if (description.Length > 0)
                     report.Issues.Add(new XstsFrameIssue
                     {
@@ -293,11 +363,13 @@ namespace UNCAD.Core.Stat
                         CircuitName = circuit,
                         Description = description
                     });
+                if (item != null) numbers[item] = index + 1;
                 var frame = new XstsFrameDetail
                 {
                     FrameHandle = item?.FrameHandle ?? "",
                     MachineId = machine,
-                    CircuitName = circuit
+                    CircuitName = circuit,
+                    UpstreamId = (item?.UpstreamId ?? "").Trim()
                 };
                 // Frame identity, not its material count, determines the number of rows.
                 report.Frames.Add(frame);
@@ -336,6 +408,64 @@ namespace UNCAD.Core.Stat
             }
             foreach (XstsFrameDetail frame in report.Frames)
                 while (frame.Cells.Count < report.MaterialColumns.Count) frame.Cells.Add(null);
+
+            // D-057：重复图框/同名回路待确认来自按身份键的配对结果。旧口径按
+            // “机台ID+回路名”判重，把同名不同上游的合法回路误报成重复，而
+            // “同名双回路只画一条”又被 Distinct 塌缩成完整。问题行按图框
+            // 先后并入，异常页里一图框一条、顺序与图框明细一致。
+            var keyedIssues = new List<XstsFrameIssue>();
+            foreach (CircuitMatchResult match in matches)
+            {
+                foreach (CircuitDuplicate duplicate in match.Duplicates)
+                {
+                    if (!sources.TryGetValue(duplicate.Drawn, out XstsCircuitRecord record))
+                        continue;
+                    string originalHandle = duplicate.Original != null
+                        && sources.TryGetValue(duplicate.Original, out XstsCircuitRecord first)
+                        ? (first.FrameHandle ?? "") : "";
+                    keyedIssues.Add(new XstsFrameIssue
+                    {
+                        FrameNumber = numbers.TryGetValue(record, out int number)
+                            ? number : 0,
+                        FrameHandle = record.FrameHandle ?? "",
+                        MachineId = record.MachineId.Trim(),
+                        CircuitName = record.CircuitName.Trim(),
+                        UpstreamId = (record.UpstreamId ?? "").Trim(),
+                        Description = CircuitMatchText.DuplicateFrameNote(match,
+                            duplicate, originalHandle)
+                    });
+                }
+                foreach (CircuitSelection item in match.Unresolved)
+                {
+                    if (!sources.TryGetValue(item, out XstsCircuitRecord record))
+                        continue;
+                    keyedIssues.Add(new XstsFrameIssue
+                    {
+                        FrameNumber = numbers.TryGetValue(record, out int number)
+                            ? number : 0,
+                        FrameHandle = record.FrameHandle ?? "",
+                        MachineId = record.MachineId.Trim(),
+                        CircuitName = record.CircuitName.Trim(),
+                        UpstreamId = (record.UpstreamId ?? "").Trim(),
+                        Description = CircuitMatchText.UnresolvedFrameNote(match, item)
+                    });
+                }
+            }
+            if (keyedIssues.Count > 0)
+            {
+                int tail = report.Issues.Count;
+                var merged = report.Issues
+                    .Select((issue, position) => new { issue, position })
+                    .Concat(keyedIssues.Select((issue, position) =>
+                        new { issue, position = tail + position }))
+                    .OrderBy(entry => entry.issue.FrameNumber == 0
+                        ? int.MaxValue : entry.issue.FrameNumber)
+                    .ThenBy(entry => entry.position)
+                    .Select(entry => entry.issue)
+                    .ToList();
+                report.Issues.Clear();
+                report.Issues.AddRange(merged);
+            }
 
             int AddColumn(string name, string unit, int occurrence)
             {
@@ -443,6 +573,13 @@ namespace UNCAD.Core.Stat
         public string Seq { get; }
         /// <summary>Selected-frame provenance; empty for workbook baseline rows.</summary>
         public string FrameHandle { get; set; } = "";
+        /// <summary>
+        /// D-057：上游编号。图框侧取自 frameinfo_json 明文，台账侧取自快照行
+        /// 的 U_上游编号——同名回路靠它区分。
+        /// </summary>
+        public string UpstreamId { get; set; } = "";
+        /// <summary>D-057：回路身份键（台账行必有；老图框可能为空串）。</summary>
+        public string CircuitKey { get; set; } = "";
         public List<List<string>> TableRows { get; } = new List<List<string>>();
     }
 }

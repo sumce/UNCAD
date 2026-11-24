@@ -25,6 +25,10 @@ namespace UNCAD.Core.Excel
         public static readonly string[] CircuitAliases =
             { "回路名称", "U_回路名称", "设备名称", "回路", "设备" };
 
+        /// <summary>D-057：上游编号 列可识别表头（可选——同机台同名回路靠它指认）。</summary>
+        public static readonly string[] UpstreamAliases =
+            { "上游编号", "U_上游编号", "FR", "上游", "UpstreamId" };
+
         public static bool TryRead(string path, out XLayoutFilterList list, out string error)
         {
             list = null;
@@ -95,6 +99,8 @@ namespace UNCAD.Core.Excel
                     }
                     int circuitColumn = ExcelHeaderBinder.Optional(header,
                         sheet.SheetName, CircuitAliases);
+                    int upstreamColumn = ExcelHeaderBinder.Optional(header,
+                        sheet.SheetName, UpstreamAliases);
                     var entries = new List<XLayoutFilterEntry>();
                     for (int r = header.RowNum + 1; r <= sheet.LastRowNum; r++)
                     {
@@ -103,7 +109,9 @@ namespace UNCAD.Core.Excel
                         string machine = Cell(row, machineColumn);
                         if (machine.Length == 0) continue;
                         entries.Add(new XLayoutFilterEntry(machine,
-                            circuitColumn >= 0 ? Cell(row, circuitColumn) : ""));
+                            circuitColumn >= 0 ? Cell(row, circuitColumn) : "",
+                            circuitColumn >= 0 && upstreamColumn >= 0
+                                ? Cell(row, upstreamColumn) : ""));
                     }
                     if (entries.Count == 0)
                         error = "清单没有数据行（机台ID 列全为空）：" + path;
@@ -132,6 +140,7 @@ namespace UNCAD.Core.Excel
                 return null;
             }
             int circuitColumn = FindAliasColumn(header, CircuitAliases);
+            int upstreamColumn = FindAliasColumn(header, UpstreamAliases);
             var entries = new List<XLayoutFilterEntry>();
             for (int r = headerIndex + 1; r < lines.Length; r++)
             {
@@ -140,7 +149,9 @@ namespace UNCAD.Core.Excel
                 string machine = Cell(cells, machineColumn);
                 if (machine.Length == 0) continue;
                 entries.Add(new XLayoutFilterEntry(machine,
-                    circuitColumn >= 0 ? Cell(cells, circuitColumn) : ""));
+                    circuitColumn >= 0 ? Cell(cells, circuitColumn) : "",
+                    circuitColumn >= 0 && upstreamColumn >= 0
+                        ? Cell(cells, upstreamColumn) : ""));
             }
             if (entries.Count == 0)
                 error = "清单没有数据行（机台ID 列全为空）：" + path;
@@ -240,10 +251,11 @@ namespace UNCAD.Core.Excel
         {
             return "清单文件「" + Path.GetFileName(path) + "」认不出机台ID列。"
                 + "可识别表头：" + string.Join(" / ", MachineAliases)
-                + "（回路列可选：" + string.Join(" / ", CircuitAliases) + "）。";
+                + "（回路列可选：" + string.Join(" / ", CircuitAliases)
+                + "；上游编号列可选：" + string.Join(" / ", UpstreamAliases) + "）。";
         }
 
-        /// <summary>同键条目去重（保持首次出现顺序）。</summary>
+        /// <summary>同键条目去重（保持首次出现顺序）。键 = 机台 + 回路 + 上游。</summary>
         private static List<XLayoutFilterEntry> Deduplicate(
             IEnumerable<XLayoutFilterEntry> entries)
         {
@@ -251,7 +263,7 @@ namespace UNCAD.Core.Excel
             var result = new List<XLayoutFilterEntry>();
             foreach (XLayoutFilterEntry entry in entries)
             {
-                if (!seen.Add(entry.MachineKey + "\u001f" + entry.CircuitKey)) continue;
+                if (!seen.Add(entry.IdentityKey)) continue;
                 result.Add(entry);
             }
             return result;

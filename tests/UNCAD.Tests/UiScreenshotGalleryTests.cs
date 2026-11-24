@@ -62,7 +62,8 @@ namespace UNCAD.Tests
                 settings.Show();
                 Pump(6);
                 Thread.Sleep(450);
-                for (int page = 0; page < 11; page++)
+                // D-057：设置页 11 → 12（新增「图框与排版」）。
+                for (int page = 0; page < 12; page++)
                 {
                     settings.ShowPage(page);
                     Pump(4);

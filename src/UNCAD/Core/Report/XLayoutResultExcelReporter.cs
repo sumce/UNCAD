@@ -75,25 +75,28 @@ namespace UNCAD.Core.Report
                     + Path.GetFileName(report.FilterSourcePath));
                 Set(sheet.CreateRow(row++), 0, "机台ID", workbook, true);
                 Set(sheet.GetRow(row - 1), 1, "回路/设备名称", workbook, true);
-                Set(sheet.GetRow(row - 1), 2, "状态", workbook, true);
-                Set(sheet.GetRow(row - 1), 3, "图框句柄", workbook, true);
-                Set(sheet.GetRow(row - 1), 4, "备注", workbook, true);
+                // D-057：上游编号列——同机台同名回路靠它认领是哪一条。
+                Set(sheet.GetRow(row - 1), 2, "上游编号", workbook, true);
+                Set(sheet.GetRow(row - 1), 3, "状态", workbook, true);
+                Set(sheet.GetRow(row - 1), 4, "图框句柄", workbook, true);
+                Set(sheet.GetRow(row - 1), 5, "备注", workbook, true);
                 for (int index = 0; index < report.FilterRows.Count; index++)
                 {
                     XLayoutResultListRow item = report.FilterRows[index];
                     IRow current = sheet.CreateRow(row++);
                     Set(current, 0, item.MachineId);
                     Set(current, 1, item.CircuitName);
-                    Set(current, 2, item.OutcomeText);
+                    Set(current, 2, item.UpstreamId);
+                    Set(current, 3, item.OutcomeText);
                     // 句柄是标识符（含纯数字形态），一律按文本写，防 Excel 数值化。
-                    Set(current, 3, item.FrameHandles);
-                    Set(current, 4, item.Note);
+                    Set(current, 4, item.FrameHandles);
+                    Set(current, 5, item.Note);
                 }
-                int[] widths = { 20, 26, 14, 22, 40 };
+                int[] widths = { 20, 26, 18, 14, 22, 40 };
                 for (int i = 0; i < widths.Length; i++)
                     sheet.SetColumnWidth(i, widths[i] * 256);
                 // 表头在第 2 行（0 标题、1 生成时间），数据从第 3 行起。
-                FormatTable(sheet, 2, 2 + report.FilterRows.Count, 5, bodyStyle);
+                FormatTable(sheet, 2, 2 + report.FilterRows.Count, 6, bodyStyle);
             }
 
             ISheet frames = workbook.CreateSheet("排版图框");
@@ -103,21 +106,23 @@ namespace UNCAD.Core.Report
                 "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
             Set(frames.CreateRow(frameRow++), 0, "机台ID", workbook, true);
             Set(frames.GetRow(frameRow - 1), 1, "回路/设备名称", workbook, true);
-            Set(frames.GetRow(frameRow - 1), 2, "图框句柄", workbook, true);
-            Set(frames.GetRow(frameRow - 1), 3, "备注", workbook, true);
+            Set(frames.GetRow(frameRow - 1), 2, "上游编号", workbook, true);
+            Set(frames.GetRow(frameRow - 1), 3, "图框句柄", workbook, true);
+            Set(frames.GetRow(frameRow - 1), 4, "备注", workbook, true);
             for (int index = 0; index < report.FrameRows.Count; index++)
             {
                 XLayoutResultFrameRow item = report.FrameRows[index];
                 IRow current = frames.CreateRow(frameRow++);
                 Set(current, 0, item.MachineId);
                 Set(current, 1, item.CircuitName);
-                Set(current, 2, item.FrameHandle);
-                Set(current, 3, item.Note);
+                Set(current, 2, item.UpstreamId);
+                Set(current, 3, item.FrameHandle);
+                Set(current, 4, item.Note);
             }
-            int[] frameWidths = { 20, 26, 22, 40 };
+            int[] frameWidths = { 20, 26, 18, 22, 40 };
             for (int i = 0; i < frameWidths.Length; i++)
                 frames.SetColumnWidth(i, frameWidths[i] * 256);
-            FormatTable(frames, 2, 2 + report.FrameRows.Count, 4, bodyStyle);
+            FormatTable(frames, 2, 2 + report.FrameRows.Count, 5, bodyStyle);
             return workbook;
         }
 

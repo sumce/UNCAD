@@ -1,0 +1,155 @@
+<UserControl x:Class="UNCAD.UI.SettingsFramePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:kit="clr-namespace:UNCAD.UI"
+             FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- NavigationView 的 Frame 不继承窗口资源，设计令牌按页合并（2026-11-03）。 -->
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Frame 资源黑洞（D-046 复盘）：页面必须自带 WPF-UI 字典，
+                     否则 ToggleSwitch/NumberBox 退化为兜底模板（蓝条/无微调按钮）。
+                     主题目前只在窗口构造时确定；若将来加运行时换肤，
+                     需同步刷新各页的 ThemesDictionary。 -->
+                <kit:FluentKit />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="28,20,36,32">
+        <StackPanel MaxWidth="920" HorizontalAlignment="Left">
+
+            <TextBlock Style="{DynamicResource UncadPageTitle}" Text="图框与排版" />
+            <TextBlock Margin="2,6,0,18" Style="{DynamicResource UncadCaption}"
+                       Text="图框内制图信息表（小表）六列写什么、清单标题、XLAYOUT 排版参数" />
+
+            <!-- 卡1：制图信息表六列模板（D-057） -->
+            <ui:Card x:Name="InfoCard" x:FieldModifier="internal" Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="制图信息表（图框内的小表）" />
+                    <TextBlock Margin="0,4,0,10" Style="{DynamicResource UncadCaption}" TextWrapping="Wrap"
+                               Text="U1F / U1U 每次运行会写这六格。每一格可以写固定文字，也可以夹占位符，例如 (机台ID)、(楼层)、(U1F创建时间)、(U1U更新时间:yyyy-MM-dd)。留空 = 不改这一格——图框里现有的内容保留，可以直接在图框里手工改。" />
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="56" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="专业" />
+                        <ui:TextBox x:Name="InfoProfession" x:FieldModifier="internal" Grid.Row="0" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left"
+                                    ToolTip="留空 = 不改图框里现有的内容" />
+                        <TextBlock Grid.Row="0" Grid.Column="2" Style="{DynamicResource UncadFieldLabel}" Margin="24,8,10,0" Text="楼层" />
+                        <ui:TextBox x:Name="InfoFloor" x:FieldModifier="internal" Grid.Row="0" Grid.Column="3"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="制图" />
+                        <ui:TextBox x:Name="InfoDrafter" x:FieldModifier="internal" Grid.Row="1" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left"
+                                    ToolTip="留空 = 不改图框里现有的内容" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{DynamicResource UncadFieldLabel}" Margin="24,8,10,0" Text="审核" />
+                        <ui:TextBox x:Name="InfoReviewer" x:FieldModifier="internal" Grid.Row="1" Grid.Column="3"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left"
+                                    ToolTip="留空 = 不改图框里现有的内容" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="日期" />
+                        <ui:TextBox x:Name="InfoDate" x:FieldModifier="internal" Grid.Row="2" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left" />
+                        <TextBlock Grid.Row="2" Grid.Column="2" Style="{DynamicResource UncadFieldLabel}" Margin="24,8,10,0" Text="版本" />
+                        <ui:TextBox x:Name="InfoVersion" x:FieldModifier="internal" Grid.Row="2" Grid.Column="3"
+                                    Style="{DynamicResource UncadFieldBox}" Width="330" HorizontalAlignment="Left"
+                                    ToolTip="留空 = 不改图框里现有的内容" />
+                    </Grid>
+
+                    <TextBlock Margin="0,8,0,4" Style="{DynamicResource UncadCaption}"
+                               Text="点占位符插到正在编辑的那一格（光标处）：" />
+                    <WrapPanel x:Name="PlaceholderBar" x:FieldModifier="internal" />
+                    <TextBlock x:Name="TemplatePreview" x:FieldModifier="internal" Margin="0,10,0,0"
+                               Style="{DynamicResource UncadCaption}" TextWrapping="Wrap" />
+                    <ui:Button x:Name="ResetTemplatesButton" x:FieldModifier="internal" Content="恢复默认"
+                               Margin="0,8,0,0" HorizontalAlignment="Left"
+                               ToolTip="楼层 = (楼层)、日期 = (日期)，其余留空（与 3.5.0 的行为一致）" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 卡2：清单标题（D-057） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="清单（BOQ）标题" />
+                    <TextBlock Margin="0,4,0,10" Style="{DynamicResource UncadCaption}" TextWrapping="Wrap"
+                               Text="生成的 [BOQ]&lt;机台ID&gt;.xlsx 顶部三行。留空 = 用清单模板里现有的文字（或你在清单文件里手改过的）。可用占位符：(机台ID) (日期) (时间) (用户)" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="72" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="第 1 行" />
+                        <ui:TextBox x:Name="BoqTitle1" x:FieldModifier="internal" Grid.Row="0" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="520" HorizontalAlignment="Left" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="第 2 行" />
+                        <ui:TextBox x:Name="BoqTitle2" x:FieldModifier="internal" Grid.Row="1" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="520" HorizontalAlignment="Left" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Style="{DynamicResource UncadFieldLabel}" Margin="0,8,10,0" Text="第 3 行" />
+                        <ui:TextBox x:Name="BoqTitle3" x:FieldModifier="internal" Grid.Row="2" Grid.Column="1"
+                                    Style="{DynamicResource UncadFieldBox}" Width="520" HorizontalAlignment="Left" />
+                    </Grid>
+                    <TextBlock x:Name="BoqTitlePreview" x:FieldModifier="internal" Margin="0,10,0,0"
+                               Style="{DynamicResource UncadCaption}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ui:Card>
+
+            <!-- 卡3：XLAYOUT 排版参数（D-057） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="图框排版（XLAYOUT）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}" TextWrapping="Wrap"
+                               Text="图纸单位。默认值即旧版常量；填错或越界会自动回落到默认值。" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="图框间距" />
+                            <ui:NumberBox x:Name="XLayoutSpacing" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="10000000" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,16,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="机台标签字高" />
+                            <ui:NumberBox x:Name="XLayoutLabelTextHeight" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="1" Maximum="1000000" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,0,12">
+                            <TextBlock Style="{DynamicResource UncadFieldLabel}" Text="标签离图框距离" />
+                            <ui:NumberBox x:Name="XLayoutLabelDistance" x:FieldModifier="internal"
+                                          Style="{DynamicResource UncadNumberBox}"
+                                          Minimum="0" Maximum="100000000" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Margin="0,6,0,0">
+                        <ui:ToggleSwitch x:Name="XLayoutWarningMarker" x:FieldModifier="internal"
+                                         Style="{DynamicResource UncadToggle}" Margin="0"
+                                         Content="给重复 / 同名回路待确认的图框画黄色提示框" />
+                        <TextBlock Style="{DynamicResource UncadToggleHint}"
+                                   Text="关掉后只给机台标签上色，不在图框外画黄色方框。" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

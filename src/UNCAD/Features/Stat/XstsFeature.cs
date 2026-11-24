@@ -138,7 +138,10 @@ namespace UNCAD.Features.Stat
                     var frame = new XstsCircuitRecord(identity?.MachineId,
                         identity?.DeviceName, string.Join("；", errors))
                     {
-                        FrameHandle = region.Handle
+                        FrameHandle = region.Handle,
+                        // D-057：图框的上游编号与回路身份键（同名回路的区分依据）。
+                        UpstreamId = identity?.UpstreamId ?? "",
+                        CircuitKey = identity?.CircuitKey ?? ""
                     };
                     if (tableSource != null) frame.TableRows.AddRange(tableSource.TableRows);
                     selectedRows.Add(frame);
@@ -187,8 +190,13 @@ namespace UNCAD.Features.Stat
                             .ReadRowsForMachines(configuredPath, selectedMachines))
                         {
                             if (!selectedMachines.Contains((row.MachineId ?? "").Trim())) continue;
+                            // D-057：台账行带上上游编号与回路身份键，同名回路不塌缩。
                             expectedRows.Add(new XstsCircuitRecord(row.MachineId,
-                                row.CircuitName, row.Batch, row.Seq));
+                                row.CircuitName, row.Batch, row.Seq)
+                            {
+                                UpstreamId = (row.Fr ?? "").Trim(),
+                                CircuitKey = CircuitIdentityKey.Of(row)
+                            });
                         }
                         expectedStatus = XstsExpectedDataStatus.Available;
                         expectedDetail = "SQLite 快照（最后成功刷新时间 "

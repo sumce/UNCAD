@@ -38,6 +38,19 @@ namespace UNCAD.Core.Fill
         public string FacilitySwitch { get; set; } = "";
         public string LastModifiedUtc { get; set; } = "";
         public string LastModifiedUser { get; set; } = "";
+        /// <summary>
+        /// D-057：本图框当前这份清单的创建时间（最近一次 U1F，UTC “o” 格式）。
+        /// U1F 是重定义模式（每次重写图框信息），所以“创建时间”= 最近一次 U1F
+        /// 的时间；U1U 沿用不改。制图信息表的 (U1F创建时间) 占位符取这里。
+        /// 老 JSON 没有该字段（空串），展示时退回 <see cref="LastModifiedUtc"/>。
+        /// </summary>
+        public string FilledUtc { get; set; } = "";
+        /// <summary>
+        /// D-057：最近一次写入本记录的命令（"U1F" / "U1U"；老 JSON 为空串）。
+        /// (U1U更新时间) 只在它为 U1U 时才有值——刚做完 U1F 的图框还没被 U1U
+        /// 更新过。
+        /// </summary>
+        public string LastCommand { get; set; } = "";
 
         /// <summary>
         /// 写入时所属图框的句柄（meta.frameHandle）。老 JSON 没有该字段（空串），

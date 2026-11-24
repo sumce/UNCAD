@@ -34,13 +34,14 @@ namespace UNCAD.Tests
         {
             RunSta(() =>
             {
-                // 11 个导航项与旧 11 页一一对应，顺序不变。
+                // 12 个导航项与页面一一对应，顺序不变
+                //（D-057：日志页前插入「图框与排版」，其余页下标不变）。
                 string[] titles = SettingsWindow.PageTitles;
                 Assert.Equal(new[]
                 {
                     "概览", "绘制标注", "统计汇总", "文字样式", "界面与启动",
                     "机台数据", "清单与表格", "Downstream 自动添加", "颜色",
-                    "输出与分享", "日志与记录"
+                    "输出与分享", "图框与排版", "日志与记录"
                 }, titles);
 
                 for (int index = 0; index < titles.Length; index++)
@@ -50,7 +51,7 @@ namespace UNCAD.Tests
                     Pump(3);
                     var items = window.Navigation.MenuItems.OfType<NavigationViewItem>()
                         .ToList();
-                    Assert.Equal(11, items.Count);
+                    Assert.Equal(12, items.Count);
                     Assert.Equal(titles, items.Select(item =>
                         Convert.ToString(item.Content)).ToArray());
                     // 构造参数决定初始导航页（与旧 SelectedIndex 语义一致），越界钳回。
@@ -61,7 +62,7 @@ namespace UNCAD.Tests
                 var clampedHigh = new SettingsWindow(99);
                 clampedHigh.Show();
                 Pump(2);
-                Assert.Equal(10, clampedHigh.SelectedPageIndex);
+                Assert.Equal(11, clampedHigh.SelectedPageIndex);
                 clampedHigh.Close();
 
                 var clampedLow = new SettingsWindow(-3);
@@ -388,11 +389,12 @@ namespace UNCAD.Tests
         {
             RunSta(() =>
             {
-                var window = new SettingsWindow(10);
+                // D-057：日志页下标 10 → 11（前面插入了「图框与排版」页）。
+                var window = new SettingsWindow(11);
                 window.Show();
                 Pump(3);
                 SettingsLogsPage page = window.LogsPage;
-                Assert.Equal(10, window.SelectedPageIndex);
+                Assert.Equal(11, window.SelectedPageIndex);
                 Assert.Equal(new[] { "INFO", "WARN", "ERROR" },
                     page.LogLevel.Items.Cast<ComboBoxItem>()
                         .Select(item => Convert.ToString(item.Content)).ToArray());
@@ -435,9 +437,10 @@ namespace UNCAD.Tests
                         text + " 不可见或无尺寸");
                 }
 
-                window.ShowPage(10);
+                // D-057：日志页下标 10 → 11（前面插入了「图框与排版」页）。
+                window.ShowPage(11);
                 Pump(3);
-                Assert.Equal(10, window.SelectedPageIndex);
+                Assert.Equal(11, window.SelectedPageIndex);
                 Assert.Contains(LogLevelItems(window.LogsPage), item => item == "INFO");
                 Assert.All(new[] { window.LogsPage.LogRetentionDays,
                         window.LogsPage.HistoryRetentionMonths }, box =>
@@ -541,7 +544,14 @@ namespace UNCAD.Tests
                 "CableReserveILine", "CableReserveSocket", "CableReserveBusbar",
                 "FillDeviceReserveAutoDetect", "FillRequireAllCircuits",
                 "FillLayerGovernor", "FillCorrectCableLabelPlacement",
-                "LogLevel", "LogRetentionDays", "HistoryRetentionMonths"
+                "LogLevel", "LogRetentionDays", "HistoryRetentionMonths",
+                // 3.6.0（D-057）：U1SET「图框与排版」页——制图信息表六列模板、
+                // 清单标题模板、XLAYOUT 排版参数。
+                "FillInfoProfession", "FillInfoFloor", "FillInfoDrafter",
+                "FillInfoReviewer", "FillInfoDate", "FillInfoVersion",
+                "BoqTitleLine1", "BoqTitleLine2", "BoqTitleLine3",
+                "XLayoutSpacing", "XLayoutLabelTextHeight", "XLayoutLabelDistance",
+                "XLayoutWarningMarker"
             };
             string[] missing = expected.Except(found).ToArray();
             string[] added = found.Except(expected).ToArray();

@@ -175,14 +175,29 @@ namespace UNCAD.UI
                 return;
             }
 
+            // D-057：同机台同名回路（上游编号不同）在「设备 / 回路」上带上游后缀——
+            // 两条同名回路在列表里不再长得一模一样，选错回路的概率降到最低。
+            var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (MachineRow row in rows)
+            {
+                string countKey = (row.CircuitName ?? "").Trim();
+                nameCounts.TryGetValue(countKey, out int count);
+                nameCounts[countKey] = count + 1;
+            }
+            bool anyDuplicated = nameCounts.Values.Any(count => count > 1);
             foreach (MachineRow row in rows)
             {
                 string displayName = string.IsNullOrWhiteSpace(row.CircuitName)
                     ? row.MachineId : row.CircuitName;
+                if (anyDuplicated && nameCounts.TryGetValue((row.CircuitName ?? "").Trim(),
+                        out int sameName) && sameName > 1)
+                    displayName += string.IsNullOrWhiteSpace(row.Fr)
+                        ? "（上游未记录）" : "（上游 " + row.Fr.Trim() + "）";
                 _circuits.Add(new CircuitRow(row, displayName));
             }
             SetSummary(rows[0].Region + " ｜ 机台 " + rows[0].MachineId
-                + " ｜ 共 " + rows.Count + " 个回路", false);
+                + " ｜ 共 " + rows.Count + " 个回路"
+                + (anyDuplicated ? "（含同名回路，按上游编号区分）" : ""), false);
             ApplyCircuitFilter();
             if (CircuitGrid.SelectedItem == null && _circuits.Count > 0)
                 CircuitGrid.SelectedIndex = 0;
@@ -214,6 +229,8 @@ namespace UNCAD.UI
         private static bool MatchesCircuit(CircuitRow row, string keyword)
         {
             return Contains(row.DisplayName, keyword)
+                || Contains(row.UpstreamId, keyword)
+                || Contains(row.FacilitySwitch, keyword)
                 || Contains(row.PanelType, keyword)
                 || Contains(row.Detail, keyword);
         }
@@ -323,19 +340,24 @@ namespace UNCAD.UI
                 + "    软管: " + (string.IsNullOrWhiteSpace(row.Dia) ? "" : "Φ" + row.Dia);
         }
 
-        /// <summary>回路列表行模型。</summary>
+        /// <summary>回路列表行模型。上游编号/厂务开关列（D-057）：同机台同名回路靠
+        /// 上游编号区分，选的时候不用点中行再去预览里看。</summary>
         public sealed class CircuitRow
         {
             public CircuitRow(MachineRow row, string displayName)
             {
                 Row = row;
                 DisplayName = displayName;
+                UpstreamId = (row.Fr ?? "").Trim();
+                FacilitySwitch = (row.FacilitySwitch ?? "").Trim();
                 PanelType = DisplayPanelType(row.Next);
                 Detail = row.Detail ?? "";
             }
 
             public MachineRow Row { get; }
             public string DisplayName { get; }
+            public string UpstreamId { get; }
+            public string FacilitySwitch { get; }
             public string PanelType { get; }
             public string Detail { get; }
         }

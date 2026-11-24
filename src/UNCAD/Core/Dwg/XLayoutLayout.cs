@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UNCAD.Core.Excel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.Text;
 
@@ -10,12 +12,32 @@ namespace UNCAD.Core.Dwg
     public sealed class XLayoutFrameItem : DwgFrameLayoutItem
     {
         public XLayoutFrameItem(string machineId, string deviceName, FrameRectangle boundary,
-            string handle = "") : base(machineId, deviceName, boundary)
+            string handle = "", string upstreamId = "", string circuitKey = "")
+            : base(machineId, deviceName, boundary)
         {
             Handle = handle ?? "";
+            UpstreamId = upstreamId ?? "";
+            CircuitKey = circuitKey ?? "";
         }
 
         public string Handle { get; }
+        /// <summary>
+        /// D-057：图框记录的上游编号明文（frameinfo_json）。同机台同名回路靠它
+        /// 区分；老图框或复制来的图框可能为空。
+        /// </summary>
+        public string UpstreamId { get; }
+        /// <summary>D-057：回路身份键（机台ID+回路名+上游编号）；老图框可能为空。</summary>
+        public string CircuitKey { get; }
+
+        /// <summary>配对用的条目（键/上游取自图框自身记录）。</summary>
+        public CircuitSelection ToSelection() => new CircuitSelection
+        {
+            MachineId = MachineId ?? "",
+            CircuitName = DeviceName ?? "",
+            UpstreamId = UpstreamId ?? "",
+            CircuitKey = CircuitKey ?? "",
+            Handle = Handle ?? ""
+        };
     }
 
     /// <summary>One frame translation produced by XLAYOUT.</summary>
@@ -110,12 +132,53 @@ namespace UNCAD.Core.Dwg
             = new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
 
         /// <summary>机台ID+回路 → 上游编号（U_上游编号；空白视为未配置）。
-        /// 3.3.3.2：同 RowOrder 换 IdentityTextNormalizer（D-021）。</summary>
+        /// 3.3.3.2：同 RowOrder 换 IdentityTextNormalizer（D-021）。
+        /// D-057：只在机台内回路名唯一时填充——重名回路的行序/上游走下面两个
+        /// 按键字典，否则两条同名回路会共用第一条的行序、最后一条的上游。</summary>
         public IDictionary<string, string> UpstreamOf { get; }
             = new Dictionary<string, string>(IdentityTextNormalizer.Comparer);
 
+        /// <summary>D-057：回路身份键 → Excel 行序（同名回路各有各的行序）。</summary>
+        public IDictionary<string, int> RowOrderByKey { get; }
+            = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>D-057：回路身份键 → 上游编号。</summary>
+        public IDictionary<string, string> UpstreamByKey { get; }
+            = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// D-057：台账里机台内有重名的回路（<see cref="MakeKey"/>）。这些回路
+        /// 只按身份键解析行序/上游；图框没有可用的键时归“同名回路待确认”。
+        /// </summary>
+        public ISet<string> DuplicateNames { get; }
+            = new HashSet<string>(IdentityTextNormalizer.Comparer);
+
         public static string MakeKey(string machineId, string circuitName)
             => (machineId ?? "").Trim() + "\u001f" + (circuitName ?? "").Trim();
+
+        /// <summary>
+        /// 登记一条台账行：按身份键记行序/上游；名字在机台内唯一时同时记到
+        /// 按名字典（兼容无键的老图框）。调用方按 Excel 行序逐行调用。
+        /// </summary>
+        public void AddRow(MachineRow row, int order)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.CircuitName)) return;
+            string key = UNCAD.Core.Fill.CircuitIdentityKey.Of(row);
+            string nameKey = MakeKey(row.MachineId, row.CircuitName);
+            RowOrderByKey[key] = order;
+            UpstreamByKey[key] = (row.Fr ?? "").Trim();
+            if (DuplicateNames.Contains(nameKey)) return;
+            if (RowOrder.ContainsKey(nameKey))
+            {
+                // 同名第二行出现：这个名字不再唯一，撤掉按名映射。
+                RowOrder.Remove(nameKey);
+                UpstreamOf.Remove(nameKey);
+                DuplicateNames.Add(nameKey);
+                return;
+            }
+            RowOrder[nameKey] = order;
+            UpstreamOf[nameKey] = (row.Fr ?? "").Trim();
+        }
     }
 
     /// <summary>Arranges frames into rows (one per machine, or per upstream) with a fixed gap.</summary>
@@ -124,6 +187,12 @@ namespace UNCAD.Core.Dwg
         public const double DefaultSpacing = 10000d;
         /// <summary>按上游排列时，没有上游编号的回路所在的行首标签。</summary>
         public const string UnassignedUpstreamLabel = "未配上游";
+        /// <summary>
+        /// D-057：按上游排列时，机台内有同名回路而图框没有可用身份键（未记录
+        /// 上游编号）的图框所在的行——说不出它属于哪个上游，单独一行提醒
+        /// 先做 U1F/U1U 指认，不塞进“未配上游”冒充台账缺项。
+        /// </summary>
+        public const string AmbiguousUpstreamLabel = "同名回路待确认";
 
         public static IReadOnlyList<XLayoutPlacement> Arrange(
             IEnumerable<XLayoutFrameItem> items, double spacing = DefaultSpacing)
@@ -198,22 +267,30 @@ namespace UNCAD.Core.Dwg
                 .ToList();
         }
 
+        /// <summary>
+        /// D-057：按上游排列。同一上游的不同写法（带槽位/轴位标注）归同一行；
+        /// 同名回路且图框无可用身份键的归“同名回路待确认”行（排最后）。
+        /// </summary>
         private static List<Row> BuildUpstreamRows(List<XLayoutFrameItem> items,
             XLayoutArrangeContext context)
         {
             return items
-                .GroupBy(item => UpstreamOf(context, item),
+                .GroupBy(item => UpstreamBucketKey(context, item),
                     StringComparer.OrdinalIgnoreCase)
                 .Select(group =>
                 {
-                    string upstream = group.Key.Trim();
-                    bool unassigned = upstream.Length == 0;
+                    XLayoutFrameItem first = group.First();
+                    bool ambiguous = IsAmbiguous(context, first);
+                    string upstream = UpstreamOf(context, first);
+                    bool unassigned = !ambiguous && upstream.Length == 0;
                     return new Row
                     {
-                        Label = unassigned ? UnassignedUpstreamLabel : upstream,
-                        // 未配上游的行排最后；其余按上游编号字母序。
-                        SortRank = unassigned ? 1 : 0,
-                        SortKey = upstream,
+                        Label = ambiguous ? AmbiguousUpstreamLabel
+                            : unassigned ? UnassignedUpstreamLabel
+                            : UNCAD.Core.Fill.CircuitIdentityKey.UpstreamDisplay(upstream),
+                        // 未配上游的行排最后；同名待确认更后；其余按上游编号字母序。
+                        SortRank = ambiguous ? 2 : unassigned ? 1 : 0,
+                        SortKey = unassigned ? "" : upstream,
                         Items = group.ToList()
                     };
                 })
@@ -222,29 +299,70 @@ namespace UNCAD.Core.Dwg
                 .ToList();
         }
 
-        private static string UpstreamOf(XLayoutArrangeContext context,
+        private static string UpstreamBucketKey(XLayoutArrangeContext context,
             XLayoutFrameItem item)
         {
+            if (IsAmbiguous(context, item)) return "\u0002ambiguous";
+            string key = UNCAD.Core.Fill.CircuitIdentityKey.UpstreamKey(
+                UpstreamOf(context, item));
+            return key.Length == 0 ? "\u0001none" : key;
+        }
+
+        /// <summary>
+        /// 图框没有可用的身份键（老图框/上游改挂后键过期），而它的回路名在
+        /// 台账里又有重名：行序和上游都无法确定。
+        /// </summary>
+        private static bool IsAmbiguous(XLayoutArrangeContext context,
+            XLayoutFrameItem item)
+        {
+            if (item.CircuitKey.Length > 0
+                && (context.RowOrderByKey.ContainsKey(item.CircuitKey)
+                    || context.UpstreamByKey.ContainsKey(item.CircuitKey)))
+                return false;
+            return context.DuplicateNames.Contains(XLayoutArrangeContext.MakeKey(
+                item.MachineId, item.DeviceName));
+        }
+
+        /// <summary>图框对应台账行的上游编号：身份键优先，其次机台内唯一的回路名。</summary>
+        public static string UpstreamOf(XLayoutArrangeContext context,
+            XLayoutFrameItem item)
+        {
+            if (item == null) return "";
+            if (item.CircuitKey.Length > 0
+                && context.UpstreamByKey.TryGetValue(item.CircuitKey, out string keyed))
+                return keyed ?? "";
+            if (IsAmbiguous(context, item)) return "";
             return context.UpstreamOf.TryGetValue(
                 XLayoutArrangeContext.MakeKey(item.MachineId, item.DeviceName),
                 out string upstream) ? upstream ?? "" : "";
         }
 
-        /// <summary>行内顺序：Excel 行序优先（缺失映射的排末尾），再按图上位置稳定排序。</summary>
+        /// <summary>行内顺序：Excel 行序优先（身份键 → 唯一回路名；缺失映射的排末尾），
+        /// 再按图上位置稳定排序。</summary>
         private static void SortRowMembers(List<Row> rows,
             XLayoutArrangeContext context)
         {
             foreach (Row row in rows)
             {
                 row.Items = row.Items
-                    .OrderBy(item => context.RowOrder.TryGetValue(
-                        XLayoutArrangeContext.MakeKey(item.MachineId, item.DeviceName),
-                        out int order) ? order : int.MaxValue)
+                    .OrderBy(item => OrderOf(context, item))
                     .ThenBy(item => item.Boundary.MinX)
                     .ThenBy(item => item.Boundary.MinY)
                     .ThenBy(item => item.Handle, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
+        }
+
+        private static int OrderOf(XLayoutArrangeContext context,
+            XLayoutFrameItem item)
+        {
+            if (item.CircuitKey.Length > 0
+                && context.RowOrderByKey.TryGetValue(item.CircuitKey, out int keyed))
+                return keyed;
+            if (IsAmbiguous(context, item)) return int.MaxValue;
+            return context.RowOrder.TryGetValue(
+                XLayoutArrangeContext.MakeKey(item.MachineId, item.DeviceName),
+                out int order) ? order : int.MaxValue;
         }
     }
 }

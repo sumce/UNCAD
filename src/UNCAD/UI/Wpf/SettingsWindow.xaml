@@ -53,6 +53,9 @@
                                        Icon="{ui:SymbolIcon Color24}" />
                 <ui:NavigationViewItem x:Name="NavOutput" x:FieldModifier="internal" Content="输出与分享"
                                        Icon="{ui:SymbolIcon Share24}" />
+                <!-- D-057：图框与排版（制图信息表模板 / 清单标题 / XLAYOUT 参数） -->
+                <ui:NavigationViewItem x:Name="NavFrame" x:FieldModifier="internal" Content="图框与排版"
+                                       Icon="{ui:SymbolIcon DocumentBulletList24}" />
                 <ui:NavigationViewItem x:Name="NavLogs" x:FieldModifier="internal" Content="日志与记录"
                                        Icon="{ui:SymbolIcon History24}" />
             </ui:NavigationView.MenuItems>

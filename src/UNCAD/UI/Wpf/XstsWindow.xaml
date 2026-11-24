@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="XSTS · 机台回路统计"
-                 Width="1200" Height="600" MinWidth="720" MinHeight="440"
+                 Width="1240" Height="760" MinWidth="720" MinHeight="440"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -12,39 +12,58 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="*" MinHeight="120" />
+            <!-- D-057：选中项详情条（机台/图框/异常行），可折叠 -->
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <ui:TitleBar Grid.Row="0" Title="XSTS · 机台回路统计" />
 
-        <StackPanel Grid.Row="1" Margin="24,10,24,4">
+        <StackPanel Grid.Row="1" Margin="24,8,24,4">
             <TextBlock FontSize="20" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                        Text="{Binding Heading, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
-            <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
+            <TextBlock Margin="0,4,0,0" FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Text="{Binding Coverage, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
-            <WrapPanel x:Name="BadgeBar" x:FieldModifier="internal" Margin="4,8,0,0" />
+            <WrapPanel x:Name="BadgeBar" x:FieldModifier="internal" Margin="4,6,0,0" />
             <TextBlock Margin="2,2,0,0" FontSize="12"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                        Text="{Binding NextStep, RelativeSource={RelativeSource AncestorType=ui:FluentWindow}, Mode=OneWay}" />
         </StackPanel>
 
-        <TabControl x:Name="ReportTabs" Grid.Row="2" Margin="24,12,24,8">
+        <TabControl x:Name="ReportTabs" Grid.Row="2" Margin="24,10,24,6">
             <TabItem Header="回路统计">
-                <DataGrid x:Name="MachineGrid" Margin="0,8,0,0"
+                <DataGrid x:Name="MachineGrid" Margin="0,6,0,0"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" HeadersVisibility="Column"
                           GridLinesVisibility="Horizontal" BorderThickness="0"
-                          RowHeight="32" FontSize="13"
+                          RowHeight="26" FontSize="12" FrozenColumnCount="1"
+                          EnableColumnVirtualization="False"
                           SelectionMode="Single" SelectionUnit="FullRow"
+                          SelectionChanged="OnMachineSelected"
                           Background="{DynamicResource ControlFillColorDefaultBrush}">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="110" />
-                        <DataGridTextColumn Header="批次" Binding="{Binding Batch}" Width="90" />
-                        <DataGridTextColumn Header="序号" Binding="{Binding Seq}" Width="70" />
-                        <DataGridTextColumn Header="已选回路" Binding="{Binding SelectedCircuitCount}" Width="80">
+                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="批次" Binding="{Binding Batch}" Width="80">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                    <Setter Property="ToolTip" Value="{Binding Batch}" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="序号" Binding="{Binding Seq}" Width="60" />
+                        <DataGridTextColumn Header="已选" Binding="{Binding SelectedCircuitCount}" Width="56">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="HorizontalAlignment" Value="Right" />
@@ -52,22 +71,56 @@
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
-                        <DataGridTextColumn Header="应有回路" Binding="{Binding ExpectedCircuitText}" Width="90" />
-                        <DataGridTextColumn Header="缺少回路" Binding="{Binding MissingText}" Width="*">
+                        <DataGridTextColumn Header="应有" Binding="{Binding ExpectedCircuitText}" Width="64">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
                                     <Setter Property="VerticalAlignment" Value="Center" />
-                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="缺少" Binding="{Binding MissingCircuitCount}" Width="56">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
                                     <Setter Property="ToolTip" Value="{Binding MissingText}" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
-                        <DataGridTextColumn Header="多出回路" Binding="{Binding UnexpectedText}" Width="*">
+                        <DataGridTextColumn Header="多出" Binding="{Binding UnexpectedCircuitCount}" Width="56">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="ToolTip" Value="{Binding UnexpectedText}" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="重复图框" Binding="{Binding DuplicateFrameCount}" Width="68">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="待确认" Binding="{Binding UnresolvedCircuitCount}" Width="62">
+                            <DataGridTextColumn.ElementStyle>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="HorizontalAlignment" Value="Right" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="ToolTip" Value="{Binding UnresolvedText}" />
+                                </Style>
+                            </DataGridTextColumn.ElementStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="缺少 / 待确认的回路" Binding="{Binding MissingText}" Width="*">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="VerticalAlignment" Value="Center" />
                                     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
-                                    <Setter Property="ToolTip" Value="{Binding UnexpectedText}" />
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource TextFillColorSecondaryBrush}" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
@@ -75,14 +128,15 @@
                 </DataGrid>
             </TabItem>
             <TabItem x:Name="FrameTab" Header="图框明细">
-                <DataGrid x:Name="FrameGrid" Margin="0,8,0,0"
+                <DataGrid x:Name="FrameGrid" Margin="0,6,0,0"
                           AutoGenerateColumns="False" IsReadOnly="True"
-                          FrozenColumnCount="3"
+                          FrozenColumnCount="4"
                           CanUserAddRows="False" HeadersVisibility="Column"
                           GridLinesVisibility="Horizontal" BorderThickness="0"
-                          RowHeight="32" FontSize="13"
+                          RowHeight="26" FontSize="12"
                           EnableColumnVirtualization="True"
                           SelectionMode="Single" SelectionUnit="FullRow"
+                          SelectionChanged="OnFrameSelected"
                           Background="{DynamicResource ControlFillColorDefaultBrush}">
                     <DataGrid.Resources>
                         <Style TargetType="ToolTip">
@@ -105,24 +159,27 @@
                         </Style>
                     </DataGrid.Resources>
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
-                        <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="150" />
+                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130" />
+                        <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="170" />
+                        <!-- D-057：同机台同名回路靠上游编号区分 -->
+                        <DataGridTextColumn Header="上游编号" Binding="{Binding UpstreamId}" Width="150" />
                         <DataGridTextColumn Header="图框ID" Binding="{Binding FrameHandle}" Width="90" />
                     </DataGrid.Columns>
                 </DataGrid>
             </TabItem>
             <TabItem x:Name="IssueTab" Header="异常图框">
-                <DataGrid x:Name="IssueGrid" Margin="0,8,0,0"
+                <DataGrid x:Name="IssueGrid" Margin="0,6,0,0"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           CanUserAddRows="False" HeadersVisibility="Column"
                           GridLinesVisibility="Horizontal" BorderThickness="0"
-                          RowHeight="32" FontSize="13"
+                          RowHeight="26" FontSize="12"
                           SelectionMode="Single" SelectionUnit="FullRow"
+                          SelectionChanged="OnIssueSelected"
                           Background="{DynamicResource ControlFillColorDefaultBrush}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="图框ID" Binding="{Binding FrameIdText}" Width="90" />
-                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="120" />
-                        <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="*" />
+                        <DataGridTextColumn Header="机台 ID" Binding="{Binding MachineId}" Width="130" />
+                        <DataGridTextColumn Header="回路名称" Binding="{Binding CircuitName}" Width="170" />
                         <DataGridTextColumn Header="问题" Binding="{Binding Description}" Width="*">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
@@ -137,7 +194,34 @@
             </TabItem>
         </TabControl>
 
-        <Grid Grid.Row="3" Margin="24,8,24,20">
+        <Border x:Name="DetailStrip" x:FieldModifier="internal" Grid.Row="3" Margin="24,0,24,6"
+                Padding="12,8" CornerRadius="6" Visibility="Collapsed"
+                BorderThickness="1"
+                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="DetailTitle" x:FieldModifier="internal" Grid.Column="0"
+                               FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                               TextTrimming="CharacterEllipsis" Text="—" />
+                    <ToggleButton x:Name="DetailToggle" x:FieldModifier="internal" Grid.Column="1"
+                                  Content="收起" FontSize="12" Padding="10,1" MinWidth="56"
+                                  Click="OnDetailToggle" />
+                </Grid>
+                <ScrollViewer x:Name="DetailScroll" x:FieldModifier="internal" MaxHeight="170"
+                              Margin="0,4,0,0" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="DetailBody" x:FieldModifier="internal" />
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="4" Margin="24,4,24,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

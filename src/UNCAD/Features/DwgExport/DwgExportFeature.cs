@@ -83,8 +83,12 @@ namespace UNCAD.Features.DwgExport
                     {
                         MachineId = group.Key,
                         Complete = !failedIds.Contains(group.Key),
+                        // D-057：按回路身份去重（有键用键）——同机台同名回路（上游
+                        // 编号不同）是两条回路，旧口径按名字去重会把 2 条数成 1 条。
                         CircuitCount = group
-                            .Select(frame => (frame.DeviceName ?? "").Trim())
+                            .Select(frame => (frame.CircuitKey ?? "").Length > 0
+                                ? "k:" + frame.CircuitKey
+                                : "n:" + (frame.DeviceName ?? "").Trim())
                             .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
                         MissingNames = coverageFailed
                             .FirstOrDefault(result => string.Equals(result.MachineId,

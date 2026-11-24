@@ -11,6 +11,7 @@ using UNCAD.Core.Stat;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
+using UNCAD.Infra;
 using UNCAD.UI;
 
 namespace UNCAD.Features.Fill
@@ -51,10 +52,12 @@ namespace UNCAD.Features.Fill
         internal static bool TryResolveFrameCircuit(Transaction transaction,
             FrameRegionGroup region, FillWorkbookSnapshot workbook,
             CadBlockDefinitionReader definitions,
-            out string machineId, out string circuitName, out string error)
+            out string machineId, out string circuitName, out string upstreamId,
+            out string error)
         {
             machineId = "";
             circuitName = "";
+            upstreamId = "";
             error = "";
             if (transaction == null || region == null || workbook == null)
             {
@@ -85,6 +88,13 @@ namespace UNCAD.Features.Fill
                 error = "图框缺少机台ID或回路名。";
                 return false;
             }
+            // D-057：机台内有同名回路（上游编号不同）时带出上游编号——PDF 文件名
+            // 靠它区分两条回路，且取自台账（不取本批），先后两次各出一条时文件名稳定。
+            // 名字唯一时为空，文件名保持 <机台>_<回路>.pdf。
+            int sameName = workbook.FindRows(machineId).Count(row =>
+                IdentityTextNormalizer.Equals(row.CircuitName, machine.CircuitName));
+            if (sameName > 1)
+                upstreamId = CircuitIdentityKey.UpstreamDisplay(machine.Fr);
             return true;
         }
 
@@ -249,6 +259,18 @@ namespace UNCAD.Features.Fill
                     + DynamicBlockStatePolicy.UpstreamVisibilityState(row.Next));
             if (selection.UpstreamInfoBlockIds.Length > 0)
                 preview.AppendLine("▼ 上游信息块：" + row.Fr + " / " + row.Detail);
+            // D-057：制图信息表六列的写入预览（U1SET「图框与排版」模板；留空的列标“不改”）。
+            if (selection.DrawingInfoTableIds.Length > 0)
+            {
+                IReadOnlyList<string> info = DrawingInfoTemplateRenderer.Render(
+                    options.DrawingInfo,
+                    DrawingInfoContext.ForRun(row, null, CommandIds.Fill, DateTime.UtcNow));
+                var infoParts = new List<string>();
+                for (int column = 0; column < DrawingInfoTemplates.ColumnCount; column++)
+                    infoParts.Add(DrawingInfoTemplates.ColumnNames[column] + "="
+                        + (options.DrawingInfo.IsSet(column) ? info[column] : "不改"));
+                preview.AppendLine("▼ 制图信息表：" + string.Join(" ｜ ", infoParts));
+            }
             if (selection.UpstreamAxisBlockIds.Length > 0)
                 preview.AppendLine("▼ 上游轴位块：US = " + ConnectionBlockFiller.UpstreamAxis(row));
             if (selection.DownstreamAxisBlockIds.Length > 0)

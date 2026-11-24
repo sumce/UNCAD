@@ -5,22 +5,15 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.5.0.0` (2026-11-22, D-055: XLAYOUT
-  filter-list import + result export), not packaged or installed; the
-  installed assembly is `3.5.0.0` (local acceptance build, not
-  a tagged release).
-  The previous local release
-  ZIP was generated on 2026-11-20 at
-  `artifacts\Pro\UNCAD-Pro-v3.4.1.6.zip` (SHA-256:
-  `DCA972DB7532FB9B34582C6F125E29FAA14B701892939DC86385540A46EC7C90`).
-  It has not been uploaded. Its bundle checksum differs from the installed
-  bundle, and user-drawing acceptance is pending. XSTS frame details use one row per frame, with separate model
-  and quantity columns for all drawn BOQ items and blank cells for missing
-  items. Near-name hints and the whole-drawing "not drawn" list are removed.
-  The local `v3.4.1` tag is present. The `3.4.1.7` archive was published as
-  latest on 2026-11-22; size 6,625,853 bytes, SHA-256
-  `1AB481606D8BB56E7AEDE77449324A7D0E17E7351260AF3F1666C32A3B729DB8`.
-  Server metadata and anonymous download were verified byte-for-byte.
+- Current local source version: `3.6.0.0` (2026-11-24, D-057: same-name
+  circuits handled by one pairing rule across XSTS / XLAYOUT / BOQ / PDF /
+  DWG; drawing-info table column templates; BOQ title templates; XLAYOUT
+  layout options), not installed and not published. The latest published
+  release is `3.5.0.1` (2026-11-23, tag `v3.5.0`), installed user-scope and
+  verified byte-for-byte on the server. XSTS frame details use one row per
+  frame, with separate model and quantity columns for all drawn BOQ items and
+  blank cells for missing items. Near-name hints and the whole-drawing "not
+  drawn" list are removed.
 - Current stable release line: `3.4.1` (source patch `3.4.1.11`; latest
   published patch `3.4.1.7`, 2026-11-20;
   D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
@@ -123,7 +116,10 @@ U1PDF
   settings are restored field by field; no third-party batch-plot plugin)
 
 XLAYOUT/XSTS
-  collect frame regions -> resolve machine identity -> arrange or compare
+  collect frame regions -> resolve machine identity -> pair each machine's
+  frames with its workbook rows (CircuitMatcher: identity key first, name only
+  when unique in the machine, same-name frames without a usable key pending)
+  -> arrange or compare
 ```
 
 ## Data Contracts
@@ -147,7 +143,11 @@ XLAYOUT/XSTS
 - Parsed machine rows and refresh metadata live in the per-user SQLite snapshot;
   the last successful snapshot remains live until a later refresh succeeds.
 - `frameinfo_json` stores machine ID, device/upstream identity, last update,
-  cable reserve breakdown and replacement/change history. It is written to the
+  cable reserve breakdown and replacement/change history. `meta` also carries
+  `filledUtc` (latest U1F, the creation time) and `lastCommand` (D-057); the
+  circuit identity key is derived from the stored plaintext, never persisted.
+  The drawing-info table's six columns are filled from the U1SET templates
+  (`UNC_FILL_INFO_*`, empty = leave the cell untouched). It is written to the
   frame block's own `FRAMEINFO` attribute (D-040); the standalone
   `frameinfo_json` block and legacy inline attributes stay as read-only legacy
   sources. Schema v2 is the

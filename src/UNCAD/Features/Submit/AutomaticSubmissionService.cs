@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
@@ -138,6 +139,31 @@ namespace UNCAD.Features.Submit
                 BoqWorkbookWriter.ValidateRevision(revision);
         }
 
+        /// <summary>
+        /// D-057：清单设备列区分同名回路要用的台账行（这些机台）。快照未配置/
+        /// 未刷新/读取失败时返回 null——退回按回路名的旧口径，不拦清单输出。
+        /// </summary>
+        private static List<UNCAD.Core.Excel.MachineRow> LoadRowsForDeviceLabels(
+            IEnumerable<string> machineIds)
+        {
+            try
+            {
+                string configured = Settings.Get(ConfigKeys.FillExcelPath, "").Trim();
+                if (configured.Length == 0) return null;
+                if (!UNCAD.Core.Excel.MachineWorkbookSource.TryGetSnapshot(configured,
+                        out _)) return null;
+                return UNCAD.Core.Excel.MachineWorkbookSnapshotStore.Default
+                    .ReadRowsForMachines(configured, machineIds ?? new string[0])
+                    .ToList();
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("读取机台快照失败，清单设备列按回路名区分（同名回路可能并列）："
+                    + ex.Message);
+                return null;
+            }
+        }
+
         private static AutomaticSubmissionWriteResult WriteCore(CadContext ctx,
             Transaction transaction, string filePath, IEnumerable<ObjectId[]> sourceGroups,
             FileBatchRollback externalBatch, bool inferLegacySocketPanels,
@@ -152,6 +178,11 @@ namespace UNCAD.Features.Submit
                     inferLegacySocketPanels));
             if (records.Count == 0)
                 throw new InvalidDataException("没有可写入 Excel 的图框记录。");
+
+            // D-057：同机台同名回路（上游编号不同）在清单里各占一列/DATA 各占一行。
+            // 列名按台账判定是否重名，带“（上游 X）”后缀；快照不可用时退回旧口径。
+            BoqDeviceLabels.Apply(records, LoadRowsForDeviceLabels(
+                records.Select(record => record.MachineId)));
 
             // 硬对账:图框内存在无法匹配固定清单的材料行时,生成的 xlsx 必然
             // 与图框实际内容不一致。报错中止,列出每一行,让用户先在 CAD 表中解决。
@@ -204,6 +235,8 @@ namespace UNCAD.Features.Submit
                     .GroupBy(record => record.MachineId.Trim(),
                         IdentityTextNormalizer.Comparer)
                     .ToList();
+                // D-057：清单标题模板一次读取（U1SET「图框与排版」）。
+                BoqTitleTemplates titles = FillSettings.BoqTitles();
                 int machineDone = 0;
                 foreach (IGrouping<string, SubmissionRecord> machineGroup in machineGroups)
                 {
@@ -221,7 +254,7 @@ namespace UNCAD.Features.Submit
                     try
                     {
                         BoqWorkbookWriter.WriteTracked(target, template, machineGroup,
-                            allowEmptyMaterials, progress);
+                            allowEmptyMaterials, progress, null, null, titles);
                         batch?.MarkWritten(target, progress.WrittenFingerprint);
                     }
                     catch (BoqExternalModificationException)

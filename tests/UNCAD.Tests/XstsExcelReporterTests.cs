@@ -41,36 +41,45 @@ namespace UNCAD.Tests
                         Assert.Equal(1d, summary.GetRow(2).GetCell(3).NumericCellValue);
                         var details = (XSSFSheet)workbook.GetSheet("图框明细");
                         Assert.Equal(2, details.LastRowNum);
-                        Assert.Equal(new[] { "机台 ID", "回路名称", "图框ID", "电缆型号", "电缆米数",
+                        // D-057：图框明细在“回路名称”后插入“上游编号”（同机台同名回路靠它认领），
+                        // 其后各列顺移一位。
+                        Assert.Equal(new[] { "机台 ID", "回路名称", "上游编号", "图框ID", "电缆型号", "电缆米数",
                             "桥架型号", "桥架米数", "软管型号", "软管米数", "线管型号", "线管米数",
                             "其他配件型号", "其他配件数量（套）", "断路器型号", "断路器数量（个）" },
                             details.GetRow(0).Cells.Select(cell => cell.StringCellValue));
-                        Assert.Equal("001234", details.GetRow(1).GetCell(2).StringCellValue);
-                        Assert.Equal("YJV-3*25", details.GetRow(1).GetCell(3).StringCellValue);
-                        Assert.Equal("12.50", details.GetRow(1).GetCell(4).StringCellValue);
-                        Assert.Contains("2.说明:现场敷设", details.GetRow(1).GetCell(3).CellComment.String.String);
-                        Assert.Equal("200*100", details.GetRow(1).GetCell(5).StringCellValue);
-                        Assert.Equal("8", details.GetRow(1).GetCell(6).StringCellValue);
-                        Assert.Equal("", details.GetRow(1).GetCell(7).StringCellValue);
+                        Assert.Equal("001234", details.GetRow(1).GetCell(3).StringCellValue);
+                        Assert.Equal("", details.GetRow(1).GetCell(2).StringCellValue);
+                        Assert.Equal("YJV-3*25", details.GetRow(1).GetCell(4).StringCellValue);
+                        Assert.Equal("12.50", details.GetRow(1).GetCell(5).StringCellValue);
+                        Assert.Contains("2.说明:现场敷设", details.GetRow(1).GetCell(4).CellComment.String.String);
+                        Assert.Equal("200*100", details.GetRow(1).GetCell(6).StringCellValue);
+                        Assert.Equal("8", details.GetRow(1).GetCell(7).StringCellValue);
                         Assert.Equal("", details.GetRow(1).GetCell(8).StringCellValue);
                         Assert.Equal("", details.GetRow(1).GetCell(9).StringCellValue);
                         Assert.Equal("", details.GetRow(1).GetCell(10).StringCellValue);
-                        Assert.Equal(CellType.String, details.GetRow(1).GetCell(11).CellType);
-                        Assert.Equal("=保留原文", details.GetRow(1).GetCell(11).StringCellValue);
-                        Assert.Equal("待确认", details.GetRow(1).GetCell(12).StringCellValue);
-                        Assert.Contains("编码：00123", details.GetRow(1).GetCell(11).CellComment.String.String);
-                        Assert.Equal("3P63A", details.GetRow(1).GetCell(13).StringCellValue);
-                        Assert.Equal("0", details.GetRow(1).GetCell(14).StringCellValue);
-                        Assert.Equal("001235", details.GetRow(2).GetCell(2).StringCellValue);
-                        Assert.Equal("", details.GetRow(2).GetCell(3).StringCellValue);
-                        Assert.True(details.GetRow(1).GetCell(3).CellStyle.WrapText);
+                        Assert.Equal("", details.GetRow(1).GetCell(11).StringCellValue);
+                        Assert.Equal(CellType.String, details.GetRow(1).GetCell(12).CellType);
+                        Assert.Equal("=保留原文", details.GetRow(1).GetCell(12).StringCellValue);
+                        Assert.Equal("待确认", details.GetRow(1).GetCell(13).StringCellValue);
+                        Assert.Contains("编码：00123", details.GetRow(1).GetCell(12).CellComment.String.String);
+                        Assert.Equal("3P63A", details.GetRow(1).GetCell(14).StringCellValue);
+                        Assert.Equal("0", details.GetRow(1).GetCell(15).StringCellValue);
+                        Assert.Equal("001235", details.GetRow(2).GetCell(3).StringCellValue);
+                        Assert.Equal("", details.GetRow(2).GetCell(4).StringCellValue);
+                        Assert.True(details.GetRow(1).GetCell(4).CellStyle.WrapText);
                         Assert.Equal(32, details.GetRow(1).HeightInPoints);
                         Assert.True(details.PaneInformation.IsFreezePane());
-                        Assert.Equal(3, details.PaneInformation.VerticalSplitPosition);
-                        Assert.Equal("A1:O3", details.GetCTWorksheet().autoFilter.@ref);
+                        Assert.Equal(4, details.PaneInformation.VerticalSplitPosition);
+                        Assert.Equal("A1:P3", details.GetCTWorksheet().autoFilter.@ref);
                         ISheet issues = workbook.GetSheet("异常图框");
                         Assert.Equal("图框ID", issues.GetRow(0).GetCell(0).StringCellValue);
                         Assert.Equal("001235", issues.GetRow(1).GetCell(0).StringCellValue);
+                        Assert.Contains("重复", issues.GetRow(1).GetCell(3).StringCellValue);
+                        // D-057：机台表追加“重复图框”“待确认”两列（老列位不变）。
+                        Assert.Equal("重复图框", summary.GetRow(4).GetCell(7).StringCellValue);
+                        Assert.Equal("待确认", summary.GetRow(4).GetCell(8).StringCellValue);
+                        Assert.Equal(1d, summary.GetRow(5).GetCell(7).NumericCellValue);
+                        Assert.Equal(0d, summary.GetRow(5).GetCell(8).NumericCellValue);
                         Assert.True(workbook.NumCellStyles < 10);
                     }
                     finally { workbook.Close(); }
@@ -93,10 +102,10 @@ namespace UNCAD.Tests
             {
                 ISheet details = workbook.GetSheet("图框明细");
                 Assert.Equal(2, details.LastRowNum);
-                Assert.Equal("未命名项目型号", details.GetRow(0).GetCell(11).StringCellValue);
-                Assert.Contains("只有特征", details.GetRow(1).GetCell(11).StringCellValue);
-                Assert.Equal("0002", details.GetRow(2).GetCell(2).StringCellValue);
-                Assert.Equal("", details.GetRow(2).GetCell(3).StringCellValue);
+                Assert.Equal("未命名项目型号", details.GetRow(0).GetCell(12).StringCellValue);
+                Assert.Contains("只有特征", details.GetRow(1).GetCell(12).StringCellValue);
+                Assert.Equal("0002", details.GetRow(2).GetCell(3).StringCellValue);
+                Assert.Equal("", details.GetRow(2).GetCell(4).StringCellValue);
             }
             finally { workbook.Close(); }
 
@@ -106,8 +115,8 @@ namespace UNCAD.Tests
             {
                 ISheet details = workbook.GetSheet("图框明细");
                 Assert.Equal(1, details.LastRowNum);
-                Assert.Equal(11, details.GetRow(0).Cells.Count);
-                Assert.Equal("0002", details.GetRow(1).GetCell(2).StringCellValue);
+                Assert.Equal(12, details.GetRow(0).Cells.Count);
+                Assert.Equal("0002", details.GetRow(1).GetCell(3).StringCellValue);
             }
             finally { workbook.Close(); }
         }

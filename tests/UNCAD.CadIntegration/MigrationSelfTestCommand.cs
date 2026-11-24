@@ -1106,6 +1106,7 @@ namespace UNCAD.CadIntegration
                         && !CadDrawingInfoTableWriter.IsDrawingInfoTable(cloned),
                         slot.Generation + " 克隆的 BOQ 表布局不对（列 "
                         + cloned.Columns.Count + "）。");
+                    CheckDrawingInfoTemplates(tx, slot, selection);
                     Info("  d) " + slot.Generation + " 旧属性已移除（"
                         + LegacyJsonTag + "/" + LegacyBridgeTag + "/" + ConduitTag
                         + "），FRAMEINFO 主存储完好，MACHINEID-* 值保留，克隆 BOQ 表 "
@@ -1845,6 +1846,83 @@ namespace UNCAD.CadIntegration
                     return attribute.IsMTextAttribute;
             }
             return false;
+        }
+
+        /// <summary>
+        /// D-057：制图信息表六列按模板写（真机核对写表本身——表是真实 CAD Table，
+        /// 不是字符串契约）。三步：自定义模板六列各写各的 → 默认模板只动楼层与
+        /// 日期、其余格保留 → 全程不改表格行列尺寸。
+        /// </summary>
+        private static void CheckDrawingInfoTemplates(Transaction tx,
+            FrameSlot slot, FillSelection selection)
+        {
+            if (selection.DrawingInfoTableIds == null
+                || selection.DrawingInfoTableIds.Length != 1)
+            {
+                Check(false, slot.Generation + " 迁移后选集应有且只有一张制图信息表（实际 "
+                    + (selection.DrawingInfoTableIds?.Length ?? 0) + "）。");
+                return;
+            }
+            Table info = (Table)tx.GetObject(selection.DrawingInfoTableIds[0],
+                OpenMode.ForWrite, true);
+            double[] widths = Enumerable.Range(0, info.Columns.Count)
+                .Select(index => info.Columns[index].Width).ToArray();
+            double[] heights = Enumerable.Range(0, info.Rows.Count)
+                .Select(index => info.Rows[index].Height).ToArray();
+            ObjectId[] ids = selection.DrawingInfoTableIds;
+            var machine = new MachineRow
+            {
+                MachineId = "SELFTEST", CircuitName = "模板回路", DeviceFloor = "3F",
+                PanelFloor = "2F"
+            };
+            string reviewerBefore = info.Cells[1, 3].TextString;
+            DateTime run = new DateTime(2026, 11, 25, 6, 30, 0, DateTimeKind.Utc);
+
+            // ① 自定义模板：固定文字 + 占位符 + 时间格式。
+            DrawingInfoTemplates custom = DrawingInfoTemplates.Create(
+                "电气", "(设备楼层)//(上游楼层)", "张三", "", "(U1F创建时间:yyyyMMdd)", "V1");
+            CadDrawingInfoTableWriter.Write(tx, ids, machine, run, custom, null, "U1F");
+            Check(info.Cells[1, 0].TextString == "电气",
+                slot.Generation + " 制图信息表「专业」应写入固定文字（实际 "
+                + info.Cells[1, 0].TextString + "）。");
+            Check(info.Cells[1, 1].TextString == "3F//2F",
+                slot.Generation + " 制图信息表「楼层」占位符渲染不对（实际 "
+                + info.Cells[1, 1].TextString + "）。");
+            Check(info.Cells[1, 2].TextString == "张三",
+                slot.Generation + " 制图信息表「制图」应写入固定文字（实际 "
+                + info.Cells[1, 2].TextString + "）。");
+            Check(info.Cells[1, 3].TextString == reviewerBefore,
+                slot.Generation + " 模板留空的「审核」格被改动了（"
+                + reviewerBefore + " → " + info.Cells[1, 3].TextString + "）。");
+            string expectedDate = run.ToLocalTime().ToString("yyyyMMdd",
+                System.Globalization.CultureInfo.InvariantCulture);
+            Check(info.Cells[1, 4].TextString == expectedDate,
+                slot.Generation + " 制图信息表「日期」时间占位符格式不对（期望 "
+                + expectedDate + "，实际 " + info.Cells[1, 4].TextString + "）。");
+            Check(info.Cells[1, 5].TextString == "V1",
+                slot.Generation + " 制图信息表「版本」应写入固定文字（实际 "
+                + info.Cells[1, 5].TextString + "）。");
+
+            // ② 默认模板：只动楼层与日期，其余四格保留上一步写的内容。
+            CadDrawingInfoTableWriter.Write(tx, ids, new MachineRow
+                {
+                    MachineId = "SELFTEST", CircuitName = "模板回路", DeviceFloor = "4F"
+                }, run);
+            Check(info.Cells[1, 1].TextString == "4F",
+                slot.Generation + " 默认模板「楼层」应写成 4F（实际 "
+                + info.Cells[1, 1].TextString + "）。");
+            Check(info.Cells[1, 0].TextString == "电气" && info.Cells[1, 2].TextString == "张三"
+                && info.Cells[1, 5].TextString == "V1",
+                slot.Generation + " 默认模板不应改动专业/制图/版本格（实际 "
+                + info.Cells[1, 0].TextString + "/" + info.Cells[1, 2].TextString + "/"
+                + info.Cells[1, 5].TextString + "）。");
+
+            // ③ 两次写表都不改表格行列尺寸。
+            Check(widths.SequenceEqual(Enumerable.Range(0, info.Columns.Count)
+                    .Select(index => info.Columns[index].Width))
+                && heights.SequenceEqual(Enumerable.Range(0, info.Rows.Count)
+                    .Select(index => info.Rows[index].Height)),
+                slot.Generation + " 写制图信息表改变了表格行列尺寸。");
         }
 
         private static void Check(bool condition, string message)

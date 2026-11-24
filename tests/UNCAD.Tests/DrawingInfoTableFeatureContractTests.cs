@@ -41,8 +41,14 @@ namespace UNCAD.Tests
             Assert.Contains("FrameRegionCollector.CurrentFrameName", migration);
             string writer = Read("src", "UNCAD", "Features", "Fill",
                 "CadDrawingInfoTableWriter.cs");
-            Assert.Contains("table.SetTextString(headerRow + 1, 1, floor)", writer);
-            Assert.Contains("table.SetTextString(headerRow + 1, 4, date)", writer);
+            // D-057：六列内容按 U1SET 模板写；模板留空的列不动图框里的内容。
+            Assert.Contains("DrawingInfoTemplates templates = null", writer);
+            Assert.Contains("if (!effective.IsSet(column)) continue;", writer);
+            Assert.Contains("table.SetTextString(headerRow + 1, column, values[column])", writer);
+            Assert.Contains("DrawingInfoContext.ForRun(machine, previous,", writer);
+            // 单框与批量都把模板和上一条记录（时间来源）传给写入方。
+            Assert.Contains("options.DrawingInfo, frameInfoPrevious", fill);
+            Assert.Contains("options.DrawingInfo, plan.PreviousRecord", update);
             string submission = Read("src", "UNCAD", "Features", "Submit",
                 "AutomaticSubmissionService.cs");
             Assert.Contains("CadTableLayoutClassifier.IsDrawingInfoTable(table)", submission);

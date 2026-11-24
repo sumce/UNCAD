@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using NPOI.SS.UserModel;
+using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 
 namespace UNCAD.Core.Submission
@@ -11,15 +12,20 @@ namespace UNCAD.Core.Submission
     /// BOQ 工作簿里的 DATA 工作表：一行一个回路（= 一个图框/设备），记录电缆、软管、
     /// 桥架、线管、上下游轴位与更新时间，便于按回路追溯数据来源。
     ///
-    /// 更新语义与 BOQ 设备列保持一致：按「机台ID + 回路名」定位——有则更新、无则追加，
-    /// 同机台其它回路的行保留不动。因此重复执行 U1F/U1U 只刷新那一行，不会累积重复行。
+    /// 更新语义与 BOQ 设备列保持一致：按「机台ID + 回路名 + 上游编号」定位——
+    /// 有则更新、无则追加，同机台其它回路的行保留不动。因此重复执行 U1F/U1U
+    /// 只刷新那一行，不会累积重复行。
+    ///
+    /// D-057：行键加上游编号。旧版只按「机台ID + 回路名」，同机台同名回路
+    /// （上游编号不同）互相覆盖、只留最后一行。旧工作簿里没有上游编号的行
+    /// （该回路名在表里只有一行）首次遇到带上游的记录时沿用并补上上游编号。
     /// </summary>
     internal static class BoqDataSheet
     {
         public const string SheetName = "DATA";
 
         private const int HeaderRowIndex = 0;
-        private const int ColumnCount = 15;
+        private const int ColumnCount = 16;
         private const int UpdatedAtIndex = 0;
         private const int MachineIdIndex = 1;
         private const int DeviceNameIndex = 2;
@@ -35,6 +41,8 @@ namespace UNCAD.Core.Submission
         private const int UpstreamAxisIndex = 12;
         private const int DownstreamAxisIndex = 13;
         private const int MaterialCountIndex = 14;
+        /// <summary>D-057：上游编号（追加在末尾，老工作簿的列位不变）。</summary>
+        internal const int UpstreamIdIndex = 15;
 
         internal static readonly string[] Headers =
         {
@@ -43,8 +51,19 @@ namespace UNCAD.Core.Submission
             "软管管径", "软管长度(m)",
             "桥架信息", "桥架长度(m)",
             "线管信息", "线管长度(m)",
-            "上游轴位", "下游轴位", "材料行数"
+            "上游轴位", "下游轴位", "材料行数",
+            "上游编号"
         };
+
+        /// <summary>表里现有行的索引：完整行键 → 行号；机台+回路名 → 行数。</summary>
+        private sealed class SheetIndex
+        {
+            public Dictionary<string, int> Rows =
+                new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
+
+            public Dictionary<string, int> NameCounts =
+                new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
+        }
 
         internal static void Write(IWorkbook workbook, IEnumerable<SubmissionRecord> records,
             DateTime updatedAt)
@@ -62,7 +81,7 @@ namespace UNCAD.Core.Submission
             WriteHeader(sheet);
             if (created || headerMissing) StyleNewSheet(workbook, sheet);
 
-            Dictionary<string, int> rows = FindRows(sheet);
+            SheetIndex index = FindRows(sheet);
             string timestamp = updatedAt.ToString("yyyy-MM-dd HH:mm:ss",
                 CultureInfo.InvariantCulture);
             foreach (SubmissionRecord record in source)
@@ -70,11 +89,28 @@ namespace UNCAD.Core.Submission
                 string machineId = (record.MachineId ?? "").Trim();
                 string deviceName = (record.DeviceName ?? "").Trim();
                 if (deviceName.Length == 0) continue;
-                string key = RowKey(machineId, deviceName);
-                if (!rows.TryGetValue(key, out int rowIndex))
+                string upstream = (record.UpstreamId ?? "").Trim();
+                string upstreamKey = CircuitIdentityKey.UpstreamKey(upstream);
+                string key = RowKey(machineId, deviceName, upstreamKey);
+                if (!index.Rows.TryGetValue(key, out int rowIndex))
                 {
-                    rowIndex = NextRowIndex(sheet);
-                    rows[key] = rowIndex;
+                    string nameKey = NameKey(machineId, deviceName);
+                    index.NameCounts.TryGetValue(nameKey, out int named);
+                    if (upstreamKey.Length > 0 && named == 1
+                        && index.Rows.TryGetValue(RowKey(machineId, deviceName, ""),
+                            out int legacyRow))
+                    {
+                        // 旧版留下的“无上游”行，且这个回路名在表里只有这一行：
+                        // 沿用它并补上上游编号（不留两行）。
+                        index.Rows.Remove(RowKey(machineId, deviceName, ""));
+                        rowIndex = legacyRow;
+                    }
+                    else
+                    {
+                        rowIndex = NextRowIndex(sheet);
+                        index.NameCounts[nameKey] = named + 1;
+                    }
+                    index.Rows[key] = rowIndex;
                 }
                 IRow row = sheet.GetRow(rowIndex) ?? sheet.CreateRow(rowIndex);
                 SetText(row, UpdatedAtIndex, timestamp);
@@ -94,6 +130,7 @@ namespace UNCAD.Core.Submission
                 SetNumber(row, MaterialCountIndex,
                     (record.Materials == null ? 0 : record.Materials.Count)
                         .ToString(CultureInfo.InvariantCulture));
+                SetText(row, UpstreamIdIndex, upstream);
             }
         }
 
@@ -123,7 +160,7 @@ namespace UNCAD.Core.Submission
                     if (cell != null) cell.CellStyle = style;
                 }
                 sheet.CreateFreezePane(0, 1);
-                int[] widths = { 19, 14, 18, 12, 26, 14, 10, 13, 22, 13, 22, 13, 12, 12, 10 };
+                int[] widths = { 19, 14, 18, 12, 26, 14, 10, 13, 22, 13, 22, 13, 12, 12, 10, 18 };
                 for (int column = 0; column < widths.Length; column++)
                     sheet.SetColumnWidth(column, widths[column] * 256);
             }
@@ -133,9 +170,9 @@ namespace UNCAD.Core.Submission
             }
         }
 
-        private static Dictionary<string, int> FindRows(ISheet sheet)
+        private static SheetIndex FindRows(ISheet sheet)
         {
-            var rows = new Dictionary<string, int>(IdentityTextNormalizer.Comparer);
+            var index = new SheetIndex();
             for (int rowIndex = HeaderRowIndex + 1; rowIndex <= sheet.LastRowNum; rowIndex++)
             {
                 IRow row = sheet.GetRow(rowIndex);
@@ -143,9 +180,14 @@ namespace UNCAD.Core.Submission
                 string machineId = CellText(row.GetCell(MachineIdIndex));
                 string deviceName = CellText(row.GetCell(DeviceNameIndex));
                 if (deviceName.Length == 0) continue;
-                rows[RowKey(machineId, deviceName)] = rowIndex;
+                string upstreamKey = CircuitIdentityKey.UpstreamKey(
+                    CellText(row.GetCell(UpstreamIdIndex)));
+                index.Rows[RowKey(machineId, deviceName, upstreamKey)] = rowIndex;
+                string nameKey = NameKey(machineId, deviceName);
+                index.NameCounts[nameKey] = index.NameCounts.TryGetValue(nameKey,
+                    out int named) ? named + 1 : 1;
             }
-            return rows;
+            return index;
         }
 
         private static int NextRowIndex(ISheet sheet)
@@ -155,8 +197,14 @@ namespace UNCAD.Core.Submission
             return rowIndex;
         }
 
-        private static string RowKey(string machineId, string deviceName)
-            => (machineId ?? "").Trim() + "\n" + (deviceName ?? "").Trim();
+        // '\u001f' 不是空白：IdentityTextNormalizer 的比较器忽略空白，用它做
+        // 分隔符才不会把「机台/回路名/上游」的边界抹掉。
+        private static string RowKey(string machineId, string deviceName, string upstreamKey)
+            => (machineId ?? "").Trim() + "\u001f" + (deviceName ?? "").Trim()
+                + "\u001f" + (upstreamKey ?? "");
+
+        private static string NameKey(string machineId, string deviceName)
+            => (machineId ?? "").Trim() + "\u001f" + (deviceName ?? "").Trim();
 
         private static string CellText(ICell cell)
             => cell == null ? "" : (cell.ToString() ?? "").Trim();

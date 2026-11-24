@@ -519,8 +519,12 @@ namespace UNCAD.Features.Fill
                             throw new InvalidOperationException("图框 " + plan.Region.Handle
                                 + " 的清单表写入失败。");
                         tableRows += filled;
+                        // D-057：制图信息表六列按 U1SET 模板写（留空的列不动图框里的
+                        // 内容）；时间与写进 frameinfo_json 的同源。
                         CadDrawingInfoTableWriter.Write(transaction,
-                            plan.Selection.DrawingInfoTableIds, plan.Machine, DateTime.Now);
+                            plan.Selection.DrawingInfoTableIds, plan.Machine,
+                            DateTime.UtcNow, options.DrawingInfo, plan.PreviousRecord,
+                            CommandIds.FillUpdate);
 
                         // 2026-11-06：复制框先清空源框遗留旧信息再写新数据。
                         // 3.0.0.14 修正顺序：清空必须先于 FillFrame。旧代码清空排

@@ -205,16 +205,17 @@ namespace UNCAD.Core.Submission
         internal static void WriteTracked(string targetPath, string templatePath,
             IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
             BoqWorkbookWriteProgress progress, Action beforeReplace = null,
-            Action afterReplace = null)
+            Action afterReplace = null, UNCAD.Core.Fill.BoqTitleTemplates titles = null)
         {
             if (progress == null) throw new ArgumentNullException(nameof(progress));
             WriteCore(targetPath, templatePath, records, allowEmptyMaterials,
-                beforeReplace, afterReplace, progress);
+                beforeReplace, afterReplace, progress, titles);
         }
 
         private static void WriteCore(string targetPath, string templatePath,
             IEnumerable<SubmissionRecord> records, bool allowEmptyMaterials,
-            Action beforeReplace, Action afterReplace, BoqWorkbookWriteProgress progress)
+            Action beforeReplace, Action afterReplace, BoqWorkbookWriteProgress progress,
+            UNCAD.Core.Fill.BoqTitleTemplates titles = null)
         {
             if (string.IsNullOrWhiteSpace(targetPath))
                 throw new ArgumentException("BOQ 输出文件路径为空。", nameof(targetPath));
@@ -258,22 +259,31 @@ namespace UNCAD.Core.Submission
                 if (existedBeforeWrite)
                     File.Copy(fullPath, verificationBackup, false);
                 workbook = Load(fullPath, templatePath);
+                // D-057：清单标题三行按 U1SET 模板重写（留空的行用模板 xlsx/文件里现有的文字）。
+                ApplyTitles(workbook, titles, machineIds[0], DateTime.Now,
+                    Environment.UserName);
                 ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
                 Dictionary<string, int> rows = FindItemRows(sheet);
                 Dictionary<string, int> deviceColumns = FindDeviceColumns(sheet);
                 var expected = new Dictionary<string, Dictionary<string, decimal>>(
                     IdentityTextNormalizer.Comparer);
+                // D-057：设备列按回路身份分组（有键用键，无键退回回路名）——同机台
+                // 同名回路（上游编号不同）不再并成一列。列名在机台内有重名时
+                // 带“（上游 X）”后缀，由 BoqDeviceLabels 在写入前补到记录上。
                 foreach (IGrouping<string, SubmissionRecord> deviceGroup in sourceRecords
                     .Where(record => record != null)
-                    .GroupBy(record => (record.DeviceName ?? "").Trim(),
-                        IdentityTextNormalizer.Comparer))
+                    .GroupBy(record => BoqDeviceLabels.ColumnKey(record),
+                        StringComparer.OrdinalIgnoreCase))
                 {
-                    if (deviceGroup.Key.Length == 0)
+                    SubmissionRecord lead = deviceGroup.First();
+                    string deviceLabel = BoqDeviceLabels.LabelOf(lead);
+                    if (deviceLabel.Length == 0)
                         throw new InvalidDataException("BOQ 设备名称不能为空，不能创建设备列。");
-                    int deviceColumn = GetOrCreateDeviceColumn(sheet, deviceColumns, deviceGroup.Key);
+                    int deviceColumn = GetOrCreateDeviceColumn(sheet, deviceColumns,
+                        deviceLabel, lead.DeviceName.Trim());
                     Dictionary<string, decimal> deviceQuantities = ReadQuantities(
                         deviceGroup, rows, allowEmptyMaterials);
-                    expected[deviceGroup.Key] = deviceQuantities;
+                    expected[deviceLabel] = deviceQuantities;
                     // 只清空当前设备列；同一机台其他设备列必须完整保留。
                     foreach (KeyValuePair<string, int> item in rows)
                         SetNumber(GetOrCreateCell(sheet.GetRow(item.Value), deviceColumn), 0m);
@@ -427,6 +437,26 @@ namespace UNCAD.Core.Submission
             return 0m;
         }
 
+        /// <summary>
+        /// D-057：把标题模板写进 A1/A2/A3。模板为 null 或三行全空时不动——清单
+        /// 文件里现有的标题（模板 xlsx 的默认文字，或用户手改过的）原样保留。
+        /// </summary>
+        private static void ApplyTitles(IWorkbook workbook,
+            UNCAD.Core.Fill.BoqTitleTemplates titles, string machineId, DateTime now,
+            string user)
+        {
+            if (titles == null || !titles.IsSet) return;
+            ISheet sheet = workbook.GetSheet(SheetName) ?? workbook.GetSheetAt(0);
+            for (int line = 0; line < titles.Lines.Count; line++)
+            {
+                if (titles.Lines[line].Length == 0) continue;
+                string text = titles.Render(line, machineId, now, user);
+                IRow row = sheet.GetRow(line) ?? sheet.CreateRow(line);
+                ICell cell = row.GetCell(0) ?? row.CreateCell(0);
+                cell.SetCellValue(text);
+            }
+        }
+
         private static IWorkbook Load(string targetPath, string templatePath)
         {
             string source = File.Exists(targetPath) ? targetPath : templatePath;
@@ -454,8 +484,26 @@ namespace UNCAD.Core.Submission
 
         private static int GetOrCreateDeviceColumn(ISheet sheet,
             Dictionary<string, int> deviceColumns, string deviceName)
+            => GetOrCreateDeviceColumn(sheet, deviceColumns, deviceName, "");
+
+        /// <summary>
+        /// legacyName（可空）：列名带上游后缀时传回路名——旧版把同名回路并进了
+        /// 以回路名命名的列（数量相加）。第一条带上游的回路接管那一列：改列名，
+        /// 数量随后按本回路清零重写；第二条同名回路另起一列。
+        /// </summary>
+        private static int GetOrCreateDeviceColumn(ISheet sheet,
+            Dictionary<string, int> deviceColumns, string deviceName, string legacyName)
         {
             if (deviceColumns.TryGetValue(deviceName, out int existing)) return existing;
+            if (!string.IsNullOrEmpty(legacyName)
+                && deviceColumns.TryGetValue(legacyName, out int legacyColumn))
+            {
+                GetOrCreateRow(sheet, DeviceHeaderNamesRow).GetCell(legacyColumn)
+                    .SetCellValue(deviceName);
+                deviceColumns.Remove(legacyName);
+                deviceColumns[deviceName] = legacyColumn;
+                return legacyColumn;
+            }
             int column = FirstDeviceColumn;
             while (deviceColumns.Values.Contains(column)) column++;
             IRow groupHeader = GetOrCreateRow(sheet, DeviceHeaderGroupRow);

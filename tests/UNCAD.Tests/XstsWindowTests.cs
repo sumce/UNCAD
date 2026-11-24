@@ -38,7 +38,9 @@ namespace UNCAD.Tests
                         "Fluent 主题字典必须按窗口合并");
 
                     Assert.Equal(2, window.MachineGrid.Items.Count);
-                    Assert.Equal(7, window.MachineGrid.Columns.Count);
+                    // D-057：追加“重复图框”“待确认”两列（同名回路口径）+ 缺少/待确认回路名列。
+                    Assert.Equal(10, window.MachineGrid.Columns.Count);
+                    Assert.Equal(26, window.MachineGrid.RowHeight);
                     Assert.Equal(2, window.IssueGrid.Items.Count);
                     Assert.Equal(4, window.IssueGrid.Columns.Count);
                     Assert.Equal(3, window.ReportTabs.Items.Count);
@@ -52,7 +54,18 @@ namespace UNCAD.Tests
                     Assert.Contains("缺回路 1 台", badges, StringComparison.Ordinal);
                     Assert.Contains("完整 0 台", badges, StringComparison.Ordinal);
                     Assert.Contains("多出 1 台", badges, StringComparison.Ordinal);
+                    Assert.Contains("待确认 0 台", badges, StringComparison.Ordinal);
                     Assert.Contains("无基准 0 台", badges, StringComparison.Ordinal);
+                    // D-057 详情条：开窗即选中首台机台，已选/缺少回路全名列出
+                    //（格子里的只是截断预览）。
+                    Assert.Equal(Visibility.Visible, window.DetailStrip.Visibility);
+                    Assert.Contains("M1", window.DetailTitleText, StringComparison.Ordinal);
+                    Assert.Contains("已选 2 / 应有 3", window.DetailTitleText,
+                        StringComparison.Ordinal);
+                    Assert.Contains("C1、C2", Detail(window, "已选回路"),
+                        StringComparison.Ordinal);
+                    Assert.Equal("C3", Detail(window, "缺少回路"));
+                    Assert.Equal("无", Detail(window, "待确认"));
                     Assert.True(window.CloseButton.IsDefault);
                     Assert.True(window.CloseButton.IsCancel);
                     window.Close();
@@ -98,24 +111,33 @@ namespace UNCAD.Tests
                     Assert.Null(window.FindName("BlindGrid"));
                     Assert.Equal(3, window.FrameGrid.Items.Count);
                     Assert.True(window.FrameGrid.IsReadOnly);
-                    Assert.Equal(3, window.FrameGrid.FrozenColumnCount);
-                    Assert.Equal(new[] { "机台 ID", "回路名称", "图框ID", "电缆型号", "电缆米数",
+                    // D-057：图框明细冻结 4 列（多一列“上游编号”），行高 32→26。
+                    Assert.Equal(4, window.FrameGrid.FrozenColumnCount);
+                    Assert.Equal(26, window.FrameGrid.RowHeight);
+                    Assert.Equal(new[] { "机台 ID", "回路名称", "上游编号", "图框ID", "电缆型号", "电缆米数",
                         "桥架型号", "桥架米数", "软管型号", "软管米数", "线管型号", "线管米数",
                         "配件[自填].A型号", "配件[自填].A数量（套）" },
                         window.FrameGrid.Columns.Select(column => (string)column.Header));
                     Assert.Contains("3 框", (string)window.FrameTab.Header);
                     var cableText = Assert.IsType<System.Windows.Controls.TextBlock>(
-                        window.FrameGrid.Columns[3].GetCellContent(report.Frames[0]));
+                        window.FrameGrid.Columns[4].GetCellContent(report.Frames[0]));
                     Assert.Equal("YJV-3*25", cableText.Text);
                     var cableQuantity = Assert.IsType<System.Windows.Controls.TextBlock>(
-                        window.FrameGrid.Columns[4].GetCellContent(report.Frames[0]));
+                        window.FrameGrid.Columns[5].GetCellContent(report.Frames[0]));
                     Assert.Equal("12", cableQuantity.Text);
                     Assert.Contains("编码：1.1", (string)cableText.ToolTip);
                     var emptyModel = Assert.IsType<System.Windows.Controls.TextBlock>(
-                        window.FrameGrid.Columns[3].GetCellContent(report.Frames[2]));
+                        window.FrameGrid.Columns[4].GetCellContent(report.Frames[2]));
                     Assert.Equal("", emptyModel.Text);
                     Assert.DoesNotContain("\n", cableText.Text);
-                    Assert.Equal(32, window.FrameGrid.RowHeight);
+                    // 选中图框行 → 详情条切换成该框的清单明细。
+                    window.FrameGrid.SelectedIndex = 0;
+                    Pump(2);
+                    Assert.Contains("M1 / 主回路", window.DetailTitleText,
+                        StringComparison.Ordinal);
+                    Assert.Contains("YJV-3*25", window.DetailRows
+                        .First(row => row.Key.StartsWith("清单", StringComparison.Ordinal)).Value,
+                        StringComparison.Ordinal);
                     Assert.DoesNotContain("未上图", StatusBadgeBar.Summary(window.BadgeBar));
                     CaptureIfRequested(window, "xsts-details.png");
                     window.Width = window.MinWidth;
@@ -193,6 +215,9 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        private static string Detail(XstsWindow window, string label)
+            => window.DetailRows.Single(row => row.Key == label).Value;
+
         private static XstsReport BuildReport()
         {
             var report = new XstsReport { FrameCount = 3 };
@@ -200,6 +225,7 @@ namespace UNCAD.Tests
             {
                 SelectedCircuitCount = 2,
                 ExpectedCircuitCount = 3,
+                MissingCircuitCount = 1,
                 ExpectedDataAvailable = true
             };
             first.SelectedCircuits.AddRange(new[] { "C1", "C2" });

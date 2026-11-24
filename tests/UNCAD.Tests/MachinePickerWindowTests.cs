@@ -32,6 +32,65 @@ namespace UNCAD.Tests
                 }
             };
 
+        [Fact]
+        public void SameNameCircuits_AreToldApartByTheUpstreamColumn()
+        {
+            // D-057：同机台两条同名回路（上游编号不同）——旧列表只有 设备/回路、
+            // 盘柜类型、配电详情 三列，两行长得一模一样，要点中才在预览里看到 FR。
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var rows = new List<MachineRow>
+                    {
+                        new MachineRow
+                        {
+                            Region = "AMHS", MachineId = "MEDPC01", CircuitName = "AC Rack",
+                            Fr = "3N-11B1A-PP-02", FacilitySwitch = "FS-A",
+                            Next = "I-Line盘", Detail = "N480 3P4W 3P100A"
+                        },
+                        new MachineRow
+                        {
+                            Region = "AMHS", MachineId = "MEDPC01", CircuitName = "AC Rack",
+                            Fr = "3N-31D2A-PP-03", FacilitySwitch = "FS-B",
+                            Next = "I-Line盘", Detail = "N480 3P4W 3P100A"
+                        }
+                    };
+                    var window = Window(
+                        id => string.Equals(id, "MEDPC01", StringComparison.OrdinalIgnoreCase)
+                            ? rows : new List<MachineRow>(),
+                        machineIds: new[] { "MEDPC01" });
+                    window.Show();
+                    Pump(2);
+                    window.MachineInput.Text = "MEDPC01";
+                    Pump(2);
+
+                    Assert.Equal(5, window.CircuitGrid.Columns.Count);
+                    Assert.Equal(26, window.CircuitGrid.RowHeight);
+                    Assert.Equal(2, window.CircuitGrid.Items.Count);
+                    var first = (MachinePickerWindow.CircuitRow)window.CircuitGrid.Items[0];
+                    var second = (MachinePickerWindow.CircuitRow)window.CircuitGrid.Items[1];
+                    Assert.Equal("AC Rack（上游 3N-11B1A-PP-02）", first.DisplayName);
+                    Assert.Equal("AC Rack（上游 3N-31D2A-PP-03）", second.DisplayName);
+                    Assert.Equal("FS-A", first.FacilitySwitch);
+                    Assert.Equal("FS-B", second.FacilitySwitch);
+                    Assert.Contains("同名回路", window.MachineSummary.Text);
+
+                    // 筛选框认上游编号：直接筛出两条同名回路里的那一条。
+                    window.CircuitFilterBox.Text = "PP-03";
+                    Pump(2);
+                    Assert.Equal(1, window.CircuitGrid.Items.Count);
+                    window.Close();
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
         private static MachinePickerWindow Window(
             Func<string, List<MachineRow>> lookup = null,
             Func<MachineRow, string> preview = null,

@@ -117,6 +117,26 @@ namespace UNCAD.Infra
         public const string CableReserveILine = "UNC_CABLE_RESERVE_ILINE_MM";
         public const string CableReserveSocket = "UNC_CABLE_RESERVE_SOCKET_MM";
         public const string CableReserveBusbar = "UNC_CABLE_RESERVE_BUSBAR_MM";
+        // 3.6.0（D-057）：制图信息表（图框内小表）六列内容模板。留空 = 不改该格
+        //（图框里现有的内容保留，可手工改）；可写固定文本或占位符，例如
+        //(楼层)、(U1F创建时间)、(U1U更新时间:yyyy-MM-dd)。默认与 3.5.0 行为一致。
+        public const string FillInfoProfession = "UNC_FILL_INFO_PROFESSION";
+        public const string FillInfoFloor = "UNC_FILL_INFO_FLOOR";
+        public const string FillInfoDrafter = "UNC_FILL_INFO_DRAFTER";
+        public const string FillInfoReviewer = "UNC_FILL_INFO_REVIEWER";
+        public const string FillInfoDate = "UNC_FILL_INFO_DATE";
+        public const string FillInfoVersion = "UNC_FILL_INFO_VERSION";
+        // 3.6.0（D-057）：清单（BOQ）工作簿标题三行（A1/A2/A3）模板；留空 = 用模板
+        // xlsx 里的文字。占位符：(机台ID) (日期) (时间) (用户)。
+        public const string BoqTitleLine1 = "UNC_BOQ_TITLE_1";
+        public const string BoqTitleLine2 = "UNC_BOQ_TITLE_2";
+        public const string BoqTitleLine3 = "UNC_BOQ_TITLE_3";
+        // 3.6.0（D-057）：图框排版（XLAYOUT）参数——图框间距、机台标签字高、
+        // 标签离图框的距离（图纸单位），以及是否给重复/待确认图框画黄色提示框。
+        public const string XLayoutSpacing = "UNC_XLAYOUT_SPACING";
+        public const string XLayoutLabelTextHeight = "UNC_XLAYOUT_LABEL_HEIGHT";
+        public const string XLayoutLabelDistance = "UNC_XLAYOUT_LABEL_DISTANCE";
+        public const string XLayoutWarningMarker = "UNC_XLAYOUT_WARNING_MARKER";
         // 日志与操作记录（U1SET 可改）：级别 INFO/WARN/ERROR；日志保留天数；操作记录保留月数。
         public const string LogLevel = "UNC_LOG_LEVEL";
         public const string LogRetentionDays = "UNC_LOG_RETENTION_DAYS";

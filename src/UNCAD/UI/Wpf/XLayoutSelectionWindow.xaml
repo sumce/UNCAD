@@ -27,7 +27,7 @@
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
             <TextBlock Margin="0,6,0,0" FontSize="12" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="勾选后只重排这些回路；筛选框支持空格/逗号分隔多个关键词（任一命中即可，可整段粘贴机台ID）" />
+                       Text="勾选后只重排这些回路；筛选框支持空格/逗号分隔多个关键词（机台ID / 回路名称 / 上游编号 任一命中即可，可整段粘贴机台ID）" />
             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                 <TextBlock Text="排列方案" VerticalAlignment="Center" FontSize="13"
                            Margin="0,0,10,0" />
@@ -98,6 +98,12 @@
                                   Visibility="{Binding ShowCheckBox, Converter={StaticResource BoolToVisibility}}" />
                         <TextBlock Text="{Binding Header}" Margin="6,0,0,0"
                                    VerticalAlignment="Center" />
+                        <!-- D-057：回路叶子带上游编号与图框句柄（次要色）——
+                             同机台同名回路在树里一眼分得开 -->
+                        <TextBlock Text="{Binding Detail}" Margin="12,0,0,0"
+                                   VerticalAlignment="Center" FontSize="12"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                   Visibility="{Binding ShowDetail, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
                 </HierarchicalDataTemplate>
             </TreeView.ItemTemplate>

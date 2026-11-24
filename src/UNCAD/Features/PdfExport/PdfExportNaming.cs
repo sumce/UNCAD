@@ -38,15 +38,21 @@ namespace UNCAD.Features.PdfExport
         /// <c>&lt;机台&gt;_&lt;回路&gt;.pdf</c>；机台或回路为空时只保留另一方，
         /// 两者都为空回退为 <c>circuit.pdf</c>。非法文件名字符替换为 '_'，主体截断到
         /// <see cref="MaximumNameLength"/> 字符。
+        /// D-057：upstreamId 非空（机台内有同名回路）时文件名带上上游编号——
+        /// <c>&lt;机台&gt;_&lt;回路&gt;_&lt;上游&gt;.pdf</c>，两条同名回路的 PDF 互不覆盖、
+        /// 重出其中一条也不改另一条的文件名。
         /// </summary>
-        internal static string BuildFileName(string machineId, string circuitName)
+        internal static string BuildFileName(string machineId, string circuitName,
+            string upstreamId = null)
         {
             string machine = SanitizePart(machineId);
             string circuit = SanitizePart(circuitName);
+            string upstream = SanitizePart(upstreamId);
             string name;
             if (machine.Length == 0) name = circuit;
             else if (circuit.Length == 0) name = machine;
             else name = machine + NameSeparator + circuit;
+            if (upstream.Length > 0) name += NameSeparator + upstream;
             if (name.Length > MaximumNameLength)
                 name = name.Substring(0, MaximumNameLength).Trim().TrimEnd('.');
             if (name.Length == 0) name = EmptyNameFallback;
@@ -59,9 +65,9 @@ namespace UNCAD.Features.PdfExport
         /// （Windows 文件系统不区分大小写）。
         /// </summary>
         internal static string AllocateFileName(string machineId, string circuitName,
-            ISet<string> usedNames)
+            ISet<string> usedNames, string upstreamId = null)
         {
-            string baseName = BuildFileName(machineId, circuitName);
+            string baseName = BuildFileName(machineId, circuitName, upstreamId);
             if (usedNames == null) return baseName;
             string candidate = baseName;
             int suffix = 2;

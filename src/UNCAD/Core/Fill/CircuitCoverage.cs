@@ -51,72 +51,22 @@ namespace UNCAD.Core.Fill
         }
 
         /// <summary>
-        /// D-056 键口径：期望侧来自快照行（键必有），已选侧来自图框记录
-        /// （老图框键为空）。两段式配对——先按键一一消耗，再按名消耗剩余；
-        /// 一个已选条目只能满足一条期望，同名双回路只画一条时必报缺。
+        /// D-056 键口径（D-057 改走统一配对内核 <see cref="CircuitMatcher"/>）：
+        /// 期望侧来自快照行（键必有），已选侧来自图框记录（老图框键为空）。
+        /// 身份键一一配对；没配掉的图框只在机台内回路名唯一时按名配对
+        /// （上游改挂的过渡态照常放行）。同名回路不按名猜——图框没有可用
+        /// 的键时记为待确认，整机校验不放行：放行等于拿一张身份不明的图框
+        /// 替另一条回路出清单。缺失行带上游编号后缀，待确认的合并点名。
         /// </summary>
         public static CircuitCoverageResult Evaluate(string machineId,
             IEnumerable<CircuitSelection> expected, IEnumerable<CircuitSelection> selected)
         {
-            List<CircuitSelection> expectedList = (expected
-                ?? Enumerable.Empty<CircuitSelection>())
-                .Where(item => item != null
-                    && !string.IsNullOrWhiteSpace(item.CircuitName))
-                .ToList();
-            List<CircuitSelection> selectedList = (selected
-                ?? Enumerable.Empty<CircuitSelection>())
-                .Where(item => item != null
-                    && !string.IsNullOrWhiteSpace(item.CircuitName))
-                .ToList();
-
-            var remaining = new List<CircuitSelection>(selectedList);
-            var satisfied = new bool[expectedList.Count];
-            // 第一段：键匹配（期望键恒非空；已选键为空的老图框进不了这一段）。
-            for (int index = 0; index < expectedList.Count; index++)
-            {
-                CircuitSelection expect = expectedList[index];
-                CircuitSelection hit = remaining.FirstOrDefault(item =>
-                    !string.IsNullOrWhiteSpace(item.CircuitKey)
-                    && string.Equals(item.CircuitKey, expect.CircuitKey,
-                        StringComparison.OrdinalIgnoreCase));
-                if (hit == null) continue;
-                remaining.Remove(hit);
-                satisfied[index] = true;
-            }
-            // 第二段：尚未满足的期望按名匹配剩余已选（一一消耗）。
-            for (int index = 0; index < expectedList.Count; index++)
-            {
-                if (satisfied[index]) continue;
-                CircuitSelection expect = expectedList[index];
-                CircuitSelection hit = remaining.FirstOrDefault(item =>
-                    IdentityTextNormalizer.Equals(item.CircuitName, expect.CircuitName));
-                if (hit == null) continue;
-                remaining.Remove(hit);
-                satisfied[index] = true;
-            }
-            var missingItems = expectedList
-                .Where((item, index) => !satisfied[index]).ToList();
-
-            // 同名回路的缺失行加“（上游 …）”后缀，用户能分清缺的是哪一条。
-            var duplicateNames = new HashSet<string>(
-                expectedList.GroupBy(item => IdentityTextNormalizer.Key(item.CircuitName),
-                        StringComparer.OrdinalIgnoreCase)
-                    .Where(group => group.Count() > 1)
-                    .Select(group => group.Key),
-                StringComparer.OrdinalIgnoreCase);
-            string Display(CircuitSelection item)
-            {
-                if (!duplicateNames.Contains(IdentityTextNormalizer.Key(item.CircuitName)))
-                    return item.CircuitName;
-                string upstream = (item.UpstreamId ?? "").Trim();
-                return item.CircuitName + "（上游 "
-                    + (upstream.Length > 0 ? upstream : "无编号") + "）";
-            }
-
+            CircuitMatchResult match = CircuitMatcher.Pair(machineId, expected,
+                selected, hasBaseline: true);
             return new CircuitCoverageResult((machineId ?? "").Trim(),
-                expectedList.Select(item => item.CircuitName).ToList(),
-                selectedList.Select(item => item.CircuitName).ToList(),
-                missingItems.Select(Display).ToList());
+                match.Expected.Select(item => item.CircuitName).ToList(),
+                match.Selected.Select(item => item.CircuitName).ToList(),
+                CircuitMatchText.Missing(match).ToList());
         }
 
         private static IReadOnlyList<string> DistinctInOrder(IEnumerable<string> values)

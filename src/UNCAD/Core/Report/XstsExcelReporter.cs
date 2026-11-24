@@ -82,6 +82,10 @@ namespace UNCAD.Core.Report
             Set(sheet.GetRow(row - 1), 4, "应有回路", workbook, true);
             Set(sheet.GetRow(row - 1), 5, "缺少回路", workbook, true);
             Set(sheet.GetRow(row - 1), 6, "多出回路", workbook, true);
+            // D-057：同名回路口径——重复图框与“同名回路待确认”单列，追加在
+            // 既有列之后，老列位不变（现场对这张表做 VLOOKUP）。
+            Set(sheet.GetRow(row - 1), 7, "重复图框", workbook, true);
+            Set(sheet.GetRow(row - 1), 8, "待确认", workbook, true);
             foreach (XstsMachineSummary item in report.Machines)
             {
                 IRow current = sheet.CreateRow(row++);
@@ -93,6 +97,8 @@ namespace UNCAD.Core.Report
                 else Set(current, 4, item.ExpectedCircuitText);
                 Set(current, 5, item.MissingText);
                 Set(current, 6, item.UnexpectedText);
+                Set(current, 7, item.DuplicateFrameCount);
+                Set(current, 8, item.UnresolvedCircuitCount);
             }
             Set(sheet.CreateRow(row++), 0, "合计", workbook, true);
             Set(sheet.GetRow(row - 1), 3, report.SelectedCircuitCount);
@@ -101,10 +107,13 @@ namespace UNCAD.Core.Report
             else Set(sheet.GetRow(row - 1), 4, report.ExpectedCircuitText);
             Set(sheet.GetRow(row - 1), 5, report.MissingCircuitText);
             Set(sheet.GetRow(row - 1), 6, report.UnexpectedCircuitText);
+            Set(sheet.GetRow(row - 1), 7, report.DuplicateFrameCount);
+            Set(sheet.GetRow(row - 1), 8, report.UnresolvedCircuitCount);
 
             ISheet frames = workbook.CreateSheet("图框明细");
             IRow frameHeader = frames.CreateRow(0);
-            string[] frameColumns = new[] { "机台 ID", "回路名称", "图框ID" }
+            // D-057：图框明细加“上游编号”列——同机台同名回路靠它分行认领。
+            string[] frameColumns = new[] { "机台 ID", "回路名称", "上游编号", "图框ID" }
                 .Concat(report.MaterialColumns.SelectMany(column =>
                     new[] { column.ModelHeader, column.QuantityHeader })).ToArray();
             ICellStyle frameHeaderStyle = workbook.CreateCellStyle();
@@ -124,12 +133,13 @@ namespace UNCAD.Core.Report
                 IRow frameRow = frames.CreateRow(index + 1);
                 Set(frameRow, 0, item.MachineId);
                 Set(frameRow, 1, item.CircuitName);
+                Set(frameRow, 2, item.UpstreamId);
                 // Handles are identifiers, including digit-only ones; keep them as text.
-                Set(frameRow, 2, item.FrameHandle);
+                Set(frameRow, 3, item.FrameHandle);
                 for (int column = 0; column < item.Cells.Count; column++)
                 {
                     XstsFrameItem material = item.Cells[column];
-                    int modelColumn = 3 + column * 2;
+                    int modelColumn = 4 + column * 2;
                     Set(frameRow, modelColumn, material?.Model ?? "");
                     Set(frameRow, modelColumn + 1, material?.Quantity ?? "");
                     if (material == null) continue;
@@ -145,12 +155,12 @@ namespace UNCAD.Core.Report
                 }
                 frameRow.HeightInPoints = 32;
             }
-            int[] identityWidths = { 18, 24, 14 };
+            int[] identityWidths = { 18, 24, 18, 14 };
             for (int index = 0; index < frameColumns.Length; index++)
-                frames.SetColumnWidth(index, (index < 3 ? identityWidths[index]
-                    : (index - 3) % 2 == 0 ? 38 : 18) * 256);
+                frames.SetColumnWidth(index, (index < 4 ? identityWidths[index]
+                    : (index - 4) % 2 == 0 ? 38 : 18) * 256);
             FormatTable(frames, 0, report.Frames.Count, frameColumns.Length, bodyStyle);
-            frames.CreateFreezePane(3, 1);
+            frames.CreateFreezePane(4, 1);
 
             ISheet issues = workbook.CreateSheet("异常图框");
             IRow issueHeader = issues.CreateRow(0);
@@ -167,10 +177,10 @@ namespace UNCAD.Core.Report
                 Set(issueRow, 2, issue.CircuitName);
                 Set(issueRow, 3, issue.Description);
             }
-            for (int i = 0; i < 7; i++)
-                sheet.SetColumnWidth(i, (i >= 5 ? 38 : i == 0 ? 18 : 14) * 256);
+            for (int i = 0; i < 9; i++)
+                sheet.SetColumnWidth(i, (i >= 5 && i <= 6 ? 38 : i == 0 ? 18 : 14) * 256);
             for (int i = 0; i < 4; i++) issues.SetColumnWidth(i, (i == 3 ? 42 : 18) * 256);
-            FormatTable(sheet, 4, 4 + report.Machines.Count, 7, bodyStyle);
+            FormatTable(sheet, 4, 4 + report.Machines.Count, 9, bodyStyle);
             FormatTable(issues, 0, issues.LastRowNum, 4, bodyStyle);
             return workbook;
         }

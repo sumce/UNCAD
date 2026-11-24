@@ -53,8 +53,30 @@ namespace UNCAD.Infra
                     Settings.GetDouble(ConfigKeys.CableReserveBusbar,
                         CableReserveSettings.DefaultBusbarConnectorMillimeters)),
                 // 老版设备内预留横排毫米标自动识别（D-043，默认开，U1SET 可关）。
-                Settings.GetBool(ConfigKeys.FillDeviceReserveAutoDetect, true));
+                Settings.GetBool(ConfigKeys.FillDeviceReserveAutoDetect, true),
+                // D-057：制图信息表六列模板 + 清单标题模板（U1SET「图框与排版」）。
+                DrawingInfoTemplates.Create(
+                    Settings.Get(ConfigKeys.FillInfoProfession,
+                        DrawingInfoTemplates.DefaultProfession),
+                    Settings.Get(ConfigKeys.FillInfoFloor, DrawingInfoTemplates.DefaultFloor),
+                    Settings.Get(ConfigKeys.FillInfoDrafter,
+                        DrawingInfoTemplates.DefaultDrafter),
+                    Settings.Get(ConfigKeys.FillInfoReviewer,
+                        DrawingInfoTemplates.DefaultReviewer),
+                    Settings.Get(ConfigKeys.FillInfoDate, DrawingInfoTemplates.DefaultDate),
+                    Settings.Get(ConfigKeys.FillInfoVersion,
+                        DrawingInfoTemplates.DefaultVersion)),
+                BoqTitles());
         }
+
+        /// <summary>
+        /// D-057：清单（BOQ）标题三行模板（U1SET「图框与排版」）。三个键都留空时
+        /// <see cref="BoqTitleTemplates.IsSet"/> 为假，清单标题沿用模板 xlsx 里的文字。
+        /// </summary>
+        public static BoqTitleTemplates BoqTitles() => BoqTitleTemplates.Create(
+            Settings.Get(ConfigKeys.BoqTitleLine1, BoqTitleTemplates.DefaultLine1),
+            Settings.Get(ConfigKeys.BoqTitleLine2, BoqTitleTemplates.DefaultLine2),
+            Settings.Get(ConfigKeys.BoqTitleLine3, BoqTitleTemplates.DefaultLine3));
 
         private static int SafeInt(double value, int fallback)
         {

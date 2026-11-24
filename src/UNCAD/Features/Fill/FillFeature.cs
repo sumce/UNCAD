@@ -364,8 +364,11 @@ namespace UNCAD.Features.Fill
                         throw new InvalidOperationException(
                             "清单表写入失败（表格列数不足或格式不兼容），"
                             + "本次图纸修改已整体回滚；请检查清单表是否被改动后重试。");
+                    // D-057：制图信息表六列按 U1SET 模板写（留空的列不动图框里的内容）；
+                    // (U1F创建时间)/(U1U更新时间) 与写进 frameinfo_json 的时间同源。
                     CadDrawingInfoTableWriter.Write(transaction, selection.DrawingInfoTableIds,
-                        picked, DateTime.Now);
+                        picked, DateTime.UtcNow, options.DrawingInfo, frameInfoPrevious,
+                        command);
                     // 2026-11-06（用户要求 U1F 定义要清干净）：复制来的图框先把
                     // 源框遗留的 CABLE_INFO/CONDUIT_INFO/FRAMEINFO 显式清空，再写
                     // 新机台数据——同一事务，整体提交或整体回滚。
@@ -685,9 +688,10 @@ namespace UNCAD.Features.Fill
         internal static bool TryResolveFrameCircuit(Transaction transaction,
             FrameRegionGroup region, FillWorkbookSnapshot workbook,
             CadBlockDefinitionReader definitions,
-            out string machineId, out string circuitName, out string error)
+            out string machineId, out string circuitName, out string upstreamId,
+            out string error)
             => FillMachinePickStage.TryResolveFrameCircuit(transaction, region, workbook,
-                definitions, out machineId, out circuitName, out error);
+                definitions, out machineId, out circuitName, out upstreamId, out error);
 
         internal static int ResolveTableWriteCapacity(CadContext ctx, ObjectId[] tableIds,
             int startRow, int configuredRows)

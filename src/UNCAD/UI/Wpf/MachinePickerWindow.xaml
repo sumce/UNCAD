@@ -3,7 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="U1F · 机台选择"
-                 Width="820" Height="640" MinWidth="700" MinHeight="520"
+                 Width="980" Height="660" MinWidth="760" MinHeight="520"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -90,25 +90,25 @@
             <TextBlock Grid.Column="0" Text="筛选回路" VerticalAlignment="Center"
                        FontSize="13" Margin="0,0,10,0" />
             <ui:TextBox x:Name="CircuitFilterBox" x:FieldModifier="internal" Grid.Column="1"
-                        PlaceholderText="设备 / 回路 / 盘柜类型 / 配电详情"
+                        PlaceholderText="回路 / 上游编号 / 厂务开关 / 盘柜 / 配电详情"
                         TextChanged="OnCircuitFilterTextChanged" />
             <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="12,0,0,0"
                        FontSize="12" TextWrapping="NoWrap"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                       Text="命中任一关键词即可；清空恢复全部" />
+                       Text="命中任一关键词即可；同名回路看「上游编号」列区分" />
         </Grid>
 
-        <!-- ② 回路列表 -->
+        <!-- ② 回路列表（D-057：加上游编号/厂务开关列，行高 34→26 多看几行） -->
         <DataGrid x:Name="CircuitGrid" Grid.Row="5" Margin="24,10,24,8"
                   AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                   HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                  BorderThickness="0" RowHeight="34" FontSize="13"
+                  BorderThickness="0" RowHeight="26" FontSize="12"
                   SelectionMode="Single" SelectionUnit="FullRow"
                   SelectionChanged="OnCircuitSelectionChanged"
                   MouseDoubleClick="OnCircuitDoubleClick"
                   Background="{DynamicResource ControlFillColorDefaultBrush}">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DisplayName}" Width="215">
+                <DataGridTextColumn Header="设备 / 回路" Binding="{Binding DisplayName}" Width="190">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="VerticalAlignment" Value="Center" />
@@ -117,7 +117,26 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                <DataGridTextColumn Header="盘柜类型" Binding="{Binding PanelType}" Width="110">
+                <!-- 同机台同名回路（上游编号不同）靠这一列区分 -->
+                <DataGridTextColumn Header="上游编号" Binding="{Binding UpstreamId}" Width="160">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding UpstreamId}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="厂务开关" Binding="{Binding FacilitySwitch}" Width="96">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding FacilitySwitch}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="盘柜类型" Binding="{Binding PanelType}" Width="92">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="VerticalAlignment" Value="Center" />

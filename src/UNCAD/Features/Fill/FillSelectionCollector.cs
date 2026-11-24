@@ -227,7 +227,9 @@ namespace UNCAD.Features.Fill
                     DeviceName = json.DeviceName.Trim(),
                     // D-056：键只在 JSON 身份胜出时生效（物理标注胜出=旧键
                     // 属于他机回路，必须丢弃，走按名匹配+歧义弹窗）。
-                    CircuitKey = (json.CircuitKey ?? "").Trim()
+                    CircuitKey = (json.CircuitKey ?? "").Trim(),
+                    // D-057：上游编号明文随 JSON 身份带出，供统计/排版区分同名回路。
+                    UpstreamId = (json.Fr ?? "").Trim()
                 };
             }
 

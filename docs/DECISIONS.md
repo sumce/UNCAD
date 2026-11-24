@@ -4,6 +4,94 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-057: Same-Name Circuits Everywhere, Drawing-Info Table Templates, Layout Options (2026-11-24)
+
+- Status: accepted
+- Problem: D-056 fixed the U1U row match, but everything downstream still
+  grouped by circuit **name**. A machine with two same-name circuits fed from
+  different upstreams was reported wrong or silently merged: XSTS collapsed
+  them to one circuit and flagged the second frame as a duplicate; XLAYOUT drew
+  the yellow duplicate frame around both, collapsed the expected count, put
+  both frames into one upstream row with the row order of the first; the BOQ
+  device column summed both circuits (and zeroed the other one when only one
+  frame was in the batch) while the DATA sheet kept only the last row; the PDF
+  name `<machine>_<circuit>.pdf` told them apart by a `-2` suffix in selection
+  order, so re-exporting one circuit replaced the other's PDF; the U1DWG
+  selection window counted 2 frames as 1 circuit.
+- Decision:
+  1. **One pairing rule for every consumer.** `Core/Fill/CircuitMatcher` pairs
+     a machine's workbook rows with its frames: pass 1 consumes frames by
+     circuit identity key; a frame left over may pair by name only when that
+     name is **unique** in the machine (legacy frames, re-homed upstream); a
+     same-name frame without a usable key is never guessed — it is *pending*
+     (待确认); a frame whose key equals an already-paired row, or a surplus
+     frame of a name whose rows are all paired, is a *duplicate*; a name the
+     workbook does not know is *extra*. XSTS, XLAYOUT and the whole-machine
+     gate (U1S/U1DWG/U1U evaluation) all call it, so the three agree.
+  2. **Pending frames do not count as covered.** The gate reports the machine
+     incomplete and names the frames ("机台有 N 条同名回路，图框 … 未记录上游
+     编号，无法判定对应哪一条；其中缺 N 张"); it never states which specific
+     same-name row is missing, because that cannot be known. The fix is a
+     U1F/U1U run on that frame, which records the upstream. Before this change
+     the name pass let a copied frame stand in for an undrawn circuit.
+  3. **XSTS** counts circuits, not distinct names; legitimate same-name
+     circuits raise no issue; the machine sheet gains 重复图框 / 待确认 columns
+     after the existing ones, and the frame sheet gains 上游编号 after
+     回路名称 (later columns shift right by one). A frame with the same
+     identity as an earlier frame is still reported as a duplicate.
+  4. **XLAYOUT** marks only the surplus frame (same identity, or surplus of a
+     same-name group), never a legitimate same-name circuit. In upstream mode
+     each frame goes to the row of its own upstream; upstream numbers are
+     grouped by the annotation-stripped form (D-056 normalization), so one
+     feeder written two ways lands in one row and the row label shows the
+     stripped number. A same-name frame with no usable key goes to a trailing
+     「同名回路待确认」 row, not to 「未配上游」. Row order per circuit follows
+     that circuit's own workbook row. Machine-readiness rank and label colour
+     both come from the frames arranged in this run (previously rank came from
+     the whole selection), and in upstream mode the row label takes the worst
+     machine of the row. The workbook snapshot is read once per command.
+  5. **Outputs.** BOQ device columns are grouped by circuit identity and,
+     when the workbook has same-name circuits for that machine, named
+     `回路名（上游 X）`; the rename is decided from the workbook, not from the
+     batch, so the column name is stable across runs. A legacy merged column
+     with the plain name is taken over (renamed) by the first such circuit, so
+     no stale summed column stays in the total. The DATA sheet keys rows by
+     machine + name + upstream and gains an 上游编号 column at the end; a
+     legacy row without upstream is reused and stamped once. U1PDF adds the
+     upstream number to the file name only when the machine has same-name
+     circuits. The U1DWG selection count and the U1DWG result list dedupe by
+     identity.
+  6. **Drawing-info table templates.** The six columns 专业 / 楼层 / 制图 /
+     审核 / 日期 / 版本 of the frame's small table take their content from
+     per-column templates (U1SET → 图框与排版): literal text and placeholders
+     `(名称)` / `（名称）`, with an optional `:format` on time placeholders.
+     An empty template leaves that cell untouched, so hand-written values in
+     the frame survive; the defaults reproduce the previous behaviour exactly
+     (楼层 `(楼层)`, 日期 `(日期)`, the rest empty). Unknown placeholders are
+     written literally and are called out on the settings page.
+  7. **Creation time.** `frameinfo_json` `meta` gains `filledUtc` (the latest
+     U1F — U1F is redefine mode, so each U1F re-creates the record) and
+     `lastCommand`. `(U1U更新时间)` is empty until a U1U has run since the
+     last U1F. A U1U on a record without `filledUtc` adopts that record's
+     `updatedUtc` as the creation time. Old JSON parses with both empty.
+  8. **More options.** BOQ title lines A1–A3 are templates (blank = keep the
+     template file's text). XLAYOUT spacing, label text height, label distance
+     and the yellow warning frame become settings whose defaults are the
+     previous constants.
+- Rationale: crews hit same-name circuits on real machines (two `AC Rack`
+  rows on MEDPC01). The identity key already existed; the remaining defects
+  were name-keyed grouping in consumers. One shared pairing rule removes the
+  class instead of each instance. The drawing-info table was hard-coded to two
+  cells and had no creation time to show.
+- Consequence: visible output changes — XSTS machine sheet has two extra
+  columns and the frame sheet's 上游编号 column; BOQ files of machines with
+  same-name circuits get suffixed device headers and a DATA column; PDF file
+  names of those machines gain the upstream number; XLAYOUT no longer frames
+  both frames of a same-name pair. Machines without same-name circuits and
+  default templates produce the same files as 3.5.0 apart from the XSTS column
+  additions. Re-introducing name-only grouping, or making the gate accept a
+  pending frame, needs a new decision.
+
 ## D-056: Circuit Identity Key For Same-Name Circuits (2026-11-23)
 
 - Status: accepted
