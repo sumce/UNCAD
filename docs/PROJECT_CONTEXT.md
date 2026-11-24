@@ -8,8 +8,12 @@ shorter than the historical release notes.
 - Current local source version: `3.6.0.0` (2026-11-24, D-057: same-name
   circuits handled by one pairing rule across XSTS / XLAYOUT / BOQ / PDF /
   DWG; drawing-info table column templates; BOQ title templates; XLAYOUT
-  layout options), not installed and not published. The latest published
-  release is `3.5.0.1` (2026-11-23, tag `v3.5.0`), installed user-scope and
+  layout options), released locally on 2026-11-25 as tag `v3.6.0`, not
+  published. `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
+  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`) passed
+  every `release.ps1` gate and is installed user-scope on the development
+  machine, verified; interactive acceptance in the AutoCAD UI is pending.
+  The latest published release is `3.5.0.1` (2026-11-23, tag `v3.5.0`),
   verified byte-for-byte on the server. XSTS frame details use one row per
   frame, with separate model and quantity columns for all drawn BOQ items and
   blank cells for missing items. Near-name hints and the whole-drawing "not

@@ -71,4 +71,13 @@
 ## 验证
 
 - `dotnet test UNCAD.slnx`：1775 / 1775 通过（原 1719 + 新增 56 条回归）。
-- `release.ps1 -NoRestore`：见提交记录。
+- `release.ps1 -NoRestore`（2026-11-25，提交 `da8db81`，标签 `v3.6.0`）：
+  全部门禁通过——全量单测 1775/1775、PERF_SMOKE PASS、MIGRATION_SELFTEST PASS
+  （含新增的制图信息表六列模板真机核对）、包校验 26 个文件 SHA-256 一致。
+- 安装包：`artifacts\Pro\UNCAD-Pro-v3.6.0.0.zip`，6,549,352 字节，SHA-256
+  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`。已在
+  开发机按当前用户安装并通过 `installer.ps1 -Mode VerifyUser`。
+- 未做：AutoCAD 界面里的交互验收（窗口都是无头测试）；XLAYOUT 统计窗的
+  「定位图框」尤其需要真机点一遍。未推送到服务器。
+- `UNCAD_XFRAME_SELFTEST` 失败：它断言的是旧的迁移行为（迁移时删除旧清单
+  表），排在本版改动之前，也不在出包门禁内；没有在改动前的代码上复跑确认。
