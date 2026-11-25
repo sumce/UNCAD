@@ -7,6 +7,7 @@ using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
 using UNCAD.Features.Fill;
+using UNCAD.Cad.Frame;
 
 namespace UNCAD.Features.Submit
 {

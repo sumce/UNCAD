@@ -49,8 +49,8 @@ namespace UNCAD.Tests
             // 单框与批量都把模板和上一条记录（时间来源）传给写入方。
             Assert.Contains("options.DrawingInfo, frameInfoPrevious", fill);
             Assert.Contains("options.DrawingInfo, plan.PreviousRecord", update);
-            string submission = Read("src", "UNCAD", "Features", "Submit",
-                "AutomaticSubmissionService.cs");
+            string submission = Read("src", "UNCAD", "Cad", "Frame",
+                "CadSubmissionReader.cs");
             Assert.Contains("CadTableLayoutClassifier.IsDrawingInfoTable(table)", submission);
         }
 

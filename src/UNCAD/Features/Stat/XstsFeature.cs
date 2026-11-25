@@ -17,6 +17,7 @@ using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
 using UNCAD.Infra;
 using UNCAD.UI;
+using UNCAD.Cad.Frame;
 
 namespace UNCAD.Features.Stat
 {

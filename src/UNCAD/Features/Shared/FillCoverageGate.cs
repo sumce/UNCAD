@@ -8,7 +8,7 @@ using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
 
-namespace UNCAD.Features.Fill
+namespace UNCAD.Features.Shared
 {
     /// <summary>
     /// 阶段3「整机回路校验」门禁（D-033/D-034，2.10.0）：一个机台必须把机台数据

@@ -187,7 +187,7 @@ namespace UNCAD.Tests
             // D-048（2026-11-04）：U1U 缺回路机台默认跳过 BOQ（D-034/D-044 不变），
             // 但经 FillCoverageGate.OfferForceBoq 弹窗让用户逐台确认强制生成
             // （仅含已画回路）。单框与批量共用同一实现，且都发生在 BOQ 准备之前。
-            string gate = File.ReadAllText(Repo("src", "UNCAD", "Features", "Fill",
+            string gate = File.ReadAllText(Repo("src", "UNCAD", "Features", "Shared",
                 "FillCoverageGate.cs"));
             Assert.Contains("new UNCAD.UI.BoqForceSelectionWindow(", gate);
             Assert.Contains("仅含已画回路", gate);

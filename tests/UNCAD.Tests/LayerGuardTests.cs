@@ -35,10 +35,8 @@ namespace UNCAD.Tests
                 "src/UNCAD/Features/DwgExport/DwgExportFeature.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/DwgExport/DwgFrameExportService.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Fill/BatchFillUpdateCoordinator.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Fill/BatchFillUpdatePreflight.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Fill/FillFeature.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Fill/FillMachinePickStage.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Fill/FillUpdateRowMerger.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Fill",
                 "src/UNCAD/Features/Stat/XstsFeature.cs -> UNCAD.Features.Submit",
@@ -48,7 +46,6 @@ namespace UNCAD.Tests
                 "src/UNCAD/Features/XLayout/XLayoutFeature.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/XLayout/XmergeService.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Conduit/ConduitFeature.cs -> UNCAD.Features.Fill",
-                "src/UNCAD/Features/Submit/CircuitCoverageGuard.cs -> UNCAD.Features.Fill",
                 "src/UNCAD/Features/Submit/FrameIdentityReader.cs -> UNCAD.Features.Fill"
             };
 

@@ -13,6 +13,7 @@ using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
 using UNCAD.Features.Fill;
 using UNCAD.Features.Submit;
+using UNCAD.Cad.Frame;
 
 namespace UNCAD.CadIntegration
 {

@@ -9,8 +9,8 @@ namespace UNCAD.Tests
         [Fact]
         public void ReadSelection_ClassifiesTableBeforeBlockReference()
         {
-            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Submit", "AutomaticSubmissionService.cs"));
+            string source = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "Frame", "CadSubmissionReader.cs"));
             int table = source.IndexOf("if (entity is Table table)", StringComparison.Ordinal);
             int block = source.IndexOf("else if (entity is BlockReference block)",
                 StringComparison.Ordinal);
