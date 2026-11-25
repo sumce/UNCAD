@@ -32,7 +32,8 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.8.0.8` (2026-11-26, D-059 + 3.8.0.1–3.8.0.8
+- Current local source version: `3.8.0.9` (2026-11-26; 3.8.0.9 is the
+  structural/CI cleanup with no command behavior change; D-059 + 3.8.0.1–3.8.0.8
   field fixes: U1U preview runs the local WebView2 + three.js page with the
   WPF Viewport3D renderer as automatic fallback (never a blank pane), draws
   wireframe floor planes/axes/routes/upstream cabinet only, reference building
@@ -46,15 +47,17 @@ when their version numbers or counts are stale.
   half-and-half; the preview page fits the camera to the route, lays labels out
   with same-frame collision avoidance, draws a single bold cable, a coordinate
   lattice at every grid intersection and endpoint axis chips at grid corners),
-  packaged locally (see below) and tagged locally as `v3.8.0`; not yet published; a clean build of this source is
-  installed user-scope on the development machine (2026-11-25) and verified —
-  24 files, installed `UNCAD.dll` SHA-256
-  `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`,
-  identical to the build output and the bundle (`InstallUser` refuses to run
-  while AutoCAD is open — close AutoCAD first). The last local release
-  is `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview redesign).
-  The previous local release is `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`;
-  D-058 preview rebuilt with gap tolerance and U1UL). The latest published release is `3.6.0.0`
+  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.9.zip` (6,579,776 bytes,
+  SHA-256 `71D1254ADE7FBF5E18231A0F91A91A4F348115F4527BB2B24DD08DE5D59217CD`) and
+  tagged as `v3.8.0.9`; the GitHub Release is produced by `release.yml`. The
+  package/bundle `UNCAD.dll` SHA-256 is
+  `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`; the
+  development machine's installed copy remains 3.8.0.8 until
+  `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The last local
+  release is `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup). The previous
+  local release is `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview
+  redesign); before that `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`).
+  The latest GitHub Release is `3.8.0.9`; the latest site release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`, commit `da8db81`; D-057 same-name circuits,
   drawing-info table templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256

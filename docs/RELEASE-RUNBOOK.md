@@ -25,6 +25,9 @@
   迁移）通过后才推送 tag。`-PackageOnly` 不是完整发布门禁。
 - 现有 `v3.8.0` tag 早于本工作流与 `-PackageOnly` 脚本；该 tag 不能直接走
   release.yml，需手动补 Release 或从包含新脚本的提交重新打 tag。
+- D-032 的“补丁不新开 tag”只适用于本地补丁；通过 `release.yml` 发布到
+  GitHub Releases 的补丁版需要一个 tag 作为 Release 锚点（例如 `v3.8.0.9`），
+  但仍不新建 `RELEASE-3.8.0.9.md`。
 
 ## 2. 常规发布步骤
 

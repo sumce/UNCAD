@@ -2,6 +2,31 @@
 
 发布日期：2026-11-25
 
+## 3.8.0.9 清理（2026-11-26）
+
+- **无命令行为变更**；本版只做工程结构清理与 CI 自动化。
+- 删除生产零引用的 WinForms/reporting 死代码（UiKit、DialogLayout、
+  BrandMarkControl、StableFileCache、StatExcelReporter），共 1,430 行源码 +
+  458 行测试。
+- 新增 `Core/IO/AtomicFileWriter`，收敛 BOQ、提交表、DWG、XSTS、XLAYOUT、
+  机台 Excel 缓存 6 处原子替换。
+- `CadSubmissionReader` 下沉 `Cad/Frame`；`FillCoverageGate` 移到
+  `Features/Shared`；架构守卫白名单 20 → 17。
+- CI：`build-hosted.yml` 在托管 runner 做编译 + 架构守卫；`release.yml` 在
+  `v*` tag 上自动编译、打包并创建 GitHub Release；`tests.yml` 改为手动触发
+  （当前没有注册的 self-hosted runner）。
+- 验证：全量 1,886/1,886；`release.ps1` 完整门禁（单测、`UNCAD_PERF_SMOKE`、
+  `UNCAD_MIGRATION_SELFTEST`、`VerifyPackage`）PASS。
+- 安装包：`artifacts/Pro/UNCAD-Pro-v3.8.0.9.zip`（6,579,776 字节，SHA-256
+  `71D1254ADE7FBF5E18231A0F91A91A4F348115F4527BB2B24DD08DE5D59217CD`）；包内
+  `UNCAD.dll` SHA-256
+  `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`。
+- 本机安装副本仍为 3.8.0.8（本次未重装）；需要时关闭 AutoCAD 后执行
+  `installer.ps1 -Mode InstallUser`。
+- 说明：本版是 GitHub Releases 渠道的补丁 tag（`v3.8.0.9`）；D-032 的
+  “补丁不新开 tag”只适用于本地补丁，GitHub Release 需要 tag 作为锚点。
+  不新建 `RELEASE-3.8.0.9.md`，继续复用本文件。
+
 ## 3.8.0.8 修补（2026-11-26）
 
 现场口径（「能直观地看出来！清晰的轴位 回路 这是必须的」「每个方格交叉点都加
