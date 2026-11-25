@@ -28,9 +28,10 @@ shorter than the historical release notes.
   `UNCAD.dll` SHA-256 `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`,
   identical to the build output and the bundle (`InstallUser` refuses to run
   while AutoCAD is open). The last
-  local release is `3.7.0.0` (tag `v3.7.0`,
-  commit `5a9b81a`; D-058 gap tolerance + U1UL). The latest published release is
-  `3.6.0.0`
+  local release is `3.8.0.0` (tag `v3.8.0`,
+  commit `7157aa1`; D-059 preview redesign). The previous local release is
+  `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`; D-058 gap tolerance + U1UL).
+  The latest published release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
   templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
