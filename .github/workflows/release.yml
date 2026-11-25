@@ -61,6 +61,9 @@ jobs:
           "label=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
           "note_label=$($parts[0..2] -join '.')" >> $env:GITHUB_OUTPUT
 
+      - name: Restore Autodesk NuGet references
+        run: dotnet restore UNCAD.slnx -p:UseAutoCadNuGet=true
+
       # PackageOnly forces UseAutoCadNuGet=true and skips tests/PERF/MIGRATION.
       - name: Compile and package
         shell: powershell
