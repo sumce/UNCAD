@@ -34,12 +34,16 @@ when their version numbers or counts are stale.
 
 - Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
   preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
-  text, hose, named issues; new command U1UL millimetre-label alignment), not
-  yet tagged or released. A local build of this source is installed user-scope
-  on the development machine (2026-11-25) and verified: 26 files, installed
-  `UNCAD.dll` SHA-256
-  `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`, identical
-  to the build output and the bundle. The latest published release is `3.6.0.0`
+  text, hose, named issues; new command U1UL millimetre-label alignment),
+  released locally on 2026-11-25 as tag `v3.7.0` (commit `5a9b81a`), not
+  published. The archive `UNCAD-Pro-v3.7.0.0.zip` (6,566,040 bytes, SHA-256
+  `8F1A066B35445BDD405C0DCD7ECCBA3E4A74A0BFE77F963B8C6928B518C687B2`) passed
+  every `release.ps1` gate (1836 tests, PERF_SMOKE, MIGRATION_SELFTEST,
+  package verification). The development machine runs a local build of the
+  same source installed before the package was built (installed `UNCAD.dll`
+  SHA-256 `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`);
+  installing the package's own files is pending until AutoCAD is closed. The
+  latest published release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`, commit `da8db81`; D-057 same-name circuits,
   drawing-info table templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256

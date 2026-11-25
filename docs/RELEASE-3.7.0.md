@@ -60,13 +60,17 @@ U1SET 的偏移值、**角度**改成与线段平行：
   - `UNCAD_LABEL_ALIGN_SELFTEST` PASS——U1UL：所在侧/沿线位置/文字/字高/关联
     元数据不变，无关联的不动，重跑幂等；
   - `UNCAD_ROUTE_INSPECT_SELFTEST` PASS——既有线路体检回归；
-  - `UNCAD_PERF_SMOKE` PASS、`UNCAD_MIGRATION_SELFTEST` PASS——两条发布门禁
-    （本次为本地构建安装，直接单跑门禁命令，未经 `release.ps1`）。
-- 本地安装（2026-11-25）：`build.ps1 -NoRestore` 干净构建 → `installer.ps1`
-  `-Mode VerifyPackage` / `InstallUser` / `VerifyUser` 全部通过，26 个安装文件
-  SHA-256 一致；已安装的 `UNCAD.dll`（3.7.0.0）SHA-256
-  `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`，与构建
-  输出、bundle 三处一致。未打标签、未出发布包、未发布。
+  - `UNCAD_PERF_SMOKE` PASS、`UNCAD_MIGRATION_SELFTEST` PASS——两条发布门禁。
+- 发布包（2026-11-25，标签 `v3.7.0`，提交 `5a9b81a`）：`release.ps1 -NoRestore`
+  全部门禁通过——干净构建、全量单测 1836/1836、PERF_SMOKE、MIGRATION_SELFTEST、
+  包校验（bundle 与暂存区各一遍）。`UNCAD-Pro-v3.7.0.0.zip`，6,566,040 字节，
+  SHA-256 `8F1A066B35445BDD405C0DCD7ECCBA3E4A74A0BFE77F963B8C6928B518C687B2`；
+  解包后复核 26 个文件一致。未发布。
+- 开发机当前装的是出包前同一份源码的本地构建（已安装 `UNCAD.dll` SHA-256
+  `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`）。包内
+  `UNCAD.dll` 是重新构建的，构建时间戳不同，SHA-256 为
+  `4953411F6B8EF6627429724F34E366C697FB8D805F195D3A186F87B818924FAF`；用包内
+  文件覆盖安装待 AutoCAD 关闭后进行。
 - 真机验收要点（建议按此过一遍）：
   - U1U 一个图框：左侧出现 3D；底部显示「识别 N 段…桥架…线管…软管…」；
     两端有「上游端」「设备端」标记；命令行输出线路识别与问题。

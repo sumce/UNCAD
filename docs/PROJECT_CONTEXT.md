@@ -7,10 +7,13 @@ shorter than the historical release notes.
 
 - Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
   preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
-  text, hose, named issues; new command U1UL millimetre-label alignment), not
-  yet tagged or released; a local build is installed user-scope on the
-  development machine (2026-11-25) and verified. The latest published release
-  is `3.6.0.0`
+  text, hose, named issues; new command U1UL millimetre-label alignment),
+  released locally on 2026-11-25 as tag `v3.7.0` (commit `5a9b81a`), not
+  published; `UNCAD-Pro-v3.7.0.0.zip` (6,566,040 bytes, SHA-256
+  `8F1A066B35445BDD405C0DCD7ECCBA3E4A74A0BFE77F963B8C6928B518C687B2`) passed
+  every `release.ps1` gate. The development machine runs a local build of the
+  same source (installed before the package was built). The latest published
+  release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
   templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
