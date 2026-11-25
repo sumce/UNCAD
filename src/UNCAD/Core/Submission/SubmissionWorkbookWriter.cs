@@ -109,7 +109,6 @@ namespace UNCAD.Core.Submission
             byte[] originalFingerprint = null;
             string temporary = Path.Combine(folder, "." + Path.GetFileName(fullPath)
                 + "." + Guid.NewGuid().ToString("N") + ".tmp");
-            string backup = temporary + ".bak";
             try
             {
                 existedBeforeRead = File.Exists(fullPath);
@@ -206,7 +205,17 @@ namespace UNCAD.Core.Submission
                         throw new IOException("提交表在读取期间被删除，未覆盖原文件。");
                     if (!SameFingerprint(originalFingerprint, ComputeFingerprint(fullPath)))
                         throw new IOException("提交表在读取期间发生外部修改，未覆盖最新内容。");
-                    ReplaceExisting(temporary, fullPath, backup, originalFingerprint);
+                    AtomicFileWriter.Replace(fullPath, temporary,
+                        () => throw new IOException(
+                            "提交表在替换期间被删除，未覆盖原文件。"),
+                        () =>
+                        {
+                            if (!File.Exists(fullPath)
+                                || !SameFingerprint(originalFingerprint,
+                                    ComputeFingerprint(fullPath)))
+                                throw new IOException(
+                                    "提交表在替换期间发生外部修改，未覆盖最新内容。");
+                        });
                 }
                 else
                 {
@@ -239,49 +248,6 @@ namespace UNCAD.Core.Submission
             for (int i = 0; i < left.Length; i++)
                 if (left[i] != right[i]) return false;
             return true;
-        }
-
-        // 某些网络或重定向文件系统不支持 File.Replace，降级为带备份的移动替换。
-        private static void ReplaceExisting(string temporary, string target, string backup,
-            byte[] expectedFingerprint)
-        {
-            try
-            {
-                File.Replace(temporary, target, backup, true);
-                FileCleanup.TryDelete(backup);
-                return;
-            }
-            catch (PlatformNotSupportedException)
-            {
-                // 继续使用可回滚的移动替换路径。
-            }
-            catch (NotSupportedException)
-            {
-                // 继续使用可回滚的移动替换路径。
-            }
-            catch (IOException)
-            {
-                // 网络文件系统可能以 IOException 表示不支持原子替换。
-            }
-
-            if (!SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
-                throw new IOException("提交表在替换期间发生外部修改，未覆盖最新内容。");
-
-            bool movedOriginal = false;
-            try
-            {
-                File.Move(target, backup);
-                movedOriginal = true;
-                File.Move(temporary, target);
-                FileCleanup.TryDelete(backup);
-            }
-            catch
-            {
-                // 替换失败时尽力恢复原文件；恢复失败由调用方的最终异常明确暴露。
-                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
-                    File.Move(backup, target);
-                throw;
-            }
         }
 
         private static IWorkbook LoadOrCreate(string path)

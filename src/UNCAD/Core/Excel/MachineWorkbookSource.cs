@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Cache;
 using System.Security.Cryptography;
 using System.Text;
+using UNCAD.Core.IO;
 
 namespace UNCAD.Core.Excel
 {
@@ -139,8 +140,7 @@ namespace UNCAD.Core.Excel
                 string cacheWarning = null;
                 try
                 {
-                    if (File.Exists(cachePath)) File.Replace(downloadPath, cachePath, null);
-                    else File.Move(downloadPath, cachePath);
+                    AtomicFileWriter.Replace(cachePath, downloadPath);
                     CleanupStaleDownloads(Path.GetDirectoryName(cachePath));
                 }
                 catch (Exception ex)

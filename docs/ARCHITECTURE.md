@@ -54,7 +54,7 @@
 | 图框身份/内容读取 | `Cad/Frame` | `Features/Submit/FrameIdentityReader`、`CadSubmissionReader` 待下沉 |
 | 图框规则/身份键/回路配对 | `Core/Frame` | `Core/Fill` + `Core/Submission` 待收口 |
 | 线路扫描/毫米标 | `Cad/QuickLine` + `Core/Route` | 基本正确；`ScanDetailed` 待拆 |
-| 原子写 | `Core/IO` | 5 套实现待抽 `AtomicFileWriter` |
+| 原子写 | `Core/IO` | 已完成：`AtomicFileWriter`（6 套替换收敛，含机台缓存） |
 | Excel/固定清单/快照 | `Core/Excel` | 正确 |
 | 输出布局 | `Core/Submission/OutputLayout` | 正确 |
 | 交互弹窗 | `Features/Shared/IUserInteraction` + `UI/Wpf` | Features 直调窗口 54 处待收 |
@@ -79,7 +79,7 @@
 |---|---|---|
 | 0 | characterization + `SourceContract` trait | 待做 |
 | 1a | 纯死代码清理 | **完成**（删除 5 个源文件/1,430 行 + 3 个测试文件；全量 1,882 通过） |
-| 1b | 抽 `Core/IO/AtomicFileWriter` | 待做 |
+| 1b | 抽 `Core/IO/AtomicFileWriter` | **完成**（BOQ/Submission/DWG/XSTS/XLAYOUT/机台缓存收敛；全量 1,886） |
 | 2 | 破 Submit↔Fill 环：共享读取器下沉 `Cad/Frame` | 待做 |
 | 3 | `FrameSnapshot` L1/L2 + `FrameScope`；先 XSTS | 待做 |
 | 4 | 拆 U1F/U1U 事务链：`Execute`/`Preflight.Build`/`ExecuteCore`/`Resolve` | 待做 |

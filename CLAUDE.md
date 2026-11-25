@@ -114,6 +114,7 @@ attribute, `RibbonDefinition`, `CommandHelpCatalog`, the bundle, and
 - `Features/Submit/FrameIdentityReader` — frame identity.
 - `Infra/FileBatchRollback` — multi-file batch backup/restore.
 - `Infra/CommandHelpCatalog` — user-facing help text.
+- `Core/IO/AtomicFileWriter` — atomic replace with unique backup and move fallback.
 
 ### Key data flows
 

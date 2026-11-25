@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
 using UNCAD.Core.Dwg;
+using UNCAD.Core.IO;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Features.Submit;
@@ -376,45 +377,6 @@ namespace UNCAD.Features.DwgExport
         }
 
         private static void ReplaceFile(string temporary, string target)
-        {
-            if (!File.Exists(target))
-            {
-                File.Move(temporary, target);
-                return;
-            }
-            // 同 BoqWorkbookWriter：唯一备份名，避免吃掉用户自己的 .bak，
-            // 也避免降级分支 File.Move 因目标已存在而必然失败。
-            string backup = target + ".uncad-replace-" + Guid.NewGuid().ToString("N") + ".bak";
-            try
-            {
-                File.Replace(temporary, target, backup, true);
-                // 3.2.0.6（审计修复）：替换已成功，备份删除属清理——此前
-                // File.Delete 抛 IOException（杀毒/索引器短暂占用备份）会被下面
-                // 的 catch (IOException) 吞掉并落入降级分支：File.Move(target,
-                // backup) 因备份仍存在必抛 → rethrow → 上层 batch.Rollback() 把
-                // 本批已正确写盘的 DWG 一起回滚（成功批次被误伤）。改 TryDelete
-                //（与 BoqWorkbookWriter.Replace 同口径），删不掉只留一个 .bak。
-                UNCAD.Core.IO.FileCleanup.TryDelete(backup);
-                return;
-            }
-            catch (PlatformNotSupportedException) { }
-            catch (NotSupportedException) { }
-            catch (IOException) { }
-
-            bool movedOriginal = false;
-            try
-            {
-                File.Move(target, backup);
-                movedOriginal = true;
-                File.Move(temporary, target);
-                if (File.Exists(backup)) File.Delete(backup);
-            }
-            catch
-            {
-                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
-                    File.Move(backup, target);
-                throw;
-            }
-        }
+            => AtomicFileWriter.Replace(target, temporary);
     }
 }

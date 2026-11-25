@@ -661,53 +661,33 @@ namespace UNCAD.Core.Submission
         private static void Replace(string target, string temporary,
             byte[] expectedFingerprint)
         {
-            if (!File.Exists(target))
+            if (expectedFingerprint == null)
             {
-                if (expectedFingerprint != null)
+                if (File.Exists(target))
                     throw new BoqExternalModificationException(
-                        "BOQ 文件在替换期间被删除，未覆盖原文件。");
-                File.Move(temporary, target);
+                        "BOQ 文件在替换期间被其他程序创建，未覆盖该文件。");
+                AtomicFileWriter.Replace(target, temporary);
                 return;
             }
-            if (expectedFingerprint == null)
+
+            if (!File.Exists(target))
                 throw new BoqExternalModificationException(
-                    "BOQ 文件在替换期间被其他程序创建，未覆盖该文件。");
+                    "BOQ 文件在替换期间被删除，未覆盖原文件。");
             if (!SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
                 throw new BoqExternalModificationException(
                     "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
 
-            // 备份名必须唯一：曾经用 target+".bak"，既会覆盖并删除用户自己的
-            // .bak，又会让下面的 File.Move 降级分支在 .bak 已存在时直接失败。
-            string backup = target + ".uncad-replace-" + Guid.NewGuid().ToString("N") + ".bak";
-            try
-            {
-                File.Replace(temporary, target, backup, true);
-                FileCleanup.TryDelete(backup);
-                return;
-            }
-            catch (PlatformNotSupportedException) { }
-            catch (NotSupportedException) { }
-            catch (IOException) { }
-
-            if (!File.Exists(target)
-                || !SameFingerprint(expectedFingerprint, ComputeFingerprint(target)))
-                throw new BoqExternalModificationException(
-                    "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
-
-            bool movedOriginal = false;
-            try
-            {
-                File.Move(target, backup);
-                movedOriginal = true;
-                File.Move(temporary, target);
-                FileCleanup.TryDelete(backup);
-            }
-            catch
-            {
-                if (movedOriginal && !File.Exists(target) && File.Exists(backup))
-                    File.Move(backup, target);
-                throw;
-            }
+            AtomicFileWriter.Replace(target, temporary,
+                () => throw new BoqExternalModificationException(
+                    "BOQ 文件在替换期间被删除，未覆盖原文件。"),
+                () =>
+                {
+                    if (!File.Exists(target)
+                        || !SameFingerprint(expectedFingerprint,
+                            ComputeFingerprint(target)))
+                        throw new BoqExternalModificationException(
+                            "BOQ 文件在替换期间发生外部修改，未覆盖最新内容。");
+                });
         }
 
     }

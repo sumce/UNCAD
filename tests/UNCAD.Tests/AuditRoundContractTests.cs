@@ -250,21 +250,24 @@ namespace UNCAD.Tests
         [Fact]
         public void ExportWriters_AreAtomicOrBackupSafe()
         {
-            // XSTS 改临时文件+替换的原子写（此前全仓唯一一个直写目标的导出器）。
+            // 结构收敛（1b）：原子写已下沉到 Core/IO/AtomicFileWriter；导出器
+            // 必须调用共享实现，而不是各写一套 File.Replace 降级分支。
             string xsts = Read("src", "UNCAD", "Core", "Report", "XstsExcelReporter.cs");
             Assert.Contains(".tmp-", xsts, StringComparison.Ordinal);
-            Assert.Contains("File.Replace", xsts, StringComparison.Ordinal);
+            Assert.Contains("AtomicFileWriter.Replace", xsts, StringComparison.Ordinal);
 
-            // DWG 替换成功后备份删除改 TryDelete——File.Delete 抛 IOException 会
-            // 落入降级分支，把已正确写盘的批次误报失败并整体回滚。
             string dwg = Read("src", "UNCAD", "Features", "DwgExport",
                 "DwgFrameExportService.cs");
-            int replace = dwg.IndexOf("File.Replace(temporary, target, backup, true)",
+            Assert.Contains("AtomicFileWriter.Replace", dwg, StringComparison.Ordinal);
+
+            // 共享实现里：替换成功后的备份清理必须吞错，不得参与成败判定。
+            string atomic = Read("src", "UNCAD", "Core", "IO", "AtomicFileWriter.cs");
+            int replace = atomic.IndexOf("File.Replace(temporary, target, backup, true)",
                 StringComparison.Ordinal);
-            int tryDelete = dwg.IndexOf("TryDelete(backup)", replace,
+            int tryDelete = atomic.IndexOf("TryDelete(backup)", replace,
                 StringComparison.Ordinal);
             Assert.True(replace >= 0 && tryDelete > replace,
-                "DWG 替换成功后备份清理必须吞错，不得参与成败判定");
+                "原子替换成功后备份清理必须吞错，不得参与成败判定");
 
             string rollback = Read("src", "UNCAD", "Infra", "FileBatchRollback.cs");
             Assert.Contains("DeleteBackups(failedTargets)", rollback,
