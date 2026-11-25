@@ -13,6 +13,19 @@
 | 干净工作树 | `git status --short` 无未预期改动；正在发布的提交已打 tag（正式版门禁要求） |
 | 服务端管理员密码 | 仅上传发布用（`tools/publish-release.ps1`），打包本身不需要 |
 
+## 1.1 GitHub Actions tag 发布
+
+- 触发：推送 `v*` tag（或在 Actions 手动指定已有 tag）。
+- `.github/workflows/release.yml` 在 `windows-latest` 上执行
+  `.\release.ps1 -PackageOnly -NoRestore`：用 Autodesk NuGet 引用程序集编译，
+  跳过单测/PERF_SMOKE/MIGRATION_SELFTEST，仍执行 bundle 校验、
+  `installer.ps1 -Mode VerifyPackage`、版本/tag 一致性和打包；随后创建或更新
+  GitHub Release，附 zip 与 `docs/RELEASE-X.Y.Z.md`。
+- **完整门禁必须在打 tag 前跑完**：`.\release.ps1 -NoRestore`（单测、性能、
+  迁移）通过后才推送 tag。`-PackageOnly` 不是完整发布门禁。
+- 现有 `v3.8.0` tag 早于本工作流与 `-PackageOnly` 脚本；该 tag 不能直接走
+  release.yml，需手动补 Release 或从包含新脚本的提交重新打 tag。
+
 ## 2. 常规发布步骤
 
 ```powershell

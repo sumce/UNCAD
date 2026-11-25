@@ -35,7 +35,12 @@ dotnet test UNCAD.slnx --filter "FullyQualifiedName~FrameRegionCollectorTests"
 dotnet test UNCAD.slnx --filter "FullyQualifiedName~BoqCatalogIndexTests.Category_IsAutomaticallyResolved"
 
 .\release.ps1 -NoRestore                       # full release gate; output in artifacts\Pro
+.\release.ps1 -PackageOnly -NoRestore          # CI packaging: skips AutoCAD runtime gates
 ```
+
+`-PackageOnly` is used by `.github/workflows/release.yml` on a tag push. It
+forces the Autodesk NuGet compile references and skips tests/PERF/MIGRATION;
+run the full `release.ps1` before creating the tag.
 
 - `build.ps1` / `release.ps1` accept only `-Configuration Release`.
 - Both projects reference AutoCAD DLLs from `D:\Program Files\Autodesk\AutoCAD 2022`.

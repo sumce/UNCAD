@@ -10,12 +10,22 @@ param(
     [switch]$SkipMigration,
     # 开发版通道（D-039）：跳过"发布页 + git tag"两道正式版门禁，用于真机验收
     # 装机包；测试/性能/迁移门禁照常执行。正式发布禁止携带 -Dev。
-    [switch]$Dev
+    [switch]$Dev,
+    # GitHub Actions 托管打包：用 Autodesk NuGet 引用程序集编译，跳过需要
+    # AutoCAD 运行时/accoreconsole 的测试、性能与迁移门禁。只允许对已通过
+    # 本地/自带 runner 完整门禁的 tag 使用。
+    [switch]$PackageOnly
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ($Configuration -ne "Release") { throw "Only the unified UNCAD Pro Release configuration is supported." }
+if ($PackageOnly -and $NoBuild) {
+    throw "-PackageOnly requires a build; do not combine it with -NoBuild."
+}
+if ($PackageOnly) {
+    Write-Warning "PackageOnly: full tests, PERF_SMOKE and MIGRATION_SELFTEST are skipped; build uses Autodesk NuGet reference assemblies. Use only for GitHub Actions packaging from an already-gated tag."
+}
 $productName = "UNCAD Pro"
 $bundle = Join-Path $root "bundle\UNCAD.bundle"
 
@@ -48,6 +58,7 @@ function Assert-TreeMatches {
 if (-not $NoBuild) {
     $buildArgs = @{ Configuration = $Configuration }
     if ($NoRestore) { $buildArgs.NoRestore = $true }
+    if ($PackageOnly) { $buildArgs.UseAutoCadNuGet = $true }
     & (Join-Path $root "build.ps1") @buildArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
@@ -84,19 +95,21 @@ Assert-TreeMatches (Split-Path -Parent $buildOutput) $bundle "DLL payload" "*.dl
 # 独立进程 WebV（UNCAD.Preview.exe）仍然退役，不入包。
 Assert-TreeMatches (Join-Path (Split-Path -Parent $buildOutput) "Web") (Join-Path $bundle "Web") "U1U preview page"
 
-$testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
-# build.ps1 already built the solution; avoid a second timestamped DLL build.
-$testArgs += "--no-build"
-if ($NoRestore) { $testArgs += "--no-restore" }
-& dotnet $testArgs
-if ($LASTEXITCODE -ne 0) { throw "Release tests failed." }
+if (-not $PackageOnly) {
+    $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
+    # build.ps1 already built the solution; avoid a second timestamped DLL build.
+    $testArgs += "--no-build"
+    if ($NoRestore) { $testArgs += "--no-restore" }
+    & dotnet $testArgs
+    if ($LASTEXITCODE -ne 0) { throw "Release tests failed." }
+}
 
 # 性能冒烟门禁（accoreconsole 真机）：在程序化生成的大图（36 图框 + 3600 线 +
 # 统计文字）上，计时批量 U1U 的两条历史热点读路径——整图 FrameRegionCollector
 # 收集与按图框统计文字求和。背景：2.9.0 的 O(N²) 全图扫描曾造成单帧 8.7 秒、
 # 一天连发五个性能补丁；不设命令级基准，这类回归只能到客户机器上才暴露。
 # 超预算时 run.ps1 会抛错终止发布，各阶段耗时明细见其输出与 %UNCAD_PERF_SMOKE_REPORT%。
-if (-not $SkipPerf) {
+if (-not $SkipPerf -and -not $PackageOnly) {
     $perfDrawing = Join-Path (Split-Path -Parent $buildOutput) "Resources\XFrameTemplate.dwg"
     & (Join-Path $root "tests\UNCAD.CadIntegration\run.ps1") `
         -Command UNCAD_PERF_SMOKE -InputDrawing $perfDrawing
@@ -114,7 +127,7 @@ if (-not $SkipPerf) {
 # must not resize a user's existing table, row, or column」此前只有单测字符串断言；
 # 任何 XFrameMigrationService/FrameInfoJsonBlockWriter/模板 DWG 的回归都会在这里
 # 被真机拦截。断言明细见 run.ps1 输出与 %UNCAD_MIGRATION_SELFTEST_REPORT%。
-if (-not $SkipMigration) {
+if (-not $SkipMigration -and -not $PackageOnly) {
     $migrationDrawing = Join-Path (Split-Path -Parent $buildOutput) "Resources\XFrameTemplate.dwg"
     & (Join-Path $root "tests\UNCAD.CadIntegration\run.ps1") `
         -Command UNCAD_MIGRATION_SELFTEST -InputDrawing $migrationDrawing

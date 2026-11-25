@@ -2,7 +2,9 @@
     [string]$Configuration = "Release",
     [string]$AutoCADDir = "D:\Program Files\Autodesk\AutoCAD 2022",
     [switch]$SkipBundle,
-    [switch]$NoRestore
+    [switch]$NoRestore,
+    # Hosted CI (no AutoCAD install): compile against Autodesk NuGet reference assemblies.
+    [switch]$UseAutoCadNuGet
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,9 +18,14 @@ $buildArgs = @(
     "build", $buildTarget, "-c", $Configuration,
     "-p:AutoCADDir=$AutoCADDir"
 )
-if ($NoRestore) { $buildArgs += "--no-restore" }
 $cleanArgs = @("clean", $buildTarget, "-c", $Configuration,
     "-p:AutoCADDir=$AutoCADDir")
+if ($UseAutoCadNuGet) {
+    $buildArgs += "-p:UseAutoCadNuGet=true"
+    $cleanArgs += "-p:UseAutoCadNuGet=true"
+    Write-Host "Compile references: Autodesk NuGet (UseAutoCadNuGet=true)" -ForegroundColor Cyan
+}
+if ($NoRestore) { $buildArgs += "--no-restore" }
 & dotnet $cleanArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & dotnet $buildArgs

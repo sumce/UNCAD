@@ -1,0 +1,122 @@
+# Tag-driven release packaging.
+#
+# The full release gate (unit tests + AutoCAD accoreconsole PERF/MIGRATION) must
+# run before the tag is pushed: this workflow is intentionally compile/package
+# only because GitHub-hosted runners have no AutoCAD runtime.  It rebuilds from
+# the tagged source with the official Autodesk NuGet reference assemblies,
+# verifies the package layout, and creates/updates the GitHub Release.
+#
+# Trigger:
+#   - push a v* tag (the normal release)
+#   - workflow_dispatch with an existing tag (dry_run defaults to true)
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v3.8.0)
+        required: true
+        type: string
+      dry_run:
+        description: Build/package only; do not create a GitHub Release
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve tag
+        id: meta
+        shell: powershell
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.tag }}" } else { "${{ github.ref_name }}" }
+          if (-not $tag.StartsWith("v")) { throw "Release tag must start with v: $tag" }
+          $parts = $tag.Substring(1).Split('.')
+          if ($parts.Length -lt 3) { throw "Release tag must be vX.Y.Z or vX.Y.Z.N: $tag" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "label=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+          "note_label=$($parts[0..2] -join '.')" >> $env:GITHUB_OUTPUT
+
+      # PackageOnly forces UseAutoCadNuGet=true and skips tests/PERF/MIGRATION.
+      - name: Compile and package
+        shell: powershell
+        run: .\release.ps1 -PackageOnly -NoRestore
+
+      - name: Locate package
+        id: package
+        shell: powershell
+        run: |
+          $zip = Get-ChildItem artifacts\Pro\UNCAD-Pro-v*.zip -File |
+              Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+          if (-not $zip) { throw "UNCAD package zip not found under artifacts\Pro" }
+          $hash = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash
+          "path=$($zip.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($zip.Name)" >> $env:GITHUB_OUTPUT
+          "sha=$hash" >> $env:GITHUB_OUTPUT
+          Write-Host "Package: $($zip.FullName)"
+          Write-Host "SHA-256: $hash"
+
+      - name: Upload CI package
+        uses: actions/upload-artifact@v4
+        with:
+          name: UNCAD-${{ steps.meta.outputs.label }}-ci
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $label = "${{ steps.meta.outputs.label }}"
+          $noteLabel = "${{ steps.meta.outputs.note_label }}"
+          $zip = "${{ steps.package.outputs.path }}"
+          $name = "${{ steps.package.outputs.name }}"
+          $sha = "${{ steps.package.outputs.sha }}"
+          $notes = "docs\RELEASE-$noteLabel.md"
+          if (-not (Test-Path -LiteralPath $notes -PathType Leaf)) {
+            throw "Release note missing: $notes"
+          }
+          $bodyFile = Join-Path $env:RUNNER_TEMP "release-notes-$label.md"
+          Copy-Item -LiteralPath $notes -Destination $bodyFile
+          $footer = "`n---`n`n## GitHub Actions artifact`n`n" +
+            "Asset: " + $name + "`n" +
+            "SHA-256: " + $sha + "`n" +
+            "Built from tag " + $tag + " on GitHub Actions with the Autodesk NuGet " +
+            "reference assemblies (compile-only). Full AutoCAD 2022 runtime gates " +
+            "are run before tagging; this artifact is a rebuild from the same tagged source."
+          Add-Content -LiteralPath $bodyFile -Value $footer -Encoding UTF8
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $zip --clobber
+            gh release edit $tag --title "UNCAD Pro $label" --notes-file $bodyFile --latest
+          } else {
+            gh release create $tag $zip --title "UNCAD Pro $label" --notes-file $bodyFile --verify-tag --latest
+          }
