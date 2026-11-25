@@ -32,18 +32,28 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
-  preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
-  text, hose, named issues; new command U1UL millimetre-label alignment),
-  released locally on 2026-11-25 as tag `v3.7.0` (commit `5a9b81a`), not
-  published. The archive `UNCAD-Pro-v3.7.0.0.zip` (6,566,040 bytes, SHA-256
-  `8F1A066B35445BDD405C0DCD7ECCBA3E4A74A0BFE77F963B8C6928B518C687B2`) passed
-  every `release.ps1` gate (1836 tests, PERF_SMOKE, MIGRATION_SELFTEST,
-  package verification). The development machine runs a local build of the
-  same source installed before the package was built (installed `UNCAD.dll`
-  SHA-256 `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`);
-  installing the package's own files is pending until AutoCAD is closed. The
-  latest published release is `3.6.0.0`
+- Current local source version: `3.8.0.8` (2026-11-26, D-059 + 3.8.0.1–3.8.0.8
+  field fixes: U1U preview runs the local WebView2 + three.js page with the
+  WPF Viewport3D renderer as automatic fallback (never a blank pane), draws
+  wireframe floor planes/axes/routes/upstream cabinet only, reference building
+  and WebV removed, tray/conduit run totals with red-line host recovery,
+  cross-floor rise check measured from the upstream floor ground to the device
+  end, pitch-true 4.8 m axis grid with both ends inside their bays and a named
+  mismatch, U1UL position match; legacy single-/multi-line tray text/red-line,
+  dimension/curve and bent-polyline route recognition; `宽Wx高H` tray width;
+  dead label associations re-matched geometrically; socket-panel routes lifted
+  1 m; line labels sit on their line; confirmation windows 1440×900 / 1440×820
+  half-and-half; the preview page fits the camera to the route, lays labels out
+  with same-frame collision avoidance, draws a single bold cable, a coordinate
+  lattice at every grid intersection and endpoint axis chips at grid corners),
+  packaged locally (see below) but not yet tagged or published; a clean build of this source is
+  installed user-scope on the development machine (2026-11-25) and verified —
+  24 files, installed `UNCAD.dll` SHA-256
+  `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`,
+  identical to the build output and the bundle (`InstallUser` refuses to run
+  while AutoCAD is open — close AutoCAD first). The last local release
+  is `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`; D-058 preview rebuilt with gap
+  tolerance and U1UL). The latest published release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`, commit `da8db81`; D-057 same-name circuits,
   drawing-info table templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
@@ -137,6 +147,75 @@ when their version numbers or counts are stale.
   changes only a label's distance and angle — never its side, text, height or
   position along the line — and only for labels carrying the U1L/U1LX
   association.
+- U1U preview (D-059): draws only the workbook floors' planes, the edge axis
+  band, the routes, the hose and the upstream cabinet. Floor planes are
+  **wireframe only** (outline + column grid): WPF's transparent fill still
+  writes depth and hides routes on the far side. The reference building
+  (waffle/steel/grating/columns/busbar/ground slabs), the bay-based footprint
+  and its 4096-bay limit, and WebV (`UNCAD.Preview.exe` + three.js) are gone
+  and must not return. The U1U preview kernel is the local WebView2 +
+  three.js page (`Web/QuickLineOrbit`, virtual host, vendored three.js) with
+  the WPF Viewport3D renderer as an **automatic fallback**: the WPF scene is
+  built synchronously and stays as the base layer, the browser initialises in
+  the background and only covers it after `ready` + first frame, and every
+  browser failure collapses it and leaves the WPF scene plus a reason visible
+  — never a blank/white pane (3.8.0.5). The login window's WebView2 is the
+  only other consumer; do not restore the out-of-process WebV viewer or the
+  3.3.8 prewarm/orphan sweep. The axis grid is
+  **pitch-true** (3.8.0.4): one axis number/letter per 4800 mm line, never
+  interpolated between the endpoint labels; the drift is split so each route
+  end is within half a bay of its own axis line (a device off the axis centre
+  still sits in its named bay); the default convention is letters along +X
+  (north, up-right) and numbers along −Y, the rotated convention is used only
+  when the default cannot hold both ends, and a frame whose plan distance
+  still cannot host the workbook axis difference is reported
+  (`轴位与图面距离对不上…`) instead of stretched or hidden. Tray/conduit
+  lengths come
+  from the annotation (one run total, never a sum of segment labels); hosts
+  resolve metadata → red line (split into pieces, adjacent label-less red
+  lines merge) → nearest single segment, and an unresolved run is reported.
+  Legacy annotations without ownership metadata find their red line from the
+  text's geometric-extents centre; text/line parallelism is not required, and
+  a used red line is never reported as an unlabelled cable. Annotation text
+  (including a multi-line second `3500mm`, and a single line with the run
+  length at the end such as `梯形桥架200Wx100H-1300mm`) is never a cable
+  millimetre label; the `宽Wx高H` spec supplies the tray width. Text carrying
+  `共用` (shared tray) is deliberately left outside these rules (user,
+  2026-11-25: "共用桥架不用管").
+  Cable segments include open/closed-collinear LWPOLYLINE, 3D polyline and
+  spline; the fill/U1U scan also treats a linear dimension with no real line
+  at its witness points as a segment (U1LX's default scan is unchanged, and a
+  dimension is never moved to `U_CABLE`). In the fill/U1U scan an open,
+  bulge-free bent LWPOLYLINE whose legs all lie on the drafting axes is split
+  into legs (`handle/seq` keys), each with its own label; the default U1LX scan
+  is unchanged and hop-detour polylines are not split.
+  A millimetre label whose U1L association is dead (handle 0 or deleted — what
+  AutoCAD leaves after copying without the target) is matched geometrically
+  like a legacy label; an association that still resolves to a live non-line
+  entity stays unresolved. Text with a cross-section unit (`mm²`/`mm2`/`㎡`)
+  and hose-length text (`软管长度` attribute, text containing `软管`) are never
+  cable millimetre labels.
+  Every millimetre label must belong to a segment — unbound ones are named
+  (reserve-marker form excluded) — and both axis blocks are required.
+  Cross-floor routes are checked from the upstream floor ground to the device
+  end: the upstream end's height above that ground (socket panel 1 m, others
+  0) plus the route's rise from its base point (the riser bottom when the end
+  segment is a riser standing on it) must match the device standing level
+  minus the upstream ground within 0.2 m per storey (2F→3F: 7.6–7.8 m; both
+  levels from the U1SET level list, named in the warning), otherwise a
+  warning is reported; nothing is blocked (3.8.0.3 — never compare the bare
+  end-to-end rise with the floor difference again). U1UL also aligns
+  labels matched by position (beside the segment, ≤ max(4× height, 300)
+  off-line, ≤10° skew) and never writes an association.
+- U1U preview placement and labels (3.8.0.2): a socket panel lifts the whole
+  reconstructed route 1 m (no end-height arithmetic — the box is a
+  placeholder); I-Line panels and bus plug boxes are not lifted. The
+  placeholder box footprint scales with the scene (width ≥ 5 % of the view
+  diagonal, capped at 4×; heights stay true). Millimetre, tray/conduit-run and
+  hose labels are rotated along their segment's on-screen direction and fixed
+  beside it (readable: never upside down); they do not take part in collision
+  avoidance and may only flip to the other side of the same line. Do not
+  reintroduce free-floating chips for line labels.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

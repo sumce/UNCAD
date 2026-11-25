@@ -45,6 +45,12 @@ deferred, or important for support diagnosis.
   hose is schematic (it continues the last segment from the device end) and
   writes nothing. U1UL leaves labels that carry no U1L/U1LX association
   untouched and lists their lines.
+- Shared trays (text carrying `共用`, e.g. `共用桥架200*100 3000mm`) are
+  deliberately left alone (user, 2026-11-25: "共用桥架不用管"). The
+  single-line annotation rule of 3.8.0.3 skips them: a metadata-owned shared
+  tray keeps its pre-3.8.0.3 behaviour — the run length is not read (the
+  summary counts it as 未标长度) and the width falls back to the 200 mm
+  default. Do not "fix" this without a new instruction; a unit test locks it.
 - BOQ files written before 3.6.0 may hold one merged column for a machine's
   same-name circuits. The first 3.6.0 write renames that column to the first
   circuit (`回路名（上游 X）`) and rewrites its quantities from that frame; run
@@ -131,9 +137,6 @@ deferred, or important for support diagnosis.
 
 ## Environment Limits
 
-- WebV 是可选预览窗口，需安装 Microsoft Edge WebView2 Runtime；如果运行时
-  缺失、控制器超时或 GPU 上下文丢失，窗口会显示错误，WPF 内嵌预览仍可用。
-  WebV 在独立进程和独立临时用户目录运行，不会阻塞 AutoCAD。
 - U1U route ends come from the upstream/device blocks when those blocks can be
   located (D-058): the end nearest each block is that end; when both ends are
   equally near, or both blocks point at the same end, direction stays
@@ -145,9 +148,68 @@ deferred, or important for support diagnosis.
   groups, invalid axes, and zero or multiple region matches leave cabinet and
   endpoint-axis markers hidden and report why; they do not block fill or BOQ
   work.
-- U1U previews exceeding 4096 occupied column bays including their margin
-  show a selection-size error. Bays and waffle openings are not sampled.
-  This limit affects the preview only, not the drawing or BOQ.
+- U1U preview (D-059) draws the workbook's upstream/device floors only. A frame
+  whose workbook floors cannot be read falls back to the U1SET "本层=" line;
+  with neither, no floor plane is drawn (the route still shows). Floor
+  elevations come from the U1SET level list, unknown floors are extrapolated at
+  the 7.8 m floor height — a project with a different floor height must list
+  its grounds in U1SET before the cross-floor check (7.6–7.8 m per storey) is
+  meaningful. Since 3.8.0.3 the check measures from the upstream floor ground
+  to the device end (a socket panel's 1 m above the ground is added; a riser
+  end is measured from the riser bottom), and the warning names the two
+  level-list entries behind the band. The shipped list encodes one building
+  (2F ground 7800, 3F ground 15000, 3F raised floor 15600 — the device stands
+  on the raised floor); another storey height is a U1SET edit, not a code
+  change. The preview is read-only: it never writes geometry and never
+  feeds BOQ or statistics.
+- U1U preview floors are wireframe by design: WPF's transparent fill still
+  writes depth and hides routes on the far side. Legacy tray/conduit text with
+  no ownership metadata is matched to a nearby red line by the text's extents
+  (parallel text/line is not required), but the red line must still be within
+  600 mm of a parallel labelled cable (≤15°) to resolve a host; otherwise the
+  annotation is reported as an orphan. A linear dimension with no real line at
+  its witness points is a segment only in the fill/U1U scan; U1LX still needs
+  a real Line, polyline (open, or closed-collinear), 3D polyline, or spline.
+  Likewise bent-polyline legs (fill/U1U scan only) are identified as
+  `handle/seq` in the issue lists; U1LX and U1UL still see the whole polyline
+  as one chord, and U1UL does not reposition the labels of its legs.
+- U1U preview (3.8.0.5) runs WebView2 + three.js with the WPF renderer as
+  fallback. The WebView2 controller can take 6–33 s to become ready on a cold
+  profile; the pane shows the WPF scene from the first moment and swaps only
+  after the page reports its first frame, so the wait is invisible. If the
+  runtime is missing or the controller times out, the pane stays on WPF and
+  shows the reason — preview data and BOQ work are unaffected. The page fits
+  the camera to the route and lays labels out with same-frame collision
+  avoidance (axis labels hide first); the far edge axis band is deliberately
+  not drawn (a large slab would cover the view in numbers/letters).
+- U1U axis grid (3.8.0.4) is pitch-true: one axis number/letter per 4800 mm
+  grid line, no interpolation between the endpoint labels. Both route ends are
+  placed within half a bay of their own axis lines by splitting the drift. When
+  the drawing's plan distance cannot host the workbook axis difference (the
+  route is drawn not to scale, or the workbook axis belongs to another face of
+  the fab), the grid is anchored at the upstream and the frame reports
+  `轴位与图面距离对不上` with the expected bays/distance and the measured span;
+  a bay is never stretched to hide the mismatch. Direction resolution itself
+  is unchanged (connection blocks first; the fixed-convention axis-region
+  match only as the no-block fallback — a sign derived from the geometry
+  cannot decide upstream/device).
+- "Millimetre label without a segment" still fires for genuine orphans: a
+  duplicate label (two texts on one line), a label whose line is inside a block
+  or at another elevation, or a label more than 6× its text height from the
+  nearest line. On 18 customer drawings (whole-space scan) 83 such labels
+  remain after 3.8.0.2, down from 379; they are reported, not guessed. Use the
+  read-only `UNCAD_DUMP_HANDLES` command (handles in `UNCAD_DUMP_HANDLES`,
+  output path in `UNCAD_DUMP_OUT`) to dump the geometry of a named handle and
+  the nearest scanned lines.
+- U1U line labels (millimetres, tray/conduit runs, hose) are attached to their
+  segment and rotated along it; they deliberately skip collision avoidance, so
+  two long labels on short neighbouring segments can overlap when seen
+  end-on. They only flip to the other side of the same line, never slide.
+- U1UL claims a label by position only inside the tolerance box (along the
+  segment, within max(4× text height, 300) off-line, ≤10° skew). A label moved
+  farther away is left untouched and counted; if the line was redrawn shorter
+  than the label's position, the label is outside the along-range and is not
+  claimed either.
 - CAD integration tests and real command acceptance require AutoCAD 2022 and
   its .NET assemblies. Core tests should remain runnable without AutoCAD loaded.
 - User drawings, customer workbooks, logs, `bin`, `obj`, and `artifacts` are

@@ -94,22 +94,54 @@
 
 ### 3D 预览
 
-- WPF Viewport3D 是 U1U/U13D 的内嵌默认视图；WebV/Three.js 可从预览工具栏
-  按需打开。两者消费同一份 `QuickLine3dScene` 网格与标签锚点，场景语义和
-  毫米坐标不在渲染器里重建。
-- WebV 的 WebView2 控制器只能在 `UNCAD.Preview.exe` 独立进程初始化，不能放回
-  AutoCAD STA 线程。使用每窗口独立的临时用户数据目录、本地虚拟主机映射、
-  无远程请求/宿主对象/下载；初始化或渲染失败不影响 WPF 和清单流程。
+- **U1U 预览＝WebView2 + three.js 主渲染 + WPF 自动兜底（3.8.0.5）**：
+  `QuickLineOrbitWebHost` 底层放 WPF 渲染器（`QuickLineOrbitPreviewControl`，
+  SetModel 同步建场景、立即可见），顶层 WebView2 以 1×1 可见尺寸后台初始化
+  （Collapsed 起步会白屏——3.3.6.1 教训），页面 `ready` + 首帧后才铺满盖住；
+  运行时缺失/30 s 控制器超时/导航失败/渲染进程异常/页面脚本错误一律退回 WPF
+  并写明原因，任何情况下都有画面。页面是 `Web/QuickLineOrbit`（本地虚拟主机、
+  自带 three.js vendor，只回 `ready`/`rendered`/`renderError`/`pageError`）。
+  独立进程 WebV（`UNCAD.Preview.exe`）与 3.3.8 预热器保持删除；U13D 仍是 WPF。
+  场景语义和毫米坐标都在构建器（`QuickLineOrbitSceneBuilder` 与信封）里定死，
+  渲染端只画。
+- **U1U 场景只有四样东西**（D-059）：楼层平面（台账上游/设备楼层之间的每层，
+  标高取 U1SET 楼层标高清单；**线框**——半透明面会写深度、挡住另一侧的线路）、
+  图签式轴位边标（数字/字母各一排，按 4800 柱距从解析出的端点位外推）、线路
+  （电缆 + 桥架/线管通道 + 软管 + 整趟标签）、上游柜（I-Line 落地 / 插座盘离地
+  1 m / 立管取底部基础点；插座盘的整条线路抬高 1 m，方块按场景放大）。3.3.7–
+  3.4.0 的参照建筑（华夫板/工字钢/葡萄架/柱/母线玻璃层/地面板）与基于柱跨的
+  包络推算及 4096 跨上限全部删除——不要再引回来；线宽按屏幕像素反推，保证细
+  网格在任意缩放下可读。
+- **轴位网格（3.8.0.4）**：一个轴位恒为 4.8 m，每根柱网线一个轴号/字母（相邻
+  差 1），**不做两端之间线性插值**（以前 11 跨会被压进几十米的图面，跨距就不是
+  4.8 m 了）。两端轴号与图面位移的偏差对半分摊，每端离自己的轴线不超过半跨
+  ——设备不在轴位中心也落在自己的格子里。默认约定「字母沿 +X、数字沿 −Y」
+  （等测图右上为北）放不下时试旋转约定「数字沿 +X、字母沿 −Y」；两边都放不下
+  就锚在上游、按 4.8 m 铺，并在问题清单/命令行报「轴位与图面距离对不上」（相差
+  几跨、应有/实际多少米）。递增方向由两端轴号与图面位移定，不硬编码；两端
+  字母相同时按约定。
+- 标签是「牌子」：米数读米（`14.4 m`）、深色底衬、粗体。**贴线的标签**（米数、
+  桥架/线管整趟、软管，3.8.0.2）沿线段在屏幕上的投影方向排字、固定在线旁，不
+  参与防重叠，只在首选侧撞上已贴线标签时翻到线的另一侧；其余牌子（两端、上游
+  柜、楼层名）避让贴线标签，挤不下时落在重叠最少的位置照常显示（轴号边标除外，
+  全撞则隐藏）。对应测试：
+  `QuickLineOrbitPreviewModelTests`、`QuickLine3dPreviewTests`、
+  `FillOrbitPreviewWindowTests`、`RoutePreviewRecognitionTests`、
+  `RouteFloorAndRecoveryTests`；`PreviewLookScreenshotTests`（环境变量
+  `UNCAD_PREVIEW_SHOTS=1`）把窗格渲染成 PNG 供观感核对。
 - 带毫米标的路线预览一律按标签长度建模；00mm 占位规则仍只影响 Xauto，
-  不得让预览线长与标签脱节。对应测试见 `QuickLineWebPreviewTests`、
-  `QuickLineOrbitPreviewModelTests`、`QuickLine3dPreviewTests` 和
-  `FillOrbitPreviewWindowTests`；在线登录页仍使用 WebView2。
-- 线路识别（D-058）：U1U 的预览模型在 `FillRouteInspectionStage.AttachPreview` 里
-  构建（同一读事务、try/catch，U1F 不建）；识别逻辑在 `FillRouteRecognitionStage`，
-  纯函数在 `Core/QuickLine`（`QuickLineRouteConnector` 断口容差、
-  `QuickLineRouteDirectionPlanner.ResolveFromAnchors` 两端按块、
-  `RouteAnnotationTextPlanner` 文字识别与就近绑定、`RouteAnnotationLineClassifier`
-  标注线）。只读，不改图纸、不进统计。断口容差只作用于两端都带毫米标的线段；
+  不得让预览线长与标签脱节。
+- 线路识别（D-058/D-059）：U1U 的预览模型在 `FillRouteInspectionStage.AttachPreview`
+  里构建（同一读事务、try/catch，U1F 不建）；识别逻辑在
+  `FillRouteRecognitionStage`，纯函数在 `Core/QuickLine`：
+  `QuickLineRouteConnector`（断口容差）、`QuickLineRouteDirectionPlanner
+  .ResolveFromAnchors`（两端按块）、`RouteAnnotationTextPlanner`（文字识别、
+  整趟长度解析）、`RouteAnnotationHostRecovery`（红线拆段分别找最近电缆）、
+  `RouteAnnotationLineClassifier`（认标注线）、`PreviewFloorPlan`（楼层平面 +
+  跨层校验）、`PreviewCabinet`（上游柜）、`QuickLineColumnGridPlanner`（轴位
+  网格：4.8 m 定跨、两端落格、对不上点名）。只读，不改图纸、不进统计。断口容差
+  只作用于两端都带毫米标的线段；桥架/线管长度取标注上的整趟总长，绝不逐段
+  相加；没有归属线段的毫米标与缺失的轴位块都点名。
   批量 U1U 的桥架/线管标注文字整图只收一次（与平行标注输出同一条 O(图框×实体) 教训）。
 
 ## AutoCAD 写入
@@ -172,14 +204,49 @@ CAD 行为不能只靠纯单测；出图、写图这类必须真机验证：
   是否真的回滚"。U1PDF 失败路径靠回滚丢弃临时打印设置，这条修复的全部正确性都
   建立在该前提上；探针同时用 `Commit` 作对照，避免出现"什么都没变"的假通过。
   结论（AutoCAD 2022 实测）：`Dispose` 未提交 = 回滚，`Commit` = 落盘。
-- `UNCAD_ROUTE_PREVIEW_SELFTEST`（3.7.0，U1U 3D 预览数据链）：在 `XFrameTemplate.dwg`
-  上画三段带毫米标的路线（一处拐角差 30）、一条无毫米标的线、一趟带元数据的桥架
-  输出、一条 U1B 软管标注和两个块引用，走真实的体检 + 预览构建，断言断口被容差
-  接上、桥架通道归属、两端落在离连接块最近的末端、软管取 U1B 标注长度、摘要与
-  问题点名。
-- `UNCAD_LABEL_ALIGN_SELFTEST`（3.7.0，U1UL 毫米标归位）：真事务里断言归位后
-  所在侧/沿线位置/文字/字高/关联元数据不变，无毫米标的线段与只靠位置匹配的
-  毫米标不动并计数，重跑幂等。
+- `UNCAD_ROUTE_PREVIEW_SELFTEST`（3.7.0 / 3.8.0，U1U 3D 预览数据链）：在
+  `XFrameTemplate.dwg` 上画三段带毫米标的路线（一处拐角差 30）、一条无毫米标的
+  线、一趟带元数据的桥架输出、一条 U1B 软管标注、两个块引用、一个没有归属的
+  毫米标和一个设备预留标记形态的横排数字，走真实的体检 + 预览构建，断言断口
+  接上、桥架整趟（趟数 + 整趟长度）、两端落在离连接块最近的末端、软管取 U1B
+  标注长度、楼层平面与跨层高度报警、上游柜落地、无归属毫米标与缺失轴位块点名
+  （预留标记不点）、场景里没有华夫板；3.8.0.1 起楼层平面是线框（不再有半透明面）；
+  3.8.0.3 起跨层报警量的是「上游楼层地面到设备端」（I-Line 盘：线路竖向；插座盘：
+  离地 1 m + 线路竖向），文案点名 U1SET 标高清单的来源条目。
+- `UNCAD_LABEL_ALIGN_SELFTEST`（3.7.0 / 3.8.0，U1UL 毫米标归位）：真事务里断言
+  归位后所在侧/沿线位置/文字/字高/关联元数据不变；没有毫米标的线段计数、
+  只靠位置匹配（贴在线旁）的毫米标也归位但不补写关联、离线太远的那个不动并
+  计数；重跑幂等。
+- `UNCAD_LEGACY_TRAY_SELFTEST`（3.8.0.1，旧图框桥架）：竖排多行文字
+  「梯形桥架200Wx100H / 3500mm」+ 缩短红线 + 没有归属元数据。断言扫描器不把
+  第二行的 3500mm 当电缆毫米标、红线拆段找到旁边带毫米标的电缆、整趟 3.5m、
+  红线算标注线且不再报「没有毫米标」/「找不到宿主」。3.8.0.3 起加单行写法
+  「梯形桥架200Wx100H-1300mm」（长度 1.3m、宽度按「宽Wx高H」读，不再报
+  「毫米标没有归属线段」），宽度不再是缺省值。
+- `UNCAD_CURVE_ROUTE_SELFTEST`（3.8.0.1，非 LINE 电缆段）：闭合但顶点共线的
+  多段线、三维多段线、样条曲线、以及没有实线的线性标注（旁边另放「300mm」
+  文字）都认成线段且毫米标归属正确；默认 U1LX 扫描不把标注当线段。
+- `UNCAD_DEAD_ASSOCIATION_SELFTEST`（3.8.0.2，「300mm 识别不到」的根因）：标注
+  带着 U1L 关联、关联句柄是 0（AutoCAD 复制时置空的 XData 句柄），文字压在
+  短线中点上。断言它回到几何配对、归到旁边的线上；活关联的线保住自己的
+  标注；关联指向活着的非线实体的照旧不猜；`mm²` 型号文字、长格式
+  `电缆…=14800mm`、软管块的「软管长度」属性、自由文字「软管1500mm」都不是
+  电缆毫米标。
+- `UNCAD_BENT_POLYLINE_SELFTEST`（3.8.0.2，一笔画出的路线）：开口无弧、每腿
+  都在制图轴上的多段线（斜 3400 / 竖 2000 / 斜 3000，两个标注带指向它的旧
+  关联）在填充/U1U 口径下拆成 3 段（键＝句柄/序号）、各有标注、无归属为 0、
+  3D 里三段都在；默认 U1LX 口径不拆；带斜腿的绕行多段线不拆。
+- `UNCAD_DUMP_HANDLES`（只读诊断，不是门禁）：按句柄导出实体的真实几何
+  （类型/图层/端点/文字定位点/字高/旋转/对齐/U1L 关联），再导出整图配对
+  结果（线段与各自归属的毫米标、没有归属的毫米标及离它最近的线）。环境
+  变量 `UNCAD_DUMP_HANDLES`=句柄列表、`UNCAD_DUMP_OUT`=导出路径。现场「这个
+  毫米标为什么归不到线上」先跑它取证——3.8.0.2 的根因就是靠它在 18 张客户
+  图纸上坐实的（全图无归属 379 → 83）。
+- `UNCAD_TEXT_SURVEY`（只读诊断，不是门禁）：把当前空间（含块属性）里所有带
+  桥架/线管字样的文字按「实体类型 + 原文」去重计数导出（出现次数、旋转角、
+  有没有 U1L 关联/归属元数据），只记事实不做判定。环境变量
+  `UNCAD_SURVEY_OUT`=导出路径。现场「这种标注文字为什么不认」先跑它把真实
+  写法收齐，再改识别规则——3.8.0.3 的单行桥架写法就是这样对出来的。
 
 ## 代码评审门槛
 

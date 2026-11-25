@@ -5,15 +5,32 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
-  preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
-  text, hose, named issues; new command U1UL millimetre-label alignment),
-  released locally on 2026-11-25 as tag `v3.7.0` (commit `5a9b81a`), not
-  published; `UNCAD-Pro-v3.7.0.0.zip` (6,566,040 bytes, SHA-256
-  `8F1A066B35445BDD405C0DCD7ECCBA3E4A74A0BFE77F963B8C6928B518C687B2`) passed
-  every `release.ps1` gate. The development machine runs a local build of the
-  same source (installed before the package was built). The latest published
-  release is `3.6.0.0`
+- Current local source version: `3.8.0.8` (2026-11-26, D-059 + 3.8.0.1–3.8.0.8
+  field fixes: U1U preview runs the local WebView2 + three.js page with the
+  WPF Viewport3D renderer as automatic fallback (never a blank pane); it draws
+  only the workbook floors' wireframe planes, the edge axis band, the routes
+  and the upstream cabinet; reference building and WebV removed; tray/conduit
+  run totals with red-line host recovery; cross-floor rise check measured from
+  the upstream floor ground to the device end; pitch-true 4.8 m axis grid
+  (both ends inside their bays, a mismatch is named); U1UL position match;
+  legacy single-/multi-line tray text/red-line, dimension/curve and
+  bent-polyline route recognition; `宽Wx高H` tray width; dead label
+  associations re-matched; socket panel lifts the route 1 m; line labels sit
+  on their line; confirmation windows 1440×900 / 1440×820 half-and-half;
+  preview page camera fits the route, labels avoid each other, single bold cable,
+  coordinate lattice at every grid intersection, endpoint axis chips at grid
+  corners),
+  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.8.zip` (6,587,589 bytes,
+  SHA-256
+  `9ACAF47423D50CDF3126FC7D060C35D0B0ACC5F7CBBADCC08CD4A1C73ED6BDAD`) but not
+  yet tagged or published; a clean build of this source is installed user-scope
+  on the development machine (2026-11-25) and verified, 24 files, installed
+  `UNCAD.dll` SHA-256 `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`,
+  identical to the build output and the bundle (`InstallUser` refuses to run
+  while AutoCAD is open). The last
+  local release is `3.7.0.0` (tag `v3.7.0`,
+  commit `5a9b81a`; D-058 gap tolerance + U1UL). The latest published release is
+  `3.6.0.0`
   (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
   templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
@@ -129,16 +146,19 @@ XLAYOUT/XSTS
   when unique in the machine, same-name frames without a usable key pending)
   -> arrange or compare
 
-U1U route preview (D-058; read-only, U1F builds none)
-  whole-space scan (segments + labels, parallel outputs, annotation texts —
-  each once per command) -> per frame: segments whose midpoint is inside the
-  boundary -> connectivity (strict 1.0, plus gap tolerance only between two
-  labelled segments) -> tray/conduit channels (metadata ownership first; a
-  text without metadata binds to the nearest parallel labelled segment)
-  -> isometric scene from the labelled segments -> route ends from the
-  upstream/device blocks (nearest open end) -> hose from the Ruanguan block
-  -> issues named (unlabelled lines, tolerated gaps, orphan labels, skipped
-  directions) -> preview model handed to the confirmation window
+U1U route preview (D-058/D-059; read-only, U1F builds none)
+  whole-space scan (segments + labels + unbound labels, parallel outputs,
+  annotation texts — each once per command) -> per frame: segments whose
+  midpoint is inside the boundary -> connectivity (strict 1.0, plus gap
+  tolerance only between two labelled segments) -> tray/conduit runs
+  (metadata ownership -> red-line pieces -> nearest segment; the annotation
+  carries the run total) -> isometric scene from the labelled segments ->
+  route ends from the upstream/device blocks (nearest open end) -> hose from
+  the Ruanguan block -> floor planes from the workbook floors (own
+  elevations), upstream cabinet by 盘柜类型, cross-floor rise check ->
+  issues named (unlabelled lines, unbound labels, tolerated gaps, orphan
+  runs, missing axis blocks, skipped directions) -> preview model handed to
+  the confirmation window (floors + edge axis band + route + cabinet only)
 ```
 
 ## Data Contracts

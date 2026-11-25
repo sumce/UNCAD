@@ -4,6 +4,265 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-059: Preview Redesign — Floor Planes Only, WebV Removed, Run Totals, U1UL Position Match (2026-11-25)
+
+- Status: accepted (user instruction 2026-11-25)
+- Problem: the U1U preview was slow on real orders (the reference building —
+  waffle plates, I-beams, grating, columns, busbar glass — buried the route and
+  dominated the triangle count and transparent blending), the axis display and
+  the millimetre labels were hard to read, and the user's requirement changed:
+  **only the floor planes of the workbook floors, and axis labels**. Two
+  recognition gaps were reported as well: tray/conduit annotations whose hosts
+  cannot be resolved (merged polylines, shortened red lines, several runs
+  sharing one label) and millimetre labels that U1UL skipped because they carry
+  no association metadata. WebV (the optional WebView2/three.js viewer) is not
+  wanted at all.
+- Decision:
+  1. **Preview draws floors, axes, routes, cabinet only.** Floor planes are the
+     workbook's upstream and device floors (all floors between them). Elevations
+     come from the U1SET level list ("NF地面 / NF高架地板面", raised floor wins —
+     equipment stands on it); unknown floors are extrapolated by the 7.8 m floor
+     height from the nearest known ground. Nothing of the 3.3.7–3.4.0 reference
+     building returns; the old bay-based footprint planner and its 4096-bay limit
+     are deleted (a long route cannot fail the preview any more).
+  2. **Axis display is a drawing-style edge band.** Numeric and letter axis
+     numbers are printed along two adjacent outer edges of the top floor plane,
+     extrapolated from the resolved endpoint axes at the 4800 mm pitch — not a
+     full combination label on every column.
+  3. **Labels are chips.** Millimetre labels read in metres ("14.4 m") on a
+     dark backing; tray/conduit labels are one per run ("桥架 400 · 19.2m");
+     floor names carry their relative elevation; the ends are "上游端 48/V" /
+     "设备端 37/V". All chips participate in collision avoidance; a millimetre
+     chip that cannot find a free spot still shows at its least-overlapping
+     position instead of disappearing.
+  4. **WebV is deleted** (`UNCAD.Preview.exe`, the three.js page, the launcher,
+     its project reference, bundle payload entries and the U13D/U1U toolbar
+     buttons). WPF Viewport3D stays the only 3D kernel; the login window keeps
+     its WebView2 (D-025 unchanged). Physical line widths derive from screen
+     pixels so thin grids stay readable at any zoom.
+  5. **Upstream cabinet placement** (workbook 盘柜类型): I-Line panel stands on
+     the upstream floor's ground; socket panel sits 1 m above it (bottom);
+     busbar plug box is drawn at the route end height. The base point is not
+     blindly the route endpoint: when the endpoint segment is a vertical riser
+     going up, the riser's bottom is the equipment base point. Nothing is drawn
+     when the type is empty or the direction is unresolved.
+  6. **Cross-floor height check**: when upstream and device lie on different
+     floors, the vertical distance between the two route endpoints must equal
+     the floor elevation difference, allowing 0.2 m per storey (2F→3F: 7.6–7.8
+     m). A mismatch is reported as a warning on the pane, the command line and
+     the batch remarks; nothing is blocked.
+  7. **Tray/conduit runs and red-line recovery**: an annotation's length is the
+     **whole run total**, never per segment. Hosts resolve in order: metadata →
+     the annotation's own red line(s), split into pieces that each find the
+     nearest parallel, overlapping labelled cable (adjacent label-less red lines
+     of the same kind merge into the run) → nearest segment only (reported as a
+     proximity binding). A run that still finds no cable is reported as an
+     orphan; the batch remarks name it. Several annotations of the same kind may
+     share one red-line chain (one label, several runs) — the lengths add.
+  8. **Unbound millimetre labels and axis blocks are reported**: every
+     millimetre label must belong to a segment — one that belongs to none is
+     named (handle and text) on the pane/command line/batch remarks; the
+     device-reserve marker form (horizontal `\d+0mm` without a dangling
+     association) is excluded. A frame must carry both the upstream and the
+     downstream axis block; a missing one is reported.
+  9. **U1UL also aligns labels matched by position**: a label without the
+     U1L/U1LX association is claimed when it sits beside the segment (within the
+     along-line range, off-line at most max(4× text height, 300), angle within
+     10°). It is aligned but never gains an association; anything farther or
+     more skewed is left untouched and counted (`PositionRejected`).
+- Consequence: do not bring back the reference building model, the bay-based
+  footprint/4096 limit, or WebV; do not compute tray/conduit length by summing
+  segment labels (the annotation carries the run total); do not claim a
+  millimetre label by position outside the stated box, and never write an
+  association from U1UL; U1LX and Xauto keep the strict endpoint tolerance and
+  are unaffected.
+- Amendment (2026-11-25, 3.8.0.1 — field acceptance of D-059):
+  1. Floor planes are **wireframe only** (outline + column grid). WPF's
+     semi-transparent surfaces still write depth, so a filled plane hid every
+     route and label on its far side ("穿过楼层就看不到电缆"). The socket-panel
+     chip sits at the cabinet's mid-height and a thin guide runs from the floor
+     to the box bottom, so "离地 1 m" is visible instead of looking like it
+     stands on the floor.
+  2. Tray/conduit annotation text is never a cable millimetre label — this
+     includes a second line such as `3500mm` in a multi-line tray annotation.
+     For legacy annotations without ownership metadata the red line is found
+     from the text's geometric-extents centre, and **parallelism between the
+     text and the line is not required** (vertical tray text beside a diagonal
+     red line is a real drawing form). A red line used by an annotation is
+     classified as an annotation line, not reported as an unlabelled cable.
+     The red-line-to-cable perpendicular limit is 600 mm.
+  3. Cable segments may also be closed LWPOLYLINEs whose vertices are all
+     collinear (the closing edge overlaps the line), 3D polylines, and splines
+     (open curve, first/last point). In the fill/U1U scan only, a linear
+     dimension with no real line at its witness points becomes a synthetic
+     segment between those points, so the drafter's `300mm` dimension is part of
+     the route; the default U1LX scan is unchanged, and synthetic dimension
+     segments are never moved to `U_CABLE`.
+  4. D-059's other rules (run totals, orphan/unbound reports, axis blocks,
+     cross-floor rise check, U1UL position match) are unchanged.
+- Amendment (2026-11-25, 3.8.0.2 — second field round):
+  1. **Socket panel lifts the whole route.** The box is only a placeholder: for
+     a socket panel the reconstructed route is raised 1 m as a whole (no
+     end-height arithmetic), so its upstream end sits 1 m above the upstream
+     floor. The box bottom sits at floor + 1 m when the floor is known, and on
+     the route's base point otherwise. I-Line panels and bus plug boxes are not
+     lifted.
+  2. **The placeholder box is scaled with the scene.** Its footprint is
+     enlarged so the box width is at least 5 % of the view diagonal (route +
+     floor bounds), capped at 4×; heights stay 2200 / 1000 / 700 mm.
+  3. **Line labels sit on their line.** Millimetre, tray/conduit-run and hose
+     chips are rotated along the on-screen projection of their segment
+     (readable: left-to-right, or bottom-to-top beside a vertical line), fixed
+     beside it (millimetres and hose above, tray/conduit below). They do not
+     take part in collision avoidance, so they never drift when the camera
+     orbits; the only move is flipping to the other side of the same line when
+     the preferred side overlaps an already placed line label. Other chips
+     (ends, cabinet, floor, axis edges) avoid the line labels.
+  4. **A dead label association is no association.** When a millimetre label
+     carries a U1L association whose handle is 0 or points at a deleted entity
+     (AutoCAD zeroes XData handles that are copied without their target), the
+     label takes part in geometric matching again. This is the cause of the
+     field's "300mm not recognised": the text sat on the line's midpoint with
+     `associatedLine=0`. An association that still resolves to a live
+     non-line entity remains unresolved (reported, not guessed).
+  5. **Not millimetre labels**: text carrying a cross-section unit (`mm²`,
+     `mm2`, `㎡` — cable model / BOQ info, even when it ends in `=14800mm`) and
+     hose-length text (the Ruanguan block's `软管长度` attribute, free text
+     containing `软管`).
+  6. **Bent polylines are routes drawn in one stroke.** In the fill/U1U scan
+     an open, bulge-free LWPOLYLINE whose legs all lie on the drafting axes
+     (0°, 30°, 90°, 150°, ±5°) and are not all collinear is split into legs;
+     each leg is identified as `handle/seq` and gets its own label (labels
+     associated with the polyline handle go through geometric matching). The
+     default U1LX/Xauto/U1R scan is unchanged, and hop-detour polylines (bulge
+     or off-axis legs) are not split.
+- Amendment (2026-11-25, 3.8.0.3 — third field round):
+  1. **The cross-floor rise is measured from the upstream floor to the device
+     end** (user: "上下游端点距离改成 2F 地面到设备的距离，在 7.6~7.8"). The
+     measured value is the upstream end's height above the upstream floor
+     ground (socket panel 1 m, others 0) plus the route's vertical rise from
+     its base point (the upstream end, or the riser bottom when the end
+     segment is a riser standing on it). Before, the route's end-to-end rise
+     was compared with the floor elevation difference — the socket panel's
+     metre is not in the drawing (a frame cannot show the ground), so the
+     field saw "应在 7.6~7.8 m，实际 6.2 m" for a route that is 7.2 m above the
+     2F ground. The warning names the level-list entries the band comes from
+     (`按 U1SET 标高清单 2F地面 → 3F高架地板面 差 7.8 m`) and how the measured
+     value is composed (`上游端离地 1 m + 线路竖向 6.2 m`). The band itself is
+     unchanged: device standing level minus upstream ground, minus 0.2 m per
+     storey; both levels come from the U1SET list, so a project with other
+     storey heights edits the list (the default list has 2F ground 7.8 m, 3F
+     ground 15.0 m, 3F raised floor 15.6 m).
+  2. **Single-line tray/conduit annotations are annotations.** A single line
+     with the keyword, a spec and the run length at the end —
+     `梯形桥架200Wx100H-1300mm` — is a tray annotation (length = the trailing
+     millimetres, width from the `宽Wx高H` spec), never a cable millimetre
+     label. A spec ending in a digit needs a separator before the length and
+     the length must not be 0 (so `250` is never split into `25` + `0mm`);
+     text after `mm` (`… 2500mm 预留`) and a keyword without a spec
+     (`桥架内穿管 20mm`) are not annotations. The `宽Wx高H` spec is read as
+     the tray width everywhere (U1Q's own output `梯形桥架100Wx100H` used to
+     fall back to the 200 mm default).
+  3. **Shared trays are left alone** (user, 2026-11-25: "共用桥架不用管"):
+     text carrying `共用` stays outside rule 2 — its length is still not read
+     and nothing about it changed. Do not "fix" it without a new instruction.
+- Amendment (2026-11-25, 3.8.0.4 — axis grid):
+  1. **The bay is 4.8 m and each grid line carries one axis number.** The grid
+     labels are generated at the pitch (adjacent numbers/letters differ by 1
+     per line), never interpolated between the two endpoint labels — the old
+     interpolation squeezed an 11-bay difference into a few dozen metres, so
+     the drawn grid no longer had 4.8 m bays ("一个轴位是 4.8M").
+  2. **Both route ends stay inside their own bays.** The drift between the
+     workbook axis difference and the plan displacement is split equally, so
+     each end is at most half a bay from its own axis line; a device that is
+     not at an axis centre is still bracketed by the axes its label names
+     ("设备很大概率不在轴位中心 只要两端能被正确轴位保住就行"). The increase
+     direction is derived from the labels and the plan displacement (never
+     hard-coded); with both letters equal the documented convention applies.
+  3. **Convention fallback.** The default convention is letters along +X
+     (north, up-right) and numbers along −Y. When the default cannot hold
+     both ends but the rotated convention (numbers along +X, letters along
+     −Y) can, the rotated one is used. When neither holds, the grid is
+     anchored at the upstream axis and the frame reports
+     `轴位与图面距离对不上：…` (expected bays/distance vs measured span, pane
+     issue list and command line). **A mismatch is never hidden** and a bay is
+     never stretched ("算出来的网格轴位和设备/上游轴位对不上也不提示").
+  4. Direction resolution is unchanged: connection blocks first; with no
+     blocks the fixed-convention axis-region match remains the fallback
+     (deriving the sign from the geometry would make both orientations fit
+     equally, so it cannot decide upstream/device).
+- Amendment (2026-11-25, 3.8.0.5 — U1U preview kernel back to WebView2;
+  user instruction "3D预览换成 WebView2吧 … 不要踩之前的无法显示的坑"):
+  this supersedes D-059's "WebView2 is retired / WPF Viewport3D is the only
+  3D kernel" clause and D-054 3.4.0's "no web surface" clause for the U1U
+  confirmation pane. The out-of-process WebV viewer (`UNCAD.Preview.exe`,
+  deleted in 3.8.0) stays deleted — only the in-process local page returns.
+  1. **Two layers, never a blank pane.** The pane hosts the existing WPF
+     renderer (`QuickLineOrbitPreviewControl`) as the always-present base
+     layer (scene built synchronously on `SetModel`), and a WebView2 above it.
+     The browser starts as a visible 1×1 control (a WebView2 that first
+     Loads while Collapsed binds no visual — the 3.3.6.1 field lesson), is
+     initialised in the background through
+     `SharedWebView2Environment.EnsureControllerAsync` (30 s controller
+     timeout, fallback profile directory), and covers the WPF layer only after
+     the page posts `ready` **and** the first frame is built. Any failure —
+     missing runtime, controller timeout, navigation error, process failure,
+     page script error (`pageError`) or `renderError` — collapses the browser
+     and leaves the WPF scene plus a one-line reason visible. Cold starts
+     (6–33 s measured in 3.3.x) therefore never show an empty or white pane.
+  2. **Security posture unchanged (D-025 / D-054 3.4.0.4).** The page is local:
+     virtual host `u1orbit.uncad.invalid` mapped to the plugin's `Web` folder
+     with `CoreWebView2HostResourceAccessKind.Deny`; `NavigationStarting`
+     cancels anything that is not that HTTPS host; no host objects, no
+     downloads, no new windows, permissions denied, DevTools/context menus
+     off, no network. The page receives the same PascalCase envelope as the
+     WPF renderer and only replies `ready` / `rendered` / `renderError` /
+     `pageError`; it never writes CAD data.
+  3. **No prewarm, no resident browser.** The 3.3.8 `OrbitPrewarmHost`
+     (off-screen window + `msedgewebview2` orphan sweep) and its
+     `System.Management` dependency are not restored: the WPF base layer
+     already gives an instant picture, so the browser can initialise lazily
+     per window and die with it.
+  4. **The page is part of the package** (`Web/QuickLineOrbit/**`, seven
+     files including the vendored three.js), listed in `build.ps1` /
+     `installer.ps1` payloads and compared by `release.ps1`; the bundle grows
+     from 17 to 24 files.
+  5. **Confirmation windows are half-and-half at a usable size.** Both U1U
+     windows default to 1440×900 / 1440×820 (MinWidth 1200), keep the 1:1
+     star split with a 6 px splitter, and clamp the preview half at 420 px
+     and the list half at 520 px so the 3D pane cannot be dragged into a
+     strip. With a preview the right half opens on the 清单选择 table (the
+     identity tab remains one click away and validation still switches to
+     it).
+  6. **Page framing and labels (3.8.0.6).** The page camera fits the route
+     bounds (segments, cabinet, endpoints, hose), never the whole floor slab —
+     a 100 m slab must not shrink a 30 m route to a corner. Labels avoid each
+     other in screen space with a fixed priority (line labels first, then
+     direction/pin, cabinet, floor, axis last; axis labels hide when they
+     collide). The page omits the far edge axis band (it covered a large slab
+     in numbers/letters) and keeps only the in-plane ticks/letters near the
+     route. Endpoints carry one «上游端 …»/«设备端 …» chip — no duplicate pin
+     chips. Segment labels are shown in metres (`8000mm` → `8 m`), matching
+     the WPF overlay. Missing/NaN envelope fields never poison the camera.
+  7. **One cable colour; axis marks on the grid.** Route segments are drawn in
+     one colour (orange) — the isometric X/Y/Z axes are reconstruction
+     internals, not a legend (user: "你加XYZ干嘛"). Axis numbers/letters sit at
+     the ends of their grid lines on two adjacent slab edges (not floating in
+     the middle of the floor) and are collision-filtered. The endpoint axis
+     chips («上游端 55/C», «设备端 56/J») are placed at the **grid intersection**
+     of that number line and letter line — the grid corner — joined to the real
+     route end by a thin line, so an endpoint that is not on the axis centre is
+     visible at a glance (user: "轴位肯定在网格夹角"). The WPF fallback uses the
+     same single colour and legend.
+  8. **Coordinate lattice at every grid intersection (3.8.0.8).** Each column
+     grid crossing carries its axis coordinate (e.g. `55/C`) across the whole
+     floor; the lattice is generated from the in-plane tick/letter values at
+     the 4.8 m pitch and filtered by a screen-cell occupancy hash (labels too
+     close on screen hide, and reappear as the user zooms in). The route is a
+     single bold orange tube so it reads at a glance against the lattice. This
+     supersedes the edge-band and in-plane middle-row placements of
+     3.8.0.6/3.8.0.7.
+
 ## D-058: Route Recognition Rebuilt — U1U 3D Pane, Gap Tolerance, Block-Anchored Ends, U1UL (2026-11-25)
 
 - Status: accepted (user instruction 2026-11-25)
