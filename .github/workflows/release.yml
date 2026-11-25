@@ -116,10 +116,16 @@ jobs:
             "are run before tagging; this artifact is a rebuild from the same tagged source."
           Add-Content -LiteralPath $bodyFile -Value $footer -Encoding UTF8
 
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
+          # Do not use `gh release view` here: PowerShell 5.1 surfaces its
+          # "release not found" stderr as a terminating error in Actions.
+          $existingTags = @(gh release list --limit 100 --json tagName --jq '.[].tagName')
+          if ($LASTEXITCODE -ne 0) { throw "gh release list failed" }
+          if ($existingTags -contains $tag) {
             gh release upload $tag $zip --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed" }
             gh release edit $tag --title "UNCAD Pro $label" --notes-file $bodyFile --latest
+            if ($LASTEXITCODE -ne 0) { throw "gh release edit failed" }
           } else {
             gh release create $tag $zip --title "UNCAD Pro $label" --notes-file $bodyFile --verify-tag --latest
+            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
           }
