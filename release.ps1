@@ -178,7 +178,7 @@ if ($versionLabel -like "*-dev") {
 $releaseNote = Join-Path $root ("docs\RELEASE-" + $versionLabel + ".md")
 if (-not $Dev) {
     if (-not (Test-Path $releaseNote -PathType Leaf)) {
-        throw "Release note document is missing: docs\RELEASE-$versionLabel.md (see docs/RELEASE.md)."
+        throw "Release note document is missing: docs\RELEASE-$versionLabel.md (see docs/RELEASE-RUNBOOK.md)."
     }
     if ([IO.File]::ReadAllText($releaseNote).Trim().Length -eq 0) {
         throw "Release note document is empty: docs\RELEASE-$versionLabel.md"

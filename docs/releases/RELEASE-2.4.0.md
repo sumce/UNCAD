@@ -12,4 +12,4 @@
 - 统一版本：`2.4.0` / `2.4.0.0`。
 - 使用新的版本专属 `ProductCode`，保持原 `UpgradeCode`。
 - 仅生成 `UNCAD Pro` 在线授权包。
-- 测试与打包命令见 `docs/RELEASE.md`。
+- 测试与打包命令见 `docs/RELEASE-RUNBOOK.md`。

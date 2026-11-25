@@ -10,7 +10,7 @@ documents assume you already know.
 
 1. `AGENTS.md` — hard constraints, layer rules, change protocol.
 2. `docs/PROJECT_CONTEXT.md` — module and command map.
-3. `docs/DECISIONS.md` — accepted decisions (D-001…D-053; D-031 is a void number
+3. `docs/DECISIONS.md` — accepted decisions (D-001…D-059; D-031 is a void number
    and D-049 is reserved) that are not open for re-litigation. Check
    `docs/KNOWN-ISSUES.md` before "fixing" deferred behavior.
 4. The relevant section of `docs/DEVELOPMENT.md` (bilingual, Chinese; the
@@ -100,12 +100,14 @@ rules and the migration sequence live in `docs/ARCHITECTURE.md`.
   the single transaction boundary.
 - `src/UNCAD/UI/` — since 3.0 every dialog is WPF (`UI/Wpf`, WPF-UI / Fluent
   style, D-037/D-038) and edits a passed-in model only; the WinForms shells are
-  gone. WebView2 survives only in targeted spots: the online login window
+  gone. WebView2 has three consumers: the online login window
   (`ClientLoginWindow`), the license fallback window (`OnlineLicenseWindow`,
-  opened from the login window's manual-verify entry), and the U1L3D/U13D preview
-  (`U1L3DPreviewWindow`, WebView2 virtual host mapped to the local
-  `Web/QuickLine3D` folder). The startup splash is pure WPF since 3.1.0.1
-  (`StartupSplashCanvas` single path — the WebView2 takeover switch was the
+  opened from the login window's manual-verify entry), and the U1U batch
+  confirmation preview (`QuickLineOrbitPreviewControl`, virtual host mapped to
+  the packaged `Web/QuickLineOrbit` folder; the in-dialog WPF Viewport3D scene
+  stays underneath as the automatic fallback — D-059 as amended by 3.8.0.5).
+  `U13D` is pure WPF. The startup splash is pure WPF since 3.1.0.1
+  (`StartupSplashWindow` single path — the WebView2 takeover switch was the
   cause of the every-launch flicker and unreliable click-to-skip). An HTML-based dialog
   framework was tried and removed — do not reintroduce one without a decision.
 

@@ -26,60 +26,21 @@ When code or a test conflicts with an accepted decision, treat it as a
 regression to investigate. Do not preserve an old behavior merely because it
 currently passes a stale test.
 
-`ARCHITECTURE.md` and `CLAUDE.md` contain historical/tool-specific notes. They
-are useful references, but this file and the documents above take precedence
-when their version numbers or counts are stale.
+`docs/archive/` holds retired notes (the original v3 architecture draft and the
+retired development plan); `CLAUDE.md` carries tool-specific commands. They are
+useful references, but this file and the documents above take precedence when
+their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.8.0.9` (2026-11-26; 3.8.0.9 is the
-  structural/CI cleanup with no command behavior change; D-059 + 3.8.0.1–3.8.0.8
-  field fixes: U1U preview runs the local WebView2 + three.js page with the
-  WPF Viewport3D renderer as automatic fallback (never a blank pane), draws
-  wireframe floor planes/axes/routes/upstream cabinet only, reference building
-  and WebV removed, tray/conduit run totals with red-line host recovery,
-  cross-floor rise check measured from the upstream floor ground to the device
-  end, pitch-true 4.8 m axis grid with both ends inside their bays and a named
-  mismatch, U1UL position match; legacy single-/multi-line tray text/red-line,
-  dimension/curve and bent-polyline route recognition; `宽Wx高H` tray width;
-  dead label associations re-matched geometrically; socket-panel routes lifted
-  1 m; line labels sit on their line; confirmation windows 1440×900 / 1440×820
-  half-and-half; the preview page fits the camera to the route, lays labels out
-  with same-frame collision avoidance, draws a single bold cable, a coordinate
-  lattice at every grid intersection and endpoint axis chips at grid corners),
-  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.9.zip` (6,579,776 bytes,
-  SHA-256 `71D1254ADE7FBF5E18231A0F91A91A4F348115F4527BB2B24DD08DE5D59217CD`) and
-  tagged as `v3.8.0.9`; GitHub Release `v3.8.0.9` is published (CI asset
-  SHA-256 `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
-  The
-  package/bundle `UNCAD.dll` SHA-256 is
-  `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`; the
-  development machine's installed copy remains 3.8.0.8 until
-  `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The last local
-  release is `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup). The previous
-  local release is `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview
-  redesign); before that `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`).
-  The latest GitHub Release is `3.8.0.9`; the latest site release is `3.6.0.0`
-  (2026-11-24, tag `v3.6.0`, commit `da8db81`; D-057 same-name circuits,
-  drawing-info table templates, BOQ title templates, XLAYOUT options),
-  `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
-  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`),
-  passed every `release.ps1` gate, published on uncad.aosa.me and verified by
-  anonymous download. XSTS frame details use one row per frame, with separate
-  model and quantity columns for every drawn BOQ item and blank cells for
-  missing items. Near-name hints and the "not drawn" list are removed.
-- Product: `UNCAD Pro`. Stable line: `3.4.1` (source patch `3.4.1.11`,
-  latest published patch `3.4.1.7`;
-  U1U/U13D 3D preview kernel
-  switched to the in-box WPF Viewport3D — synchronous scene build, no browser
-  process, no user-data-directory lock; the WebView2+three.js preview stack
-  is retired, login page WebView2 stays, 2026-11-18, D-054 amendment; full
-  WPF UI since 3.0.0, D-038; patches increment the fourth version part per
-  D-032. Patch 3.4.0.8 binds U1U axis labels to the two route endpoints by
-  topology and workbook axis regions; ambiguous endpoint matches are reported,
-  not guessed).
-- Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
-- The only supported distribution is the online-licensed Pro package.
+- Product: `UNCAD Pro`, online-licensed; the only supported distribution is the
+  Pro package. Runtime: AutoCAD 2022, .NET Framework 4.8, x64.
+- Current version, tag, package hashes and the installed-copy state live in
+  `docs/PROJECT_CONTEXT.md` — that file is the single source. Do not copy the
+  status block into this file, `README.md` or `CLAUDE.md`; a duplicated status
+  drifts (the last drift left `3.4.1` here while the product was `3.8.0.9`).
+- The release entry point is `release.ps1`; customer and expiry data come from
+  `pro.key`, not from the assembly or package manifest.
 - The release entry point is `release.ps1`; customer and expiry data come from
   `pro.key`, not from the assembly or package manifest.
 

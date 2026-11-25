@@ -70,8 +70,8 @@
 3. 不引用其他 Feature 的内部实现；不直接 `new Window`（走 `Features.Shared`）。
 4. 共享能力有明确归属；没有新增第二套实现。
 5. 文件 ≤800 行、方法 ≤200 行（逐步收紧到 120）；超了拆或进白名单并写原因。
-6. 只更新一个事实源（`ARCHITECTURE.md` / `DECISIONS.md` / `STATUS.md`），
-   不在 README/AGENTS/CLAUDE 里重复。
+6. 只更新一个事实源（`docs/PROJECT_CONTEXT.md` 版本状态 / `docs/DECISIONS.md`
+   决策 / 本文件结构），不在 README/AGENTS/CLAUDE 里重复。
 
 ## 迁移顺序
 

@@ -12,4 +12,4 @@
 
 - 统一版本：`2.3.0` / `2.3.0.0`。
 - 仅生成 `UNCAD Pro` 在线授权包。
-- 测试与打包命令见 `docs/RELEASE.md`。
+- 测试与打包命令见 `docs/RELEASE-RUNBOOK.md`。

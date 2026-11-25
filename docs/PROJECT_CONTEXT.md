@@ -43,43 +43,15 @@ shorter than the historical release notes.
   details use one row per frame, with separate model and quantity columns for
   all drawn BOQ items and blank cells for missing items. Near-name hints and
   the whole-drawing "not drawn" list are removed.
-- Current stable release line: `3.4.1` (source patch `3.4.1.11`; latest
-  published patch `3.4.1.7`, 2026-11-20;
-  D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
-  optional WebView2/Three.js window launched in a separate process; both
-  render identical millimetre geometry, so browser startup cannot block CAD.
-  The WPF scene builds synchronously, with no browser process, WebView2 data-directory
-  lock, white airspace window, or "starting renderer" state in the default path. The
-  reference building model formulas (floor/epoxy/waffle holes/steel/grating/
-  devices/busbar glass/columns/1F ground, base-floor rebasing, grid-bay
-  extents) were ported verbatim from the retired three.js page, and U13D
-  keeps its orthographic camera, axis grid, compass, and info panel. The
-  WebView2 in-process preview stack (prewarm host, orphan sweep) is retired;
-  the optional WebV process uses a unique local profile and only packaged
-  page assets. The login page WebView2 stays. Future fixes increment the fourth version
-  part per D-032). Patch .6 adds independent column visibility while preserving
-  grid-axis labels, centers those labels on grid center lines, and removes the
-  legacy I-Line/socket-panel demo boxes. Patch .7 binds U1U axis labels to the
-  two topological route endpoints. Patch .8 matches endpoints by their 4800 mm
-  workbook axis regions without requiring route-vector alignment; ambiguous
-  matches, branches, or invalid axes show a diagnostic and no guessed
-  cabinet/endpoint markers. Since patch .3, reference geometry follows occupied
-  route bays plus one neighboring bay, preserving nine waffle holes per
-  bay; 1F ground remains visible after floor rebasing. Patch .7 disabled U1U
-  style correction for U1L millimetre labels, U1Q trays, U1C conduits, and
-  legacy bridge-label migration. Source patch .8 disables the same corrections
-  and migration for U1F. U1B label-height and governed-layer correction remain
-  enabled; an absorbed reserve marker that cannot be erased now aborts the fill
-  transaction instead of leaving the text behind.
-  Patch .9 prefixes new CABLE_INFO model displays with `电缆 `; existing
-  prefixed and unprefixed frame values remain readable. Patch .10 adds a
-  default-off U1SET option to align associated U1L millimetre labels to their
-  line using the configured position/offset; it changes neither text nor
-  height, and widens only the legacy adjacent-label angle fallback to 15°.
 - Product: `UNCAD Pro` only, with online key validation.
 - Target host: AutoCAD 2022 / .NET Framework 4.8 / x64.
 - Build and package: `build.ps1` and `release.ps1`.
 - Detailed engineering rules: `docs/DEVELOPMENT.md`.
+
+This block is the single source of the version/tag/hash status. `AGENTS.md`,
+`README.md` and `CLAUDE.md` must link here instead of copying it — the previous
+copy in `AGENTS.md` still claimed `3.4.1` while the product was `3.8.0.9`.
+
 
 ## Module Map
 
@@ -262,5 +234,6 @@ U1U route preview (D-058/D-059; read-only, U1F builds none)
 - Engineering rules: `docs/DEVELOPMENT.md`
 - Product decisions: `docs/DECISIONS.md`
 - Deferred/intentional behavior: `docs/KNOWN-ISSUES.md`
-- Release steps: `docs/RELEASE.md`
+- Release steps: `docs/RELEASE-RUNBOOK.md`
+- Historical release notes (1.x / 2.x archive): `docs/releases/`
 - Focused file list: `scripts/context.ps1`

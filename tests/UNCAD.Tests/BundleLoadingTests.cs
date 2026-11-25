@@ -282,7 +282,8 @@ namespace UNCAD.Tests
             Assert.Contains("artifacts\\Pro", script);
             Assert.Contains("LicenseMode -ne \"Online\"", script);
             Assert.Contains("supplied by pro.key", script);
-            Assert.Contains("-Mode VerifyPackage", script);
+            Assert.Contains("$verifyArgs = @{ Mode = \"VerifyPackage\" }", script);
+            Assert.Contains("SkipAutoCadCheck = $true", script);
             Assert.Contains("Remove-Item $stage -Recurse -Force", script);
             Assert.DoesNotContain("UNCAD-JSWY", script);
             Assert.DoesNotContain("UNCAD-JSHY", script);

@@ -600,11 +600,11 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 comman
 
 ## 工程结构（分层架构）
 
-> 完整架构设计见 **ARCHITECTURE.md**（分层原则、扩展指南、未来模块蓝图）。
+> 完整架构设计见 `docs/ARCHITECTURE.md`（分层原则、扩展指南、未来模块蓝图）。
 
 ```
 UNCAD/
-├─ UNCAD.slnx / build.ps1 / README.md / ARCHITECTURE.md
+├─ UNCAD.slnx / build.ps1 / README.md / AGENTS.md
 ├─ bundle/UNCAD.bundle/        ← 用户分发包（PackageContents.xml + UNCAD.dll）
 └─ src/UNCAD/
    ├─ UNCAD.csproj             (net48 / x64 / 引用 AutoCAD 2022 DLL + AdWindows)
@@ -617,7 +617,7 @@ UNCAD/
 ```
 
 **扩展新功能**：在 `CommandIds` 声明命令，在 `Features/MyFeature/` 实现功能，
-再按用户任务将入口加入 `RibbonCatalog`；详见 ARCHITECTURE.md 第 4 节。
+再按用户任务将入口加入 `RibbonCatalog`；详见 `docs/ARCHITECTURE.md` 第 4 节。
 
 ## 多版本扩展（预留）
 
