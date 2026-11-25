@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UNCAD.Cad;
 using Xunit;
 
@@ -22,6 +23,45 @@ namespace UNCAD.Tests
         {
             Path.Combine("src", "UNCAD", "UI", "RibbonBuilder.cs")
         };
+
+        /// <summary>
+        /// 当前存在的跨 Feature 引用（结构债）。新引用不在表内即失败；
+        /// 修掉一条后必须同步删条目，否则 ArchitectureWhitelistEntries_AreStillPresent 会红。
+        /// 目标见 docs/ARCHITECTURE.md：Feature 之间不得互相引用。
+        /// </summary>
+        private static readonly HashSet<string> CrossFeatureWhitelist =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "src/UNCAD/Features/DwgExport/DwgExportFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/DwgExport/DwgFrameExportService.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Fill/BatchFillUpdateCoordinator.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Fill/BatchFillUpdatePreflight.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Fill/FillFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Fill/FillMachinePickStage.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Fill/FillUpdateRowMerger.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Fill",
+                "src/UNCAD/Features/Stat/XstsFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Unl/QuickLine3dPreviewFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Unl/QuickLine3dPreviewFeature.cs -> UNCAD.Features.Fill",
+                "src/UNCAD/Features/XAuto/XAutoFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/XLayout/XLayoutFeature.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/XLayout/XmergeService.cs -> UNCAD.Features.Submit",
+                "src/UNCAD/Features/Conduit/ConduitFeature.cs -> UNCAD.Features.Fill",
+                "src/UNCAD/Features/Submit/CircuitCoverageGuard.cs -> UNCAD.Features.Fill",
+                "src/UNCAD/Features/Submit/FrameIdentityReader.cs -> UNCAD.Features.Fill"
+            };
+
+        /// <summary>
+        /// UI 反向引用 Features 的存量（结果 DTO 放错层）。目标是把 DTO 下沉 Core，
+        /// 然后清空这张表；新引用立即失败。
+        /// </summary>
+        private static readonly HashSet<string> UiFeatureWhitelist =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "src/UNCAD/UI/Wpf/DwgExportResultWindow.xaml.cs -> UNCAD.Features.DwgExport",
+                "src/UNCAD/UI/Wpf/PdfExportResultWindow.xaml.cs -> UNCAD.Features.PdfExport"
+            };
 
         [Fact]
         public void Core_StaysFreeOfAutoCadAndWinFormsAndWpf()
@@ -68,6 +108,79 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void FeatureToFeatureReferences_DoNotGrow()
+        {
+            // 目标：Feature 之间不互相引用；共享能力下沉 Core/Cad/Features.Shared。
+            // 存量在 CrossFeatureWhitelist 中逐条登记，新增即红。
+            var offenders = new List<string>();
+            foreach (string file in SourceFilesUnder("src", "UNCAD", "Features"))
+            {
+                string own = FeatureNamespaceOf(file);
+                foreach (string target in FeatureNamespacesUsed(file))
+                {
+                    if (target == own
+                        || string.Equals(target, "Shared", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    string key = RepoRelative(file) + " -> UNCAD.Features." + target;
+                    if (!CrossFeatureWhitelist.Contains(key)) offenders.Add(key);
+                }
+            }
+            Assert.True(offenders.Count == 0,
+                "新增跨 Feature 引用（共享能力应下沉 Core/Cad/Features.Shared）: "
+                + string.Join("; ", offenders));
+        }
+
+        [Fact]
+        public void UiDoesNotReferenceFeatures_ExceptKnownResultWindows()
+        {
+            var offenders = new List<string>();
+            foreach (string file in SourceFilesUnder("src", "UNCAD", "UI"))
+            {
+                foreach (string target in FeatureNamespacesUsed(file))
+                {
+                    string key = RepoRelative(file) + " -> UNCAD.Features." + target;
+                    if (!UiFeatureWhitelist.Contains(key)) offenders.Add(key);
+                }
+            }
+            Assert.True(offenders.Count == 0,
+                "UI 反向引用 Features（结果 DTO 应下沉 Core）: "
+                + string.Join("; ", offenders));
+        }
+
+        [Fact]
+        public void Infra_DoesNotReferenceCadFeaturesOrUi()
+        {
+            string[] offenders = SourceFilesUnder("src", "UNCAD", "Infra")
+                .Where(f => UsesAnyOf(f, "using UNCAD.Cad", "using UNCAD.Features",
+                    "using UNCAD.UI"))
+                .ToArray();
+            Assert.Empty(offenders);
+        }
+
+        [Fact]
+        public void Cad_DoesNotReferenceFeaturesOrUi()
+        {
+            string[] offenders = SourceFilesUnder("src", "UNCAD", "Cad")
+                .Where(f => UsesAnyOf(f, "using UNCAD.Features", "using UNCAD.UI"))
+                .ToArray();
+            Assert.Empty(offenders);
+        }
+
+        [Fact]
+        public void ArchitectureWhitelistEntries_AreStillPresent()
+        {
+            // 白名单条目必须随修复收敛：文件改名、搬走或引用删除后，条目要一起删。
+            foreach (string key in CrossFeatureWhitelist.Concat(UiFeatureWhitelist))
+            {
+                string[] parts = key.Split(new[] { " -> " }, StringSplitOptions.None);
+                string file = Path.Combine(RepoDir(), parts[0].Replace('/', '\\'));
+                Assert.True(File.Exists(file), "白名单文件已不存在，请删除条目: " + key);
+                Assert.True(UsesAnyOf(file, "using " + parts[1]),
+                    "白名单引用已不存在，请删除条目: " + key);
+            }
+        }
+
+        [Fact]
         public void FrameBlockNames_AreFrozenForLegacyDrawings()
         {
             // 图框块名是对客户旧图纸的兼容承诺；上一代迁移到当前代。
@@ -82,7 +195,40 @@ namespace UNCAD.Tests
         }
 
         private static IEnumerable<string> SourceFilesUnder(params string[] parts)
-            => Directory.GetFiles(RepoDir(parts), "*.cs", SearchOption.AllDirectories);
+            => Directory.GetFiles(RepoDir(parts), "*.cs", SearchOption.AllDirectories)
+                .Where(file => !file.Contains(
+                        Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
+                    && !file.Contains(
+                        Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar));
+
+        private static string FeatureNamespaceOf(string file)
+        {
+            string marker = Path.DirectorySeparatorChar + "Features"
+                + Path.DirectorySeparatorChar;
+            int index = file.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (index < 0) return "";
+            string rest = file.Substring(index + marker.Length);
+            int slash = rest.IndexOf(Path.DirectorySeparatorChar);
+            return slash < 0 ? "" : rest.Substring(0, slash);
+        }
+
+        private static IEnumerable<string> FeatureNamespacesUsed(string file)
+        {
+            foreach (string line in File.ReadAllLines(file))
+            {
+                Match match = Regex.Match(line.Trim(),
+                    @"^using\s+UNCAD\.Features\.([A-Za-z0-9_]+)\s*;");
+                if (match.Success) yield return match.Groups[1].Value;
+            }
+        }
+
+        private static string RepoRelative(string file)
+        {
+            string root = RepoDir();
+            return file.Substring(root.Length)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Replace('\\', '/');
+        }
 
         private static bool UsesAnyOf(string file, params string[] forbiddenUsings)
         {

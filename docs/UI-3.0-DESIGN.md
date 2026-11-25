@@ -73,11 +73,11 @@
 迁移纪律执行记录：一窗体一提交（新窗体上线 + 旧文件删除 + 测试改写同批），
 21 个窗体全部按此完成；全量门禁 1267/1267。
 
-### 遗留的 WinForms 基础设施（待清死代码，下一批）
+### 遗留的 WinForms 基础设施（3.8.0 已清理）
 
-DpiAwareForm 已删（零派生）。仍保留：UiKit、UiTheme、DialogLayout、
-BrandMarkControl（Ribbon 构造链仍用 UiTheme/RibbonIconFactory）——
-全部业务窗体不再引用它们后，按引用拓扑逐个删除并处置 UiKitTests。
+DpiAwareForm 已删（零派生）。3.8.0 结构清理已删除 UiKit、DialogLayout、
+BrandMarkControl 以及 UiKitTests/DpiScalingContractTests；UiTheme 仍被
+RibbonIconFactory、StartupSplashWindow 的色板/字体引用，暂留。
 
 迁移纪律：一窗体一提交（新窗体上线 + 旧文件删除 + 测试改写同提交）；
 每完成一批跑全量门禁；中途可停，WinForms 与 WPF 过渡期共存但不新增

@@ -18,7 +18,7 @@ namespace UNCAD.UI
         /// <summary>窗口尺寸最多占工作区的比例（自适应：小屏/低分屏不被截断）。</summary>
         private const double WorkAreaCoverage = 0.92;
 
-        /// <summary>按窗口合并 Fluent 主题、控件样式与 UiKit 设计令牌；重复调用以
+        /// <summary>按窗口合并 Fluent 主题、控件样式与设计令牌；重复调用以
         /// 最新主题为准（换主题 = 移除旧 ThemesDictionary 再挂新的，外观页切换
         /// 全靠它）。合并后把窗口尺寸钳制到工作区内并居中。</summary>
         internal static void ApplyFluentTheme(Window window, ApplicationTheme theme)

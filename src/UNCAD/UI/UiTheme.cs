@@ -68,7 +68,7 @@ namespace UNCAD.UI
         /// <summary>卡片投影（极轻，仅用于卡片浮层感，不做发光）。</summary>
         public static readonly Color Shadow = Color.FromArgb(16, 0x20, 0x2C, 0x3A);
 
-        // ---- 品牌(仅 AboutForm / BrandMarkControl)----
+        // ---- 品牌色（Ribbon/启动动画）----
         public static readonly Color BrandBlue = Color.FromArgb(0x00, 0x70, 0xAD);
         public static readonly Color BrandOrange = Color.FromArgb(0xEC, 0x7E, 0x22);
 
@@ -103,11 +103,9 @@ namespace UNCAD.UI
         public const int RadiusPill = 10;
 
         // ---- DPI 缩放 ----
-        // 所有窗体经 DialogLayout.Apply 设置 AutoScaleMode.Dpi +
-        // AutoScaleDimensions=(96,96)，由 WinForms 在窗体加载时按实际 DPI 统一
-        // 缩放。绝不要对普通控件属性做手工换算——那会与自动缩放叠加，150% 屏幕上
-        // 得到 2.25 倍而不是 1.5 倍（实测：控件边界与 TableLayoutPanel 的 Absolute
-        // 行列样式都在自动缩放的覆盖范围内）。因此默认写法是直接写 96-DPI 设计值。
+        // 3.8.0 结构清理后业务窗体全部是 WPF/FluentKit；UiTheme 暂留色板/字体，
+        // 其中旧 WinForms 控件工厂是待清理存量，新 UI 不得再使用，也不做手工
+        // DPI 换算。
 
         /// <summary>
         /// 仅用于 WinForms 自动缩放**不覆盖**的尺寸属性。实测确认这类属性只有：

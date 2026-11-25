@@ -255,7 +255,8 @@ U1U route preview (D-058/D-059; read-only, U1F builds none)
 
 ## Navigation
 
-- Architecture and layer rules: `docs/DEVELOPMENT.md`
+- Architecture, modules and shared-capability ownership: `docs/ARCHITECTURE.md`
+- Engineering rules: `docs/DEVELOPMENT.md`
 - Product decisions: `docs/DECISIONS.md`
 - Deferred/intentional behavior: `docs/KNOWN-ISSUES.md`
 - Release steps: `docs/RELEASE.md`
