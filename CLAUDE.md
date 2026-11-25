@@ -29,6 +29,7 @@ Version numbers and command IDs come from source and tests, never from docs.
 # Areas: All | Fill | QuickLine | Layout | Stats | Settings | Submit
 
 dotnet build UNCAD.slnx                        # or .\build.ps1 (Release, refreshes bundle)
+dotnet build UNCAD.slnx -p:UseAutoCadNuGet=true # compile-only, no AutoCAD install (hosted CI)
 dotnet test UNCAD.slnx --no-restore            # full suite (xunit, net48)
 dotnet test UNCAD.slnx --filter "FullyQualifiedName~FrameRegionCollectorTests"
 dotnet test UNCAD.slnx --filter "FullyQualifiedName~BoqCatalogIndexTests.Category_IsAutomaticallyResolved"
@@ -38,7 +39,11 @@ dotnet test UNCAD.slnx --filter "FullyQualifiedName~BoqCatalogIndexTests.Categor
 
 - `build.ps1` / `release.ps1` accept only `-Configuration Release`.
 - Both projects reference AutoCAD DLLs from `D:\Program Files\Autodesk\AutoCAD 2022`.
-  Override with `-p:AutoCADDir="<path>"`; the build fails without them.
+  Override with `-p:AutoCADDir="<path>"`. With no AutoCAD installed, pass
+  `-p:UseAutoCadNuGet=true` to use the official Autodesk NuGet reference
+  assemblies; that mode is **compile-only** and cannot run AutoCAD runtime
+  tests. GitHub-hosted `build-hosted.yml` uses this for PR compile checks;
+  the full test suite stays on the self-hosted `tests.yml` runner.
 - `build.ps1` cleans first, then syncs `bundle\UNCAD.bundle\` — DLL set is
   replaced wholesale and `checksums.sha256` regenerated. Never hand-edit bundle
   contents; a mismatch fails `release.ps1`.
@@ -77,7 +82,8 @@ the bare version label.
 Layered plugin loaded into AutoCAD 2022 (`net48`, x64). Dependency direction is
 one-way: `Core` ← `Cad`/`Infra` ← `Features` ← `UI`. `Core` is pure C# with no
 AutoCAD, WinForms, registry, or process-global state — that is what makes it
-unit-testable and what the test suite covers.
+unit-testable and what the test suite covers. Full layer/module/shared-capability
+rules and the migration sequence live in `docs/ARCHITECTURE.md`.
 
 - `src/UNCAD/Core/` — parsing, matching, BOQ planning, statistics, geometry,
   formatting. Sub-areas: `Excel`, `Fill`, `QuickLine`, `Stat`, `Text`, `Dwg`,
@@ -108,7 +114,6 @@ attribute, `RibbonDefinition`, `CommandHelpCatalog`, the bundle, and
 - `Features/Submit/FrameIdentityReader` — frame identity.
 - `Infra/FileBatchRollback` — multi-file batch backup/restore.
 - `Infra/CommandHelpCatalog` — user-facing help text.
-- `Core/Excel/StableFileCache<T>` — file fingerprint + transient-IO retry.
 
 ### Key data flows
 

@@ -15,7 +15,7 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 comman
 
 - 定位：**工程加固版**——基于 3.0.0.17 现场稳定代码，零命令行为变更、不动任何决策（D-001~D-052 维持），全部投入在测试、流程与文档的可信度上。
 - 测试：**真实台账脱敏夹具**入库（832 机台 / 4999 行 / 163 删除线行，三重泄漏检查零命中）+ 3 条解析冒烟测试——自动化测试从此覆盖真实文件格式（合并单元格/公式缓存/富文本），全量 1431/1431。
-- CI：`scripts/ci-local.ps1` 本地一键全量测试（「执行数=源码期望数」防假绿核对 + 三层并发锁）；`.github/workflows/tests.yml` GitHub Actions self-hosted 工作流（push/PR 自动兜底）。
+- CI：`scripts/ci-local.ps1` 本地一键全量测试（「执行数=源码期望数」防假绿核对 + 三层并发锁）；`.github/workflows/build-hosted.yml` 在 GitHub 托管 runner 上用 Autodesk NuGet 引用程序集做 PR 编译检查（不跑 AutoCAD 运行时测试）；`.github/workflows/tests.yml` 只在 main push / 手动触发时走 self-hosted 全量测试，fork PR 不再接触自托管机器。
 - 运维：发布运维手册 `docs/RELEASE-RUNBOOK.md`（七道门禁/参数速查/失败处置/运营连续性清单）；KNOWN-ISSUES 增设悬置决策季度复查清单与 U1U 批量链前提风险记录。
 - 文档：COMMAND-AUDIT 去行号 + 补 D-042/044/045/047/048/050/051 行为关键词；CLAUDE.md/DEVELOPMENT.md 过时表述校准。
 
@@ -496,6 +496,7 @@ The 3.0.0 line (shipped 2026-11-03, closing the D-039 dev channel) has 36 comman
 - **命令行**：`.\build.ps1`（等价 `dotnet build UNCAD.slnx`）。依赖已还原时可用 `.\build.ps1 -NoRestore` 快速刷新 Bundle。
 - **测试与发布**：`dotnet test UNCAD.slnx -c Release`；仅使用 `release.ps1` 生成统一 `UNCAD Pro` 包。发布脚本会把测试作为打包前置门禁，并校验 bundle DLL、安装清单和 BOQ 模板。
 - AutoCAD 不在默认路径时：`dotnet build UNCAD.slnx -p:AutoCADDir="你的 AutoCAD 目录"`。
+- 机器上没有 AutoCAD（只做编译检查）：`dotnet build UNCAD.slnx -p:UseAutoCadNuGet=true`。NuGet 包是 Autodesk 的引用程序集，只能编译；运行 AutoCAD API 的测试仍需真机/self-hosted。
 
 ## 加载与调试
 

@@ -1,0 +1,61 @@
+# Hosted compile-check CI.
+#
+# The full test suite needs the real AutoCAD 2022 managed DLLs at test runtime
+# (the NuGet packages are reference assemblies, so calling AutoCAD APIs throws
+# InvalidProgramException).  Therefore this workflow only restores/builds on a
+# GitHub-hosted runner using the official Autodesk NuGet packages.  The full
+# unit/integration gates still run on the self-hosted runner via tests.yml.
+#
+# Why this exists: pull requests from forks must never execute on the
+# self-hosted machine.  This job gives PRs a fast, safe compile + architecture
+# report without touching the self-hosted runner.
+name: build-hosted
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-hosted-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # AutoCAD.NET / .Core / .Model 24.1.51000 = AutoCAD 2022 API
+      # (net47 reference assemblies; compile-only, never packaged).
+      - name: Restore with AutoCAD NuGet references
+        run: dotnet restore UNCAD.slnx -p:UseAutoCadNuGet=true
+
+      - name: Build (no AutoCAD install required)
+        run: dotnet build UNCAD.slnx -c Release --no-restore -p:UseAutoCadNuGet=true
+
+      - name: Architecture report
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-architecture.ps1
+
+      # Pure source guard; does not call AutoCAD runtime APIs.
+      - name: Architecture guard tests
+        run: dotnet test UNCAD.slnx -c Release --no-build -p:UseAutoCadNuGet=true --filter "FullyQualifiedName~LayerGuardTests"
+
+      - name: Upload plugin DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: UNCAD-Release
+          path: src/UNCAD/bin/Release/net48/UNCAD.dll
+          if-no-files-found: error

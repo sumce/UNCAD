@@ -11,6 +11,10 @@
     <AssemblyName>UNCAD</AssemblyName>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
+    <!-- CI/托管 runner 没有 AutoCAD 安装：用 Autodesk 官方 NuGet 包做编译引用。
+         本地发布仍用 AutoCADDir 的 DLL，保持 Private=False 的打包行为。 -->
+    <UseAutoCadNuGet Condition="'$(UseAutoCadNuGet)' == ''">false</UseAutoCadNuGet>
+    <AutoCadNuGetVersion Condition="'$(AutoCadNuGetVersion)' == ''">24.1.51000</AutoCadNuGetVersion>
 
     <AssemblyTitle>UNCAD - AutoCAD 轻量插件集</AssemblyTitle>
     <AssemblyDescription>AutoCAD 2022 U1 命令集：清单生成、批量更新、自动记录、绘制与统计</AssemblyDescription>
@@ -36,7 +40,7 @@
     <None Update="Web\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseAutoCadNuGet)' != 'true'">
     <Reference Include="AcMgd">
       <HintPath>$(AutoCADDir)\AcMgd.dll</HintPath>
       <Private>False</Private>
@@ -53,6 +57,14 @@
       <HintPath>$(AutoCADDir)\AdWindows.dll</HintPath>
       <Private>False</Private>
     </Reference>
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseAutoCadNuGet)' == 'true'">
+    <PackageReference Include="AutoCAD.NET" Version="$(AutoCadNuGetVersion)"
+                      ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="AutoCAD.NET.Core" Version="$(AutoCadNuGetVersion)"
+                      ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="AutoCAD.NET.Model" Version="$(AutoCadNuGetVersion)"
+                      ExcludeAssets="runtime" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -86,7 +98,8 @@
     <!-- WPF 程序集由 UseWPF 自动引入（原 Ribbon 手工引用已合并） -->
   </ItemGroup>
 
-  <Target Name="CheckAutoCADReferences" BeforeTargets="ResolveAssemblyReferences">
+  <Target Name="CheckAutoCADReferences" BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(UseAutoCadNuGet)' != 'true'">
     <Error Condition="!Exists('$(AutoCADDir)\AcMgd.dll')"
            Text="未找到 AutoCAD 2022 .NET API（$(AutoCADDir)\AcMgd.dll）。请安装 AutoCAD 2022，或用 -p:AutoCADDir=... 指定路径。" />
   </Target>

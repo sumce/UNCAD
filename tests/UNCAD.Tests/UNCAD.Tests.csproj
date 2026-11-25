@@ -5,7 +5,8 @@
     <TargetFramework>net48</TargetFramework>
     <!-- 3.0 WPF 窗体测试（D-038）需要 WPF 程序集 -->
     <UseWPF>true</UseWPF>
-    <!-- AutoCAD 2022 涓庢湰鎻掍欢閮芥槸 x64-only锛汚nyCPU 浼氳娴嬭瘯瀹夸富鎸?x86 鍚姩锛?         鍔犺浇 AcDbMgd 澶辫触鍚庢祴璇曡闈欓粯璺宠繃锛? 椤癸級銆?-->
+    <!-- AutoCAD 2022 与插件都是 x64-only；AnyCPU 会让测试宿主按 x86 启动，
+         加载 AcDbMgd 失败后整个程序集被静默跳过（退出码仍为 0）。 -->
     <PlatformTarget>x64</PlatformTarget>
     <LangVersion>13</LangVersion>
     <IsPackable>false</IsPackable>
@@ -15,6 +16,10 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>8.0</AnalysisLevel>
     <AutoCADDir Condition="'$(AutoCADDir)' == ''">D:\Program Files\Autodesk\AutoCAD 2022</AutoCADDir>
+    <!-- 托管 CI 没有 AutoCAD：用 Autodesk 官方 NuGet 包把运行时程序集复制到测试输出。
+         本地仍用 AutoCADDir，保持与发布构建相同的 DLL 版本。 -->
+    <UseAutoCadNuGet Condition="'$(UseAutoCadNuGet)' == ''">false</UseAutoCadNuGet>
+    <AutoCadNuGetVersion Condition="'$(AutoCadNuGetVersion)' == ''">24.1.51000</AutoCadNuGetVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,17 +39,12 @@
     <None Include="..\Fixtures\*.xlsx" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- UNCAD.dll 鐨?AutoCAD 渚濊禆蹇呴』鐢辨祴璇曢」鐩嚜宸变繚璇?CopyLocal锛?         浠ュ墠闈?杈撳嚭鐩綍閲屾伆濂芥湁杩欏嚑涓?dll"锛屼竴鏃﹀埆鐨勬瀯寤烘竻鐞嗚繃灏变細鍙樻垚
-         could not find dependent assembly 'Acdbmgd'锛屾祴璇曢潤榛樿窇 0 椤广€?-->
-    <!-- UNCAD.dll 渚濊禆鐨?AutoCAD 鎵樼绋嬪簭闆嗗繀椤荤敱娴嬭瘯椤圭洰鑷繁 CopyLocal锛?         鍚﹀垯娴嬭瘯杈撳嚭鐩綍閲屾病鏈夊畠浠紝娴嬭瘯瀹夸富浼氭姤
-         "could not find dependent assembly 'Acdbmgd'" 骞舵妸鍏ㄩ儴娴嬭瘯闈欓粯璺宠繃
-         锛堣€?dotnet test 浠嶈繑鍥為€€鍑虹爜 0锛夈€備笉瑕佸姞 PlatformTarget锛氶偅浼氳瀹夸富
-         鎸夊彟涓€绉嶄綅鏁板惎鍔紝鍚屾牱瀵艰嚧璺宠繃銆?-->
+  <!-- 本地构建：测试输出目录必须始终带着 AutoCAD 托管程序集。build.ps1 会先
+       clean，而 UNCAD.dll 对它们的引用是 Private=False（不复制），于是测试宿主
+       会报 Acdbmgd.dll 找不到 —— 轻则整个程序集被静默跳过（门禁假绿），重则
+       [FATAL ERROR] 直接中断发布。这里在测试项目构建后显式补齐。 -->
+  <ItemGroup Condition="'$(UseAutoCadNuGet)' != 'true'">
     <Reference Include="AdWindows"><HintPath>$(AutoCADDir)\AdWindows.dll</HintPath><Private>True</Private></Reference>
-    <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>True</Private></Reference>
-    <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>True</Private></Reference>
-    <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcMgd"><HintPath>$(AutoCADDir)\AcMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcDbMgd"><HintPath>$(AutoCADDir)\AcDbMgd.dll</HintPath><Private>True</Private></Reference>
     <Reference Include="AcCoreMgd"><HintPath>$(AutoCADDir)\AcCoreMgd.dll</HintPath><Private>True</Private></Reference>
@@ -52,17 +52,21 @@
     <Reference Include="System.Web.Extensions" />
   </ItemGroup>
 
-  <!-- 测试输出目录必须始终带着 AutoCAD 托管程序集：build.ps1 会先 clean，而
-       UNCAD.dll 对它们的引用是 Private=False（不复制），于是测试宿主会报
-       Acdbmgd.dll 找不到 —— 轻则整个程序集被静默跳过（门禁假绿），
-       重则 [FATAL ERROR] 直接中断发布。这里在测试项目构建后显式补齐。 -->
-  <Target Name="CopyAutoCadAssemblies" AfterTargets="Build">
+  <ItemGroup Condition="'$(UseAutoCadNuGet)' == 'true'">
+    <PackageReference Include="AutoCAD.NET" Version="$(AutoCadNuGetVersion)" />
+    <PackageReference Include="AutoCAD.NET.Core" Version="$(AutoCadNuGetVersion)" />
+    <PackageReference Include="AutoCAD.NET.Model" Version="$(AutoCadNuGetVersion)" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+
+  <Target Name="CopyAutoCadAssemblies" AfterTargets="Build"
+          Condition="'$(UseAutoCadNuGet)' != 'true'">
     <ItemGroup>
       <AutoCadAssembly Include="$(AutoCADDir)\Ac*.dll" />
       <AutoCADAssembly Include="$(AutoCADDir)\AdWindows.dll" />
     </ItemGroup>
-    <Copy SourceFiles="@(AutoCADAssembly)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(AutoCadAssembly)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>
-

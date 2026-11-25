@@ -239,6 +239,10 @@ when their version numbers or counts are stale.
 Do not move Excel matching into `Cad`, put business rules in forms, or make
 `Core` depend on AutoCAD or WinForms.
 
+Full layer, module, shared-capability ownership and migration rules:
+`docs/ARCHITECTURE.md`. New code follows that contract; existing violations are
+listed there as debt, not precedents.
+
 ## Change Protocol
 
 - Start with `git status --short` and locate the command entry with `rg`.
@@ -259,5 +263,6 @@ Do not move Excel matching into `Cad`, put business rules in forms, or make
 .\scripts\context.ps1 -Area Fill
 .\scripts\context.ps1 -Area QuickLine -IncludeTests
 dotnet test UNCAD.slnx --no-restore
+dotnet build UNCAD.slnx -p:UseAutoCadNuGet=true   # no AutoCAD install; compile-only
 .\release.ps1 -NoRestore
 ```
