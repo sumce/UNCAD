@@ -22,8 +22,8 @@ shorter than the historical release notes.
   corners),
   packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.8.zip` (6,587,589 bytes,
   SHA-256
-  `9ACAF47423D50CDF3126FC7D060C35D0B0ACC5F7CBBADCC08CD4A1C73ED6BDAD`) but not
-  yet tagged or published; a clean build of this source is installed user-scope
+  `B05318110EE7EE6B439F6CEC15D0A03B106BD8DD45B0E03052A99231FA7288E3`) and tagged
+  locally as `v3.8.0`; not yet published; a clean build of this source is installed user-scope
   on the development machine (2026-11-25) and verified, 24 files, installed
   `UNCAD.dll` SHA-256 `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`,
   identical to the build output and the bundle (`InstallUser` refuses to run

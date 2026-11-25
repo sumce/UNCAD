@@ -12,12 +12,13 @@
   靠得太近的自动隐藏、放大后逐步显现。轴号不再只在边上或飘在平面中间。
 - **回路加粗**：电缆统一亮橙色粗管（不再按 X/Y/Z 分色），在网格里一眼可见。
 - 端点轴位牌仍在各自网格夹角（55/C、56/J 的交叉点），细线连到真实端点。
-- 验证：单测 1,891/1,891；真机 WebView2 探针 PASS；`VerifyPackage` 24 个文件；
-  本机安装 3.8.0.8（`UNCAD.dll` SHA-256
+- 验证：单测 1,891/1,891；`release.ps1` 门禁（`UNCAD_PERF_SMOKE`、
+  `UNCAD_MIGRATION_SELFTEST`、`VerifyPackage` 24 个文件）PASS；真机 WebView2
+  探针 PASS；本机安装 3.8.0.8（`UNCAD.dll` SHA-256
   `78B11567881C34C0B46855AEFCBC5D782CA5BFD5EC766861A73A5D7282FD0388`，三处
   一致）；安装包 `artifacts/Pro/UNCAD-Pro-v3.8.0.8.zip`（6,587,589 字节，
-  SHA-256 `9ACAF47423D50CDF3126FC7D060C35D0B0ACC5F7CBBADCC08CD4A1C73ED6BDAD`）
-  与解压好的 `-Install` 目录，包内校验通过。未打标签、未发布。
+  SHA-256 `B05318110EE7EE6B439F6CEC15D0A03B106BD8DD45B0E03052A99231FA7288E3`）
+  与解压好的 `-Install` 目录，包内校验通过。本地已打 `v3.8.0` 标签，未发布。
 
 ## 3.8.0.7 修补（2026-11-26）
 
