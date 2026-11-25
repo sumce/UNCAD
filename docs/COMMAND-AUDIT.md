@@ -29,6 +29,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `U1L` | 正式 | `Features/Unl/UnlFeature.cs` | ✓ | 绘制线条 | 已审计 |
 | `U1LX` | 正式 | `Features/Unl/QuickLineFeature.cs` | ✓ | 快速标注距离 | 已审计 |
+| `U1UL` | 正式 | `Features/Unl/QuickLineLabelAlignFeature.cs` | ✓ | 毫米标归位 | 已审计（3.7.0 / D-058：`RoutePreviewRecognitionTests.U1UL_*` 源码契约 + `QuickLineLabelPlacementPlanner` 纯几何单测；只读命令外的事务边界在 `Cad/QuickLine/QuickLineLabelAlignService.cs`） |
 | `U1L3D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U1L 三维预览 | 已审计 |
 | `U13D` | 正式 | `Features/Unl/QuickLine3dPreviewFeature.cs` | ✓ | U13D 多图框预览 | 已审计 |
 | `U1DT` | 正式 | `Features/Dimension/DimensionTextFeature.cs` | ✓ | 标注转文字 | 已审计 |

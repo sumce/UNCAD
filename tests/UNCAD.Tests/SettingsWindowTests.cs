@@ -551,7 +551,9 @@ namespace UNCAD.Tests
                 "FillInfoReviewer", "FillInfoDate", "FillInfoVersion",
                 "BoqTitleLine1", "BoqTitleLine2", "BoqTitleLine3",
                 "XLayoutSpacing", "XLayoutLabelTextHeight", "XLayoutLabelDistance",
-                "XLayoutWarningMarker"
+                "XLayoutWarningMarker",
+                // 3.7.0（D-058）：线路识别断口容差（图框与排版页）。
+                "RouteGapTolerance"
             };
             string[] missing = expected.Except(found).ToArray();
             string[] added = found.Except(expected).ToArray();

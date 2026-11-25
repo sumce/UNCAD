@@ -352,14 +352,16 @@ namespace UNCAD.Features.Unl
         /// <summary>
         /// 由同一份 U1L 线段快照构建端点图。批量场景构建里场景重建、端点锚定
         /// 和路线分组必须共用这一张图，否则每帧要重复三次全量建图。
+        /// D-058：与 U1U 预览同一口径——带毫米标的线段按 U1SET 断口容差相接。
         /// </summary>
         private static QuickLineGraph BuildRouteGraph(
             IReadOnlyList<QuickLineCadSegment> labelled)
-            => QuickLineGraph.Build((labelled ?? Array.Empty<QuickLineCadSegment>())
+            => QuickLineRouteConnector.Build((labelled ?? Array.Empty<QuickLineCadSegment>())
                 .Select(item => new QuickLineSegment(
                     item.LineId.Handle.ToString(),
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
-                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))), 1.0);
+                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))),
+                QuickLineRouteSettings.GapTolerance()).Graph;
 
         private static Dictionary<string, string> BuildRouteGroupIds(
             IReadOnlyList<QuickLineCadSegment> labelled, QuickLineGraph graph)

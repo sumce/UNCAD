@@ -45,7 +45,10 @@ namespace UNCAD.Core.QuickLine
             EnvelopePoint downstreamEndpoint,
             EnvelopePoint gridAnchor,
             bool directionResolved,
-            IReadOnlyList<string> directionDiagnostics)
+            IReadOnlyList<string> directionDiagnostics,
+            EnvelopeHose hose,
+            string recognitionSummary,
+            IReadOnlyList<string> routeIssues)
         {
             Segments = segments;
             ColumnGridLines = columnGridLines;
@@ -66,7 +69,22 @@ namespace UNCAD.Core.QuickLine
             DirectionResolved = directionResolved;
             DirectionDiagnostics = directionDiagnostics
                 ?? Array.Empty<string>();
+            Hose = hose;
+            RecognitionSummary = recognitionSummary ?? string.Empty;
+            RouteIssues = routeIssues ?? Array.Empty<string>();
         }
+
+        /// <summary>
+        /// D-058：软管的示意几何（从设备端沿末段方向伸出，长度＝软管毫米）。
+        /// 没有软管、或设备端未确认（放不出来）时为 null。
+        /// </summary>
+        public EnvelopeHose Hose { get; }
+
+        /// <summary>D-058：线路识别结果一句话（由预览模型原样带入）。</summary>
+        public string RecognitionSummary { get; }
+
+        /// <summary>D-058：识别出的问题，逐条成句（由预览模型原样带入）。</summary>
+        public IReadOnlyList<string> RouteIssues { get; }
 
         /// <summary>一条电缆段：中心线端点 + 轴向 + 通道双线（null=普通电缆段）。</summary>
         public IReadOnlyList<EnvelopeSegment> Segments { get; }
@@ -286,8 +304,51 @@ namespace UNCAD.Core.QuickLine
                 anyAssumed, levels, baseFloorZ,
                 upstreamEndpoint, downstreamEndpoint, gridAnchor,
                 grid?.DirectionResolved ?? false,
-                grid?.Diagnostics ?? model.DirectionDiagnostics);
+                grid?.Diagnostics ?? model.DirectionDiagnostics,
+                BuildHoseGeometry(model.Hose, downstreamEndpoint, segments),
+                model.RecognitionSummary ?? string.Empty,
+                model.RouteIssues ?? Array.Empty<string>());
         }
+
+        /// <summary>
+        /// D-058：软管示意几何——从设备端沿「设备端所在末段」的方向伸出一段，
+        /// 长度取软管毫米。方向未确认时软管放不出来（返回 null），摘要里仍报长度。
+        /// </summary>
+        private static EnvelopeHose BuildHoseGeometry(
+            QuickLineOrbitPreviewHose hose, EnvelopePoint deviceEnd,
+            IReadOnlyList<EnvelopeSegment> segments)
+        {
+            if (hose == null || deviceEnd == null) return null;
+            foreach (EnvelopeSegment segment in segments)
+            {
+                EnvelopePoint other;
+                if (SamePoint(segment.Start, deviceEnd)) other = segment.End;
+                else if (SamePoint(segment.End, deviceEnd)) other = segment.Start;
+                else continue;
+                double dx = deviceEnd.X - other.X;
+                double dy = deviceEnd.Y - other.Y;
+                double dz = deviceEnd.Z - other.Z;
+                double length = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (length < 1e-9) continue;
+                string label = hose.DiameterMillimetres.HasValue
+                    ? "软管 ⌀" + Math.Round(hose.DiameterMillimetres.Value)
+                        .ToString(CultureInfo.InvariantCulture) + " "
+                    : "软管 ";
+                label += Math.Round(hose.LengthMillimetres)
+                    .ToString(CultureInfo.InvariantCulture) + "mm";
+                if (hose.ByLabelOnly) label += "（U1B 标注）";
+                return new EnvelopeHose(deviceEnd, new EnvelopePoint(
+                    deviceEnd.X + dx / length * hose.LengthMillimetres,
+                    deviceEnd.Y + dy / length * hose.LengthMillimetres,
+                    deviceEnd.Z + dz / length * hose.LengthMillimetres),
+                    hose.LengthMillimetres, label);
+            }
+            return null;
+        }
+
+        private static bool SamePoint(EnvelopePoint left, EnvelopePoint right)
+            => left.X.Equals(right.X) && left.Y.Equals(right.Y)
+                && left.Z.Equals(right.Z);
 
         /// <summary>段方向的水平法向（dir × ẑ 归一化；竖直段回退 ŷ——与
         /// 3.3.2 控件同口径，竖直爬升段的通道同样向两侧偏移）。</summary>
@@ -390,6 +451,25 @@ namespace UNCAD.Core.QuickLine
             public EnvelopePoint A2 { get; }
             public EnvelopePoint B1 { get; }
             public EnvelopePoint B2 { get; }
+        }
+
+        /// <summary>D-058：软管示意几何（设备端 → 沿末段方向伸出软管长度）。</summary>
+        public sealed class EnvelopeHose
+        {
+            internal EnvelopeHose(EnvelopePoint start, EnvelopePoint end,
+                double lengthMillimetres, string label)
+            {
+                Start = start;
+                End = end;
+                LengthMillimetres = lengthMillimetres;
+                Label = label ?? string.Empty;
+            }
+
+            public EnvelopePoint Start { get; }
+            public EnvelopePoint End { get; }
+            public double LengthMillimetres { get; }
+            /// <summary>段旁标签文字（如「软管 ⌀100 2500mm」）。</summary>
+            public string Label { get; }
         }
 
         /// <summary>三维点（mm；世界 Z 向上）。</summary>

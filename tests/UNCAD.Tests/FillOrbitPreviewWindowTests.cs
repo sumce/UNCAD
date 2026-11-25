@@ -511,6 +511,38 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void OrbitControl_ShowsAtMostThreeIssuesThenACount()
+        {
+            // D-058：窗格点名线路识别问题（最多 3 条 + 计数），放在不挡鼠标的
+            // 半透明底衬上；没有问题时问题行收起。
+            WpfStaRunner.Run(delegate
+            {
+                var control = new QuickLineOrbitPreviewControl();
+                control.SetModel(PreviewModel(""));
+                var withIssues = new QuickLineOrbitPreviewModel(new[]
+                {
+                    new QuickLineOrbitPreviewSegment("s1",
+                        new QuickLineSpatialPoint(0, 0, 0),
+                        new QuickLineSpatialPoint(3000, 0, 0),
+                        QuickLineSpatialAxis.X, 3000, true)
+                }, "", new List<string>(), recognitionSummary: "识别 1 段",
+                    routeIssues: new[] { "问题一", "问题二", "问题三", "问题四", "问题五" });
+                control.SetModel(withIssues);
+                Assert.StartsWith("⚠ 问题一\n⚠ 问题二\n⚠ 问题三\n…另有 2 项，详见命令行输出",
+                    control.BuildIssueText(control.CurrentEnvelope),
+                    StringComparison.Ordinal);
+                Border info = Assert.Single(control.Children.OfType<Border>());
+                Assert.Equal(Visibility.Visible, info.Visibility);
+                Assert.False(info.IsHitTestVisible);
+                Assert.Contains("识别 1 段", QuickLineOrbitSceneBuilder.BuildSummary(
+                    control.CurrentEnvelope), StringComparison.Ordinal);
+
+                control.SetModel(PreviewModel(""));
+                Assert.Equal(string.Empty, control.BuildIssueText(control.CurrentEnvelope));
+            });
+        }
+
+        [Fact]
         public void OrbitSceneBuilder_PlacesNineCircularWaffleHolesPerBay()
         {
             var model = new QuickLineOrbitPreviewModel(

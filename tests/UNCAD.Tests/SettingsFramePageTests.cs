@@ -77,10 +77,15 @@ namespace UNCAD.Tests
                 // 清单标题留空 = 用清单模板里的文字；XLAYOUT 三个数值框 + 黄框开关。
                 Assert.Contains("用清单模板里的文字", page.BoqTitlePreview.Text,
                     StringComparison.Ordinal);
-                Assert.Equal(3, FindAll<NumberBox>(page).Count);
+                Assert.Equal(4, FindAll<NumberBox>(page).Count);
                 Assert.Single(FindAll<ToggleSwitch>(page));
-                // 三张卡片：制图信息表 / 清单标题 / 图框排版。
-                Assert.Equal(3, FindAll<Card>(page).Count);
+                // 四张卡片：制图信息表 / 清单标题 / 图框排版 / 线路识别。
+                Assert.Equal(4, FindAll<Card>(page).Count);
+                // D-058：断口容差框读的是 U1SET 的当前值，范围 0–500（0 = 只用严格容差）。
+                Assert.Equal(0, page.RouteGapTolerance.Minimum);
+                Assert.Equal(500, page.RouteGapTolerance.Maximum);
+                Assert.Equal(UNCAD.Infra.QuickLineRouteSettings.GapTolerance(),
+                    page.RouteGapTolerance.Value);
                 window.Close();
             });
         }

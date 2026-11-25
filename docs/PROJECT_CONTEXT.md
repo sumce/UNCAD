@@ -5,19 +5,20 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.6.0.0` (2026-11-24, D-057: same-name
-  circuits handled by one pairing rule across XSTS / XLAYOUT / BOQ / PDF /
-  DWG; drawing-info table column templates; BOQ title templates; XLAYOUT
-  layout options), released locally on 2026-11-25 as tag `v3.6.0`, not
-  published. `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
-  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`) passed
-  every `release.ps1` gate and is installed user-scope on the development
-  machine, verified; interactive acceptance in the AutoCAD UI is pending.
-  The latest published release is `3.5.0.1` (2026-11-23, tag `v3.5.0`),
-  verified byte-for-byte on the server. XSTS frame details use one row per
-  frame, with separate model and quantity columns for all drawn BOQ items and
-  blank cells for missing items. Near-name hints and the whole-drawing "not
-  drawn" list are removed.
+- Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
+  preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
+  text, hose, named issues; new command U1UL millimetre-label alignment), not
+  yet tagged or released; a local build is installed user-scope on the
+  development machine (2026-11-25) and verified. The latest published release
+  is `3.6.0.0`
+  (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
+  templates, BOQ title templates, XLAYOUT options),
+  `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
+  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`),
+  published on uncad.aosa.me and verified by anonymous download. XSTS frame
+  details use one row per frame, with separate model and quantity columns for
+  all drawn BOQ items and blank cells for missing items. Near-name hints and
+  the whole-drawing "not drawn" list are removed.
 - Current stable release line: `3.4.1` (source patch `3.4.1.11`; latest
   published patch `3.4.1.7`, 2026-11-20;
   D-054 amendment — WPF Viewport3D is the immediate U1U/U13D preview, with an
@@ -78,7 +79,7 @@ descriptions are in `src/UNCAD/Infra/CommandHelpCatalog.cs`.
 | Command family | Commands |
 | --- | --- |
 | Fill and output | `U1F`, `U1U`, `U1S`, `U1D`/`U1DWG`, `U1PDF` (colour PDF per circuit), `U1SET`, `U1DATA` |
-| Drawing helpers | `U1L`, `U1LX`, `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1B` (hose), `U1Q1`, `U1Q2`, `U1Q4` |
+| Drawing helpers | `U1L`, `U1LX`, `U1UL` (millimetre-label alignment), `U13D`, `U1DT`, `U1C`/`U1C20`/`U1C25`/`U1C38`/`U1C51`, `U1R`, `U1B` (hose), `U1Q1`, `U1Q2`, `U1Q4` |
 | Project tools | `Xauto`, `XLAYOUT`, `XSTS`, `Xmerge`, `U1HELP`, `U1A` |
 | Online account | `UNC_LOGIN` (WebView2 login; account + single-device online) |
 | Compatibility aliases | `UNL`, `UNLX`, `UNR`, `UNQ1`, `UNQ2`, `UNQ4`, `UNADD` |
@@ -124,6 +125,17 @@ XLAYOUT/XSTS
   frames with its workbook rows (CircuitMatcher: identity key first, name only
   when unique in the machine, same-name frames without a usable key pending)
   -> arrange or compare
+
+U1U route preview (D-058; read-only, U1F builds none)
+  whole-space scan (segments + labels, parallel outputs, annotation texts —
+  each once per command) -> per frame: segments whose midpoint is inside the
+  boundary -> connectivity (strict 1.0, plus gap tolerance only between two
+  labelled segments) -> tray/conduit channels (metadata ownership first; a
+  text without metadata binds to the nearest parallel labelled segment)
+  -> isometric scene from the labelled segments -> route ends from the
+  upstream/device blocks (nearest open end) -> hose from the Ruanguan block
+  -> issues named (unlabelled lines, tolerated gaps, orphan labels, skipped
+  directions) -> preview model handed to the confirmation window
 ```
 
 ## Data Contracts

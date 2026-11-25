@@ -32,24 +32,22 @@ when their version numbers or counts are stale.
 
 ## Current Product
 
-- Current local source version: `3.6.0.0` (2026-11-24, D-057: same-name
-  circuits handled by one pairing rule in XSTS / XLAYOUT / BOQ / PDF / DWG;
-  drawing-info table column templates; BOQ title templates; XLAYOUT layout
-  options; on top of D-056 circuit identity key and D-055 XLAYOUT
-  filter-list import + result export), released locally on 2026-11-25 as
-  tag `v3.6.0` (commit `da8db81`), not published. The archive
+- Current local source version: `3.7.0.0` (2026-11-25, D-058: U1U 3D route
+  preview rebuilt — gap tolerance, block-anchored route ends, tray/conduit by
+  text, hose, named issues; new command U1UL millimetre-label alignment), not
+  yet tagged or released. A local build of this source is installed user-scope
+  on the development machine (2026-11-25) and verified: 26 files, installed
+  `UNCAD.dll` SHA-256
+  `C7F764BADFD69C83C239C778F3AFF0298BE551D980A1205FC65D1E764D6CA6AE`, identical
+  to the build output and the bundle. The latest published release is `3.6.0.0`
+  (2026-11-24, tag `v3.6.0`, commit `da8db81`; D-057 same-name circuits,
+  drawing-info table templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
-  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`) passed
-  every `release.ps1` gate (1775 tests, PERF_SMOKE, MIGRATION_SELFTEST,
-  package verification) and is installed user-scope on the development
-  machine, verified; interactive acceptance in the AutoCAD UI is pending.
-  The latest published release is `3.5.0.1` (2026-11-23, tag `v3.5.0`;
-  `UNCAD-Pro-v3.5.0.1.zip`, 6,525,340 bytes, SHA-256
-  `1EBF6508B855911EEDB8E48F3FB8088CBB5DD3FBE15BF6B8D4352EAB30202331`),
-  verified byte-for-byte on the server and by anonymous download. XSTS
-  frame details use one row per frame, with separate model and quantity
-  columns for every drawn BOQ item and blank cells for missing items.
-  Near-name hints and the "not drawn" list are removed.
+  `BDFC5E907A62561F94F9E6F90238B96C0A7CBF474753C72A2451EA3D28C87B36`),
+  passed every `release.ps1` gate, published on uncad.aosa.me and verified by
+  anonymous download. XSTS frame details use one row per frame, with separate
+  model and quantity columns for every drawn BOQ item and blank cells for
+  missing items. Near-name hints and the "not drawn" list are removed.
 - Product: `UNCAD Pro`. Stable line: `3.4.1` (source patch `3.4.1.11`,
   latest published patch `3.4.1.7`;
   U1U/U13D 3D preview kernel
@@ -122,6 +120,19 @@ when their version numbers or counts are stale.
   come from the U1SET templates (`UNC_FILL_INFO_*`); an empty template leaves
   the cell untouched. `(U1F创建时间)` reads `meta.filledUtc`, which U1F
   re-stamps (redefine mode) and U1U preserves.
+- Route recognition (D-058): a cable segment is proven by its millimetre
+  label — a line without one is reported, never guessed. Only labelled
+  segments join by the gap tolerance (`UNC_ROUTE_GAP_TOLERANCE`, capped at
+  500); U1LX and Xauto keep the strict 1.0 tolerance. U1U builds the 3D
+  preview (U1F does not), inside the inspection stage and inside try/catch.
+  Route ends come from the connection blocks (nearest open end to the
+  upstream / device block), never from the drawing direction of a line; the
+  workbook-axis rule is the fallback only. Tray/conduit by text is a
+  preview-only fallback for outputs without ownership metadata; metadata
+  ownership always wins and layer governance never guesses from text. U1UL
+  changes only a label's distance and angle — never its side, text, height or
+  position along the line — and only for labels carrying the U1L/U1LX
+  association.
 - Workbook parsing accepts the unified `U_` fields and ordinary `回路名称`.
   Rows whose circuit name has strikethrough are ignored. Do not reintroduce
   A1/A2 or backup-field guessing.

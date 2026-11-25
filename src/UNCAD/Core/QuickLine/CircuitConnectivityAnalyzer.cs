@@ -22,11 +22,13 @@ namespace UNCAD.Core.QuickLine
     {
         internal CircuitConnectivityReport(
             List<CircuitConnectivityComponent> components,
-            List<string> isolatedSegmentIds, int totalSegments)
+            List<string> isolatedSegmentIds, int totalSegments,
+            IReadOnlyList<QuickLineGapJoin> gapJoins = null)
         {
             Components = components;
             IsolatedSegmentIds = isolatedSegmentIds;
             TotalSegments = totalSegments;
+            GapJoins = gapJoins ?? Array.Empty<QuickLineGapJoin>();
         }
 
         public IReadOnlyList<CircuitConnectivityComponent> Components { get; }
@@ -35,21 +37,26 @@ namespace UNCAD.Core.QuickLine
         /// 范围里还有其它分量时才作为「孤立段」点名。</summary>
         public IReadOnlyList<string> IsolatedSegmentIds { get; }
         public int TotalSegments { get; }
+        /// <summary>D-058：靠断口容差才接上的接缝（两侧都是带毫米标的线段）。</summary>
+        public IReadOnlyList<QuickLineGapJoin> GapJoins { get; }
         /// <summary>整个范围恰为一个连通分量（单段路线也算一条链）。</summary>
         public bool IsSingleChain => Components.Count == 1 && TotalSegments > 0;
 
         /// <summary>
         /// 确认窗「连通性」列文案：✔ N 段一条链（单段路线也算一条链）/
         /// ⚠ 孤立段：句柄… / N 段 M 条链（不拦截，报告级——D-054）。
+        /// D-058：有断口被容差接上时在后面注明处数。
         /// </summary>
         public string ToDisplayText()
         {
             if (TotalSegments == 0) return "—";
+            string gap = GapJoins.Count > 0
+                ? "（容错接上 " + GapJoins.Count + " 处断口）" : string.Empty;
             if (Components.Count == 1)
-                return "✔ " + TotalSegments + " 段一条链";
+                return "✔ " + TotalSegments + " 段一条链" + gap;
             if (IsolatedSegmentIds.Count > 0)
-                return "⚠ 孤立段：" + JoinHandles(IsolatedSegmentIds);
-            return TotalSegments + " 段 " + Components.Count + " 条链";
+                return "⚠ 孤立段：" + JoinHandles(IsolatedSegmentIds) + gap;
+            return TotalSegments + " 段 " + Components.Count + " 条链" + gap;
         }
 
         private static string JoinHandles(IReadOnlyList<string> ids)
@@ -70,6 +77,11 @@ namespace UNCAD.Core.QuickLine
     /// 3.3.0（D-054）：回路连通性纯分析器——输入段的 id + 起终点，端点容差
     /// 沿用 QuickLineGraph 的口径（U1LX 同款），输出连通分量、孤立段
     /// （度数=0）与「每段至少一端相接」违规清单。只分析、不拦截。
+    ///
+    /// D-058：可选断口容差——hasMillimetreLabel 与 gapTolerance 都给出时，
+    /// 两端都带毫米标且端点距离不超过 gapTolerance 的线段也接成一条链
+    /// （接缝记进 <see cref="CircuitConnectivityReport.GapJoins"/>）；没有
+    /// 毫米标的线段仍只按 endpointTolerance 相接。
     /// </summary>
     public static class CircuitConnectivityAnalyzer
     {
@@ -91,7 +103,8 @@ namespace UNCAD.Core.QuickLine
 
         /// <summary>分析一组段；tolerance 与 QuickLineGraph.Build 相同语义。</summary>
         public static CircuitConnectivityReport Analyze(
-            IEnumerable<InputSegment> segments, double endpointTolerance = 1.0)
+            IEnumerable<InputSegment> segments, double endpointTolerance = 1.0,
+            Func<string, bool> hasMillimetreLabel = null, double gapTolerance = 0.0)
         {
             if (segments == null)
                 throw new ArgumentNullException(nameof(segments));
@@ -99,15 +112,41 @@ namespace UNCAD.Core.QuickLine
                 || endpointTolerance < 0)
                 throw new ArgumentOutOfRangeException(nameof(endpointTolerance),
                     "Endpoint tolerance must be finite and non-negative.");
+            if (double.IsNaN(gapTolerance) || double.IsInfinity(gapTolerance)
+                || gapTolerance < 0)
+                throw new ArgumentOutOfRangeException(nameof(gapTolerance),
+                    "Gap tolerance must be finite and non-negative.");
 
             List<InputSegment> input = segments.Where(item => item != null).ToList();
-            var graph = QuickLineGraph.Build(
-                input.Select(item => new QuickLineSegment(item.Id, item.Start, item.End)),
-                endpointTolerance);
+            QuickLineGraph graph = QuickLineGraph.Build(
+                input.Select(ToSegment), endpointTolerance);
+
+            QuickLineRouteGraph tolerant = null;
+            if (hasMillimetreLabel != null && gapTolerance > endpointTolerance)
+            {
+                List<QuickLineSegment> labelled = input
+                    .Where(item => hasMillimetreLabel(item.Id))
+                    .Select(ToSegment).ToList();
+                tolerant = QuickLineRouteConnector.Build(labelled, gapTolerance);
+            }
+
+            var adjacency = new Dictionary<string, HashSet<string>>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (QuickLineSegment segment in graph.Segments)
+                adjacency[segment.Id] = new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase);
+            foreach (QuickLineSegment segment in graph.Segments)
+                foreach (QuickLineConnection connection in graph.GetConnections(segment.Id))
+                    Connect(adjacency, segment.Id, connection.ConnectedSegmentId);
+            if (tolerant != null)
+                foreach (QuickLineSegment segment in tolerant.Graph.Segments)
+                    foreach (QuickLineConnection connection in
+                        tolerant.Graph.GetConnections(segment.Id))
+                        Connect(adjacency, segment.Id, connection.ConnectedSegmentId);
 
             var isolated = new List<string>();
             foreach (QuickLineSegment segment in graph.Segments)
-                if (graph.GetConnections(segment.Id).Count == 0)
+                if (adjacency[segment.Id].Count == 0)
                     isolated.Add(segment.Id);
 
             var components = new List<CircuitConnectivityComponent>();
@@ -123,15 +162,25 @@ namespace UNCAD.Core.QuickLine
                 {
                     string current = queue.Dequeue();
                     memberIds.Add(current);
-                    foreach (QuickLineConnection connection in graph
-                        .GetConnections(current))
-                        if (visited.Add(connection.ConnectedSegmentId))
-                            queue.Enqueue(connection.ConnectedSegmentId);
+                    foreach (string neighbour in adjacency[current])
+                        if (visited.Add(neighbour))
+                            queue.Enqueue(neighbour);
                 }
                 components.Add(new CircuitConnectivityComponent(memberIds));
             }
             return new CircuitConnectivityReport(components, isolated,
-                graph.Segments.Count);
+                graph.Segments.Count, tolerant?.GapJoins);
+        }
+
+        private static QuickLineSegment ToSegment(InputSegment item)
+            => new QuickLineSegment(item.Id, item.Start, item.End);
+
+        private static void Connect(IDictionary<string, HashSet<string>> adjacency,
+            string left, string right)
+        {
+            if (!adjacency.ContainsKey(left) || !adjacency.ContainsKey(right)) return;
+            adjacency[left].Add(right);
+            adjacency[right].Add(left);
         }
     }
 }

@@ -469,6 +469,25 @@ namespace UNCAD.Cad.QuickLine
             }
         }
 
+        /// <summary>
+        /// D-058：文字类实体（DBText / 块属性 / MTEXT）——桥架、线管标注文字的
+        /// 收集只开这些实体，不碰线段和块引用。
+        /// </summary>
+        internal static bool IsTextClass(ObjectId id)
+        {
+            try
+            {
+                Autodesk.AutoCAD.Runtime.RXClass cls = id.ObjectClass;
+                return cls == DbTextClass
+                    || cls.IsDerivedFrom(DbTextClass)   // includes AttributeReference
+                    || cls == MTextClass;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         private static List<LineSnapshot> ConnectedComponent(
             IReadOnlyList<LineSnapshot> lines, ObjectId rootLineId, double tolerance)
         {

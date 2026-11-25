@@ -117,10 +117,11 @@ namespace UNCAD.Tests
             Assert.True(transactionStart >= 0 && apply > transactionStart
                 && commit > apply,
                 "图层矫正必须落在既有写事务内（一次 U 连同填充一起回退）。");
-            // 编排只调阶段类；确认窗接收体检报告。U1U 3D 预览保持停用。
+            // 编排只调阶段类；确认窗接收体检报告。D-058：U1U 的 3D 预览在阶段类
+            // 里构建，编排器不碰场景（U1F 不建）。
             Assert.Contains("FillRouteInspectionStage.InspectSelectionAndReport", fill);
             Assert.Contains("out FillReviewData review, routeInspection", fill);
-            Assert.Contains("不构建 3D 场景", fill);
+            Assert.Contains("U1F 不建", fill);
 
             // 阶段类承载报告口径：连通性报告级（不拦截）+ 图层矫正文案。
             string stage = Source("src", "UNCAD", "Features", "Fill",
@@ -131,7 +132,17 @@ namespace UNCAD.Tests
             Assert.Contains("ConfigKeys.FillLayerGovernor", stage);
             Assert.Contains("LayerGovernorService.Plan", stage);
             Assert.Contains("ParallelAnnotationOwnership.Collect", stage);
-            Assert.DoesNotContain("inspection.Preview = BuildPreview", stage);
+            // D-058：只有 U1U（updateMode）挂 3D 预览；挂预览包在 try/catch 里，
+            // 场景构建失败只降级成诊断，绝不拦截写入。
+            Assert.Contains("if (updateMode)", stage);
+            Assert.Contains("AttachPreview(ctx, readTransaction, inspection, selection, picked)",
+                stage);
+            Assert.Contains("inspection.Preview = BuildPreview(", stage);
+            Assert.Contains("3D 预览场景构建失败", stage);
+            int attach = stage.IndexOf("internal static void AttachPreview", StringComparison.Ordinal);
+            int guard = stage.IndexOf("catch (System.Exception ex)", attach, StringComparison.Ordinal);
+            Assert.True(attach >= 0 && guard > attach,
+                "AttachPreview 必须 try/catch 降级（预览是展示件，不能炸 U1U 主流程）");
 
             string batch = Source("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");

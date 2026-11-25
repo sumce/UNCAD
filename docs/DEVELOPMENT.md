@@ -15,6 +15,7 @@
 | `SUM-STAT` | 求和统计 | 清理后的文字行、统计类别、每格毫米数 | 电缆/桥架/线管汇总及来源/命中计数 | 文字规则解析和长度求和，不读取Excel、不写CAD |
 | `BOQ-TABLE` | 清单表格 | 机台回路、BOQ索引、求和结果、生成配置 | 默认清单行、评审模型、最终表格写入行数 | 清单规划、匹配状态和CAD表格写入，不计算图纸长度 |
 | `U1LX` | 快速标注距离 | 当前空间独立 `Line`、关联毫米标注、端点容差和用户选择 | 逐段命令行输入距离写标注，视角中心自动跳到下一段 | 连接图遍历计划、点击端点分类、中部点击询问方向；Esc 保留已完成部分；不再依赖已移除的 U1X 3D 编辑器 |
+| `U1UL` | 毫米标归位 | 带 U1L/U1LX 关联元数据的毫米标及其线段、U1SET 毫米标偏移/位置、选集（线段/毫米标/图框） | 毫米标的新位置与角度 | 纯几何归位规划 `Core/QuickLine/QuickLineLabelPlacement`：只改离线距离和角度，所在侧与沿线位置保持，不改文字和字高；一个事务，任一目标算不出位置整体放弃；`Cad/QuickLine/QuickLineLabelAlignService` |
 
 - 模块必须通过 `ModuleRunner` 执行有外部副作用或可能失败的阶段；日志统一记录模块ID、阶段、耗时和异常。
 - 对用户显示的异常格式为 `模块[模块ID/名称]在[阶段]阶段失败`，首先按模块ID定位，不从整个命令入口开始猜测。
@@ -103,6 +104,13 @@
   不得让预览线长与标签脱节。对应测试见 `QuickLineWebPreviewTests`、
   `QuickLineOrbitPreviewModelTests`、`QuickLine3dPreviewTests` 和
   `FillOrbitPreviewWindowTests`；在线登录页仍使用 WebView2。
+- 线路识别（D-058）：U1U 的预览模型在 `FillRouteInspectionStage.AttachPreview` 里
+  构建（同一读事务、try/catch，U1F 不建）；识别逻辑在 `FillRouteRecognitionStage`，
+  纯函数在 `Core/QuickLine`（`QuickLineRouteConnector` 断口容差、
+  `QuickLineRouteDirectionPlanner.ResolveFromAnchors` 两端按块、
+  `RouteAnnotationTextPlanner` 文字识别与就近绑定、`RouteAnnotationLineClassifier`
+  标注线）。只读，不改图纸、不进统计。断口容差只作用于两端都带毫米标的线段；
+  批量 U1U 的桥架/线管标注文字整图只收一次（与平行标注输出同一条 O(图框×实体) 教训）。
 
 ## AutoCAD 写入
 
@@ -164,6 +172,14 @@ CAD 行为不能只靠纯单测；出图、写图这类必须真机验证：
   是否真的回滚"。U1PDF 失败路径靠回滚丢弃临时打印设置，这条修复的全部正确性都
   建立在该前提上；探针同时用 `Commit` 作对照，避免出现"什么都没变"的假通过。
   结论（AutoCAD 2022 实测）：`Dispose` 未提交 = 回滚，`Commit` = 落盘。
+- `UNCAD_ROUTE_PREVIEW_SELFTEST`（3.7.0，U1U 3D 预览数据链）：在 `XFrameTemplate.dwg`
+  上画三段带毫米标的路线（一处拐角差 30）、一条无毫米标的线、一趟带元数据的桥架
+  输出、一条 U1B 软管标注和两个块引用，走真实的体检 + 预览构建，断言断口被容差
+  接上、桥架通道归属、两端落在离连接块最近的末端、软管取 U1B 标注长度、摘要与
+  问题点名。
+- `UNCAD_LABEL_ALIGN_SELFTEST`（3.7.0，U1UL 毫米标归位）：真事务里断言归位后
+  所在侧/沿线位置/文字/字高/关联元数据不变，无毫米标的线段与只靠位置匹配的
+  毫米标不动并计数，重跑幂等。
 
 ## 代码评审门槛
 

@@ -37,6 +37,14 @@ deferred, or important for support diagnosis.
   not export that machine until a U1F/U1U run on the frame records the
   upstream. U1PDF skips such a frame with a command-line reason (no picker on
   that path).
+- Route recognition (D-058) is read-only and reports instead of guessing: only
+  segments with a millimetre label join by the gap tolerance; a tray/conduit
+  text without ownership metadata binds to one nearest labelled segment (that
+  segment only) and is reported as a proximity binding; a labelled tray output
+  whose host line is gone is reported as orphan, not attached; the preview's
+  hose is schematic (it continues the last segment from the device end) and
+  writes nothing. U1UL leaves labels that carry no U1L/U1LX association
+  untouched and lists their lines.
 - BOQ files written before 3.6.0 may hold one merged column for a machine's
   same-name circuits. The first 3.6.0 write renames that column to the first
   circuit (`回路名（上游 X）`) and rewrites its quantities from that frame; run
@@ -126,12 +134,17 @@ deferred, or important for support diagnosis.
 - WebV 是可选预览窗口，需安装 Microsoft Edge WebView2 Runtime；如果运行时
   缺失、控制器超时或 GPU 上下文丢失，窗口会显示错误，WPF 内嵌预览仍可用。
   WebV 在独立进程和独立临时用户目录运行，不会阻塞 AutoCAD。
-- U1U direction is resolved only for an unbranched route with exactly two
-  topological endpoints and parseable workbook axes whose 4800 mm regions match
-  exactly one endpoint assignment. Route-vector angular alignment is not
-  required. Branches, disconnected route groups, invalid axes, and zero or
-  multiple region matches leave cabinet and endpoint-axis markers hidden and
-  report why; they do not block fill or BOQ work.
+- U1U route ends come from the upstream/device blocks when those blocks can be
+  located (D-058): the end nearest each block is that end; when both ends are
+  equally near, or both blocks point at the same end, direction stays
+  unresolved and the reason is shown. Only when neither block can be located
+  does the workbook-axis rule apply, and then direction is resolved only for
+  an unbranched route with exactly two topological endpoints and parseable
+  workbook axes whose 4800 mm regions match exactly one endpoint assignment.
+  Route-vector angular alignment is not required. Branches, disconnected route
+  groups, invalid axes, and zero or multiple region matches leave cabinet and
+  endpoint-axis markers hidden and report why; they do not block fill or BOQ
+  work.
 - U1U previews exceeding 4096 occupied column bays including their margin
   show a selection-size error. Bays and waffle openings are not sampled.
   This limit affects the preview only, not the drawing or BOQ.

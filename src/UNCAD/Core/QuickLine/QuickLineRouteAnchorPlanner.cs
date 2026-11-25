@@ -53,23 +53,48 @@ namespace UNCAD.Core.QuickLine
             QuickLinePoint anchor, double maximumDistanceMillimetres)
         {
             if (anchor == null) throw new ArgumentNullException(nameof(anchor));
+            return FindNearest(candidates, new[] { anchor },
+                maximumDistanceMillimetres);
+        }
+
+        /// <summary>
+        /// D-058：同类连接块可能有多个（多台设备 / 多个上游信息块），候选项到
+        /// 「这一类块」的距离取到最近那个块位置的距离；其余口径同单锚点重载。
+        /// anchors 为空或全是 null 时视为没有可定位的块（不匹配）。
+        /// </summary>
+        public static QuickLineRouteAnchorMatch FindNearest(
+            IEnumerable<QuickLineRouteEndpointCandidate> candidates,
+            IReadOnlyList<QuickLinePoint> anchors,
+            double maximumDistanceMillimetres)
+        {
+            if (anchors == null) throw new ArgumentNullException(nameof(anchors));
             if (double.IsNaN(maximumDistanceMillimetres)
                 || maximumDistanceMillimetres < 0.0)
                 throw new ArgumentOutOfRangeException(
                     nameof(maximumDistanceMillimetres));
+            List<QuickLinePoint> usable = new List<QuickLinePoint>();
+            foreach (QuickLinePoint anchor in anchors)
+                if (anchor != null) usable.Add(anchor);
+            if (usable.Count == 0)
+                return new QuickLineRouteAnchorMatch(string.Empty,
+                    double.PositiveInfinity, false);
 
             double bestDistance = double.PositiveInfinity;
             double secondDistance = double.PositiveInfinity;
             string bestNode = string.Empty;
-            var seenNodes = new System.Collections.Generic.HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
+            var seenNodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (QuickLineRouteEndpointCandidate candidate
                 in candidates ?? Array.Empty<QuickLineRouteEndpointCandidate>())
             {
                 if (candidate == null || candidate.Point == null
                     || candidate.NodeId.Length == 0
                     || !seenNodes.Add(candidate.NodeId)) continue;
-                double distance = candidate.Point.DistanceSquaredTo(anchor);
+                double distance = double.PositiveInfinity;
+                foreach (QuickLinePoint anchor in usable)
+                {
+                    double toAnchor = candidate.Point.DistanceSquaredTo(anchor);
+                    if (toAnchor < distance) distance = toAnchor;
+                }
                 if (distance < bestDistance)
                 {
                     secondDistance = bestDistance;

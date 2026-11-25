@@ -103,6 +103,7 @@ namespace UNCAD.UI
                 return "line3d";
             if (string.Equals(command, CommandIds.Line, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.LineQuick, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command, CommandIds.LineLabelAlign, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command, CommandIds.DimensionText, StringComparison.OrdinalIgnoreCase))
                 return "line";
             if (string.Equals(command, CommandIds.Arch, StringComparison.OrdinalIgnoreCase)) return "arch";

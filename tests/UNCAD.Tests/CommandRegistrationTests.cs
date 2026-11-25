@@ -15,21 +15,23 @@ namespace UNCAD.Tests
         {
             Assert.Equal(new[]
             {
-                "U1L", "U1LX", "U13D", "U1DT", "U1R", "U1B", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
+                "U1L", "U1LX", "U1UL", "U13D", "U1DT", "U1R", "U1B", "U1Q1", "U1Q2", "U1Q4", "U1F", "U1U",
                 "U1S", "U1C", "U1A", "U1SET", "U1DATA", "U1DWG", "XLAYOUT", "XSTS", "Xmerge", "Xauto", "U1HELP"
             }, CommandIds.Canonical);
             Assert.Equal(new[] { "U1D" }, CommandIds.Aliases);
             Assert.Equal(new[] { "UNL", "UNLX", "UNR", "UNQ1", "UNQ2", "UNQ4", "UNADD" },
                 CommandIds.Legacy);
             Assert.Equal("U1LX;UNLX", CommandIds.QuickLineFeatureCommands);
+            // D-058：U1UL 毫米标归位（无兼容旧名）。
+            Assert.Equal("U1UL", CommandIds.LineLabelAlignFeatureCommands);
             Assert.Equal("U13D", CommandIds.QuickLine3dPreviewFeatureCommands);
             Assert.Equal("U1C;U1C20;U1C25;U1C38;U1C51",
                 CommandIds.ConduitFeatureCommands);
             Assert.Equal("U1DWG;U1D", CommandIds.DwgExportFeatureCommands);
             Assert.Equal("U1PDF", CommandIds.PdfExportFeatureCommands);
             Assert.Equal("U1B", CommandIds.HoseFeatureCommands);
-            Assert.Equal(36, CommandIds.Registered.Count);
-            Assert.Equal(36, CommandIds.Registered.Distinct(
+            Assert.Equal(37, CommandIds.Registered.Count);
+            Assert.Equal(37, CommandIds.Registered.Distinct(
                 System.StringComparer.OrdinalIgnoreCase).Count());
             // UNC_ 前缀只允许在线登录命令使用（它是在线授权的恢复入口）。
             Assert.Equal(new[] { CommandIds.ClientLogin }, CommandIds.Registered.Where(

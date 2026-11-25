@@ -13,6 +13,29 @@ namespace UNCAD.Core.Text
         private static readonly Regex BareLength = new Regex(
             @"^\s*([0-9]+(?:[.,][0-9]+)?)\s*(mm|m)\s*$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex LeadingDiameter = new Regex(
+            @"^\s*([0-9]+(?:[.,][0-9]+)?)\s*mm\s*软管",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// D-058：从软管标注文字（「100mm软管:2500mm」，RuanguanLabelFormatter
+        /// 的写法）取软管口径（mm）。不是这个写法时返回 false，不猜。
+        /// </summary>
+        public static bool TryParseDiameterMillimetres(string value,
+            out double millimetres)
+        {
+            millimetres = 0;
+            Match match = LeadingDiameter.Match(value ?? "");
+            if (!match.Success
+                || !double.TryParse(NormalizeNumeric(match.Groups[1].Value),
+                    NumberStyles.Float, CultureInfo.InvariantCulture,
+                    out double parsed)
+                || double.IsNaN(parsed) || double.IsInfinity(parsed)
+                || parsed <= 0)
+                return false;
+            millimetres = parsed;
+            return true;
+        }
 
         public static string ParseMeters(string value)
         {

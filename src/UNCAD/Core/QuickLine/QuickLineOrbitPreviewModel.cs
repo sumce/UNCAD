@@ -58,6 +58,35 @@ namespace UNCAD.Core.QuickLine
     }
 
     /// <summary>
+    /// D-058：图框里的软管（设备末端的柔性段）。长度/口径来自 Ruanguan 软管块
+    /// 属性；图框里只有 U1B 软管标注文字时取文字（<see cref="ByLabelOnly"/>）。
+    /// 预览里按设备端末段的方向示意画出，不写回图纸、不进任何统计。
+    /// </summary>
+    public sealed class QuickLineOrbitPreviewHose
+    {
+        public QuickLineOrbitPreviewHose(double lengthMillimetres,
+            double? diameterMillimetres, string sourceText, bool byLabelOnly)
+        {
+            if (double.IsNaN(lengthMillimetres) || double.IsInfinity(lengthMillimetres)
+                || lengthMillimetres <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(lengthMillimetres));
+            LengthMillimetres = lengthMillimetres;
+            DiameterMillimetres = diameterMillimetres;
+            SourceText = sourceText ?? string.Empty;
+            ByLabelOnly = byLabelOnly;
+        }
+
+        /// <summary>软管长度（mm）。</summary>
+        public double LengthMillimetres { get; }
+        /// <summary>软管口径（mm）；读不出时为空。</summary>
+        public double? DiameterMillimetres { get; }
+        /// <summary>来源原文（Ruanguan 块属性或 U1B 标注文字）。</summary>
+        public string SourceText { get; }
+        /// <summary>长度来自 U1B 标注文字而不是 Ruanguan 块（U1B 文字不进统计）。</summary>
+        public bool ByLabelOnly { get; }
+    }
+
+    /// <summary>
     /// U1U 确认窗左侧 3D 预览的场景模型——由 QuickLineIsometricSceneBuilder
     /// .BuildAll（带毫米标）重建后整体**地面归零**（所有节点 Z 减去最小 Z，
     /// 「最低的那条线段的端点高度为 0」），附上游/下游轴位摘要文字与轴位原文。
@@ -74,7 +103,10 @@ namespace UNCAD.Core.QuickLine
             QuickLineSpatialPoint? upstreamEndpoint = null,
             QuickLineSpatialPoint? downstreamEndpoint = null,
             string upstreamType = null, bool directionResolved = false,
-            IReadOnlyList<string> directionDiagnostics = null)
+            IReadOnlyList<string> directionDiagnostics = null,
+            QuickLineOrbitPreviewHose hose = null,
+            string recognitionSummary = null,
+            IReadOnlyList<string> routeIssues = null)
         {
             Segments = segments ?? Array.Empty<QuickLineOrbitPreviewSegment>();
             AxisSummary = axisSummary ?? string.Empty;
@@ -88,6 +120,9 @@ namespace UNCAD.Core.QuickLine
                 && upstreamEndpoint != null && downstreamEndpoint != null;
             DirectionDiagnostics = directionDiagnostics
                 ?? Array.Empty<string>();
+            Hose = hose;
+            RecognitionSummary = recognitionSummary ?? string.Empty;
+            RouteIssues = routeIssues ?? Array.Empty<string>();
         }
 
         public IReadOnlyList<QuickLineOrbitPreviewSegment> Segments { get; }
@@ -103,6 +138,12 @@ namespace UNCAD.Core.QuickLine
         public string UpstreamType { get; }
         public bool DirectionResolved { get; }
         public IReadOnlyList<string> DirectionDiagnostics { get; }
+        /// <summary>D-058：图框里的软管；没有可读长度的软管时为 null。</summary>
+        public QuickLineOrbitPreviewHose Hose { get; }
+        /// <summary>D-058：线路识别结果一句话（段数/桥架/线管/软管/两端判定依据）。</summary>
+        public string RecognitionSummary { get; }
+        /// <summary>D-058：识别出的问题（无毫米标的线段、被容差接上的断口、非等测方向等）。</summary>
+        public IReadOnlyList<string> RouteIssues { get; }
 
         /// <summary>
         /// 由等测场景构建预览模型：整体地面归零（minZ→0），段端点取场景节点
@@ -118,7 +159,10 @@ namespace UNCAD.Core.QuickLine
             QuickLineSpatialPoint? upstreamEndpoint = null,
             QuickLineSpatialPoint? downstreamEndpoint = null,
             string upstreamType = null, bool directionResolved = false,
-            IReadOnlyList<string> directionDiagnostics = null)
+            IReadOnlyList<string> directionDiagnostics = null,
+            QuickLineOrbitPreviewHose hose = null,
+            string recognitionSummary = null,
+            IReadOnlyList<string> routeIssues = null)
         {
             if (scene == null || scene.Segments.Count == 0) return null;
             double minZ = scene.Nodes.Count == 0
@@ -152,7 +196,8 @@ namespace UNCAD.Core.QuickLine
                 scene.Diagnostics, upstreamAxisLabel, downstreamAxisLabel,
                 NormalizeEndpoint(upstreamEndpoint, minZ),
                 NormalizeEndpoint(downstreamEndpoint, minZ),
-                upstreamType, directionResolved, directionDiagnostics);
+                upstreamType, directionResolved, directionDiagnostics,
+                hose, recognitionSummary, routeIssues);
         }
 
         private static QuickLineSpatialPoint? NormalizeEndpoint(

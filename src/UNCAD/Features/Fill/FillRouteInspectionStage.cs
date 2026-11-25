@@ -12,7 +12,9 @@ using UNCAD.Infra;
 namespace UNCAD.Features.Fill
 {
     /// <summary>
-    /// 3.3.0（D-054）：一个图框范围内的连通性报告与图层矫正计划。3D 预览已停用。
+    /// 3.3.0（D-054）：一个图框范围内的连通性报告与图层矫正计划。
+    /// D-058：加线路识别结果（通道、无毫米标线段、问题清单）；U1U 另带 3D
+    /// 路由预览模型。
     /// </summary>
     internal sealed class FillRouteInspection
     {
@@ -22,7 +24,7 @@ namespace UNCAD.Features.Fill
         public LayerGovernorPlan LayerPlan { get; set; }
         /// <summary>确认窗/预检报告用的图层矫正文案（null=无内容）。</summary>
         public string LayerCorrectionText { get; set; }
-        /// <summary>3D 路由预览模型（null=没有带毫米标注的线段，窗体隐藏预览区）。</summary>
+        /// <summary>3D 路由预览模型（U1U 构建；null=没有带毫米标注的线段或构建失败）。</summary>
         public QuickLineOrbitPreviewModel Preview { get; set; }
         /// <summary>本框已识别路由与恢复的旧 U1L 标签，供写事务复用。</summary>
         public List<QuickLineCadSegment> Segments { get; set; }
@@ -31,12 +33,37 @@ namespace UNCAD.Features.Fill
         public List<ParallelAnnotationOwnershipEntry> ParallelOutputs { get; set; }
             = new List<ParallelAnnotationOwnershipEntry>();
 
+        /// <summary>D-058：本次连通性/路线图使用的断口容差（图形单位）。</summary>
+        public double GapTolerance { get; set; }
+        /// <summary>D-058：本框电缆线段的桥架/线管通道（键=电缆线段句柄）。</summary>
+        public Dictionary<string, QuickLineOrbitPreviewChannel> Channels { get; set; }
+            = new Dictionary<string, QuickLineOrbitPreviewChannel>(
+                StringComparer.OrdinalIgnoreCase);
+        /// <summary>D-058：没有毫米标、也不是桥架/线管标注线的线段句柄（问题）。</summary>
+        public List<string> UnlabelledSegmentHandles { get; set; } = new List<string>();
+        /// <summary>D-058：认出的桥架/线管标注线句柄（不算问题）。</summary>
+        public List<string> AnnotationLineHandles { get; set; } = new List<string>();
+        /// <summary>D-058：没有元数据、按旁边文字就近绑定的桥架/线管。</summary>
+        public List<RouteAnnotationTextBinding> TextBoundAnnotations { get; set; }
+            = new List<RouteAnnotationTextBinding>();
+        /// <summary>D-058：宿主线段已找不到的桥架/线管标注文字。</summary>
+        public List<string> OrphanAnnotations { get; set; } = new List<string>();
+        /// <summary>D-058：识别结果一句话（3D 窗格与命令行共用）。</summary>
+        public string RecognitionText { get; set; } = "";
+        /// <summary>D-058：识别出的问题，逐条成句。</summary>
+        public List<string> RouteIssues { get; set; } = new List<string>();
+        /// <summary>D-058：是否已尝试构建预览（每框只建一次）。</summary>
+        public bool PreviewAttempted { get; set; }
+        /// <summary>D-058：预览构建失败原因（null=未失败）。</summary>
+        public string PreviewFailure { get; set; }
+
         public string ConnectivityText
             => Connectivity == null ? "—" : Connectivity.ToDisplayText();
     }
 
     /// <summary>
-    /// 3.3.0（D-054）：U1F/U1U 整图扫描后只执行连通性分析和图层矫正计划。
+    /// 3.3.0（D-054）：U1F/U1U 整图扫描后执行连通性分析、图层矫正计划和线路识别。
+    /// D-058：U1U 重新构建 3D 路由预览（确认窗左半），U1F 仍不构建。
     /// </summary>
     internal static class FillRouteInspectionStage
     {
@@ -101,6 +128,7 @@ namespace UNCAD.Features.Fill
         /// Line 电缆线（TryAnchor 严格模式只收表格/文字/块），线段归属必须
         /// 按边界几何判定（现场报告"U1U 没有 3D 预览、电缆/桥架图层没动"的
         /// 根因，UNCAD_ROUTE_DIAG 真图复现 scope∩扫描=0）。
+        /// D-058：U1U 在同一读事务里挂上 3D 预览并输出线路识别结果；U1F 不建预览。
         /// </summary>
         internal static FillRouteInspection InspectSelectionAndReport(
             CadContext ctx, FillSelection selection, MachineRow picked,
@@ -120,8 +148,14 @@ namespace UNCAD.Features.Fill
             using (Transaction readTransaction =
                 ctx.Db.TransactionManager.StartTransaction())
             {
+                // D-058：桥架/线管标注文字整图只收一次（与线段扫描同一口径）。
+                List<RouteAnnotationTextEntity> annotationTexts =
+                    RouteAnnotationTextReader.Collect(ctx, readTransaction);
                 inspection = Inspect(ctx, readTransaction, scope, scanned,
-                    selection?.Region?.Boundary);
+                    selection?.Region?.Boundary, null, annotationTexts);
+                // D-058：U1U 的 3D 预览（确认窗左半）。预览是展示件，失败不拦截写入。
+                if (updateMode)
+                    AttachPreview(ctx, readTransaction, inspection, selection, picked);
                 readTransaction.Commit();
             }
             inspectTimer.Stop();
@@ -134,7 +168,31 @@ namespace UNCAD.Features.Fill
             if (inspection.LayerCorrectionText != null)
                 ctx.Write("\n[" + command + "] " + inspection.LayerCorrectionText
                     + "；将随本次写入一并执行（一次 U 可回退）。");
+            if (updateMode)
+                FillRouteRecognitionStage.WriteReport(ctx, command, inspection);
             return inspection;
+        }
+
+        /// <summary>
+        /// D-058：给一份体检结果挂上 3D 预览模型（U1U 专用，每框只建一次）。
+        /// 场景构建抛异常时降级成一句诊断，绝不能把 U1U 主流程炸掉。
+        /// </summary>
+        internal static void AttachPreview(CadContext ctx,
+            Transaction readTransaction, FillRouteInspection inspection,
+            FillSelection selection, MachineRow machine)
+        {
+            if (inspection == null || inspection.PreviewAttempted) return;
+            inspection.PreviewAttempted = true;
+            try
+            {
+                inspection.Preview = BuildPreview(readTransaction, inspection,
+                    selection, machine);
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn("[U1U] 3D 预览场景构建失败（不影响写入）：" + ex.Message);
+                inspection.PreviewFailure = "3D 预览场景构建失败：" + ex.Message;
+            }
         }
 
         /// <summary>
@@ -154,24 +212,30 @@ namespace UNCAD.Features.Fill
 
         /// <summary>
         /// 体检一个图框范围。scopeEntityIds = 图框实体集（region.EntityIds 或
-        /// 单框选集 SourceIds）；upstream/downstreamAxis 用于柱位摘要（预览）。
-        /// buildPreview=false（U1F）时跳过场景构建。
+        /// 单框选集 SourceIds）。
         /// 3.3.0.1：boundary（图框边界矩形）非空时线段归属按几何判定（中点在
         /// 界内），EntityIds 仅作无边界时的回退——Collect 严格模式不收 Line。
         /// 平行标注输出按宿主电缆段判框（宿主在框内→输出在框内），红线实体
         /// 同样不在 EntityIds 里，按宿主归属才不会漏移。
+        /// D-058：连通性带断口容差（只有带毫米标的线段参与）；随后做线路识别
+        /// （通道/标注线/无毫米标线段/问题清单），annotationTexts 为整图一次
+        /// 收集的桥架/线管标注文字（null 时无法做无元数据文字的就近绑定）。
         /// </summary>
         internal static FillRouteInspection Inspect(CadContext ctx,
             Transaction readTransaction, IEnumerable<ObjectId> scopeEntityIds,
             IReadOnlyList<QuickLineCadSegment> scanned,
             FrameRectangle boundary = null,
-            List<ParallelAnnotationOwnershipEntry> precollectedOutputs = null)
+            List<ParallelAnnotationOwnershipEntry> precollectedOutputs = null,
+            IReadOnlyList<RouteAnnotationTextEntity> annotationTexts = null)
         {
             var inspectTimer = System.Diagnostics.Stopwatch.StartNew();
             var phaseTimer = System.Diagnostics.Stopwatch.StartNew();
             var scope = new HashSet<ObjectId>(scopeEntityIds
                 ?? Enumerable.Empty<ObjectId>());
-            var inspection = new FillRouteInspection();
+            var inspection = new FillRouteInspection
+            {
+                GapTolerance = QuickLineRouteSettings.GapTolerance()
+            };
             List<QuickLineCadSegment> inScope = (scanned
                 ?? Array.Empty<QuickLineCadSegment>())
                 .Where(item => item != null && SegmentInScope(item, scope, boundary))
@@ -179,15 +243,20 @@ namespace UNCAD.Features.Fill
             long filterMilliseconds = phaseTimer.ElapsedMilliseconds;
 
             // ② 连通性（特性②）：只分析，不拦截——D-054。
+            // D-058：两端都带毫米标的线段按断口容差接成一条链，接缝记入报告。
             if (inScope.Count > 0)
             {
+                var labelledHandles = new HashSet<string>(inScope
+                    .Where(item => item.HasMillimetreLabel)
+                    .Select(item => item.LineId.Handle.ToString()),
+                    StringComparer.OrdinalIgnoreCase);
                 inspection.Connectivity = CircuitConnectivityAnalyzer.Analyze(
                     inScope.Select(item => new CircuitConnectivityAnalyzer
                         .InputSegment(
                             item.LineId.Handle.ToString(),
                             new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                             new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))),
-                    1.0);
+                    1.0, labelledHandles.Contains, inspection.GapTolerance);
             }
 
             // ① 图层矫正计划（特性①）+ 特性D 通道归属共用一次归属收集：
@@ -230,6 +299,12 @@ namespace UNCAD.Features.Fill
                 if (precollectedOutputs == null)
                     Log.Info("[PERF] 路由图层计划: " + layerPlanMilliseconds + " ms");
             }
+
+            // D-058：线路识别（通道按元数据归属 → 无元数据文字就近 → 认出标注线
+            // → 没有毫米标的线段与问题清单）。U1F/U1U 都做，连通性报告同口径。
+            inspection.Channels = BuildChannels(readTransaction, frameOutputs, inScope);
+            FillRouteRecognitionStage.Recognize(inspection, inScope, frameOutputs,
+                boundary, outputs, scanned, annotationTexts);
 
             inspectTimer.Stop();
             if (precollectedOutputs == null)
@@ -280,8 +355,8 @@ namespace UNCAD.Features.Fill
                         out List<QuickLineCadSegment> hosts)
                     && hosts.Count > 0) return true;
                 return string.Equals(entry.Kind,
-                        UNCAD.Core.Dwg.UncadLayerStandard.HoseAnnotationKind,
-                        StringComparison.OrdinalIgnoreCase)
+                    UNCAD.Core.Dwg.UncadLayerStandard.HoseAnnotationKind,
+                    StringComparison.OrdinalIgnoreCase)
                     && OutputCenterInsideBoundary(readTransaction,
                         entry.EntityId, boundary);
             }).ToList();
@@ -312,16 +387,17 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>
-        /// 与 U13D 共用毫米标注建模口径，COMPLETED 只保留确认状态。毫米标原文按段
-        /// 句柄带入（特性B），上下游轴位原文带入（特性C），桥架/线管通道归属
-        /// 带入（特性D）。
+        /// D-058：U1U 的 3D 路由预览模型。与 U13D 共用毫米标注建模口径（真实
+        /// 毫米做距离）；路线端点图带断口容差（只有带毫米标的线段参与）。
+        /// 两端按上游块/设备块就近判定，带不回轴位推断；毫米标原文按段句柄
+        /// 带入，桥架/线管通道、软管、识别摘要与问题清单一并带入。
+        /// 没有带毫米标的线段时返回 null（窗体隐藏预览区）。
         /// </summary>
         private static QuickLineOrbitPreviewModel BuildPreview(
-            IReadOnlyList<QuickLineCadSegment> inScope, string axisSummary,
-            string upstreamAxis, string downstreamAxis,
-            Dictionary<string, QuickLineOrbitPreviewChannel> channels)
+            Transaction readTransaction, FillRouteInspection inspection,
+            FillSelection selection, MachineRow machine)
         {
-            List<QuickLineCadSegment> labelled = inScope
+            List<QuickLineCadSegment> labelled = inspection.Segments
                 .Where(item => item.HasMillimetreLabel).ToList();
             if (labelled.Count == 0) return null;
             var distances = labelled.ToDictionary(
@@ -336,15 +412,20 @@ namespace UNCAD.Features.Fill
                 item => item.LineId.Handle.ToString(),
                 item => item.LabelText ?? string.Empty,
                 StringComparer.OrdinalIgnoreCase);
-            QuickLineGraph graph = QuickLineGraph.Build(labelled.Select(item =>
-                new QuickLineSegment(item.LineId.Handle.ToString(),
+            QuickLineRouteGraph route = QuickLineRouteConnector.Build(
+                labelled.Select(item => new QuickLineSegment(
+                    item.LineId.Handle.ToString(),
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
-                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))), 1.0);
+                    new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))),
+                inspection.GapTolerance);
             QuickLineIsometricScene scene = QuickLineIsometricSceneBuilder.BuildMetricPreview(
-                graph, distances, completed);
+                route.Graph, distances, completed);
             QuickLineRouteDirection direction =
-                QuickLineRouteDirectionPlanner.Resolve(scene,
-                    upstreamAxis, downstreamAxis);
+                FillRouteRecognitionStage.ResolveDirection(scene, route.Graph,
+                    labelled, readTransaction, selection, machine,
+                    out string directionSource);
+            FillRouteRecognitionStage.AddSceneIssues(inspection, labelled, scene,
+                direction);
             var sceneNodes = scene.Nodes.ToDictionary(node => node.Id,
                 node => node.Position, StringComparer.OrdinalIgnoreCase);
             QuickLineSpatialPoint? upstreamEndpoint =
@@ -355,15 +436,22 @@ namespace UNCAD.Features.Fill
                 direction.IsResolved && sceneNodes.TryGetValue(
                     direction.DownstreamNodeId, out QuickLineSpatialPoint downstream)
                         ? downstream : (QuickLineSpatialPoint?)null;
-            return QuickLineOrbitPreviewModel.FromScene(scene, axisSummary,
-                upstreamAxis, downstreamAxis, labelTexts, channels,
-                upstreamEndpoint, downstreamEndpoint,
-                directionResolved: direction.IsResolved,
-                directionDiagnostics: direction.Diagnostics);
+            QuickLineOrbitPreviewHose hose = FillRouteRecognitionStage.ReadHose(
+                readTransaction, selection, inspection.ParallelOutputs);
+            inspection.RecognitionText = FillRouteRecognitionStage.BuildSummary(
+                inspection, scene.Segments.Count, directionSource, hose);
+            string upstreamAxis = machine?.UpstreamAxis;
+            string downstreamAxis = machine?.DownstreamAxis;
+            return QuickLineOrbitPreviewModel.FromScene(scene,
+                QuickLineAxisSpan.Describe(upstreamAxis, downstreamAxis),
+                upstreamAxis, downstreamAxis, labelTexts, inspection.Channels,
+                upstreamEndpoint, downstreamEndpoint, null,
+                direction.IsResolved, direction.Diagnostics,
+                hose, inspection.RecognitionText, inspection.RouteIssues);
         }
 
         /// <summary>3.3.1（特性D）：U1Q 标注文本解析不出宽度时的缺省桥架宽（图例注明）。</summary>
-        private const double DefaultTrayWidthMillimetres = 200.0;
+        internal const double DefaultTrayWidthMillimetres = 200.0;
 
         /// <summary>
         /// 3.3.1（D-054 Amendment，特性D）：归属输出 → 宿主段通道字典（键=宿主
@@ -423,7 +511,7 @@ namespace UNCAD.Features.Fill
                 {
                     string key = host.LineId.Handle.ToString();
                     if (!trayByHost.TryGetValue(key,
-                        out Tuple<double, bool> existing)
+                            out Tuple<double, bool> existing)
                         || width > existing.Item1
                         || (width == existing.Item1 && !assumed))
                         trayByHost[key] = Tuple.Create(width, assumed);
@@ -442,14 +530,14 @@ namespace UNCAD.Features.Fill
         }
 
         /// <summary>读输出实体的标注文本（DBText 直取；MText 清格式码）。</summary>
-        private static string TryReadOutputText(Transaction transaction,
+        internal static string TryReadOutputText(Transaction transaction,
             ObjectId entityId)
         {
             try
             {
                 if (transaction == null || entityId.IsNull) return null;
                 if (!(transaction.GetObject(entityId, OpenMode.ForRead, true)
-                        is Entity entity) || entity.IsErased) return null;
+                    is Entity entity) || entity.IsErased) return null;
                 if (entity is Autodesk.AutoCAD.DatabaseServices.DBText text)
                     return text.TextString;
                 if (entity is Autodesk.AutoCAD.DatabaseServices.MText mtext)

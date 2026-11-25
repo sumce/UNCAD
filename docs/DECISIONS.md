@@ -4,6 +4,73 @@ This file records decisions that should not be reopened from memory or from an
 old release note. Add a dated entry when a decision changes; do not silently
 rewrite an existing entry.
 
+## D-058: Route Recognition Rebuilt — U1U 3D Pane, Gap Tolerance, Block-Anchored Ends, U1UL (2026-11-25)
+
+- Status: accepted (user instruction 2026-11-25)
+- Problem: since 3.4.1 the U1U confirmation windows carried no 3D route
+  preview at all — `FillRouteInspection.Preview` was never assigned
+  (`BuildPreview` stayed in the stage as dead code behind a contract asserting
+  "不构建 3D 场景"). Route recognition joined segments only inside the strict
+  1.0 endpoint tolerance, so a hand-drawn frame whose segments "look connected
+  but show a hairline gap when zoomed" fell apart into several chains. The
+  fill-time label placement (default-off U1SET switch) always pushed
+  millimetre labels back to the configured side, discarding a side the user
+  had chosen by hand.
+- Decision — the user's recognition rule: "线段肯定带 mm 标，不带就是有问题；
+  桥架旁边肯定跟着桥架文本；还有软管".
+  1. **U1U builds the 3D preview again** (single-frame review window and batch
+     confirmation window; left half, layout unchanged). U1F still does not.
+     The model is attached inside the inspection stage (`AttachPreview`) in
+     the same read transaction and wrapped in try/catch — a failing scene
+     degrades to one diagnostic line and never blocks the write. Batch
+     collects annotation texts once per batch (same rule as parallel outputs).
+  2. **Gap tolerance** (`UNC_ROUTE_GAP_TOLERANCE`, drawing units, default 50,
+     0 = strict only, capped at 500): two segments are joined when their
+     endpoints lie within the tolerance **and both carry a millimetre
+     label**. Unlabelled lines never join by tolerance. It applies to the
+     U1F/U1U connectivity report ("…（容错接上 N 处断口）"), the U1U scene and
+     U13D. U1LX traversal and Xauto keep the strict 1.0 tolerance (they move
+     geometry).
+  3. **Problems are named, never guessed.** Lines in the frame without a
+     millimetre label are listed by handle on the pane, the command line and
+     the batch remarks. A labelled segment whose direction is not an
+     isometric/orthographic axis is named as skipped, not dropped silently.
+  4. **Tray/conduit by text** (amends the 3.3.1 consequence "do not draw
+     tray/conduit channels from colour/text guessing" for the preview only):
+     a tray/conduit text (the statistics grammar) that carries no ownership
+     metadata binds to the nearest parallel labelled segment, is drawn on
+     that segment only and is reported as a proximity binding. Metadata
+     ownership always wins and is never overridden; a labelled tray/conduit
+     output whose host line no longer exists is reported as orphan. A
+     parallel unlabelled line hugging a labelled segment that has a channel
+     is the annotation's own line (legacy pre-metadata output) and is not
+     reported as a missing label. Layer governance is unchanged — it still
+     never guesses from text.
+  5. **Route ends come from the connection blocks** ("离设备块最近的末端是
+     设备端，离上游块最近的是上游端"): the upstream end is the open route end
+     nearest the upstream block, the device end the one nearest the device
+     block. One block kind missing → the other end is the unique remaining
+     end of a two-ended route. Neither block locatable → workbook-axis
+     inference (3.4.0.8 rule). Both ends equally near, or both blocks nearest
+     the same end → unresolved with the reason shown; nothing is guessed.
+  6. **Hose in the preview** (display only): length from the Ruanguan block
+     attribute, or from a U1B hose label when the frame has no Ruanguan
+     block; drawn as a green tube continuing from the device end along the
+     last segment. It is schematic, writes nothing and enters no statistic.
+  7. **U1UL — millimetre-label alignment**: changes only the perpendicular
+     distance (U1SET offset, or centred on the line) and the angle (parallel
+     to the line, keeping the label's reading direction). The side the label
+     is on now is kept — a label moved to the other side stays there — and
+     so is its position along the line. Only labels carrying the U1L/U1LX
+     association are moved; labels matched by position alone are listed and
+     left untouched. One transaction (one U). Frame selection = whole frame;
+     line or label selection = those only.
+- Consequence: do not disable the U1U preview again without a new decision;
+  do not let unlabelled lines join by tolerance, and do not raise the
+  tolerance above the cap; U1UL must never change text, height or side;
+  preview recognition is read-only and never feeds BOQ or statistics; the
+  default-off fill-time placement switch is unchanged (it is opt-in).
+
 ## D-057: Same-Name Circuits Everywhere, Drawing-Info Table Templates, Layout Options (2026-11-24)
 
 - Status: accepted

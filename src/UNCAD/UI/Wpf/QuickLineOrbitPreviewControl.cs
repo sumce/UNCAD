@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using UNCAD.Core.QuickLine;
@@ -18,6 +19,9 @@ namespace UNCAD.UI
     public sealed class QuickLineOrbitPreviewControl : Grid
     {
         private static readonly Brush HintBrush = CreateFrozenBrush(0x8A, 0x8A, 0x8A);
+        // D-058：识别出的问题用琥珀色点名，压在视口左下角的半透明底衬上。
+        private static readonly Brush IssueBrush = CreateFrozenBrush(0xF2, 0xC9, 0x4C);
+        private static readonly Brush InfoBackground = CreateFrozenBrush(0xB3, 0x0D, 0x13, 0x1A);
         private static readonly Brush ButtonBackground =
             CreateFrozenBrush(0x16, 0x1D, 0x26);
         private static readonly Brush ButtonForeground =
@@ -28,6 +32,8 @@ namespace UNCAD.UI
         private readonly TextBlock _hintText;
         private readonly TextBlock _legendText;
         private readonly TextBlock _summaryText;
+        private readonly TextBlock _issueText;
+        private readonly Border _infoPanel;
         private readonly Button _gridButton;
         private readonly Button _columnsButton;
         private readonly Button _refButton;
@@ -102,28 +108,50 @@ namespace UNCAD.UI
                 Foreground = HintBrush,
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(10, 0, 10, 4),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Bottom,
                 IsHitTestVisible = false
             };
             _summaryText = new TextBlock
             {
                 Foreground = HintBrush,
                 FontSize = 11,
-                Margin = new Thickness(10, 0, 10, 22),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Bottom,
+                TextWrapping = TextWrapping.Wrap,
                 IsHitTestVisible = false
             };
-            Children.Add(_legendText);
-            Children.Add(_summaryText);
+            // D-058：识别出的问题（无毫米标的线段、断口、孤立标注…）点名。
+            _issueText = new TextBlock
+            {
+                Foreground = IssueBrush,
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                IsHitTestVisible = false
+            };
+            var infoStack = new StackPanel { Orientation = Orientation.Vertical };
+            infoStack.Children.Add(_issueText);
+            infoStack.Children.Add(_summaryText);
+            infoStack.Children.Add(_legendText);
+            // 识别摘要/问题/图例自下而上排在一块半透明底衬上，不挡鼠标。
+            _infoPanel = new Border
+            {
+                Background = InfoBackground,
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(8, 0, 8, 8),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                MaxWidth = 760.0,
+                IsHitTestVisible = false,
+                Child = infoStack
+            };
+            Children.Add(_infoPanel);
 
             ShowIdleState();
         }
 
         /// <summary>当前预览的场景（宿主/测试可读；为 null 时显示提示）。</summary>
         public QuickLineOrbitPreviewModel Model => _model;
+
+        /// <summary>当前预览的渲染信封（测试读识别摘要/问题清单用；无场景时为 null）。</summary>
+        internal QuickLineOrbitPreviewEnvelope CurrentEnvelope => _envelope;
 
         // ---- 数据级计数器（取自信封；口径与历版一致） ---------------------------
 
@@ -199,10 +227,15 @@ namespace UNCAD.UI
             _hasColumns = _viewport.HasGroup(
                 QuickLine3dSceneGroupKind.Columns);
             ApplyToggles();
-            _legendText.Text = QuickLineOrbitSceneBuilder.BuildLegend(_envelope);
+            // D-058：摘要＝线路识别结果＋轴位；问题逐条点名（窗格里最多 3 条，
+            // 全量在命令行/批量备注里）；图例末尾带鼠标操作提示。
+            _legendText.Text = QuickLineOrbitSceneBuilder.BuildLegend(_envelope)
+                + "　" + QuickLineOrbitSceneBuilder.InteractionHint;
             _summaryText.Text = QuickLineOrbitSceneBuilder.BuildSummary(_envelope);
-            _legendText.Visibility = Visibility.Visible;
-            _summaryText.Visibility = Visibility.Visible;
+            _issueText.Text = BuildIssueText(_envelope);
+            _issueText.Visibility = _issueText.Text.Length > 0
+                ? Visibility.Visible : Visibility.Collapsed;
+            _infoPanel.Visibility = Visibility.Visible;
         }
 
         /// <summary>复位视角。</summary>
@@ -243,8 +276,7 @@ namespace UNCAD.UI
         private void ShowIdleState()
         {
             _hintText.Visibility = Visibility.Visible;
-            _legendText.Visibility = Visibility.Collapsed;
-            _summaryText.Visibility = Visibility.Collapsed;
+            _infoPanel.Visibility = Visibility.Collapsed;
             _gridButton.Visibility = Visibility.Collapsed;
             _columnsButton.Visibility = Visibility.Collapsed;
             _refButton.Visibility = Visibility.Collapsed;
@@ -402,9 +434,28 @@ namespace UNCAD.UI
             }
         }
 
-        private static Brush CreateFrozenBrush(byte r, byte g, byte b)
+        private const int IssuesShownInPane = 3;
+
+        /// <summary>D-058：窗格里点名的问题（最多 3 条，其余计数提示）。</summary>
+        internal string BuildIssueText(QuickLineOrbitPreviewEnvelope envelope)
         {
-            var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+            if (envelope == null || envelope.RouteIssues.Count == 0)
+                return string.Empty;
+            var shown = new List<string>();
+            foreach (string issue in envelope.RouteIssues.Take(IssuesShownInPane))
+                shown.Add("⚠ " + issue);
+            if (envelope.RouteIssues.Count > IssuesShownInPane)
+                shown.Add("…另有 " + (envelope.RouteIssues.Count - IssuesShownInPane)
+                    + " 项，详见命令行输出");
+            return string.Join("\n", shown);
+        }
+
+        private static Brush CreateFrozenBrush(byte r, byte g, byte b)
+            => CreateFrozenBrush(0xFF, r, g, b);
+
+        private static Brush CreateFrozenBrush(byte a, byte r, byte g, byte b)
+        {
+            var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
             brush.Freeze();
             return brush;
         }

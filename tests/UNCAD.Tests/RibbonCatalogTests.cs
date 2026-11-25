@@ -17,7 +17,8 @@ namespace UNCAD.Tests
 
             RibbonItemDefinition[] primary = RibbonCatalog.Panels
                 .SelectMany(panel => panel.Items).ToArray();
-            Assert.Equal(23, primary.Length);
+            // D-058：标注面板加「毫米标归位」（U1UL）。
+            Assert.Equal(24, primary.Length);
             Assert.All(primary, item =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(item.Text));

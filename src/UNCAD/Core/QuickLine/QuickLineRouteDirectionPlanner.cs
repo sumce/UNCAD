@@ -89,6 +89,113 @@ namespace UNCAD.Core.QuickLine
                 upstreamAxis, downstreamAxis, spacingMillimetres);
         }
 
+        /// <summary>
+        /// D-058：按连接块就近判定路线两端——上游端是离上游块最近的路线末端，
+        /// 设备端是离设备块最近的路线末端。只有一端有块时，另一端按两端点
+        /// 路线的唯一剩余末端确定；两个块都没有时退回工作簿轴位推断（同
+        /// <see cref="Resolve(QuickLineIsometricScene, string, string, double)"/>）。
+        /// terminals 是路线的开口末端；闭合回路没有开口末端时用 allEndpoints。
+        /// </summary>
+        public static QuickLineRouteDirection ResolveFromAnchors(
+            QuickLineIsometricScene scene,
+            IEnumerable<QuickLineRouteEndpointCandidate> terminals,
+            IEnumerable<QuickLineRouteEndpointCandidate> allEndpoints,
+            IReadOnlyList<QuickLinePoint> upstreamAnchors,
+            IReadOnlyList<QuickLinePoint> deviceAnchors,
+            string upstreamAxis, string downstreamAxis,
+            double spacingMillimetres = QuickLineAxisGridPlanner
+                .DefaultSpacingMillimetres)
+        {
+            if (double.IsNaN(spacingMillimetres)
+                || double.IsInfinity(spacingMillimetres)
+                || spacingMillimetres <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(spacingMillimetres));
+            if (scene == null)
+                return new QuickLineRouteDirection(null, null,
+                    new[] { "没有可用路线场景；上下游方向未确认。" });
+
+            bool hasUpstream = HasAnyPoint(upstreamAnchors);
+            bool hasDevice = HasAnyPoint(deviceAnchors);
+            if (!hasUpstream && !hasDevice)
+                return Resolve(scene, upstreamAxis, downstreamAxis,
+                    spacingMillimetres);
+
+            var diagnostics = new List<string>();
+            List<QuickLineRouteEndpointCandidate> openEnds = Usable(terminals);
+            List<QuickLineRouteEndpointCandidate> pool = openEnds.Count > 0
+                ? openEnds : Usable(allEndpoints);
+            if (pool.Count == 0)
+                return new QuickLineRouteDirection(null, null,
+                    new[] { "路线没有可用端点；上下游方向未确认。" });
+            if (openEnds.Count == 0)
+                diagnostics.Add("路线没有开口末端（闭合回路），已按全部线段端点就近匹配连接块。");
+
+            string upstreamNode = null;
+            string deviceNode = null;
+            if (hasUpstream)
+            {
+                QuickLineRouteAnchorMatch match = QuickLineRouteAnchorPlanner
+                    .FindNearest(pool, upstreamAnchors, double.PositiveInfinity);
+                if (match.IsMatched)
+                {
+                    upstreamNode = match.NodeId;
+                    diagnostics.Add("上游端＝离上游块最近的路线末端（图面距离 "
+                        + Math.Round(match.DistanceMillimetres) + "）。");
+                }
+                else
+                    diagnostics.Add(match.IsAmbiguous
+                        ? "两个路线末端到上游块的距离几乎相同，上游端未确认。"
+                        : "上游块未能匹配到路线末端。");
+            }
+            if (hasDevice)
+            {
+                QuickLineRouteAnchorMatch match = QuickLineRouteAnchorPlanner
+                    .FindNearest(pool, deviceAnchors, double.PositiveInfinity);
+                if (match.IsMatched)
+                {
+                    deviceNode = match.NodeId;
+                    diagnostics.Add("设备端＝离设备块最近的路线末端（图面距离 "
+                        + Math.Round(match.DistanceMillimetres) + "）。");
+                }
+                else
+                    diagnostics.Add(match.IsAmbiguous
+                        ? "两个路线末端到设备块的距离几乎相同，设备端未确认。"
+                        : "设备块未能匹配到路线末端。");
+            }
+
+            var positions = scene.Nodes.ToDictionary(node => node.Id,
+                node => node.Position, StringComparer.OrdinalIgnoreCase);
+            List<QuickLineRouteDirectionEndpoint> endpoints = pool
+                .Where(candidate => positions.ContainsKey(candidate.NodeId))
+                .GroupBy(candidate => candidate.NodeId,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .Select(candidate => new QuickLineRouteDirectionEndpoint(
+                    candidate.NodeId, positions[candidate.NodeId]))
+                .ToList();
+            QuickLineRouteDirection direction = Resolve(endpoints, upstreamNode,
+                deviceNode, hasUpstream, hasDevice, upstreamAxis, downstreamAxis,
+                spacingMillimetres);
+            diagnostics.AddRange(direction.Diagnostics);
+            return new QuickLineRouteDirection(direction.UpstreamNodeId,
+                direction.DownstreamNodeId, diagnostics);
+        }
+
+        private static bool HasAnyPoint(IReadOnlyList<QuickLinePoint> points)
+        {
+            if (points == null) return false;
+            foreach (QuickLinePoint point in points)
+                if (point != null) return true;
+            return false;
+        }
+
+        private static List<QuickLineRouteEndpointCandidate> Usable(
+            IEnumerable<QuickLineRouteEndpointCandidate> candidates)
+            => (candidates ?? Enumerable.Empty<QuickLineRouteEndpointCandidate>())
+                .Where(item => item != null && item.Point != null
+                    && item.NodeId.Length > 0)
+                .ToList();
+
         public static QuickLineRouteDirection Resolve(
             IEnumerable<QuickLineRouteDirectionEndpoint> endpoints,
             string upstreamAnchorNodeId, string downstreamAnchorNodeId,

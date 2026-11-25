@@ -150,6 +150,21 @@
                     </StackPanel>
                 </StackPanel>
             </ui:Card>
+
+            <!-- 卡4：线路识别（D-058） -->
+            <ui:Card Style="{DynamicResource UncadCard}">
+                <StackPanel>
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="线路识别（U1U 3D 预览 / 连通性）" />
+                    <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}" TextWrapping="Wrap"
+                               Text="图纸单位。两端都带毫米标、端点相距不超过该值的线段接成一条路线（看着连着、放大才看出有缝的断口）；没有毫米标的线段不参与。0 = 只用严格容差 1。预览底部会点名被接上的断口、没有毫米标的线段。" />
+                    <StackPanel Margin="0,0,0,12" Orientation="Horizontal">
+                        <TextBlock Style="{DynamicResource UncadFieldLabel}" VerticalAlignment="Center" Margin="0,0,10,0" Text="断口容差" />
+                        <ui:NumberBox x:Name="RouteGapTolerance" x:FieldModifier="internal"
+                                      Style="{DynamicResource UncadNumberBox}" Width="160"
+                                      Minimum="0" Maximum="500" />
+                    </StackPanel>
+                </StackPanel>
+            </ui:Card>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

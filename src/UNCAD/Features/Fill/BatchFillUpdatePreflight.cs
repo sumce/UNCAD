@@ -82,7 +82,8 @@ namespace UNCAD.Features.Fill
             IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> scanned = null,
             List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> precollectedOutputs = null,
             MachineRow resolvedMachine = null,
-            List<CircuitAmbiguityCase> ambiguities = null)
+            List<CircuitAmbiguityCase> ambiguities = null,
+            IReadOnlyList<UNCAD.Cad.QuickLine.RouteAnnotationTextEntity> annotationTexts = null)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
@@ -434,14 +435,27 @@ namespace UNCAD.Features.Fill
                 Log.Info("[U1U] " + prefix + markerNote + "。");
             }
 
-            // 路由体检仍负责连通性和图层矫正；3D 场景构建已停用。
+            // 路由体检负责连通性、图层矫正和线路识别。
             // 3.3.0.1：传 region.Boundary——EntityIds 严格模式不含 Line 电缆线，
             // 线段归属按边界几何判定（单框同根因）。
+            // D-058：U1U 批量同样构建 3D 预览（确认窗左半，选中行切换）；
+            // 预览是展示件，构建失败不拦截，原因进备注。
             FillRouteInspection routeInspection = scanned == null
                 ? new FillRouteInspection()
                 : FillRouteInspectionStage.Inspect(ctx, readTransaction,
                     region.EntityIds, scanned,
-                    region.Boundary, precollectedOutputs);
+                    region.Boundary, precollectedOutputs, annotationTexts);
+            FillRouteInspectionStage.AttachPreview(ctx, readTransaction,
+                routeInspection, selection, machine);
+            // 批量结果窗只点名真正的图纸问题（漏标毫米标的线段、预览没建起来）；
+            // 断口容差、文字就近绑定等提示在确认窗左侧 3D 里看。
+            if (routeInspection.UnlabelledSegmentHandles.Count > 0)
+                notes.Add("线路识别：" + routeInspection.UnlabelledSegmentHandles.Count
+                    + " 段线段没有毫米标（句柄 "
+                    + string.Join("、", routeInspection.UnlabelledSegmentHandles.Take(4))
+                    + "）；其余识别结果见确认窗左侧 3D。");
+            if (routeInspection.PreviewFailure != null)
+                notes.Add(routeInspection.PreviewFailure + "（不影响写入）。");
             if (routeInspection.Connectivity != null
                 && (routeInspection.Connectivity.IsolatedSegmentIds.Count > 0
                     || routeInspection.Connectivity.Components.Count > 1))

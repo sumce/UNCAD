@@ -137,6 +137,10 @@ namespace UNCAD.Infra
         public const string XLayoutLabelTextHeight = "UNC_XLAYOUT_LABEL_HEIGHT";
         public const string XLayoutLabelDistance = "UNC_XLAYOUT_LABEL_DISTANCE";
         public const string XLayoutWarningMarker = "UNC_XLAYOUT_WARNING_MARKER";
+        // 3.7.0（D-058）：线路识别的断口容差（图形单位）。U1U 的 3D 预览和连通性
+        // 报告里，两端都带毫米标、端点相距不超过该值的线段接成一条路线；
+        // 0 = 只用严格容差 1（与 U1LX 相同）。越界或填错回落缺省 50。
+        public const string RouteGapTolerance = "UNC_ROUTE_GAP_TOLERANCE";
         // 日志与操作记录（U1SET 可改）：级别 INFO/WARN/ERROR；日志保留天数；操作记录保留月数。
         public const string LogLevel = "UNC_LOG_LEVEL";
         public const string LogRetentionDays = "UNC_LOG_RETENTION_DAYS";

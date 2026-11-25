@@ -12,6 +12,7 @@ using System.Windows.Media;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.QuickLine;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
 using UNCAD.Infra;
@@ -428,6 +429,9 @@ namespace UNCAD.UI
                 ConfigKeys.XLayoutLabelDistance, XLayoutRuntimeOptions.DefaultLabelLeftDistance));
             FramePage.XLayoutWarningMarker.IsChecked = Settings.GetBool(
                 ConfigKeys.XLayoutWarningMarker, XLayoutRuntimeOptions.DefaultWarningMarker);
+            // D-058：线路识别断口容差（0 = 只用严格容差）。
+            SetNumber(FramePage.RouteGapTolerance, Settings.GetNonNegativeDouble(
+                ConfigKeys.RouteGapTolerance, QuickLineRouteConnector.DefaultGapTolerance));
             _frameInteraction?.UpdatePreview();
             RefreshOperationLog();
             RefreshOverviewStatus();
@@ -602,6 +606,7 @@ namespace UNCAD.UI
                 NumberText(FramePage.XLayoutLabelDistance));
             Settings.SetBool(ConfigKeys.XLayoutWarningMarker,
                 IsOn(FramePage.XLayoutWarningMarker));
+            Settings.Set(ConfigKeys.RouteGapTolerance, NumberText(FramePage.RouteGapTolerance));
             Settings.Set(ConfigKeys.FillDeviceColorIndex,
                 SelectedColorIndex(ColorPage.DeviceColorBox,
                     FillColorSettings.DefaultDeviceColorIndex)

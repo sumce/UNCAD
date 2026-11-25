@@ -33,7 +33,9 @@ namespace UNCAD.UI
                 ["pin"] = FromRgb(0x99, 0xA7, 0xB8),
                 ["route"] = FromRgb(0xCF, 0xE0, 0xEF),
                 ["directionDown"] = FromRgb(0x63, 0xC9, 0xA5),
-                ["directionUp"] = FromRgb(0xE0, 0xB0, 0x64)
+                ["directionUp"] = FromRgb(0xE0, 0xB0, 0x64),
+                // D-058：U1U 窗格的软管标签。
+                ["hose"] = FromRgb(0x5F, 0xC9, 0x8A)
             };
         private static readonly double[] LabelCollisionOffsets =
             { 0, -20, 20, -40, 40 };

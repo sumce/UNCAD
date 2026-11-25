@@ -100,6 +100,8 @@ namespace UNCAD.Features.Fill
             int preflightStep = Math.Max(1, regions.Count / 100);
             // D-056：同名回路重跑预检需要复用整图扫描结果，声明提到 try 外。
             List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> parallelOutputs = null;
+            // D-058：桥架/线管标注文字同样整图只收一次，逐框按图框边界取用。
+            List<UNCAD.Cad.QuickLine.RouteAnnotationTextEntity> annotationTexts = null;
             try
             {
             using (Transaction readTransaction = ctx.Db.TransactionManager.StartTransaction())
@@ -112,6 +114,7 @@ namespace UNCAD.Features.Fill
                 parallelOutputs =
                     UNCAD.Cad.ParallelAnnotationOwnership.Collect(
                         ctx, readTransaction, null);
+                annotationTexts = UNCAD.Cad.QuickLine.RouteAnnotationTextReader.Collect(ctx, readTransaction);
                 ownershipTimer.Stop();
                 Log.Info("[PERF] U1U 批量平行标注归属扫描: "
                     + ownershipTimer.ElapsedMilliseconds + " ms，实体 "
@@ -123,7 +126,7 @@ namespace UNCAD.Features.Fill
                     BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
                         options, workbook, plans, errors, catalogRequests,
                         definitions, statisticsSettings, routeScanned, parallelOutputs,
-                        null, circuitAmbiguities);
+                        null, circuitAmbiguities, annotationTexts);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
@@ -165,7 +168,7 @@ namespace UNCAD.Features.Fill
                         BatchFillUpdatePreflight.Build(ctx, retryTransaction,
                             ambiguity.Region, options, workbook, plans, errors,
                             catalogRequests, new CadBlockDefinitionReader(retryTransaction),
-                            statisticsSettings, routeScanned, parallelOutputs, resolved);
+                            statisticsSettings, routeScanned, parallelOutputs, resolved, null, annotationTexts);
                         retryTransaction.Commit();
                     }
                 }
@@ -381,7 +384,7 @@ namespace UNCAD.Features.Fill
                 plan.RouteInspection?.ConnectivityText,
                 // D-056：带上上游编号/厂务开关，同名回路在确认窗直接可辨。
                 plan.Machine.Fr, plan.Machine.FacilitySwitch)).ToList();
-            // 当前填充确认窗不构建 3D 场景；保留空预览集合参数兼容窗体接口。
+            // D-058：确认窗左侧 3D 预览按图框预建（预检阶段逐框构建，选中行切换）。
             // 整批图层矫正汇总进底部报告行。
             var previewsByFrame = new Dictionary<string,
                 UNCAD.Core.QuickLine.QuickLineOrbitPreviewModel>(

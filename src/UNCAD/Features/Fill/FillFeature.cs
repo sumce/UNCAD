@@ -152,7 +152,7 @@ namespace UNCAD.Features.Fill
                 ctx.Write("\n[" + (updateMode ? CommandIds.FillUpdate : CommandIds.Fill)
                     + "] " + redefineNote);
 
-            // 路由体检只做连通性报告和图层矫正计划，不构建 3D 场景。
+            // 路由体检：连通性报告、图层矫正计划和线路识别；U1U 另建 3D 预览（阶段类内，U1F 不建）。
             FillRouteInspection routeInspection =
                 FillRouteInspectionStage.InspectSelectionAndReport(ctx, selection,
                     picked, updateMode, drawingStyle);

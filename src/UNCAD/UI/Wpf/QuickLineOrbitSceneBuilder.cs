@@ -26,6 +26,10 @@ namespace UNCAD.UI
         private static readonly Color ConduitTint = FromRgb(0x2E, 0xA8, 0xC0);
         private static readonly Color PinTint = FromRgb(0x99, 0xA7, 0xB8);
         private static readonly Color FrameTint = FromRgb(0xE0, 0xA9, 0x4A);
+        // D-058：软管（U_HOSE 的绿）与两端标记（琥珀=上游端、绿=设备端，同 U13D）。
+        private static readonly Color HoseTint = FromRgb(0x5F, 0xC9, 0x8A);
+        private static readonly Color UpstreamEndTint = FromRgb(0xE0, 0xB0, 0x64);
+        private static readonly Color DeviceEndTint = FromRgb(0x63, 0xC9, 0xA5);
 
         // 3.3.7 参照物实体配色（原页面 refColor 原样搬迁）。
         private static readonly Color FloorTint = FromRgb(0x7D, 0x93, 0xA6);
@@ -147,6 +151,8 @@ namespace UNCAD.UI
                 QuickLine3dSceneGroupKind.Grid);
             AddChannels(scene, envelope, radius);
             AddRoutes(scene, envelope, radius);
+            AddHose(scene, envelope, radius);
+            AddEndMarkers(scene, envelope, radius);
             AddLabels(scene, envelope, footprint, diagonal);
 
             // 取景：参照层高度算进去（否则整栋楼被挤到画面上半区——3.3.7
@@ -200,23 +206,35 @@ namespace UNCAD.UI
             if (parts.Count > 0) legend += "　参照: " + string.Join(" ", parts.ToArray());
             if (envelope.AnyTrayWidthAssumedDefault)
                 legend += "　桥架宽未标注按 200 显示";
+            // D-058：软管与两端标记进图例。
+            if (envelope.Hose != null) legend += "　绿管=软管(示意)";
+            if (envelope.DirectionResolved && envelope.UpstreamEndpoint != null
+                && envelope.DownstreamEndpoint != null)
+                legend += "　琥珀点=上游端 绿点=设备端";
             return legend;
         }
 
+        /// <summary>D-058：摘要＝线路识别结果 + 轴位摘要 + 未能确认方向的原因。</summary>
         public static string BuildSummary(QuickLineOrbitPreviewEnvelope envelope)
         {
-            string summary = string.IsNullOrEmpty(envelope.AxisSummary)
-                ? "" : envelope.AxisSummary + "　";
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(envelope.RecognitionSummary))
+                parts.Add(envelope.RecognitionSummary);
+            if (!string.IsNullOrEmpty(envelope.AxisSummary))
+                parts.Add(envelope.AxisSummary);
             if (!envelope.DirectionResolved)
             {
                 string reason = envelope.DirectionDiagnostics.Count == 0
                     ? "路线端点或轴位不足，柜体和上下游轴位标记已隐藏。"
                     : string.Join("；", envelope.DirectionDiagnostics);
-                summary += "上下游未确认：" + reason + "　";
+                parts.Add("上下游未确认：" + reason);
             }
-            return summary
-                + "左键拖动=旋转 · 滚轮=缩放 · 右键拖动=平移 · 双击=复位";
+            return string.Join("　", parts);
         }
+
+        /// <summary>鼠标操作提示（窗格图例行末尾）。</summary>
+        public const string InteractionHint =
+            "左键拖动=旋转 · 滚轮=缩放 · 右键拖动=平移 · 双击=复位";
 
         // ---- 参照建筑模型（公式=原页面 addSlab/addEpoxy/addWaffle/…） -----------
 
@@ -511,6 +529,38 @@ namespace UNCAD.UI
                 a.X, a.Y, a.Z, b.X, b.Y, b.Z, radius, tint);
         }
 
+        /// <summary>D-058：软管——从设备端沿末段方向伸出的绿管（长度＝软管毫米）。</summary>
+        private static void AddHose(QuickLine3dScene scene,
+            QuickLineOrbitPreviewEnvelope envelope, double radius)
+        {
+            QuickLineOrbitPreviewEnvelope.EnvelopeHose hose = envelope.Hose;
+            if (hose == null) return;
+            AddTintedTube(scene, hose.Start, hose.End, HoseTint, radius * 1.15);
+            scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "hose", hose.Label,
+                (hose.Start.X + hose.End.X) / 2.0,
+                (hose.Start.Y + hose.End.Y) / 2.0,
+                (hose.Start.Z + hose.End.Z) / 2.0 + radius * 4.0);
+        }
+
+        /// <summary>D-058：两端标记——琥珀球＝上游端，绿球＝设备端（两端确认后才画）。</summary>
+        private static void AddEndMarkers(QuickLine3dScene scene,
+            QuickLineOrbitPreviewEnvelope envelope, double radius)
+        {
+            if (!envelope.DirectionResolved || envelope.UpstreamEndpoint == null
+                || envelope.DownstreamEndpoint == null) return;
+            double marker = Math.Max(radius * 3.2, envelope.Diagonal * 0.007);
+            QuickLineOrbitPreviewEnvelope.EnvelopePoint upstream = envelope.UpstreamEndpoint;
+            QuickLineOrbitPreviewEnvelope.EnvelopePoint device = envelope.DownstreamEndpoint;
+            scene.AddSphere(QuickLine3dSceneGroupKind.Routes,
+                upstream.X, upstream.Y, upstream.Z, marker, UpstreamEndTint);
+            scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "directionUp", "上游端",
+                upstream.X, upstream.Y, upstream.Z + marker * 2.4);
+            scene.AddSphere(QuickLine3dSceneGroupKind.Routes,
+                device.X, device.Y, device.Z, marker, DeviceEndTint);
+            scene.AddLabel(QuickLine3dSceneGroupKind.Routes, "directionDown", "设备端",
+                device.X, device.Y, device.Z + marker * 2.4);
+        }
+
         private static void AddLabels(QuickLine3dScene scene,
             QuickLineOrbitPreviewEnvelope envelope,
             QuickLinePreviewFootprint footprint, double diagonal)
@@ -554,6 +604,12 @@ namespace UNCAD.UI
             {
                 feed(segment.Start);
                 feed(segment.End);
+            }
+            // D-058：软管从设备端伸出去，取景高度要把它算进来。
+            if (envelope.Hose != null)
+            {
+                feed(envelope.Hose.Start);
+                feed(envelope.Hose.End);
             }
             if (minx > maxx)
             {
