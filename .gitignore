@@ -33,6 +33,7 @@ bundle/UNCAD.bundle/checksums.sha256
 tmp/
 data.xlsx
 *.log
+/*.zip
 
 # Python helper caches
 __pycache__/
@@ -64,3 +65,4 @@ Thumbs.db
 .claude-tmp/
 .workbuddy/
 .claude/settings.local.json
+.zcode/
