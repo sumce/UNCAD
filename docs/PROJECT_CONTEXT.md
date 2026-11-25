@@ -24,7 +24,9 @@ shorter than the historical release notes.
   packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.9.zip` (6,579,776 bytes,
   SHA-256
   `71D1254ADE7FBF5E18231A0F91A91A4F348115F4527BB2B24DD08DE5D59217CD`) and tagged
-  as `v3.8.0.9`; the GitHub Release is produced by `release.yml`. Package/bundle
+  as `v3.8.0.9`; GitHub Release `v3.8.0.9` is published (CI asset SHA-256
+  `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
+  Package/bundle
   `UNCAD.dll` SHA-256 is
   `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`; the
   development machine's installed copy remains 3.8.0.8 until

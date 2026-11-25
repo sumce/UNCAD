@@ -23,6 +23,10 @@
   `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`。
 - 本机安装副本仍为 3.8.0.8（本次未重装）；需要时关闭 AutoCAD 后执行
   `installer.ps1 -Mode InstallUser`。
+- GitHub Release `v3.8.0.9` 已发布（Actions 从同一 tag 重建）：资产
+  `UNCAD-Pro-v3.8.0.9.zip`，6,579,131 字节，SHA-256
+  `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`；
+  Releases 页 Latest 已指向 3.8.0.9。
 - 说明：本版是 GitHub Releases 渠道的补丁 tag（`v3.8.0.9`）；D-032 的
   “补丁不新开 tag”只适用于本地补丁，GitHub Release 需要 tag 作为锚点。
   不新建 `RELEASE-3.8.0.9.md`，继续复用本文件。
