@@ -1,6 +1,7 @@
-# UNCAD 全量单测 CI:push 后自动跑纯单测兜底(文本契约测试脆,需要
-# push 后自动验证)。本地与 CI 同源:直接复用 scripts/ci-local.ps1,
-# 含"执行数 == 源码期望数"门禁,防 xunit 静默跳过整程序集的假绿。
+# UNCAD 全量单测 CI:手动触发。当前没有注册的 self-hosted runner,
+# 自动挂起只会制造 pending；托管 runner 又跑不了 AutoCAD 运行时测试。
+# 本地与 CI 同源:直接复用 scripts/ci-local.ps1，含"执行数 == 源码期望数"
+# 门禁，防 xunit 静默跳过整程序集的假绿。runner 上线后可恢复 push 触发。
 #
 # 为什么必须 self-hosted:测试项目经 $(AutoCADDir) HintPath 引用本机安装的
 # AutoCAD 2022 托管程序集(tests/UNCAD.Tests/UNCAD.Tests.csproj 默认
@@ -10,13 +11,11 @@
 # AutoCADDir 属性并同步下方检查。
 #
 # PR 不再触发本 workflow:fork PR 的代码不能在自托管机器上执行。
-# PR 的编译检查由 build-hosted.yml 在 GitHub 托管 runner 上完成。
-# 本 workflow 只跑可信的 main push / 手动触发。
+# PR 与 main push 的编译检查由 build-hosted.yml 在 GitHub 托管 runner 上完成。
+# 本 workflow 只在手动触发时运行，等 self-hosted runner 注册后再恢复 push。
 name: tests
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # 同一 ref 只保留最新一次运行,防止连续 push 在单台 self-hosted 机器上堆积。
