@@ -136,7 +136,9 @@ if (-not $SkipMigration -and -not $PackageOnly) {
     }
 }
 
-& (Join-Path $root "installer.ps1") -Mode VerifyPackage
+$verifyArgs = @{ Mode = "VerifyPackage" }
+if ($PackageOnly) { $verifyArgs.SkipAutoCadCheck = $true }
+& (Join-Path $root "installer.ps1") @verifyArgs
 if ($LASTEXITCODE -ne 0) { throw "Release package validation failed." }
 
 [xml]$manifest = Get-Content (Join-Path $bundle "PackageContents.xml") -Raw -Encoding UTF8
@@ -213,7 +215,7 @@ New-Item (Join-Path $stage "bundle") -ItemType Directory -Force | Out-Null
 Copy-Item $bundle (Join-Path $stage "bundle\UNCAD.bundle") -Recurse -Force
 Copy-Item ($distributionFiles | ForEach-Object { Join-Path $root $_ }) $stage -Force
 
-& (Join-Path $stage "installer.ps1") -Mode VerifyPackage
+& (Join-Path $stage "installer.ps1") @verifyArgs
 if ($LASTEXITCODE -ne 0) { throw "Unified Pro package validation failed." }
 
 Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal

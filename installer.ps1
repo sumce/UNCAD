@@ -2,7 +2,10 @@
 param(
     [ValidateSet("Menu", "InstallUser", "InstallAll", "VerifyUser", "VerifyAll", "VerifyPackage", "UninstallUser", "UninstallAll")]
     [string]$Mode = "Menu",
-    [switch]$ElevatedChild
+    [switch]$ElevatedChild,
+    # CI package verification: validate the bundle/checksums even when AutoCAD
+    # 2022 is not installed on the runner. Never used for Install modes.
+    [switch]$SkipAutoCadCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -447,10 +450,13 @@ function Verify-Bundle {
     $info = Get-PackageInfo $path
     if ($Scope -ne "Package") { Compare-BundleFiles $SourceBundle $path }
     $cadPath = Get-AutoCAD2022Path
-    if (-not $cadPath) { throw "Bundle is valid, but AutoCAD 2022 was not detected." }
+    if (-not $cadPath -and -not $SkipAutoCadCheck) {
+        throw "Bundle is valid, but AutoCAD 2022 was not detected."
+    }
     Write-SetupLog "VERIFICATION PASSED: $($info.Name) $($info.Version)" Green
     Write-SetupLog "Files: $(@(Get-ChildItem $path -File -Recurse).Count), all SHA-256 checks passed." Green
-    Write-SetupLog "AutoCAD 2022: $cadPath" Green
+    if ($cadPath) { Write-SetupLog "AutoCAD 2022: $cadPath" Green }
+    else { Write-SetupLog "AutoCAD 2022: not detected (package check only)." Yellow }
     Write-SetupLog "Location: $path" Cyan
 }
 
