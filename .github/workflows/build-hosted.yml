@@ -49,9 +49,14 @@ jobs:
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-architecture.ps1
 
-      # Pure source guard; does not call AutoCAD runtime APIs.
-      - name: Architecture guard tests
-        run: dotnet test UNCAD.slnx -c Release --no-build -p:UseAutoCadNuGet=true --filter "FullyQualifiedName~LayerGuardTests"
+      # File/string contract tests only; none of them call AutoCAD runtime APIs,
+      # so they work against the NuGet reference assemblies. They catch the
+      # "script changed, assertion not updated" breaks that a compile-only job
+      # misses (146eb1a broke BundleLoadingTests exactly that way).
+      - name: Contract tests (file-only)
+        run: >
+          dotnet test UNCAD.slnx -c Release --no-build -p:UseAutoCadNuGet=true
+          --filter "FullyQualifiedName~LayerGuardTests|FullyQualifiedName~BundleLoadingTests|FullyQualifiedName~CommandAuditTests|FullyQualifiedName~ConfigKeysTests"
 
       - name: Upload plugin DLL
         uses: actions/upload-artifact@v4
