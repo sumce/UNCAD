@@ -83,7 +83,8 @@ namespace UNCAD.Features.Fill
             List<UNCAD.Cad.ParallelAnnotationOwnershipEntry> precollectedOutputs = null,
             MachineRow resolvedMachine = null,
             List<CircuitAmbiguityCase> ambiguities = null,
-            IReadOnlyList<UNCAD.Cad.QuickLine.RouteAnnotationTextEntity> annotationTexts = null)
+            IReadOnlyList<UNCAD.Cad.QuickLine.RouteAnnotationTextEntity> annotationTexts = null,
+            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineUnboundLabel> unboundLabels = null)
         {
             string prefix = "图框 " + region.Handle + "：";
             FillSelection selection = FillSelectionCollector.Split(readTransaction,
@@ -444,16 +445,24 @@ namespace UNCAD.Features.Fill
                 ? new FillRouteInspection()
                 : FillRouteInspectionStage.Inspect(ctx, readTransaction,
                     region.EntityIds, scanned,
-                    region.Boundary, precollectedOutputs, annotationTexts);
+                    region.Boundary, precollectedOutputs, annotationTexts,
+                    unboundLabels, selection);
             FillRouteInspectionStage.AttachPreview(ctx, readTransaction,
                 routeInspection, selection, machine);
-            // 批量结果窗只点名真正的图纸问题（漏标毫米标的线段、预览没建起来）；
-            // 断口容差、文字就近绑定等提示在确认窗左侧 3D 里看。
+            // 批量结果窗只点名真正的图纸问题（漏标毫米标的线段、没有归属线段的
+            // 毫米标、缺失的轴位块、预览没建起来）；断口容差、红线就近归属等
+            // 提示在确认窗左侧 3D 里看。
             if (routeInspection.UnlabelledSegmentHandles.Count > 0)
                 notes.Add("线路识别：" + routeInspection.UnlabelledSegmentHandles.Count
                     + " 段线段没有毫米标（句柄 "
                     + string.Join("、", routeInspection.UnlabelledSegmentHandles.Take(4))
                     + "）；其余识别结果见确认窗左侧 3D。");
+            int unbound = (unboundLabels ?? Array.Empty<UNCAD.Cad.QuickLine.QuickLineUnboundLabel>())
+                .Count(label => FillRouteRecognitionStage.IsReportableUnbound(label));
+            if (unbound > 0)
+                notes.Add("线路识别：" + unbound + " 个毫米标没有归属线段（请检查是否漏画线段）");
+            foreach (string axisIssue in FillRouteRecognitionStage.BuildAxisBlockIssues(selection))
+                notes.Add("线路识别：" + axisIssue + "。");
             if (routeInspection.PreviewFailure != null)
                 notes.Add(routeInspection.PreviewFailure + "（不影响写入）。");
             if (routeInspection.Connectivity != null

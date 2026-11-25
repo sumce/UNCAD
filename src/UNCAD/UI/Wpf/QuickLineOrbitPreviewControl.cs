@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Threading;
 using UNCAD.Core.QuickLine;
 using UNCAD.Infra;
@@ -13,8 +13,9 @@ using UNCAD.Infra;
 namespace UNCAD.UI
 {
     /// <summary>
-    /// U1U preview host: synchronous WPF scene with an optional isolated WebV
-    /// window consuming the same geometry. Scene failures never block BOQ work.
+    /// U1U preview host: a synchronous WPF scene. Scene failures never block BOQ work.
+    /// 3.8.0（D-059）：场景只剩楼层平面 + 轴位 + 线路 + 上游柜，工具条只留
+    /// 「轴位」「复位」；WebV（独立 WebView2 窗口）整体删除。
     /// </summary>
     public sealed class QuickLineOrbitPreviewControl : Grid
     {
@@ -35,23 +36,13 @@ namespace UNCAD.UI
         private readonly TextBlock _issueText;
         private readonly Border _infoPanel;
         private readonly Button _gridButton;
-        private readonly Button _columnsButton;
-        private readonly Button _refButton;
-        private readonly Button _detailButton;
         private readonly Button _resetButton;
-        private readonly Button _webButton;
 
         private QuickLine3dScene _scene;
         private QuickLineOrbitPreviewModel _model;
         private QuickLineOrbitPreviewEnvelope _envelope;
         private bool _columnGridEnabled = true;
-        private bool _columnsEnabled = true;
-        private bool _referenceEnabled = true;
-        private bool _detailEnabled;
-        private bool _hasReferenceLevels;
-        private bool _hasDetailStructure;
         private bool _hasColumnGrid;
-        private bool _hasColumns;
         private bool _fatal;
 
         public QuickLineOrbitPreviewControl()
@@ -83,24 +74,10 @@ namespace UNCAD.UI
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, 8, 8, 0)
             };
-            _gridButton = CreateSceneButton("柱网 开", OnGridButton);
-            _columnsButton = CreateSceneButton("柱子 开", OnColumnsButton);
-            _refButton = CreateSceneButton("参照 开", OnRefButton);
-            _detailButton = CreateSceneButton("结构 开", OnDetailButton);
+            _gridButton = CreateSceneButton("轴位 开", OnGridButton);
             _resetButton = CreateSceneButton("复位", OnResetButton);
-            _webButton = CreateSceneButton("WebV", OnWebPreview);
-            _webButton.ToolTip = "在独立窗口中用 WebView2 / Three.js 打开当前场景";
-            buttons.Children.Add(new TextBlock
-            {
-                Text = "WPF", Foreground = HintBrush, VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(4, 0, 4, 0)
-            });
             buttons.Children.Add(_gridButton);
-            buttons.Children.Add(_columnsButton);
-            buttons.Children.Add(_refButton);
-            buttons.Children.Add(_detailButton);
             buttons.Children.Add(_resetButton);
-            buttons.Children.Add(_webButton);
             Children.Add(buttons);
 
             _legendText = new TextBlock
@@ -166,9 +143,10 @@ namespace UNCAD.UI
         internal int BuiltEndpointPinCount { get; private set; }
         internal int BuiltTrayChannelCount { get; private set; }
         internal int BuiltConduitChannelCount { get; private set; }
+        /// <summary>D-059：楼层平面数。</summary>
+        internal int BuiltFloorCount { get; private set; }
 
         internal bool ColumnGridEnabled => _columnGridEnabled;
-        internal bool ColumnsEnabled => _columnsEnabled;
 
         private int _plannedColumnGridLineCount;
         private int _plannedAxisTickCount;
@@ -181,26 +159,15 @@ namespace UNCAD.UI
             _model = model;
             _scene = null;
             _fatal = false;
-            _hasColumns = false;
             QuickLine3dScene scene = null;
+            var clock = Stopwatch.StartNew();
             try
             {
-                // 3.3.6：参照层清单来自 U1SET（标签=毫米=类型=锚定；空=不画）。
-                // 3.3.7 三轮：清单可带类型/锚定段与「本层=」指令。
-                string rawLevels = Settings.Get(ConfigKeys.PreviewReferenceLevels,
-                    PreviewReferenceLevels.DefaultList);
-                PreviewReferenceLevels.TryParseBaseFloor(rawLevels,
-                    out string baseFloorLabel);
-                _envelope = QuickLineOrbitPreviewEnvelope.Build(model,
-                    PreviewReferenceLevels.Parse(rawLevels), baseFloorLabel);
+                _envelope = QuickLineOrbitPreviewEnvelope.Build(model);
                 scene = QuickLineOrbitSceneBuilder.Build(_envelope);
-                var hidden = new List<QuickLine3dSceneGroupKind>();
-                if (!_columnGridEnabled) hidden.Add(QuickLine3dSceneGroupKind.Grid);
-                if (!_columnsEnabled) hidden.Add(QuickLine3dSceneGroupKind.Columns);
-                if (!_referenceEnabled) hidden.Add(QuickLine3dSceneGroupKind.Reference);
-                if (!_detailEnabled) hidden.Add(QuickLine3dSceneGroupKind.Detail);
                 _viewport.SetScene(scene ?? new QuickLine3dScene(),
-                    initiallyHiddenGroups: hidden);
+                    initiallyHiddenGroups: _columnGridEnabled
+                        ? null : new[] { QuickLine3dSceneGroupKind.Grid });
                 _scene = scene;
             }
             catch (Exception ex)
@@ -214,18 +181,21 @@ namespace UNCAD.UI
                     + "\n（不影响清单写入；可用 U1S/U1F 正常出清单。）");
                 return;
             }
+            clock.Stop();
             RefreshDataCounters();
+            // 现场「卡不卡」靠这行定位：建场景耗时 + 图元/三角形/标签数。
+            if (_scene != null)
+                Log.Info("[PERF] U1U 3D 场景: " + clock.ElapsedMilliseconds + " ms，图元 "
+                    + _scene.Primitives.Count + "，网格 " + _viewport.MeshCount
+                    + "，三角形 " + _viewport.TriangleCount + "，标签 "
+                    + _scene.Labels.Count);
             if (_envelope == null)
             {
                 ShowIdleState();
                 return;
             }
             _hintText.Visibility = Visibility.Collapsed;
-            _hasReferenceLevels = _envelope.ReferenceLevels.Count > 0;
-            _hasDetailStructure = ContainsDetail(scene);
-            _hasColumnGrid = _envelope.ColumnGridLines.Count > 0;
-            _hasColumns = _viewport.HasGroup(
-                QuickLine3dSceneGroupKind.Columns);
+            _hasColumnGrid = _envelope.Floors.Count > 0;
             ApplyToggles();
             // D-058：摘要＝线路识别结果＋轴位；问题逐条点名（窗格里最多 3 条，
             // 全量在命令行/批量备注里）；图例末尾带鼠标操作提示。
@@ -244,16 +214,10 @@ namespace UNCAD.UI
             _viewport.ResetCamera();
         }
 
-        /// <summary>柱网显示开关（数据级计数器随动）。</summary>
+        /// <summary>轴位（柱网线 + 边标）显示开关。</summary>
         internal void ToggleColumnGrid()
         {
             _columnGridEnabled = !_columnGridEnabled;
-            ApplyToggles();
-        }
-
-        internal void ToggleColumns()
-        {
-            _columnsEnabled = !_columnsEnabled;
             ApplyToggles();
         }
 
@@ -278,27 +242,14 @@ namespace UNCAD.UI
             _hintText.Visibility = Visibility.Visible;
             _infoPanel.Visibility = Visibility.Collapsed;
             _gridButton.Visibility = Visibility.Collapsed;
-            _columnsButton.Visibility = Visibility.Collapsed;
-            _refButton.Visibility = Visibility.Collapsed;
-            _detailButton.Visibility = Visibility.Collapsed;
             _resetButton.Visibility = Visibility.Collapsed;
-            _webButton.Visibility = Visibility.Collapsed;
-        }
-
-        private static bool ContainsDetail(QuickLine3dScene scene)
-        {
-            foreach (QuickLine3dPrimitive primitive in scene.Primitives)
-            {
-                if (primitive.Group == QuickLine3dSceneGroupKind.Detail)
-                    return true;
-            }
-            return false;
         }
 
         private void RefreshDataCounters()
         {
             BuiltSegmentLineCount = 0;
             BuiltLabelCount = 0;
+            BuiltFloorCount = 0;
             _plannedColumnGridLineCount = 0;
             _plannedAxisTickCount = 0;
             _plannedLetterLabelCount = 0;
@@ -309,19 +260,24 @@ namespace UNCAD.UI
             if (envelope == null) return;
             BuiltSegmentLineCount = envelope.Segments.Count;
             BuiltLabelCount = envelope.SegmentLabels.Count;
-            _plannedColumnGridLineCount = envelope.ColumnGridLines.Count / 2;
-            _plannedAxisTickCount = envelope.NumericTicks.Count;
-            _plannedLetterLabelCount = envelope.LetterLabels.Count;
+            BuiltFloorCount = envelope.Floors.Count;
+            foreach (QuickLineOrbitPreviewEnvelope.EnvelopeFloor floor in envelope.Floors)
+                _plannedColumnGridLineCount += floor.GridLines.Count / 2;
+            foreach (QuickLineOrbitPreviewEnvelope.EnvelopeLabel label in envelope.AxisEdgeLabels)
+            {
+                if (label.Text.Length > 0 && char.IsDigit(label.Text[0])) _plannedAxisTickCount++;
+                else _plannedLetterLabelCount++;
+            }
             BuiltEndpointPinCount = envelope.EndpointPins.Count;
             foreach (QuickLineOrbitPreviewEnvelope.EnvelopeSegment segment
                 in envelope.Segments)
             {
                 if (segment.Channel == null) continue;
                 if (string.Equals(segment.Channel.Kind, "tray",
-                        StringComparison.OrdinalIgnoreCase))
+                    StringComparison.OrdinalIgnoreCase))
                     BuiltTrayChannelCount++;
                 else if (string.Equals(segment.Channel.Kind, "conduit",
-                        StringComparison.OrdinalIgnoreCase))
+                    StringComparison.OrdinalIgnoreCase))
                     BuiltConduitChannelCount++;
             }
         }
@@ -333,61 +289,40 @@ namespace UNCAD.UI
             _gridButton.Visibility = _hasColumnGrid
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            _columnsButton.Visibility = _hasColumns
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-            _refButton.Visibility = _hasReferenceLevels
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-            _detailButton.Visibility = _hasDetailStructure
-                ? Visibility.Visible
-                : Visibility.Collapsed;
             _resetButton.Visibility = _envelope != null
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            _webButton.Visibility = _resetButton.Visibility;
 
-            _gridButton.Content = _columnGridEnabled ? "柱网 开" : "柱网 关";
-            _columnsButton.Content = _columnsEnabled ? "柱子 开" : "柱子 关";
-            _refButton.Content = _referenceEnabled ? "参照 开" : "参照 关";
-            _detailButton.Content = _detailEnabled ? "结构 开" : "结构 关";
+            _gridButton.Content = _columnGridEnabled ? "轴位 开" : "轴位 关";
 
             _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Grid,
                 _columnGridEnabled);
-            _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Columns,
-                _columnsEnabled);
-            _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Reference,
-                _referenceEnabled);
-            _viewport.SetGroupVisible(QuickLine3dSceneGroupKind.Detail,
-                _detailEnabled);
         }
 
         private void OnGridButton(object sender, RoutedEventArgs args)
         {
-            _columnGridEnabled = !_columnGridEnabled;
-            ApplyToggles();
-        }
-
-        private void OnColumnsButton(object sender, RoutedEventArgs args)
-        {
-            ToggleColumns();
-        }
-
-        private void OnRefButton(object sender, RoutedEventArgs args)
-        {
-            _referenceEnabled = !_referenceEnabled;
-            ApplyToggles();
-        }
-
-        private void OnDetailButton(object sender, RoutedEventArgs args)
-        {
-            _detailEnabled = !_detailEnabled;
-            ApplyToggles();
+            ToggleColumnGrid();
         }
 
         private void OnResetButton(object sender, RoutedEventArgs args)
         {
             ResetCameraView();
+        }
+
+        private const int IssuesShownInPane = 3;
+
+        /// <summary>D-058：窗格里点名的问题（最多 3 条，其余计数提示）。</summary>
+        internal string BuildIssueText(QuickLineOrbitPreviewEnvelope envelope)
+        {
+            if (envelope == null || envelope.RouteIssues.Count == 0)
+                return string.Empty;
+            var shown = new List<string>();
+            foreach (string issue in envelope.RouteIssues.Take(IssuesShownInPane))
+                shown.Add("⚠ " + issue);
+            if (envelope.RouteIssues.Count > IssuesShownInPane)
+                shown.Add("…另有 " + (envelope.RouteIssues.Count - IssuesShownInPane)
+                    + " 项，详见命令行输出");
+            return string.Join("\n", shown);
         }
 
         private static Button CreateSceneButton(string text,
@@ -407,47 +342,6 @@ namespace UNCAD.UI
             };
             button.Click += onClick;
             return button;
-        }
-
-        private async void OnWebPreview(object sender, RoutedEventArgs args)
-        {
-            if (_scene == null) return;
-            _webButton.IsEnabled = false;
-            try
-            {
-                var hidden = new List<string>();
-                if (!_columnGridEnabled) hidden.Add("Grid");
-                if (!_columnsEnabled) hidden.Add("Columns");
-                if (!_referenceEnabled) hidden.Add("Reference");
-                if (!_detailEnabled) hidden.Add("Detail");
-                await QuickLineWebPreview.OpenAsync(_scene,
-                    "U1U · " + _model.AxisSummary, hidden);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn("[U1U] WebV 预览启动失败: " + ex.Message);
-                _summaryText.Text = "WebV 未打开：" + ex.Message;
-            }
-            finally
-            {
-                _webButton.IsEnabled = true;
-            }
-        }
-
-        private const int IssuesShownInPane = 3;
-
-        /// <summary>D-058：窗格里点名的问题（最多 3 条，其余计数提示）。</summary>
-        internal string BuildIssueText(QuickLineOrbitPreviewEnvelope envelope)
-        {
-            if (envelope == null || envelope.RouteIssues.Count == 0)
-                return string.Empty;
-            var shown = new List<string>();
-            foreach (string issue in envelope.RouteIssues.Take(IssuesShownInPane))
-                shown.Add("⚠ " + issue);
-            if (envelope.RouteIssues.Count > IssuesShownInPane)
-                shown.Add("…另有 " + (envelope.RouteIssues.Count - IssuesShownInPane)
-                    + " 项，详见命令行输出");
-            return string.Join("\n", shown);
         }
 
         private static Brush CreateFrozenBrush(byte r, byte g, byte b)

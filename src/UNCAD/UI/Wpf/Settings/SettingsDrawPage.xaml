@@ -211,12 +211,12 @@
                 </StackPanel>
             </ui:Card>
 
-            <!-- 3D 预览参照层（U1U，3.3.6；3.3.7 类型化模型） -->
+            <!-- 楼层标高清单（U1U 3D 预览，3.8.0 / D-059） -->
             <ui:Card Style="{DynamicResource UncadCard}">
                 <StackPanel>
-                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="3D 预览参照层（U1U）" />
+                    <TextBlock Style="{DynamicResource UncadSectionTitle}" Text="楼层标高清单（U1U 3D 预览）" />
                     <TextBlock Margin="0,4,0,12" Style="{DynamicResource UncadCaption}"
-                               Text="U1U 确认窗 3D 预览里画出的参照物（建筑标高/设备高度），供电缆爬升高度对照。格式：标签=毫米=类型=锚定（后两段可选）——类型：地面/环氧地坪/华夫板/工字钢/葡萄架/高架地板/设备/母线（缺省只画标高线框）；锚定：高度相对该条目起算（如母线 3660 锚「2F地面」=7800+3660）；可选指令行「本层=2F地面」=机台所在楼层，整栋楼按本层重定位（本层地面=场景 0，母线/设备画在本层）。楼层标高链按累计折算；分号或换行分隔，非法条目自动跳过；清空=不画。钢梁/葡萄架默认隐藏（页面「结构」开关）。" />
+                               Text="U1U 确认窗 3D 预览按台账的上游/设备楼层画楼层平面，楼层地面标高从这里取：&#10;「NF地面=毫米」=该层地面；「NF高架地板面=毫米」=该层设备站立面（有就优先用）；没写的楼层按层高推算（默认 7.8 m）。&#10;可选指令行「本层=2F地面」：台账上一端楼层认不出时用它。分号或换行分隔，非法条目自动跳过；清空=只按缺省层高画。&#10;跨层校验：上下游不在同一层时，两个路线端点的垂直距离应等于两层地面标高差（每层允许低 0.2 m，即 2F→3F 应在 7.6~7.8 m），不在就在预览里报警。" />
                     <ui:TextBox x:Name="PreviewReferenceLevels" x:FieldModifier="internal"
                                 Style="{DynamicResource UncadFieldBox}"
                                 AcceptsReturn="True" TextWrapping="Wrap"

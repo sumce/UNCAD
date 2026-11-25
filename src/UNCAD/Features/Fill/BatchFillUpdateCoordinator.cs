@@ -89,11 +89,11 @@ namespace UNCAD.Features.Fill
             ctx.Write("\n[U1U] 正在批量预检 " + regions.Count + " 个图框，请稍候...");
             var perfPhase = System.Diagnostics.Stopwatch.StartNew();
             // 3.3.0（D-054）：整图只扫一次 U1L 线段（含开洞 Polyline），供逐框
-            // 连通性/图层矫正/预览场景体检——逐框各扫一遍是 O(图框×实体)。
-            IReadOnlyList<UNCAD.Cad.QuickLine.QuickLineCadSegment> routeScanned =
-                FillRouteInspectionStage.Scan(ctx, drawingStyle,
-                    regions.All(region => region.Boundary != null)
-                        ? regions.Select(region => region.Boundary).ToArray() : null);
+            // 连通性/图层矫正/预览场景体检——逐框各扫一遍是 O(图框×实体)；
+            // D-059：同一次扫描带回「没有归属线段的毫米标」。
+            UNCAD.Cad.QuickLine.QuickLineScanResult routeScan = FillRouteInspectionStage.Scan(ctx,
+                drawingStyle, regions.All(region => region.Boundary != null)
+                    ? regions.Select(region => region.Boundary).ToArray() : null);
             // 千/万级图框：进度窗让用户看到进展，不再“无响应”。
             var preflightProgress = new ProgressWindow("U1U 批量预检");
             preflightProgress.Show();
@@ -125,8 +125,8 @@ namespace UNCAD.Features.Fill
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     BatchFillUpdatePreflight.Build(ctx, readTransaction, region,
                         options, workbook, plans, errors, catalogRequests,
-                        definitions, statisticsSettings, routeScanned, parallelOutputs,
-                        null, circuitAmbiguities, annotationTexts);
+                        definitions, statisticsSettings, routeScan.Segments, parallelOutputs,
+                        null, circuitAmbiguities, annotationTexts, routeScan.UnboundLabels);
                     clock.Stop();
                     preflightDone++;
                     Log.Info("U1U 批量预检 图框 " + region.Handle + ": "
@@ -168,7 +168,8 @@ namespace UNCAD.Features.Fill
                         BatchFillUpdatePreflight.Build(ctx, retryTransaction,
                             ambiguity.Region, options, workbook, plans, errors,
                             catalogRequests, new CadBlockDefinitionReader(retryTransaction),
-                            statisticsSettings, routeScanned, parallelOutputs, resolved, null, annotationTexts);
+                            statisticsSettings, routeScan.Segments, parallelOutputs, resolved, null, annotationTexts,
+                            routeScan.UnboundLabels);
                         retryTransaction.Commit();
                     }
                 }

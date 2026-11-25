@@ -48,6 +48,10 @@ namespace UNCAD.Features.Fill
             = new List<RouteAnnotationTextBinding>();
         /// <summary>D-058：宿主线段已找不到的桥架/线管标注文字。</summary>
         public List<string> OrphanAnnotations { get; set; } = new List<string>();
+        /// <summary>D-059：桥架/线管整趟清单（每趟一个标注、一个总长、若干宿主）。</summary>
+        public List<FillAnnotationRun> AnnotationRuns { get; set; } = new List<FillAnnotationRun>();
+        /// <summary>D-059：楼层摘要（「台账 2F→3F」），进识别摘要。</summary>
+        public string FloorSummary { get; set; } = "";
         /// <summary>D-058：识别结果一句话（3D 窗格与命令行共用）。</summary>
         public string RecognitionText { get; set; } = "";
         /// <summary>D-058：识别出的问题，逐条成句。</summary>
@@ -95,8 +99,11 @@ namespace UNCAD.Features.Fill
                 result.TrayRuns, result.ConduitRuns, result.HoseLabels);
         }
 
-        /// <summary>整图扫描（含未标注线，供连通性与图层识别）。</summary>
-        internal static IReadOnlyList<QuickLineCadSegment> Scan(CadContext ctx,
+        /// <summary>
+        /// 整图扫描（含未标注线，供连通性与图层识别）。D-059：同时带回没有归属
+        /// 线段的毫米标（给了图框边界时只报框内的）。
+        /// </summary>
+        internal static QuickLineScanResult Scan(CadContext ctx,
             FillDrawingStyleSettings styleSettings = null,
             IReadOnlyList<FrameRectangle> boundaries = null)
         {
@@ -104,7 +111,13 @@ namespace UNCAD.Features.Fill
             var options = new QuickLineScanOptions
             {
                 IncludeUnlabelled = true,
-                FrameBoundaries = boundaries
+                FrameBoundaries = boundaries,
+                // 旧图框用线性标注代替短线时，把标注量出的那段当成电缆段
+                // （只影响填充/U1U 扫描；U1LX 仍只认 Line/Polyline）。
+                IncludeDimensionSegments = true,
+                // 3.8.0.2：带拐角的多段线（每段都在轴上）按段拆开，各段各有自己的
+                // 毫米标，3D 里也不再整根丢掉。
+                SplitBentPolylines = true
             };
             if (styleSettings != null)
             {
@@ -113,13 +126,14 @@ namespace UNCAD.Features.Fill
                 options.AdjacentLabelAngleToleranceRadians =
                     styleSettings.AdjacentLabelAngleToleranceRadians;
             }
-            IReadOnlyList<QuickLineCadSegment> segments =
-                QuickLineCadService.Scan(ctx, options);
+            QuickLineScanResult scan =
+                QuickLineCadService.ScanDetailed(ctx, options);
             timer.Stop();
             Log.Info("[PERF] U1U/U1F 路由扫描: " + timer.ElapsedMilliseconds
-                + " ms，线段 " + segments.Count + "，合并线恢复毫米标 "
-                + segments.Sum(item => item.RestoredLabelIds?.Count ?? 0));
-            return segments;
+                + " ms，线段 " + scan.Segments.Count + "，无归属毫米标 "
+                + scan.UnboundLabels.Count + "，合并线恢复毫米标 "
+                + scan.Segments.Sum(item => item.RestoredLabelIds?.Count ?? 0));
+            return scan;
         }
 
         /// <summary>
@@ -140,7 +154,7 @@ namespace UNCAD.Features.Fill
                     ? selection.Region.EntityIds
                     : selection?.SourceIds
                     ?? Array.Empty<ObjectId>();
-            IReadOnlyList<QuickLineCadSegment> scanned = Scan(ctx, styleSettings,
+            QuickLineScanResult scan = Scan(ctx, styleSettings,
                 selection?.Region?.Boundary == null ? null
                     : new[] { selection.Region.Boundary });
             var inspectTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -151,8 +165,9 @@ namespace UNCAD.Features.Fill
                 // D-058：桥架/线管标注文字整图只收一次（与线段扫描同一口径）。
                 List<RouteAnnotationTextEntity> annotationTexts =
                     RouteAnnotationTextReader.Collect(ctx, readTransaction);
-                inspection = Inspect(ctx, readTransaction, scope, scanned,
-                    selection?.Region?.Boundary, null, annotationTexts);
+                inspection = Inspect(ctx, readTransaction, scope, scan.Segments,
+                    selection?.Region?.Boundary, null, annotationTexts,
+                    scan.UnboundLabels, selection);
                 // D-058：U1U 的 3D 预览（确认窗左半）。预览是展示件，失败不拦截写入。
                 if (updateMode)
                     AttachPreview(ctx, readTransaction, inspection, selection, picked);
@@ -190,7 +205,8 @@ namespace UNCAD.Features.Fill
             }
             catch (System.Exception ex)
             {
-                Log.Warn("[U1U] 3D 预览场景构建失败（不影响写入）：" + ex.Message);
+                // 3.8.0.2：日志记完整堆栈——只记消息时定位不到是哪一步炸的。
+                Log.Warn("[U1U] 3D 预览场景构建失败（不影响写入）：" + ex);
                 inspection.PreviewFailure = "3D 预览场景构建失败：" + ex.Message;
             }
         }
@@ -217,16 +233,20 @@ namespace UNCAD.Features.Fill
         /// 界内），EntityIds 仅作无边界时的回退——Collect 严格模式不收 Line。
         /// 平行标注输出按宿主电缆段判框（宿主在框内→输出在框内），红线实体
         /// 同样不在 EntityIds 里，按宿主归属才不会漏移。
-        /// D-058：连通性带断口容差（只有带毫米标的线段参与）；随后做线路识别
-        /// （通道/标注线/无毫米标线段/问题清单），annotationTexts 为整图一次
-        /// 收集的桥架/线管标注文字（null 时无法做无元数据文字的就近绑定）。
+        /// D-058/D-059：连通性带断口容差（只有带毫米标的线段参与）；随后做线路识别
+        /// （整趟清单/标注线/无毫米标线段/无归属毫米标/轴位块/问题清单）。
+        /// annotationTexts 为整图一次收集的桥架/线管标注文字（null 时无法做无元数据
+        /// 文字的就近绑定）；unboundLabels 为整图一次扫描带回的没有归属线段的
+        /// 毫米标（按边界取框内的）；selection 是本框的选集分区（判轴位块缺不缺）。
         /// </summary>
         internal static FillRouteInspection Inspect(CadContext ctx,
             Transaction readTransaction, IEnumerable<ObjectId> scopeEntityIds,
             IReadOnlyList<QuickLineCadSegment> scanned,
             FrameRectangle boundary = null,
             List<ParallelAnnotationOwnershipEntry> precollectedOutputs = null,
-            IReadOnlyList<RouteAnnotationTextEntity> annotationTexts = null)
+            IReadOnlyList<RouteAnnotationTextEntity> annotationTexts = null,
+            IReadOnlyList<QuickLineUnboundLabel> unboundLabels = null,
+            FillSelection selection = null)
         {
             var inspectTimer = System.Diagnostics.Stopwatch.StartNew();
             var phaseTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -248,12 +268,12 @@ namespace UNCAD.Features.Fill
             {
                 var labelledHandles = new HashSet<string>(inScope
                     .Where(item => item.HasMillimetreLabel)
-                    .Select(item => item.LineId.Handle.ToString()),
+                    .Select(item => item.Key),
                     StringComparer.OrdinalIgnoreCase);
                 inspection.Connectivity = CircuitConnectivityAnalyzer.Analyze(
                     inScope.Select(item => new CircuitConnectivityAnalyzer
                         .InputSegment(
-                            item.LineId.Handle.ToString(),
+                            item.Key,
                             new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                             new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))),
                     1.0, labelledHandles.Contains, inspection.GapTolerance);
@@ -300,11 +320,13 @@ namespace UNCAD.Features.Fill
                     Log.Info("[PERF] 路由图层计划: " + layerPlanMilliseconds + " ms");
             }
 
-            // D-058：线路识别（通道按元数据归属 → 无元数据文字就近 → 认出标注线
-            // → 没有毫米标的线段与问题清单）。U1F/U1U 都做，连通性报告同口径。
+            // D-058/D-059：线路识别（整趟清单：元数据归属 → 红线就近 → 文字就近
+            // → 认出标注线 → 没有毫米标的线段 / 没有归属的毫米标 / 缺失的轴位块
+            // 与其它问题）。U1F/U1U 都做，连通性报告同口径。
             inspection.Channels = BuildChannels(readTransaction, frameOutputs, inScope);
             FillRouteRecognitionStage.Recognize(inspection, inScope, frameOutputs,
-                boundary, outputs, scanned, annotationTexts);
+                boundary, outputs, annotationTexts, unboundLabels, readTransaction,
+                selection);
 
             inspectTimer.Stop();
             if (precollectedOutputs == null)
@@ -401,20 +423,20 @@ namespace UNCAD.Features.Fill
                 .Where(item => item.HasMillimetreLabel).ToList();
             if (labelled.Count == 0) return null;
             var distances = labelled.ToDictionary(
-                item => item.LineId.Handle.ToString(),
+                item => item.Key,
                 item => item.LabelMillimetres.Value,
                 StringComparer.OrdinalIgnoreCase);
             var completed = new HashSet<string>(labelled
                 .Where(item => item.HasCompletionMarker)
-                .Select(item => item.LineId.Handle.ToString()),
+                .Select(item => item.Key),
                 StringComparer.OrdinalIgnoreCase);
             var labelTexts = labelled.ToDictionary(
-                item => item.LineId.Handle.ToString(),
+                item => item.Key,
                 item => item.LabelText ?? string.Empty,
                 StringComparer.OrdinalIgnoreCase);
             QuickLineRouteGraph route = QuickLineRouteConnector.Build(
                 labelled.Select(item => new QuickLineSegment(
-                    item.LineId.Handle.ToString(),
+                    item.Key,
                     new QuickLinePoint(item.StartPoint.X, item.StartPoint.Y),
                     new QuickLinePoint(item.EndPoint.X, item.EndPoint.Y))),
                 inspection.GapTolerance);
@@ -438,6 +460,43 @@ namespace UNCAD.Features.Fill
                         ? downstream : (QuickLineSpatialPoint?)null;
             QuickLineOrbitPreviewHose hose = FillRouteRecognitionStage.ReadHose(
                 readTransaction, selection, inspection.ParallelOutputs);
+
+            // D-059：楼层平面按台账的上游/设备楼层画；跨层时校验「上游楼层地面
+            // 到设备端」的垂直距离（2F→3F 应在 7.6~7.8 m），不在就点名。
+            // 3.8.0.3：从线路的基础点起量（端点段是立管时是立管底），插座盘再把
+            // 离地那 1 m 加回来——以前直接拿两端高差去比，和 7.6~7.8 不是一个
+            // 起算点（现场：「实际 6.2 m」）。
+            string rawLevels = Settings.Get(ConfigKeys.PreviewReferenceLevels,
+                PreviewReferenceLevels.DefaultList);
+            PreviewReferenceLevels.TryParseBaseFloor(rawLevels, out string baseFloorLabel);
+            PreviewFloorPlan floors = PreviewFloorPlan.Plan(machine?.PanelFloor,
+                machine?.DeviceFloor, baseFloorLabel,
+                PreviewReferenceLevels.Parse(rawLevels));
+            inspection.FloorSummary = DescribeFloors(floors);
+            PreviewCabinetKind cabinetKind = PreviewCabinet.KindOf(machine?.Next);
+            if (direction.IsResolved && floors != null)
+            {
+                string riseWarning = floors.EvaluateRise(
+                    PreviewCabinet.BasePoint(upstreamEndpoint.Value,
+                        OtherEndOfIncidentSegment(scene, sceneNodes,
+                            direction.UpstreamNodeId)).Z,
+                    downstreamEndpoint.Value.Z,
+                    PreviewCabinet.RouteLiftMillimetres(cabinetKind));
+                if (riseWarning != null) inspection.RouteIssues.Add(riseWarning);
+            }
+
+            // 3.8.0.4：轴位网格必须按一个轴位 4.8 m 铺，且两端各自落在自己的
+            // 轴位格子里；图面距离与台账轴位对不上时点名（以前直接线性插值，
+            // 把 11 跨压进几十米的图面，跨距不再 4.8 m，也不提示）。
+            if (direction.IsResolved && upstreamEndpoint.HasValue
+                && downstreamEndpoint.HasValue)
+            {
+                string axisWarning = QuickLineColumnGridPlanner.DescribeAxisMismatch(
+                    upstreamEndpoint.Value, downstreamEndpoint.Value,
+                    machine?.UpstreamAxis, machine?.DownstreamAxis);
+                if (axisWarning != null) inspection.RouteIssues.Add(axisWarning);
+            }
+
             inspection.RecognitionText = FillRouteRecognitionStage.BuildSummary(
                 inspection, scene.Segments.Count, directionSource, hose);
             string upstreamAxis = machine?.UpstreamAxis;
@@ -447,7 +506,50 @@ namespace UNCAD.Features.Fill
                 upstreamAxis, downstreamAxis, labelTexts, inspection.Channels,
                 upstreamEndpoint, downstreamEndpoint, null,
                 direction.IsResolved, direction.Diagnostics,
-                hose, inspection.RecognitionText, inspection.RouteIssues);
+                hose, inspection.RecognitionText, inspection.RouteIssues,
+                floors, cabinetKind,
+                FillRouteRecognitionStage.ToPreviewRuns(inspection));
+        }
+
+        /// <summary>
+        /// 3.8.0.3：与某个场景节点相接的第一段线的另一个端点（上游端点相接的
+        /// 那一段，用来认「端点在立管顶上」）。没有相接段时返回 null。
+        /// </summary>
+        private static QuickLineSpatialPoint? OtherEndOfIncidentSegment(
+            QuickLineIsometricScene scene,
+            IReadOnlyDictionary<string, QuickLineSpatialPoint> nodes, string nodeId)
+        {
+            if (scene == null || nodes == null || string.IsNullOrEmpty(nodeId))
+                return null;
+            foreach (QuickLineIsometricSegment segment in scene.Segments)
+            {
+                if (string.Equals(segment.StartNodeId, nodeId,
+                        StringComparison.OrdinalIgnoreCase)
+                    && nodes.TryGetValue(segment.EndNodeId,
+                        out QuickLineSpatialPoint end))
+                    return end;
+                if (string.Equals(segment.EndNodeId, nodeId,
+                        StringComparison.OrdinalIgnoreCase)
+                    && nodes.TryGetValue(segment.StartNodeId,
+                        out QuickLineSpatialPoint start))
+                    return start;
+            }
+            return null;
+        }
+
+        /// <summary>楼层摘要：「台账 2F→3F」「台账 3F」「U1SET 本层 2F」「楼层未识别」。</summary>
+        internal static string DescribeFloors(PreviewFloorPlan floors)
+        {
+            if (floors == null || floors.Floors.Count == 0) return "楼层未识别";
+            if (floors.CrossesFloors)
+                return "台账 " + floors.UpstreamSlab.Label + "→" + floors.DeviceSlab.Label;
+            // 3.8.0.2：台账两端楼层都认不出、退回 U1SET「本层=…」时只画出一层平面，
+            // 上下游那两块都是空的——取画出来的那一层（以前这里直接空引用，整个
+            // 3D 预览跟着构建失败）。
+            PreviewFloorSlab slab = floors.UpstreamSlab ?? floors.DeviceSlab
+                ?? floors.Floors[0];
+            return floors.Source.StartsWith("台账", StringComparison.Ordinal)
+                ? "台账 " + slab.Label : floors.Source + " " + slab.Label;
         }
 
         /// <summary>3.3.1（特性D）：U1Q 标注文本解析不出宽度时的缺省桥架宽（图例注明）。</summary>
@@ -490,13 +592,14 @@ namespace UNCAD.Features.Fill
                 if (isConduit)
                 {
                     foreach (QuickLineCadSegment host in hosts)
-                        conduitHosts.Add(host.LineId.Handle.ToString());
+                        conduitHosts.Add(host.Key);
                     continue;
                 }
                 string text = TryReadOutputText(readTransaction, entry.EntityId);
                 double width;
                 bool assumed;
-                if (text != null && UNCAD.Core.Text.BridgeLabelFormatter
+                // 3.8.0.3：宽度也认 U1Q 出标的「200Wx100H」写法（以前一律按缺省 200）。
+                if (text != null && RouteAnnotationTextPlanner
                         .TryParseTrayWidthMillimetres(text, out double parsed))
                 {
                     width = parsed;
@@ -509,7 +612,7 @@ namespace UNCAD.Features.Fill
                 }
                 foreach (QuickLineCadSegment host in hosts)
                 {
-                    string key = host.LineId.Handle.ToString();
+                    string key = host.Key;
                     if (!trayByHost.TryGetValue(key,
                             out Tuple<double, bool> existing)
                         || width > existing.Item1

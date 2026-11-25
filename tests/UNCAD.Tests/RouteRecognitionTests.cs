@@ -310,6 +310,17 @@ namespace UNCAD.Tests
         [InlineData("", RouteAnnotationTextKind.None)]
         [InlineData("100mm软管:2500mm", RouteAnnotationTextKind.None)]
         [InlineData("桥架 200*100 2500mm 预留", RouteAnnotationTextKind.None)]
+        // 3.8.0.3：单行、长度写在行尾的旧写法（现场「梯形桥架200Wx100H-1300mm」
+        // 被报成「毫米标没有归属线段」）。
+        [InlineData("梯形桥架200Wx100H-1300mm", RouteAnnotationTextKind.Tray)]
+        [InlineData("梯形桥架200Wx100H 1300mm", RouteAnnotationTextKind.Tray)]
+        [InlineData("镀锌穿线管SC25-3000mm", RouteAnnotationTextKind.Conduit)]
+        // 关键字后面是别的说明（没有规格）：不算标注。
+        [InlineData("桥架内穿管 20mm", RouteAnnotationTextKind.None)]
+        // 规格以数字结尾时，长度前必须有分隔符——不能把 2500 拆成「250 + 0mm」。
+        [InlineData("桥架250 0mm", RouteAnnotationTextKind.None)]
+        // 用户口径（2026-11-25）「共用桥架不用管」：共用桥架维持原样，不进这条规则。
+        [InlineData("共用桥架200*100 3000mm", RouteAnnotationTextKind.None)]
         public void Text_ClassifiesTrayAndConduitLabels(string text,
             RouteAnnotationTextKind expected)
         {

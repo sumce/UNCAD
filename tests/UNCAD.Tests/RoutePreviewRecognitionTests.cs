@@ -199,7 +199,7 @@ namespace UNCAD.Tests
             Assert.Equal(6000.0, envelope.Hose.Start.X, 6);
             Assert.Equal(8500.0, envelope.Hose.End.X, 6);
             Assert.Equal(2500.0, envelope.Hose.LengthMillimetres, 6);
-            Assert.Equal("软管 ⌀100 2500mm", envelope.Hose.Label);
+            Assert.Equal("软管 ⌀100 · 2.5m", envelope.Hose.Label);
         }
 
         [Fact]
@@ -207,7 +207,7 @@ namespace UNCAD.Tests
         {
             QuickLineOrbitPreviewEnvelope byLabel = QuickLineOrbitPreviewEnvelope.Build(
                 ResolvedModel(hose: new QuickLineOrbitPreviewHose(2500.0, null, "软管:2500mm", true)));
-            Assert.Equal("软管 2500mm（U1B 标注）", byLabel.Hose.Label);
+            Assert.Equal("软管 · 2.5m（U1B 标注）", byLabel.Hose.Label);
 
             QuickLineOrbitPreviewEnvelope unresolved = QuickLineOrbitPreviewEnvelope.Build(
                 ResolvedModel(resolved: false,
@@ -241,11 +241,11 @@ namespace UNCAD.Tests
             Assert.Equal(2, scene.Primitives.Count(primitive =>
                 primitive.Kind == QuickLine3dPrimitiveKind.Sphere
                 && primitive.Group == QuickLine3dSceneGroupKind.Routes));
-            Assert.Contains(scene.Labels, label => label.Text == "上游端"
+            Assert.Contains(scene.Labels, label => label.Text == "上游端  48/V"
                 && label.Kind == "directionUp");
-            Assert.Contains(scene.Labels, label => label.Text == "设备端"
+            Assert.Contains(scene.Labels, label => label.Text == "设备端  47/V"
                 && label.Kind == "directionDown");
-            Assert.Contains(scene.Labels, label => label.Text == "软管 ⌀100 2500mm"
+            Assert.Contains(scene.Labels, label => label.Text == "软管 ⌀100 · 2.5m"
                 && label.Kind == "hose");
 
             QuickLine3dScene unknown = QuickLineOrbitSceneBuilder.Build(
@@ -254,7 +254,8 @@ namespace UNCAD.Tests
             Assert.DoesNotContain(unknown.Primitives, primitive =>
                 primitive.Kind == QuickLine3dPrimitiveKind.Sphere
                 && primitive.Group == QuickLine3dSceneGroupKind.Routes);
-            Assert.DoesNotContain(unknown.Labels, label => label.Text == "上游端");
+            Assert.DoesNotContain(unknown.Labels, label =>
+                label.Kind == "directionUp" || label.Kind == "directionDown");
             Assert.DoesNotContain(unknown.Labels, label => label.Kind == "hose");
         }
 
@@ -266,7 +267,7 @@ namespace UNCAD.Tests
                     "识别 2 段带毫米标线段", new string[0]));
             string legend = QuickLineOrbitSceneBuilder.BuildLegend(resolved);
             Assert.Contains("绿管=软管(示意)", legend, StringComparison.Ordinal);
-            Assert.Contains("琥珀点=上游端 绿点=设备端", legend, StringComparison.Ordinal);
+            Assert.Contains("琥珀=上游端 绿=设备端", legend, StringComparison.Ordinal);
             Assert.StartsWith("识别 2 段带毫米标线段", QuickLineOrbitSceneBuilder.BuildSummary(resolved),
                 StringComparison.Ordinal);
             Assert.DoesNotContain("左键拖动", QuickLineOrbitSceneBuilder.BuildSummary(resolved),
@@ -297,11 +298,27 @@ namespace UNCAD.Tests
                         new QuickLinePoint(3030, 0), new QuickLinePoint(6000, 0))
                 }, 1.0, id => true, 50.0);
 
+            // D-059：桥架/线管按「趟」计，长度取各趟标注上的整趟总长（不是逐段相加）。
+            inspection.AnnotationRuns.Add(new FillAnnotationRun
+            {
+                Kind = RouteAnnotationTextKind.Tray, Label = "梯形桥架400Wx200H",
+                LengthMillimetres = 19200.0
+            });
+            inspection.AnnotationRuns.Add(new FillAnnotationRun
+            {
+                Kind = RouteAnnotationTextKind.Conduit, Label = "镀锌穿线管38mm",
+                LengthMillimetres = 9600.0
+            });
+            inspection.AnnotationRuns.Add(new FillAnnotationRun
+            {
+                Kind = RouteAnnotationTextKind.Tray, Label = "桥架 未标长度"
+            });
             string summary = FillRouteRecognitionStage.BuildSummary(inspection, 2,
                 "上游端/设备端＝离上游块/设备块最近的路线末端",
                 new QuickLineOrbitPreviewHose(2500.0, 100.0, "x", false));
-            Assert.Equal("识别 2 段带毫米标线段（容错接上 1 处断口） · 桥架 1 段 · 线管 1 段"
-                + " · 软管 2500mm · 上游端/设备端＝离上游块/设备块最近的路线末端", summary);
+            Assert.Equal("识别 2 段带毫米标线段（容错接上 1 处断口） · 桥架 2 趟 共 19.2m（1 趟未标长度）"
+                + " · 线管 1 趟 共 9.6m · 软管 2.5m · 上游端/设备端＝离上游块/设备块最近的路线末端",
+                summary);
             Assert.EndsWith(" · 软管 — · x",
                 FillRouteRecognitionStage.BuildSummary(inspection, 2, "x", null),
                 StringComparison.Ordinal);
@@ -336,8 +353,8 @@ namespace UNCAD.Tests
             {
                 "2 段线段没有毫米标（是电缆线请用 U1LX 补标；不是电缆线请忽略）：h1、h2",
                 "断口容差接上 1 处（看着连着、放大有缝）：a–b 间隙 30",
-                "线管文字「⌀20线管 2000mm」没有归属元数据，已就近绑定到线段 s1（只算这一段）",
-                "桥架/线管标注「桥架200*100 2500mm」找不到宿主线段（源线被删除或合并），未显示"
+                "线管标注「⌀20线管 2000mm」没有归属元数据，已就近绑定到线段 s1（只算这一段）",
+                "桥架/线管标注「桥架200*100 2500mm」找不到宿主线段（旁边没有红线，或红线旁边没有带毫米标的电缆线），未显示"
             }, issues);
         }
 

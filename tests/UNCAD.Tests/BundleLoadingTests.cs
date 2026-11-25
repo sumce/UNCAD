@@ -199,13 +199,17 @@ namespace UNCAD.Tests
                 "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
                 "Microsoft.Web.WebView2.Wpf.dll",
                 "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
-                "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
-                "Web\\Preview\\index.html", "Web\\Preview\\app.js", "Web\\Preview\\styles.css",
-                "Web\\Preview\\vendor\\three\\LICENSE.txt", "Web\\Preview\\vendor\\three\\OrbitControls.js",
-                "Web\\Preview\\vendor\\three\\three.core.min.js", "Web\\Preview\\vendor\\three\\three.module.min.js",
                 "runtimes\\win-x64\\native\\WebView2Loader.dll",
-                // 3.4.0：Web 页面树随 3D 内核换原生 Viewport3D 退役。
-                "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg"
+                // 3.8.0.5：U1U 预览页（WebView2 + three.js，本地虚拟主机）随包发布；
+                // 独立进程 WebV（UNCAD.Preview.exe）仍然退役。
+                "BOQ_Template.xlsx", "Resources\\XFrameTemplate.dwg",
+                "Web\\QuickLineOrbit\\index.html",
+                "Web\\QuickLineOrbit\\styles.css",
+                "Web\\QuickLineOrbit\\app.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\LICENSE.txt",
+                "Web\\QuickLineOrbit\\vendor\\three\\OrbitControls.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\three.core.min.js",
+                "Web\\QuickLineOrbit\\vendor\\three\\three.module.min.js",
             };
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
@@ -223,22 +227,30 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void PackagePipeline_LocalAssetsAfterNative3DKernel()
+        public void PackagePipeline_ShipsLocalPreviewPageButNoWebVProcess()
         {
-            // 3.4.0：3D 预览换 WPF 原生 Viewport3D——Web 页面树不再构建进包
-            //（登录页仍用 WebView2，loader 照常携带）。3D 渲染路径里不得再
-            // 有任何浏览器资产或 System.Management（孤儿清扫已随预热退役）。
+            // 3.8.0.5：U1U 预览页（Web/QuickLineOrbit，WebView2 + three.js）
+            // 随包发布；独立进程 WebV（UNCAD.Preview.exe）仍然退役，3D 路径
+            // 不得依赖 System.Management 预热或 OpenTK。
             string build = File.ReadAllText(RepoFile("build.ps1"));
             string installer = File.ReadAllText(RepoFile("installer.ps1"));
+            string release = File.ReadAllText(RepoFile("release.ps1"));
             string csproj = File.ReadAllText(RepoFile("src", "UNCAD", "UNCAD.csproj"));
 
             Assert.Contains("WebView2Loader.dll", build);
             Assert.Contains("WebView2Loader.dll", installer);
             Assert.Contains("Microsoft.Web.WebView2", csproj);
+            Assert.Contains("QuickLineOrbit", build);
+            Assert.Contains("QuickLineOrbit", installer);
+            Assert.Contains("Web\\**\\*", csproj);
+            Assert.Contains("Join-Path $bundle \"Web\"", release);
+            // 脚本注释里提到退役进程名是允许的；不得出现在 payload 清单或工程引用里
+            //（payload 清单由 PackagePipeline_UsesExplicitPayloadAllowList 锁死）。
+            Assert.DoesNotContain("UNCAD.Preview.csproj", build);
+            Assert.DoesNotContain("UNCAD.Preview.csproj", installer);
+            Assert.DoesNotContain("UNCAD.Preview", csproj);
             Assert.DoesNotContain("QuickLine3D", build);
-            Assert.DoesNotContain("QuickLineOrbit", build);
             Assert.DoesNotContain("QuickLine3D", installer);
-            Assert.DoesNotContain("QuickLineOrbit", installer);
             Assert.DoesNotContain("QuickLine3D", csproj);
             Assert.DoesNotContain("System.Management", csproj);
             Assert.DoesNotContain("UNCAD.Assets.StartupSplash.html", csproj);

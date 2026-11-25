@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
@@ -8,10 +9,12 @@ using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
 using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Dwg;
+using UNCAD.Core.Excel;
 using UNCAD.Core.Geometry;
 using UNCAD.Core.QuickLine;
 using UNCAD.Features.Fill;
 using UNCAD.Infra;
+using UNCAD.UI;
 
 namespace UNCAD.CadIntegration
 {
@@ -91,26 +94,54 @@ namespace UNCAD.CadIntegration
                     definition);
                 upstream = ctx.AddToCurrentSpace(tr, upstreamReference);
                 device = ctx.AddToCurrentSpace(tr, deviceReference);
+
+                // D-059：一个没有归属线段的毫米标（竖排、附近没有线）必须点名；
+                // 一个设备预留标记形态的横排毫米文字（3000mm）不算。
+                var orphan = new DBText
+                {
+                    TextString = "2000mm",
+                    Height = 180,
+                    Rotation = Math.PI / 2,
+                    Position = new Point3d(o + 9000, o + 4000, 0)
+                };
+                ctx.AddToCurrentSpace(tr, orphan);
+                var reserve = new DBText
+                {
+                    TextString = "3000mm",
+                    Height = 180,
+                    Position = new Point3d(o + 9000, o + 4500, 0)
+                };
+                ctx.AddToCurrentSpace(tr, reserve);
                 tr.Commit();
             }
 
             var boundary = new FrameRectangle("preview", o - 5000, o - 5000, o + 12000, o + 5000);
-            var scanned = QuickLineCadService.Scan(ctx, new QuickLineScanOptions
-            {
-                IncludeUnlabelled = true,
-                FrameBoundaries = new[] { boundary }
-            });
+            QuickLineScanResult scan = QuickLineCadService.ScanDetailed(ctx,
+                new QuickLineScanOptions
+                {
+                    IncludeUnlabelled = true,
+                    FrameBoundaries = new[] { boundary }
+                });
+            IReadOnlyList<QuickLineCadSegment> scanned = scan.Segments;
             FillRouteInspection inspection;
+            var machine = new MachineRow
+            {
+                MachineId = "SELFTEST-PREVIEW",
+                CircuitName = "回路",
+                PanelFloor = "2F",
+                DeviceFloor = "3F",
+                Next = "I-Line盘"
+            };
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
-                inspection = FillRouteInspectionStage.Inspect(ctx, tr, new ObjectId[0], scanned,
-                    boundary, null, null);
                 var selection = new FillSelection
                 {
                     DeviceBlockIds = new[] { device },
                     UpstreamInfoBlockIds = new[] { upstream }
                 };
-                FillRouteInspectionStage.AttachPreview(ctx, tr, inspection, selection, null);
+                inspection = FillRouteInspectionStage.Inspect(ctx, tr, new ObjectId[0], scanned,
+                    boundary, null, null, scan.UnboundLabels, selection);
+                FillRouteInspectionStage.AttachPreview(ctx, tr, inspection, selection, machine);
                 tr.Commit();
             }
 
@@ -155,15 +186,172 @@ namespace UNCAD.CadIntegration
             Require(envelope != null && envelope.Hose != null, "hose geometry placed");
             Near(envelope.Hose.End.X, 13300.0, "hose continues from the device end");
 
-            // 识别摘要与问题清单。
+            // 识别摘要与问题清单（D-059：桥架/线管按「趟」计）。
             Require(inspection.RecognitionText.IndexOf("识别 3 段", StringComparison.Ordinal) >= 0
-                && inspection.RecognitionText.IndexOf("桥架 1 段", StringComparison.Ordinal) >= 0
-                && inspection.RecognitionText.IndexOf("软管 2500mm", StringComparison.Ordinal) >= 0,
+                && inspection.RecognitionText.IndexOf("桥架 1 趟 共 2.5m", StringComparison.Ordinal) >= 0
+                && inspection.RecognitionText.IndexOf("软管 2.5m", StringComparison.Ordinal) >= 0,
                 "recognition summary: " + inspection.RecognitionText);
             Require(inspection.RouteIssues.Any(issue =>
                     issue.IndexOf("1 段线段没有毫米标", StringComparison.Ordinal) >= 0
                     && issue.IndexOf(Handle(stray), StringComparison.Ordinal) >= 0),
                 "unlabelled line named in the issues");
+
+            // D-059：没有归属线段的毫米标点名；设备预留标记形态的横排文字不点。
+            Require(inspection.RouteIssues.Any(issue =>
+                    issue.IndexOf("1 个毫米标没有归属线段", StringComparison.Ordinal) >= 0
+                    && issue.IndexOf("2000mm", StringComparison.Ordinal) >= 0),
+                "orphan millimetre label named in the issues");
+            Require(!inspection.RouteIssues.Any(issue =>
+                    issue.IndexOf("3000mm", StringComparison.Ordinal) >= 0),
+                "reserve-marker text is not reported as an orphan label");
+
+            // D-059：上游/下游轴位块缺一不可——本选集没有给轴位块，两条都要报。
+            Require(inspection.RouteIssues.Count(issue =>
+                    issue.IndexOf("轴位块", StringComparison.Ordinal) >= 0) == 2,
+                "both missing axis blocks are reported");
+
+            // D-059：楼层平面按台账（2F 上游 → 3F 设备），跨层高度不符要点名。
+            Require(inspection.Preview.Floors != null
+                && inspection.Preview.Floors.Floors.Count == 2,
+                "two floor planes from the workbook floors");
+            Require(inspection.FloorSummary == "台账 2F→3F",
+                "floor summary: " + inspection.FloorSummary);
+            // 3.8.0.3：量的是「上游楼层地面到设备端」；I-Line 盘不抬，线路竖向
+            // 3 m 就是 3 m。文案点名区间、标高清单来源和实际值。
+            string iLineRise = inspection.RouteIssues.Single(issue =>
+                issue.IndexOf("跨层高度不符", StringComparison.Ordinal) >= 0);
+            Require(iLineRise.IndexOf("2F地面到设备端应在 7.6~7.8 m",
+                    StringComparison.Ordinal) >= 0
+                && iLineRise.IndexOf("按 U1SET 标高清单 2F地面 → 3F高架地板面 差 7.8 m",
+                    StringComparison.Ordinal) >= 0
+                && iLineRise.IndexOf("实际 3 m（线路竖向 3 m）", StringComparison.Ordinal) >= 0,
+                "cross-floor rise warning measures floor-to-device: " + iLineRise);
+
+            // D-059：上游柜按台账「盘柜类型」——I-Line 盘落在 2F 地面上。
+            Require(inspection.Preview.CabinetKind == PreviewCabinetKind.ILinePanel,
+                "cabinet kind from the workbook");
+            Require(envelope.Cabinet != null, "cabinet geometry placed");
+            Near(envelope.Cabinet.BaseZ, 0.0, "I-Line panel stands on the 2F floor");
+            Near(envelope.Cabinet.Height, 2200.0, "I-Line panel height");
+
+            // 3.8.0.2：插座盘——抬的是整条线路（方块只是占位）：上游末端（设备
+            // 基础点）落在 2F 地面 + 1 m，设备端跟着高 1 m，柜底与末端同高。
+            FillRouteInspection socketInspection;
+            using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var socketSelection = new FillSelection
+                {
+                    DeviceBlockIds = new[] { device },
+                    UpstreamInfoBlockIds = new[] { upstream }
+                };
+                socketInspection = FillRouteInspectionStage.Inspect(ctx, tr,
+                    new ObjectId[0], scanned, boundary, null, null,
+                    scan.UnboundLabels, socketSelection);
+                FillRouteInspectionStage.AttachPreview(ctx, tr, socketInspection,
+                    socketSelection, new MachineRow
+                    {
+                        MachineId = "SELFTEST-PREVIEW",
+                        CircuitName = "回路",
+                        PanelFloor = "2F",
+                        DeviceFloor = "3F",
+                        Next = "插座盘"
+                    });
+                tr.Commit();
+            }
+            Require(socketInspection.PreviewFailure == null
+                && socketInspection.Preview != null,
+                "socket preview built: " + socketInspection.PreviewFailure);
+            Require(socketInspection.Preview.CabinetKind == PreviewCabinetKind.SocketPanel,
+                "socket cabinet kind from the workbook");
+            Near(socketInspection.Preview.UpstreamEndpoint.Value.Z, 1000.0,
+                "socket panel: upstream end 1 m above the 2F floor");
+            Require(socketInspection.Preview.Segments.All(segment =>
+                    Math.Min(segment.Start.Z, segment.End.Z) >= 1000.0 - 1e-6),
+                "socket panel: the whole route is lifted 1 m");
+            Near(socketInspection.Preview.DownstreamEndpoint.Value.Z, 4000.0,
+                "socket panel: device end lifted 1 m too (3000 + 1000)");
+            QuickLineOrbitPreviewEnvelope socketEnvelope =
+                QuickLineOrbitPreviewEnvelope.Build(socketInspection.Preview);
+            Require(socketEnvelope.Cabinet != null, "socket cabinet placed");
+            Near(socketEnvelope.Cabinet.BaseZ, 1000.0,
+                "socket panel bottom = upstream end (floor + 1 m)");
+            Near(socketEnvelope.Cabinet.MountingFloorZ.Value, 0.0,
+                "socket panel stands on the 2F floor plane");
+            QuickLine3dScene socketScene = QuickLineOrbitSceneBuilder.Build(socketEnvelope);
+            Require(socketScene.Primitives.Any(primitive =>
+                    primitive.Kind == QuickLine3dPrimitiveKind.Tube
+                    && primitive.Group == QuickLine3dSceneGroupKind.Reference
+                    && Math.Abs(primitive.A1z) < 1e-6
+                    && Math.Abs(primitive.B1z - 1000.0) < 1e-6),
+                "socket panel: stand from the floor to the panel bottom");
+            // 3.8.0.3：跨层校验从 2F 地面量到设备端——插座盘离地那 1 m 要加回来
+            // （线路竖向 3 m + 离地 1 m = 4 m；以前报的是 3 m）。
+            string socketRise = socketInspection.RouteIssues.Single(issue =>
+                issue.IndexOf("跨层高度不符", StringComparison.Ordinal) >= 0);
+            Require(socketRise.IndexOf("实际 4 m（上游端离地 1 m + 线路竖向 3 m）",
+                    StringComparison.Ordinal) >= 0,
+                "socket panel: rise measured from the 2F floor: " + socketRise);
+
+            // 3.8.0.4（用户口径「一个轴位是 4.8 m；算出来的网格轴位和设备/上游
+            // 轴位对不上要提示」）：轴位网格按 4.8 m 铺，每根柱网线一个轴号；
+            // 图面距离与台账轴位（48/V→37/V = 11 跨）对不上时问题清单点名，
+            // 不再线性插值把 11 跨压进 9 m 的图面。
+            FillRouteInspection axisInspection;
+            using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
+            {
+                var axisSelection = new FillSelection
+                {
+                    DeviceBlockIds = new[] { device },
+                    UpstreamInfoBlockIds = new[] { upstream }
+                };
+                axisInspection = FillRouteInspectionStage.Inspect(ctx, tr,
+                    new ObjectId[0], scanned, boundary, null, null,
+                    scan.UnboundLabels, axisSelection);
+                FillRouteInspectionStage.AttachPreview(ctx, tr, axisInspection,
+                    axisSelection, new MachineRow
+                    {
+                        MachineId = "SELFTEST-PREVIEW",
+                        CircuitName = "回路",
+                        PanelFloor = "2F",
+                        DeviceFloor = "3F",
+                        Next = "I-Line盘",
+                        UpstreamAxis = "48/V",
+                        DownstreamAxis = "37/V"
+                    });
+                tr.Commit();
+            }
+            Require(axisInspection.PreviewFailure == null
+                && axisInspection.Preview != null,
+                "axis preview built: " + axisInspection.PreviewFailure);
+            QuickLineOrbitPreviewEnvelope axisEnvelope =
+                QuickLineOrbitPreviewEnvelope.Build(axisInspection.Preview);
+            List<int> axisNumbers = axisEnvelope.NumericTicks
+                .Select(label => int.Parse(label.Text,
+                    System.Globalization.CultureInfo.InvariantCulture)).ToList();
+            Require(axisNumbers.Count >= 2, "axis ticks at the 4.8 m pitch");
+            for (int index = 1; index < axisNumbers.Count; index++)
+                Require(Math.Abs(axisNumbers[index] - axisNumbers[index - 1]) == 1,
+                    "one axis number per grid line (adjacent numbers differ by 1)");
+            Require(axisInspection.RouteIssues.Any(issue => issue.IndexOf(
+                    "轴位与图面距离对不上", StringComparison.Ordinal) >= 0),
+                "axis/grid mismatch named in the issues");
+
+            // D-059/3.8.0.1：场景只有楼层线框、轴网、线路、柜子——没有参照建筑；
+            // 楼层不画半透明面（会挡住跨层线路），只画边框和柱网。
+            QuickLine3dScene scene = QuickLineOrbitSceneBuilder.Build(envelope);
+            Require(scene != null, "scene builds");
+            Require(scene.Primitives.Count(primitive =>
+                    primitive.Group == QuickLine3dSceneGroupKind.Reference
+                    && primitive.Kind == QuickLine3dPrimitiveKind.Quad) == 0,
+                "floor planes are wireframe, not filled quads");
+            Require(scene.Labels.Any(label => label.Kind == "floor"
+                    && label.Text.StartsWith("2F", StringComparison.Ordinal))
+                && scene.Labels.Any(label => label.Kind == "floor"
+                    && label.Text.StartsWith("3F", StringComparison.Ordinal)),
+                "both floor labels present");
+            Require(scene.Primitives.Count(primitive =>
+                    primitive.Kind == QuickLine3dPrimitiveKind.WaffleCell) == 0,
+                "no waffle plate in the preview");
         }
 
         private static ObjectId Line(CadContext ctx, Transaction tr, double x1, double y1,

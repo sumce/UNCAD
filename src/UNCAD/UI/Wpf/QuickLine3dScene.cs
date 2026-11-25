@@ -53,6 +53,14 @@ namespace UNCAD.UI
         public QuickLine3dSceneGroupKind Group { get; }
         /// <summary>样式键（mm/axis/ref/pin/route/axisNorth…决定颜色字号）。</summary>
         public string Kind { get; }
+        /// <summary>
+        /// 3.8.0.2：标签贴着的那根线在场景里的方向（世界坐标；长度任意）。有了它，
+        /// 叠加层就沿线段在屏幕上的投影方向排字、固定贴在线旁，不再参与防重叠。
+        /// </summary>
+        public double DirectionX { get; internal set; }
+        public double DirectionY { get; internal set; }
+        public double DirectionZ { get; internal set; }
+        public bool HasDirection { get; internal set; }
     }
 
     /// <summary>图元种类。</summary>
@@ -243,6 +251,25 @@ namespace UNCAD.UI
         {
             if (string.IsNullOrEmpty(text)) return;
             Labels.Add(new QuickLine3dSceneLabel(text, x, y, z, group, kind));
+        }
+
+        /// <summary>
+        /// 3.8.0.2：贴着一条线的标签（米数、桥架/线管整趟、软管）：带上这条线的
+        /// 方向，叠加层沿线排字并固定贴在线旁。
+        /// </summary>
+        public void AddLineLabel(QuickLine3dSceneGroupKind group, string kind,
+            string text, double x, double y, double z,
+            double directionX, double directionY, double directionZ)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            var label = new QuickLine3dSceneLabel(text, x, y, z, group, kind)
+            {
+                DirectionX = directionX,
+                DirectionY = directionY,
+                DirectionZ = directionZ,
+                HasDirection = true
+            };
+            Labels.Add(label);
         }
     }
 }

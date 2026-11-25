@@ -16,7 +16,14 @@ namespace UNCAD.Core.QuickLine
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static readonly Regex MillimeterTokenRegex = new Regex(
-            @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*mm(?![A-Za-z])",
+            // mm 后面紧跟字母/数字/²/㎡ = 截面单位（10mm²、10mm2）或别的单位词，
+            // 不是长度：清单属性「4*10mm²: 3.4+0.5+…=52.5M」不能被当成毫米标。
+            @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*mm(?![A-Za-z0-9²㎡])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+        /// <summary>截面单位（mm² / mm2 / ㎡）：出现即电缆型号或清单信息文字。</summary>
+        private static readonly Regex CrossSectionRegex = new Regex(
+            @"mm\s*(?:²|2(?![0-9])|㎡)",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         private static readonly Regex BareNumberRegex = new Regex(
@@ -70,12 +77,16 @@ namespace UNCAD.Core.QuickLine
 
         /// <summary>
         /// Extracts one millimetre token from an associated descriptive label.
-        /// Ambiguous labels containing more than one token are rejected.
+        /// Ambiguous labels containing more than one token are rejected. Text
+        /// carrying a cross-section unit (mm² / mm2 / ㎡) is a cable-model or
+        /// info text, never a length label — even when it also ends in "=14800mm".
         /// </summary>
         public static bool TryExtractSingle(string text, out double millimeters)
         {
             millimeters = 0.0;
-            MatchCollection matches = MillimeterTokenRegex.Matches(text ?? string.Empty);
+            string normalized = NormalizeCadText(text ?? string.Empty);
+            if (CrossSectionRegex.IsMatch(normalized)) return false;
+            MatchCollection matches = MillimeterTokenRegex.Matches(normalized);
             if (matches.Count != 1) return false;
             return TryParseToken(matches[0], out millimeters);
         }

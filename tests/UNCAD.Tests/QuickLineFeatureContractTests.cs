@@ -102,10 +102,13 @@ namespace UNCAD.Tests
                 "AssignRemainingLabels was not found.");
 
             string method = source.Substring(methodStart, methodEnd - methodStart);
+            // 3.8.0.2：线段身份从 ObjectId 换成 LineKey（实体 + 多段线拆出的段序号），
+            // 契约不变——回退只遍历候选表里有的线。
             Assert.Contains(
-                "foreach (KeyValuePair<ObjectId, List<LabelMatch>> candidate in candidates",
+                "foreach (KeyValuePair<LineKey, List<LabelMatch>> candidate in candidates",
                 method);
             Assert.DoesNotContain("candidates[item.Id]", method);
+            Assert.DoesNotContain("candidates[line.Id]", method);
         }
 
         [Fact]

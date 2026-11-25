@@ -80,9 +80,9 @@ if (-not (Test-Path $bundleModule -PathType Leaf) -or
 }
 Assert-FileMatches $buildFrameTemplate $bundleFrameTemplate "Resources\XFrameTemplate.dwg"
 Assert-TreeMatches (Split-Path -Parent $buildOutput) $bundle "DLL payload" "*.dll"
-Assert-FileMatches (Join-Path (Split-Path -Parent $buildOutput) "UNCAD.Preview.exe") (Join-Path $bundle "UNCAD.Preview.exe") "WebV viewer"
-Assert-FileMatches (Join-Path (Split-Path -Parent $buildOutput) "UNCAD.Preview.exe.config") (Join-Path $bundle "UNCAD.Preview.exe.config") "WebV configuration"
-Assert-TreeMatches (Join-Path (Split-Path -Parent $buildOutput) "Web") (Join-Path $bundle "Web") "WebV assets"
+# 3.8.0.5：U1U 3D 预览页随包发布（WebView2 + three.js，本地虚拟主机）。
+# 独立进程 WebV（UNCAD.Preview.exe）仍然退役，不入包。
+Assert-TreeMatches (Join-Path (Split-Path -Parent $buildOutput) "Web") (Join-Path $bundle "Web") "U1U preview page"
 
 $testArgs = @("test", "$root\UNCAD.slnx", "-c", $Configuration)
 # build.ps1 already built the solution; avoid a second timestamped DLL build.

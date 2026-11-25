@@ -27,18 +27,80 @@ namespace UNCAD.UI
             {
                 // 对齐 Web/QuickLineOrbit styles.css 的标签配色（页面已退役，
                 // 视觉口径随控件延续）。
-                ["mm"] = FromRgb(0xD8, 0xE2, 0xEC),
+                ["mm"] = FromRgb(0xF2, 0xF7, 0xFC),
                 ["axis"] = FromRgb(0x8F, 0xA0, 0xB3),
                 ["ref"] = FromRgb(0xE0, 0xA9, 0x4A),
                 ["pin"] = FromRgb(0x99, 0xA7, 0xB8),
                 ["route"] = FromRgb(0xCF, 0xE0, 0xEF),
-                ["directionDown"] = FromRgb(0x63, 0xC9, 0xA5),
-                ["directionUp"] = FromRgb(0xE0, 0xB0, 0x64),
-                // D-058：U1U 窗格的软管标签。
-                ["hose"] = FromRgb(0x5F, 0xC9, 0x8A)
+                ["directionDown"] = FromRgb(0x9F, 0xE8, 0xC6),
+                ["directionUp"] = FromRgb(0xFF, 0xD9, 0x94),
+                // D-058/D-059：U1U 窗格的牌子。
+                ["hose"] = FromRgb(0xA9, 0xEF, 0xC4),
+                ["tray"] = FromRgb(0xFF, 0xB8, 0xB2),
+                ["conduit"] = FromRgb(0xB0, 0xE9, 0xF4),
+                ["floor"] = FromRgb(0xC9, 0xD6, 0xE3),
+                ["axisEdge"] = FromRgb(0xB4, 0xC3, 0xD6),
+                ["cabinet"] = FromRgb(0xEA, 0xF0, 0xF6)
             };
+
+        /// <summary>
+        /// D-059：带底衬的「牌子」标签（U1U 窗格）。深色半透明底 + 一圈同色系细边，
+        /// 压在楼板/管线上都读得清；全部参与防重叠。
+        /// </summary>
+        private static readonly HashSet<string> ChipKinds = new HashSet<string>(
+            StringComparer.Ordinal)
+        {
+            "mm", "axisEdge", "floor", "tray", "conduit", "hose", "cabinet",
+            "directionUp", "directionDown"
+        };
+
+        private static readonly Dictionary<string, Brush> ChipForegrounds =
+            new Dictionary<string, Brush>(StringComparer.Ordinal);
+        private static readonly Brush ChipBackground = Freeze(
+            Color.FromArgb(0xE6, 0x14, 0x1C, 0x26));
+        private static readonly Dictionary<string, Brush> ChipBorders =
+            new Dictionary<string, Brush>(StringComparer.Ordinal);
+
+        // 米数牌子的落位候选（屏幕像素偏移）：先正上/正下，再斜向，再更远。
+        private static readonly Point[] MillimetreLabelOffsets =
+        {
+            new Point(0, 0), new Point(0, -24), new Point(0, 24),
+            new Point(-36, -15), new Point(36, -15), new Point(-36, 17),
+            new Point(36, 17), new Point(0, -48), new Point(0, 48),
+            new Point(-64, 0), new Point(64, 0)
+        };
         private static readonly double[] LabelCollisionOffsets =
             { 0, -20, 20, -40, 40 };
+        /// <summary>
+        /// 3.8.0.2：桥架/线管整趟、软管、上游柜、楼层名、两端这几块牌子的落位
+        /// 候选：先原地，再上下让，再向左右让（上游柜顶上方常被「上游端」牌子
+        /// 占着；楼层名贴在平面角上，往左右让才让得开）。全撞时落在撞得最少的
+        /// 位置照常显示——桥架牌子被藏起来会被当成「桥架没识别」。轴号边标
+        /// 数量多、是次要信息，仍按旧规矩：全撞则隐藏。
+        /// </summary>
+        private static readonly Point[] ChipLabelOffsets =
+        {
+            new Point(0, 0), new Point(0, -22), new Point(0, 22),
+            new Point(-96, 0), new Point(96, 0),
+            new Point(-96, -18), new Point(96, 18),
+            new Point(0, -44), new Point(0, 44),
+            new Point(-170, 0), new Point(170, 0)
+        };
+        /// <summary>上游柜牌子：先放到盒子下方（不盖住方块），再向左右让。</summary>
+        private static readonly Point[] CabinetLabelOffsets =
+        {
+            new Point(0, 26), new Point(96, 12), new Point(-96, 12),
+            new Point(0, -26), new Point(-96, -12), new Point(96, -12),
+            new Point(0, 46), new Point(-170, 12), new Point(170, 12)
+        };
+        /// <summary>「上游端」「设备端」：先抬到端点标记上方，再贴着往左右让。</summary>
+        private static readonly Point[] EndpointLabelOffsets =
+        {
+            new Point(0, -18), new Point(-52, -20), new Point(52, -20),
+            new Point(0, -38), new Point(0, 18), new Point(-90, -12),
+            new Point(90, -12), new Point(0, -56), new Point(0, 36),
+            new Point(-160, 0), new Point(160, 0)
+        };
         private static readonly double[] FixedLabelOffset = { 0 };
 
         private readonly Viewport3D _viewport = new Viewport3D();
@@ -61,6 +123,8 @@ namespace UNCAD.UI
         private readonly List<LabelEntry> _labels = new List<LabelEntry>();
         private readonly List<LabelEntry> _activeLabels = new List<LabelEntry>();
         private readonly List<Rect> _occupied = new List<Rect>();
+        /// <summary>3.8.0.2：已经贴在线上的标签（按旋转后的真实形状记，不用外接框）。</summary>
+        private readonly List<LabelBox> _lineBoxes = new List<LabelBox>();
         private readonly HashSet<string> _hiddenLabelKinds =
             new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<QuickLine3dSceneGroupKind> _hiddenGroups =
@@ -615,22 +679,8 @@ namespace UNCAD.UI
                 {
                     if (entry.Element == null)
                     {
-                        var text = new TextBlock
-                        {
-                            Text = entry.Scene.Text,
-                            FontSize = string.Equals(entry.Scene.Kind, "axis",
-                                StringComparison.Ordinal) ? 11 : 12,
-                            Foreground = new SolidColorBrush(
-                                LabelColor(entry.Scene.Kind)),
-                            IsHitTestVisible = false
-                        };
-                        text.Measure(new Size(double.PositiveInfinity,
-                            double.PositiveInfinity));
-                        Canvas.SetLeft(text, 0.0);
-                        Canvas.SetTop(text, 0.0);
-                        text.RenderTransform = new TranslateTransform(0, 0);
-                        entry.Element = text;
-                        _labelLayer.Children.Add(text);
+                        entry.Element = CreateLabelElement(entry.Scene);
+                        _labelLayer.Children.Add(entry.Element);
                     }
                     _activeLabels.Add(entry);
                 }
@@ -640,6 +690,114 @@ namespace UNCAD.UI
                 }
             }
             _activeLabels.Sort(CompareLabelPriority);
+        }
+
+        /// <summary>
+        /// 标签控件：牌子类（U1U 窗格）带底衬、粗一点的字；其余（U13D 批量窗）
+        /// 保持原来的裸文字。画笔全部冻结并按种类缓存——旋转时不重建。
+        /// </summary>
+        private static FrameworkElement CreateLabelElement(QuickLine3dSceneLabel label)
+        {
+            string kind = label.Kind ?? string.Empty;
+            var text = new TextBlock
+            {
+                Text = label.Text,
+                FontSize = LabelFontSize(kind),
+                Foreground = LabelBrush(kind),
+                IsHitTestVisible = false
+            };
+            FrameworkElement element = text;
+            if (ChipKinds.Contains(kind))
+            {
+                if (kind == "mm" || kind == "directionUp" || kind == "directionDown")
+                    text.FontWeight = FontWeights.SemiBold;
+                // TextBlock 自己没有边框：牌子 = 圆角 Border 包一个 TextBlock。
+                element = new Border
+                {
+                    Child = text,
+                    Background = ChipBackground,
+                    BorderBrush = ChipBorder(kind),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(5, 1, 5, 1),
+                    IsHitTestVisible = false
+                };
+            }
+            element.Measure(new Size(double.PositiveInfinity,
+                double.PositiveInfinity));
+            Canvas.SetLeft(element, 0.0);
+            Canvas.SetTop(element, 0.0);
+            if (label.HasDirection)
+            {
+                // 3.8.0.2：贴线的标签＝先绕自身中心转到位、再平移到线旁。WPF 按
+                // 列出顺序依次作用（Rotate 先、Translate 后），平移量才不会被
+                // 旋转带走；RenderTransformOrigin 在中心，平移的目标仍是「中心」。
+                element.RenderTransformOrigin = new Point(0.5, 0.5);
+                element.RenderTransform = new TransformGroup
+                {
+                    Children = new TransformCollection
+                    {
+                        new RotateTransform(0),
+                        new TranslateTransform(0, 0)
+                    }
+                };
+            }
+            else
+            {
+                element.RenderTransform = new TranslateTransform(0, 0);
+            }
+            return element;
+        }
+
+        private static double LabelFontSize(string kind)
+        {
+            switch (kind ?? "")
+            {
+                case "mm":
+                case "directionDown":
+                case "directionUp":
+                    return 12.0;
+                case "axis":
+                case "compass":
+                case "axisEdge":
+                    return 10.5;
+                default:
+                    return ChipKinds.Contains(kind ?? "") ? 11.5 : 12.0;
+            }
+        }
+
+        private static Brush LabelBrush(string kind)
+        {
+            lock (ChipForegrounds)
+            {
+                if (!ChipForegrounds.TryGetValue(kind ?? "", out Brush brush))
+                {
+                    brush = Freeze(LabelColor(kind));
+                    ChipForegrounds[kind ?? ""] = brush;
+                }
+                return brush;
+            }
+        }
+
+        private static Brush ChipBorder(string kind)
+        {
+            lock (ChipBorders)
+            {
+                if (!ChipBorders.TryGetValue(kind ?? "", out Brush brush))
+                {
+                    Color color = LabelColor(kind);
+                    brush = Freeze(Color.FromArgb(0xB8, color.R, color.G, color.B));
+                    ChipBorders[kind ?? ""] = brush;
+                }
+                return brush;
+            }
+        }
+
+        private static Brush Freeze(Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            return brush;
         }
 
         private static Color LabelColor(string kind)
@@ -652,15 +810,14 @@ namespace UNCAD.UI
 
         private static bool DeOverlaps(string kind)
         {
-            // 柱网/罗盘/路线/方向标签走防重叠；毫米标/参照标/端点钉直显
-            //（对齐两版网页的行为分工）。
+            // U1U 窗格的牌子全部防重叠（米数不再互相压字）；U13D 批量窗维持
+            // 原来的分工：柱网/罗盘/路线/方向标签防重叠，其余直显。
+            if (ChipKinds.Contains(kind ?? "")) return true;
             switch (kind ?? "")
             {
                 case "axis":
                 case "compass":
                 case "route":
-                case "directionDown":
-                case "directionUp":
                     return true;
                 default:
                     return false;
@@ -674,53 +831,63 @@ namespace UNCAD.UI
                 case "directionDown":
                 case "directionUp":
                     return 0;
+                case "mm":
+                    return 1;
+                case "tray":
+                case "conduit":
+                case "hose":
+                    return 2;
+                case "cabinet":
+                    return 3;
+                case "floor":
+                    return 4;
                 case "axis":
                 case "compass":
-                    return 1;
+                    return 5;
+                case "axisEdge":
+                    return 6;
                 case "route":
-                    return 2;
+                    return 7;
                 default:
-                    return 3;
+                    return 8;
             }
         }
 
         private void UpdateLabels()
         {
             if (_scene == null || ActualWidth < 1.0 || ActualHeight < 1.0) return;
-            double width = ActualWidth;
-            double height = ActualHeight;
             _occupied.Clear();
+            _lineBoxes.Clear();
 
-            // Priority order is cached until group or label visibility changes.
+            // 第一遍：贴线的标签（固定在线旁、沿线排字）。先落位并把占位登记好；
+            // 同一条线上前后两块的牌子首选侧撞上了就翻到另一侧（仍然贴在线上）。
             foreach (LabelEntry entry in _activeLabels)
             {
-                Point4D clip = _worldToScreen.Transform(new Point4D(
-                    entry.Scene.X, entry.Scene.Y, entry.Scene.Z, 1.0));
-                bool shown = clip.W > 1e-9;
-                double ndcx = 0, ndcy = 0;
+                if (!entry.Scene.HasDirection) continue;
+                entry.Element.Visibility = PlaceAlongLine(entry, _lineBoxes)
+                    ? Visibility.Visible
+                    : Visibility.Hidden;
+            }
+
+            // 第二遍：其余牌子按优先级防重叠（躲开已经贴在线上的标签）。
+            foreach (LabelEntry entry in _activeLabels)
+            {
+                if (entry.Scene.HasDirection) continue;
+                bool shown = TryProject(entry.Scene.X, entry.Scene.Y,
+                    entry.Scene.Z, out double x, out double y);
                 if (shown)
                 {
-                    ndcx = clip.X / clip.W;
-                    ndcy = clip.Y / clip.W;
-                    shown = ndcx > -1.05 && ndcx < 1.05
-                        && ndcy > -1.05 && ndcy < 1.05
-                        && clip.Z / clip.W > -1.0 && clip.Z / clip.W < 1.0;
-                }
-                if (shown)
-                {
-                    double x = (ndcx * 0.5 + 0.5) * width;
-                    double y = (0.5 - ndcy * 0.5) * height;
-                    double verticalOffset = 0.0;
+                    double offsetX = 0.0;
+                    double offsetY = 0.0;
                     if (DeOverlaps(entry.Scene.Kind))
                         shown = PlaceWithoutOverlap(entry, x, y,
-                            out verticalOffset);
+                            out offsetX, out offsetY);
                     if (shown)
                     {
                         var transform = (TranslateTransform)entry.Element
                             .RenderTransform;
-                        transform.X = x - entry.Element.DesiredSize.Width / 2.0;
-                        transform.Y = y + verticalOffset
-                            - entry.Element.DesiredSize.Height / 2.0;
+                        transform.X = x + offsetX - entry.Element.DesiredSize.Width / 2.0;
+                        transform.Y = y + offsetY - entry.Element.DesiredSize.Height / 2.0;
                     }
                 }
                 entry.Element.Visibility = shown
@@ -729,42 +896,324 @@ namespace UNCAD.UI
             }
         }
 
+        /// <summary>场景点 → 叠加层像素；在相机背后或近视锥外时返回 false。</summary>
+        private bool TryProject(double worldX, double worldY, double worldZ,
+            out double x, out double y)
+        {
+            x = 0.0;
+            y = 0.0;
+            Point4D clip = _worldToScreen.Transform(new Point4D(
+                worldX, worldY, worldZ, 1.0));
+            if (!(clip.W > 1e-9)) return false;
+            double ndcx = clip.X / clip.W;
+            double ndcy = clip.Y / clip.W;
+            if (!(ndcx > -1.05 && ndcx < 1.05 && ndcy > -1.05 && ndcy < 1.05
+                && clip.Z / clip.W > -1.0 && clip.Z / clip.W < 1.0))
+                return false;
+            x = (ndcx * 0.5 + 0.5) * ActualWidth;
+            y = (0.5 - ndcy * 0.5) * ActualHeight;
+            return true;
+        }
+
+        /// <summary>
+        /// 3.8.0.2：贴线的标签（米数、桥架/线管整趟、软管）——按线段在屏幕上的
+        /// 投影方向排字，固定放在线旁：米数和软管在线的上方一侧，桥架/线管在下方
+        /// 一侧（同一段线上下各一块，不打架）。读向始终从左到右；线在屏幕上接近
+        /// 竖直时按 CAD 习惯从下往上读、放在线的左侧。正对着线看（投影成一个点）
+        /// 时按竖直处理。不参与防重叠（视角怎么转，它只跟着自己的线走）；唯一的
+        /// 例外是首选侧撞上了已经贴线的标签（比如软管和末段在屏幕上共线）——
+        /// 这时翻到线的另一侧，仍然贴在这条线上。
+        /// </summary>
+        private bool PlaceAlongLine(LabelEntry entry, List<LabelBox> linePlaced)
+        {
+            QuickLine3dSceneLabel scene = entry.Scene;
+            if (!TryProject(scene.X, scene.Y, scene.Z,
+                    out double x, out double y)) return false;
+            double dx = 0.0;
+            double dy = -1.0;
+            if (TryProject(scene.X + scene.DirectionX, scene.Y + scene.DirectionY,
+                    scene.Z + scene.DirectionZ, out double px, out double py))
+            {
+                double vx = px - x;
+                double vy = py - y;
+                double length = Math.Sqrt(vx * vx + vy * vy);
+                if (length > 1e-6)
+                {
+                    dx = vx / length;
+                    dy = vy / length;
+                }
+            }
+            if (Math.Abs(dx) <= 0.08)
+            {
+                dx = 0.0;
+                dy = -1.0;
+            }
+            else if (dx < 0.0)
+            {
+                dx = -dx;
+                dy = -dy;
+            }
+            double angle = Math.Atan2(dy, dx) * 180.0 / Math.PI;
+            // 法向取屏幕上方一侧 (dy, −dx)；桥架/线管首选下方一侧。
+            double nx = dy;
+            double ny = -dx;
+            string kind = scene.Kind ?? string.Empty;
+            if (kind == "tray" || kind == "conduit")
+            {
+                nx = -nx;
+                ny = -ny;
+            }
+            FrameworkElement element = entry.Element;
+            double halfWidth = element.DesiredSize.Width / 2.0;
+            double halfHeight = element.DesiredSize.Height / 2.0;
+            double gap = halfHeight + LineLabelGapPixels;
+            if (!(element.RenderTransform is TransformGroup group)
+                || group.Children.Count < 2) return false;
+            var rotate = group.Children[0] as RotateTransform;
+            var translate = group.Children[1] as TranslateTransform;
+            if (translate == null || rotate == null) return false;
+            double centerX = x + nx * gap;
+            double centerY = y + ny * gap;
+            LabelBox preferred = new LabelBox(centerX, centerY, halfWidth,
+                halfHeight, angle);
+            double overlap = OverlapWithLineBoxes(preferred, linePlaced);
+            if (overlap > 0.0)
+            {
+                LabelBox flipped = new LabelBox(x - nx * gap, y - ny * gap,
+                    halfWidth, halfHeight, angle);
+                if (OverlapWithLineBoxes(flipped, linePlaced) < overlap)
+                {
+                    centerX = x - nx * gap;
+                    centerY = y - ny * gap;
+                    preferred = flipped;
+                }
+            }
+            translate.X = centerX - halfWidth;
+            translate.Y = centerY - halfHeight;
+            rotate.Angle = angle;
+            entry.LineAngle = angle;
+            entry.LineAnchor = new Point(x, y);
+            entry.LineCenter = new Point(centerX, centerY);
+            // 登记占位：贴线的标签是固定的，其它牌子来躲它。
+            linePlaced.Add(preferred);
+            return true;
+        }
+
+        /// <summary>
+        /// 一块贴线标签与已贴线标签的重叠量：真撞上才算（按旋转后的真实形状），
+        /// 数值取两者外接框的交集面积，只用来比较哪边撞得少。没撞上是 0。
+        /// </summary>
+        private static double OverlapWithLineBoxes(LabelBox candidate,
+            List<LabelBox> placed)
+        {
+            double area = 0.0;
+            foreach (LabelBox other in placed)
+            {
+                if (!candidate.Overlaps(other)) continue;
+                Rect a = candidate.Bounds;
+                Rect b = other.Bounds;
+                double width = Math.Min(a.Right, b.Right) - Math.Max(a.Left, b.Left);
+                double height = Math.Min(a.Bottom, b.Bottom) - Math.Max(a.Top, b.Top);
+                if (width > 0.0 && height > 0.0) area += width * height;
+            }
+            return area;
+        }
+
+        /// <summary>
+        /// 3.8.0.2：测试用——按文字取一块贴线标签在线旁的落位：anchor 是线段
+        /// 中点在叠加层上的位置，center 是牌子中心，angle 是排字角度（度）。
+        /// </summary>
+        internal bool TryGetLineLabel(string text, out Point anchor,
+            out Point center, out double angle)
+        {
+            anchor = new Point();
+            center = new Point();
+            angle = 0.0;
+            foreach (LabelEntry entry in _activeLabels)
+            {
+                if (!entry.Scene.HasDirection || entry.Scene.Text != text
+                    || entry.LineCenter == null) continue;
+                anchor = entry.LineAnchor.Value;
+                center = entry.LineCenter.Value;
+                angle = entry.LineAngle.Value;
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>贴线标签离线的空隙（像素，另加半个牌子高）。</summary>
+        private const double LineLabelGapPixels = 4.0;
+
         private static int CompareLabelPriority(LabelEntry left, LabelEntry right)
         {
             return SortPriority(left).CompareTo(SortPriority(right));
         }
 
-        /// <summary>防重叠落位（同网页：五个竖向偏移候选，全撞则隐藏）。</summary>
+        /// <summary>
+        /// 防重叠落位：逐个候选偏移试到第一个不撞的为止。米数牌子候选最多
+        /// （含斜向），全都撞时退到撞得最少的那个位置照常显示——米数宁可不齐，
+        /// 不能不见。桥架/线管/软管/上游柜/楼层/两端的牌子同理（3.8.0.2）；
+        /// 轴号边标和 U13D 的普通标签全撞则隐藏。
+        /// </summary>
         private bool PlaceWithoutOverlap(LabelEntry entry, double x, double y,
-            out double verticalOffset)
+            out double offsetX, out double offsetY)
         {
-            verticalOffset = 0.0;
+            offsetX = 0.0;
+            offsetY = 0.0;
             double labelWidth = entry.Element.DesiredSize.Width;
             double labelHeight = entry.Element.DesiredSize.Height;
-            foreach (double offset in entry.Scene.Kind == "axis"
-                ? FixedLabelOffset : LabelCollisionOffsets)
+            double bestOverlap = double.PositiveInfinity;
+            double bestX = 0.0;
+            double bestY = 0.0;
+            string kind = entry.Scene.Kind ?? string.Empty;
+            bool millimetre = kind == "mm";
+            bool axis = kind == "axis";
+            // 牌子（轴号边标除外）挤不下也照常显示。
+            bool chip = ChipKinds.Contains(kind) && kind != "axisEdge";
+            // 两端的牌子先抬到端点标记的上方，不压在端点和线头上。
+            bool endpoint = kind == "directionUp" || kind == "directionDown";
+            Point[] chipOffsets = endpoint ? EndpointLabelOffsets
+                : kind == "cabinet" ? CabinetLabelOffsets : ChipLabelOffsets;
+            for (int index = 0; ; index++)
             {
-                var candidate = new Rect(
-                    x - labelWidth / 2.0 - 3,
-                    y + offset - labelHeight / 2.0 - 3,
-                    labelWidth + 6, labelHeight + 6);
-                bool overlaps = false;
-                foreach (Rect other in _occupied)
+                double dx;
+                double dy;
+                if (millimetre)
                 {
-                    if (candidate.Left < other.Right && candidate.Right > other.Left
-                        && candidate.Top < other.Bottom
-                        && candidate.Bottom > other.Top)
-                    {
-                        overlaps = true;
-                        break;
-                    }
+                    if (index >= MillimetreLabelOffsets.Length) break;
+                    dx = MillimetreLabelOffsets[index].X;
+                    dy = MillimetreLabelOffsets[index].Y;
                 }
-                if (overlaps) continue;
-                _occupied.Add(candidate);
-                verticalOffset = offset;
+                else if (chip)
+                {
+                    if (index >= chipOffsets.Length) break;
+                    dx = chipOffsets[index].X;
+                    dy = chipOffsets[index].Y;
+                }
+                else
+                {
+                    double[] offsets = axis ? FixedLabelOffset : LabelCollisionOffsets;
+                    if (index >= offsets.Length) break;
+                    dx = 0.0;
+                    dy = offsets[index];
+                }
+                var candidate = new Rect(
+                    x + dx - labelWidth / 2.0 - 3,
+                    y + dy - labelHeight / 2.0 - 3,
+                    labelWidth + 6, labelHeight + 6);
+                double overlap = OverlapArea(candidate);
+                if (overlap <= 0.0)
+                {
+                    _occupied.Add(candidate);
+                    offsetX = dx;
+                    offsetY = dy;
+                    return true;
+                }
+                if ((millimetre || chip) && overlap < bestOverlap)
+                {
+                    bestOverlap = overlap;
+                    bestX = dx;
+                    bestY = dy;
+                }
+            }
+            if ((millimetre || chip) && bestOverlap < double.PositiveInfinity)
+            {
+                // 全撞：占位不登记（不挤掉后面的牌子），落在撞得最少的位置。
+                offsetX = bestX;
+                offsetY = bestY;
                 return true;
             }
             return false;
+        }
+
+        private double OverlapArea(Rect candidate)
+            => OverlapWith(candidate, _occupied)
+                + OverlapWithLineBoxes(LabelBox.FromRect(candidate), _lineBoxes);
+
+        private static double OverlapWith(Rect candidate, IEnumerable<Rect> others)
+        {
+            double area = 0.0;
+            foreach (Rect other in others)
+            {
+                double width = Math.Min(candidate.Right, other.Right)
+                    - Math.Max(candidate.Left, other.Left);
+                double height = Math.Min(candidate.Bottom, other.Bottom)
+                    - Math.Max(candidate.Top, other.Top);
+                if (width > 0.0 && height > 0.0) area += width * height;
+            }
+            return area;
+        }
+
+        /// <summary>
+        /// 3.8.0.2：贴线标签的占位形状——绕中心转过的矩形（牌子本来就沿线排字）。
+        /// 判碰撞按真实形状（把对方的角点转到自己的坐标里看在不在内部），不用
+        /// 轴对齐外接框：斜着的长牌子外接框比本身大一截，会把旁边的牌子挤跑。
+        /// </summary>
+        internal sealed class LabelBox
+        {
+            private readonly double _cosine;
+            private readonly double _sine;
+
+            internal LabelBox(double centerX, double centerY, double halfWidth,
+                double halfHeight, double angleDegrees)
+            {
+                CenterX = centerX;
+                CenterY = centerY;
+                HalfWidth = halfWidth + 3.0;
+                HalfHeight = halfHeight + 3.0;
+                double radians = angleDegrees * Math.PI / 180.0;
+                _cosine = Math.Cos(radians);
+                _sine = Math.Sin(radians);
+                double boundHalfWidth = Math.Abs(HalfWidth * _cosine)
+                    + Math.Abs(HalfHeight * _sine);
+                double boundHalfHeight = Math.Abs(HalfWidth * _sine)
+                    + Math.Abs(HalfHeight * _cosine);
+                Bounds = new Rect(centerX - boundHalfWidth, centerY - boundHalfHeight,
+                    boundHalfWidth * 2.0, boundHalfHeight * 2.0);
+            }
+
+            internal double CenterX { get; }
+            internal double CenterY { get; }
+            internal double HalfWidth { get; }
+            internal double HalfHeight { get; }
+            /// <summary>轴对齐外接框（粗筛/比较用）。</summary>
+            internal Rect Bounds { get; }
+
+            internal static LabelBox FromRect(Rect rect)
+                => new LabelBox(rect.X + rect.Width / 2.0,
+                    rect.Y + rect.Height / 2.0, rect.Width / 2.0,
+                    rect.Height / 2.0, 0.0);
+
+            /// <summary>两个转过的矩形是否相交（任一方的角点落在另一方内部）。</summary>
+            internal bool Overlaps(LabelBox other)
+            {
+                Rect a = Bounds;
+                Rect b = other.Bounds;
+                if (a.Left > b.Right || a.Right < b.Left
+                    || a.Top > b.Bottom || a.Bottom < b.Top) return false;
+                return ContainsAnyCornerOf(other) || other.ContainsAnyCornerOf(this);
+            }
+
+            private bool ContainsAnyCornerOf(LabelBox other)
+            {
+                for (int sideX = -1; sideX <= 1; sideX += 2)
+                    for (int sideY = -1; sideY <= 1; sideY += 2)
+                    {
+                        double offsetX = sideX * other.HalfWidth * other._cosine
+                            - sideY * other.HalfHeight * other._sine;
+                        double offsetY = sideX * other.HalfWidth * other._sine
+                            + sideY * other.HalfHeight * other._cosine;
+                        double deltaX = other.CenterX + offsetX - CenterX;
+                        double deltaY = other.CenterY + offsetY - CenterY;
+                        double localX = deltaX * _cosine + deltaY * _sine;
+                        double localY = -deltaX * _sine + deltaY * _cosine;
+                        // 留 1 px 容差：等高的两块牌子并排时角点恰好落在对方边界上，
+                        // 浮点误差会让「在内部」时真时假——贴边也算撞上。
+                        if (Math.Abs(localX) <= HalfWidth + 1.0
+                            && Math.Abs(localY) <= HalfHeight + 1.0) return true;
+                    }
+                return false;
+            }
         }
 
         // ---- 投影矩阵（与 WPF 相机同口径，专供标签落位） -------------------------
@@ -1127,7 +1576,12 @@ namespace UNCAD.UI
             }
 
             internal QuickLine3dSceneLabel Scene { get; }
-            internal TextBlock Element { get; set; }
+            internal FrameworkElement Element { get; set; }
+            /// <summary>3.8.0.2：贴线标签当前的排字角度（度）；非贴线标签为 null。</summary>
+            internal double? LineAngle { get; set; }
+            /// <summary>3.8.0.2：贴线标签的锚点（线段中点）与牌子中心（叠加层像素）。</summary>
+            internal Point? LineAnchor { get; set; }
+            internal Point? LineCenter { get; set; }
         }
 
     }

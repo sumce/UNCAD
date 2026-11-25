@@ -47,6 +47,60 @@ namespace UNCAD.Core.QuickLine
     /// </summary>
     public static class QuickLineLabelPlacementPlanner
     {
+        /// <summary>只靠位置匹配时的角度差上限（用户口径：差 5° 是正常的）。</summary>
+        public const double PositionMatchAngleToleranceRadians = 10.0 * Math.PI / 180.0;
+        /// <summary>只靠位置匹配时的离线上限（字高的倍数）。</summary>
+        public const double PositionMatchHeightFactor = 4.0;
+        /// <summary>只靠位置匹配时的离线下限（图形单位）。</summary>
+        public const double PositionMatchMinimumDistance = 300.0;
+
+        /// <summary>
+        /// D-059（U1UL）：一个没有关联元数据的毫米标是不是贴在这条线段旁——沿线
+        /// 范围之内（两端各让 2%）、离线不超过 max(4 倍字高, 300)、与线段夹角
+        /// 10° 以内。用户会沿线挪毫米标、换侧、角度差几度，这些都不影响认领。
+        /// </summary>
+        public static bool SitsBesideLine(double anchorX, double anchorY,
+            double height, double rotation, QuickLinePoint lineStart,
+            QuickLinePoint lineEnd)
+        {
+            if (lineStart == null) throw new ArgumentNullException(nameof(lineStart));
+            if (lineEnd == null) throw new ArgumentNullException(nameof(lineEnd));
+            double dx = lineEnd.X - lineStart.X;
+            double dy = lineEnd.Y - lineStart.Y;
+            double lengthSquared = dx * dx + dy * dy;
+            if (lengthSquared <= 1e-18) return false;
+            double length = Math.Sqrt(lengthSquared);
+            double offsetX = anchorX - lineStart.X;
+            double offsetY = anchorY - lineStart.Y;
+            double parameter = (offsetX * dx + offsetY * dy) / lengthSquared;
+            if (parameter < -0.02 || parameter > 1.02) return false;
+            double perpendicular = Math.Abs(offsetX * dy - offsetY * dx) / length;
+            if (perpendicular > Math.Max(height * PositionMatchHeightFactor,
+                PositionMatchMinimumDistance)) return false;
+            return IsAngleWithinTolerance(Math.Atan2(dy, dx), rotation,
+                PositionMatchAngleToleranceRadians);
+        }
+
+        /// <summary>无方向线段的夹角判定（与 U1LX 的相邻标口径一致）。</summary>
+        private static bool IsAngleWithinTolerance(double lineAngle, double labelAngle,
+            double toleranceRadians)
+        {
+            if (double.IsNaN(lineAngle) || double.IsInfinity(lineAngle)
+                || double.IsNaN(labelAngle) || double.IsInfinity(labelAngle))
+                return false;
+            double difference = Math.Abs(NormalizeHalfTurn(lineAngle)
+                - NormalizeHalfTurn(labelAngle));
+            difference = Math.Min(difference, Math.PI - difference);
+            return difference <= toleranceRadians;
+        }
+
+        private static double NormalizeHalfTurn(double angle)
+        {
+            double normalized = angle % Math.PI;
+            if (normalized < 0.0) normalized += Math.PI;
+            return normalized;
+        }
+
         /// <summary>线段正向阅读角（弧度，(-90°, 90°]），与 GeoMath.ReadableAngle 同口径。</summary>
         public static double ReadableAngle(QuickLinePoint lineStart, QuickLinePoint lineEnd)
         {

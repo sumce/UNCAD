@@ -1,0 +1,145 @@
+/* 3.8.0.5：U1U 确认窗 3D 预览页样式（深色、中文交给 Chromium 排版）。
+   页面是哑渲染器：几何、标签锚点、文字全部来自宿主信封（PascalCase）。 */
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0d131a;
+  color: #c7d3df;
+  font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#canvasHost,
+#labelLayer {
+  position: absolute;
+  inset: 0;
+}
+
+#labelLayer {
+  pointer-events: none;
+}
+
+.scene-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transform-origin: 50% 50%;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.15;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #e6edf5;
+  background: rgba(13, 19, 26, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  will-change: left, top, transform;
+}
+
+.scene-label.label-mm {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.scene-label.label-run {
+  color: #ffb4a8;
+}
+
+.scene-label.label-grid {
+  color: #9fb0c1;
+  background: transparent;
+  border: none;
+  padding: 0 2px;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
+
+.scene-label.label-tick,
+.scene-label.label-floor {
+  color: #aab6c2;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+}
+
+.scene-label.label-pin,
+.scene-label.label-direction {
+  color: #f2c94c;
+  font-weight: 600;
+}
+
+.scene-label.label-cabinet {
+  color: #e6edf5;
+}
+
+#actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+#actions button {
+  font: inherit;
+  font-size: 12px;
+  color: #c7d3df;
+  background: #161d26;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+#actions button:hover {
+  background: #1e2833;
+}
+
+#info {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: min(760px, calc(100% - 16px));
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(13, 19, 26, 0.70);
+  pointer-events: none;
+}
+
+#info div {
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+#issues {
+  color: #f2c94c;
+}
+
+#issues:empty,
+#summary:empty,
+#legend:empty {
+  display: none;
+}
+
+#summary,
+#legend {
+  color: #8a96a3;
+}
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #8a96a3;
+  white-space: pre-wrap;
+}

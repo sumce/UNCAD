@@ -87,6 +87,36 @@ namespace UNCAD.Core.QuickLine
     }
 
     /// <summary>
+    /// D-059：一趟桥架/线管——一个标注、一个整趟总长、它盖住的若干宿主电缆段。
+    /// 标注上的长度是这几段电缆合起来的长度，不是每段各有这么长。
+    /// </summary>
+    public sealed class QuickLineOrbitPreviewAnnotationRun
+    {
+        public QuickLineOrbitPreviewAnnotationRun(RouteAnnotationTextKind kind,
+            string label, double? lengthMillimetres, double? trayWidthMillimetres,
+            IReadOnlyList<string> hostSegmentIds, string recoveredBy)
+        {
+            Kind = kind;
+            Label = label ?? string.Empty;
+            LengthMillimetres = lengthMillimetres;
+            TrayWidthMillimetres = trayWidthMillimetres;
+            HostSegmentIds = hostSegmentIds ?? Array.Empty<string>();
+            RecoveredBy = recoveredBy ?? string.Empty;
+        }
+
+        public RouteAnnotationTextKind Kind { get; }
+        /// <summary>标注的首行（型号或规格）。</summary>
+        public string Label { get; }
+        /// <summary>整趟长度（mm）；标注里读不出长度时为空。</summary>
+        public double? LengthMillimetres { get; }
+        public double? TrayWidthMillimetres { get; }
+        /// <summary>这一趟盖住的电缆线段 id（按路线顺序）。</summary>
+        public IReadOnlyList<string> HostSegmentIds { get; }
+        /// <summary>宿主怎么找到的：元数据 / 红线就近 / 文字就近。</summary>
+        public string RecoveredBy { get; }
+    }
+
+    /// <summary>
     /// U1U 确认窗左侧 3D 预览的场景模型——由 QuickLineIsometricSceneBuilder
     /// .BuildAll（带毫米标）重建后整体**地面归零**（所有节点 Z 减去最小 Z，
     /// 「最低的那条线段的端点高度为 0」），附上游/下游轴位摘要文字与轴位原文。
@@ -106,7 +136,10 @@ namespace UNCAD.Core.QuickLine
             IReadOnlyList<string> directionDiagnostics = null,
             QuickLineOrbitPreviewHose hose = null,
             string recognitionSummary = null,
-            IReadOnlyList<string> routeIssues = null)
+            IReadOnlyList<string> routeIssues = null,
+            PreviewFloorPlan floors = null,
+            PreviewCabinetKind cabinetKind = PreviewCabinetKind.None,
+            IReadOnlyList<QuickLineOrbitPreviewAnnotationRun> annotationRuns = null)
         {
             Segments = segments ?? Array.Empty<QuickLineOrbitPreviewSegment>();
             AxisSummary = axisSummary ?? string.Empty;
@@ -123,6 +156,9 @@ namespace UNCAD.Core.QuickLine
             Hose = hose;
             RecognitionSummary = recognitionSummary ?? string.Empty;
             RouteIssues = routeIssues ?? Array.Empty<string>();
+            Floors = floors;
+            CabinetKind = cabinetKind;
+            AnnotationRuns = annotationRuns ?? Array.Empty<QuickLineOrbitPreviewAnnotationRun>();
         }
 
         public IReadOnlyList<QuickLineOrbitPreviewSegment> Segments { get; }
@@ -144,9 +180,17 @@ namespace UNCAD.Core.QuickLine
         public string RecognitionSummary { get; }
         /// <summary>D-058：识别出的问题（无毫米标的线段、被容差接上的断口、非等测方向等）。</summary>
         public IReadOnlyList<string> RouteIssues { get; }
+        /// <summary>D-059：要画的楼层平面（台账上下游楼层）；null = 一层都定不出来。</summary>
+        public PreviewFloorPlan Floors { get; }
+        /// <summary>D-059：上游柜的类型（I-Line 盘落地 / 插座盘离地 1 m / 母线插接口）。</summary>
+        public PreviewCabinetKind CabinetKind { get; }
+        /// <summary>D-059：桥架/线管整趟清单（每趟一个标注、一个总长、若干宿主电缆段）。</summary>
+        public IReadOnlyList<QuickLineOrbitPreviewAnnotationRun> AnnotationRuns { get; }
 
         /// <summary>
-        /// 由等测场景构建预览模型：整体地面归零（minZ→0），段端点取场景节点
+        /// 由等测场景构建预览模型：先整体地面归零（minZ→0），再按上游柜的类型
+        /// 整体抬高（3.8.0.2：插座盘的线路直接抬高 1 m，见
+        /// <see cref="PreviewCabinet.RouteLiftMillimetres"/>）。段端点取场景节点
         /// 坐标，毫米值取真实距离（DistanceMillimetres）。scene 为 null 或没有
         /// 线段时返回 null（调用方隐藏预览区）。labelTexts/channels 按段句柄
         /// 带入毫米标原文与桥架/线管通道归属（缺省无标签无通道）。
@@ -162,7 +206,10 @@ namespace UNCAD.Core.QuickLine
             IReadOnlyList<string> directionDiagnostics = null,
             QuickLineOrbitPreviewHose hose = null,
             string recognitionSummary = null,
-            IReadOnlyList<string> routeIssues = null)
+            IReadOnlyList<string> routeIssues = null,
+            PreviewFloorPlan floors = null,
+            PreviewCabinetKind cabinetKind = PreviewCabinetKind.None,
+            IReadOnlyList<QuickLineOrbitPreviewAnnotationRun> annotationRuns = null)
         {
             if (scene == null || scene.Segments.Count == 0) return null;
             double minZ = scene.Nodes.Count == 0
@@ -178,9 +225,9 @@ namespace UNCAD.Core.QuickLine
             foreach (QuickLineIsometricSegment segment in scene.Segments)
             {
                 if (!positions.TryGetValue(segment.StartNodeId,
-                        out QuickLineSpatialPoint start)
+                    out QuickLineSpatialPoint start)
                     || !positions.TryGetValue(segment.EndNodeId,
-                        out QuickLineSpatialPoint end)) continue;
+                    out QuickLineSpatialPoint end)) continue;
                 string label = null;
                 if (labelTexts != null
                     && labelTexts.TryGetValue(segment.Id, out string foundLabel))
@@ -192,13 +239,38 @@ namespace UNCAD.Core.QuickLine
                     segment.Completed, label, channel));
             }
             if (segments.Count == 0) return null;
+            QuickLineSpatialPoint? upstream = NormalizeEndpoint(
+                upstreamEndpoint, minZ);
+            QuickLineSpatialPoint? downstream = NormalizeEndpoint(
+                downstreamEndpoint, minZ);
+            // 3.8.0.2：图框里画不出地面——插座盘的出线在楼层地面 + 1 m，整条
+            // 线路直接抬高 1 m（盘的方块只是占位）。
+            double lift = PreviewCabinet.RouteLiftMillimetres(cabinetKind);
+            if (lift != 0.0)
+            {
+                segments = segments.Select(segment => new QuickLineOrbitPreviewSegment(
+                    segment.Id, Lift(segment.Start, lift), Lift(segment.End, lift),
+                    segment.Axis, segment.DistanceMillimetres, segment.Completed,
+                    segment.LabelText, segment.Channel)).ToList();
+                upstream = Lift(upstream, lift);
+                downstream = Lift(downstream, lift);
+            }
             return new QuickLineOrbitPreviewModel(segments, axisSummary,
                 scene.Diagnostics, upstreamAxisLabel, downstreamAxisLabel,
-                NormalizeEndpoint(upstreamEndpoint, minZ),
-                NormalizeEndpoint(downstreamEndpoint, minZ),
+                upstream, downstream,
                 upstreamType, directionResolved, directionDiagnostics,
-                hose, recognitionSummary, routeIssues);
+                hose, recognitionSummary, routeIssues, floors, cabinetKind, annotationRuns);
         }
+
+        private static QuickLineSpatialPoint Lift(QuickLineSpatialPoint point,
+            double lift)
+            => new QuickLineSpatialPoint(point.X, point.Y, point.Z + lift);
+
+        private static QuickLineSpatialPoint? Lift(QuickLineSpatialPoint? point,
+            double lift)
+            => point.HasValue
+                ? Lift(point.Value, lift)
+                : (QuickLineSpatialPoint?)null;
 
         private static QuickLineSpatialPoint? NormalizeEndpoint(
             QuickLineSpatialPoint? point, double minZ)

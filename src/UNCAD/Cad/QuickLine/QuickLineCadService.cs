@@ -48,6 +48,20 @@ namespace UNCAD.Cad.QuickLine
         /// neighbouring frames cannot claim each other's labels.</summary>
         public IReadOnlyList<FrameRectangle> FrameBoundaries { get; set; }
 
+        /// <summary>
+        /// 3.8.0.1：把没有对应实线的线性标注（DIMALIGNED/DIMLINEAR）当成一段
+        /// 电缆路由（两个尺寸界线原点之间），让标注文字能归属到它。填充/U1U
+        /// 扫描打开；U1LX 默认关闭，不改变画线工具的行为。
+        /// </summary>
+        public bool IncludeDimensionSegments { get; set; }
+
+        /// <summary>
+        /// 3.8.0.2：带拐角的多段线（每一段都落在等测轴或正交轴上）按段拆开，各段
+        /// 各有自己的毫米标。填充/U1U 扫描打开；U1LX 默认关闭。拆出的段用
+        /// <see cref="QuickLineCadSegment.Key"/>（句柄/序号）当唯一键。
+        /// </summary>
+        public bool SplitBentPolylines { get; set; }
+
         public double EndpointTolerance { get; set; } = 1.0;
     }
 
@@ -62,6 +76,53 @@ namespace UNCAD.Cad.QuickLine
 
         public ObjectId LabelId { get; }
         public double Millimetres { get; }
+    }
+
+    /// <summary>
+    /// D-059：一个认得出是毫米标、却没有归属到任何线段的文字（「每个毫米标必须
+    /// 有自己的归属线段，没有就报警」）。值拷贝，事务关闭后仍可用。
+    /// </summary>
+    public sealed class QuickLineUnboundLabel
+    {
+        internal QuickLineUnboundLabel(ObjectId entityId, string text, double millimetres,
+            Point3d anchor, double rotation, double height, string sourceKind,
+            bool associationDangling)
+        {
+            EntityId = entityId;
+            Text = text ?? string.Empty;
+            Millimetres = millimetres;
+            Anchor = anchor;
+            Rotation = rotation;
+            Height = height;
+            SourceKind = sourceKind ?? string.Empty;
+            AssociationDangling = associationDangling;
+        }
+
+        public ObjectId EntityId { get; }
+        public string Handle => EntityId.Handle.ToString();
+        public string Text { get; }
+        public double Millimetres { get; }
+        /// <summary>定位点（DBText 对齐点 / MText 位置）。</summary>
+        public Point3d Anchor { get; }
+        public double Rotation { get; }
+        public double Height { get; }
+        public string SourceKind { get; }
+        /// <summary>带着关联元数据，但关联指向的线段不在本次扫描结果里（源线已删除/合并）。</summary>
+        public bool AssociationDangling { get; }
+    }
+
+    /// <summary>一次扫描的完整结果：线段（含各自归属的毫米标）+ 没有归属的毫米标。</summary>
+    public sealed class QuickLineScanResult
+    {
+        internal QuickLineScanResult(IReadOnlyList<QuickLineCadSegment> segments,
+            IReadOnlyList<QuickLineUnboundLabel> unboundLabels)
+        {
+            Segments = segments ?? Array.Empty<QuickLineCadSegment>();
+            UnboundLabels = unboundLabels ?? Array.Empty<QuickLineUnboundLabel>();
+        }
+
+        public IReadOnlyList<QuickLineCadSegment> Segments { get; }
+        public IReadOnlyList<QuickLineUnboundLabel> UnboundLabels { get; }
     }
 
     /// <summary>
@@ -84,6 +145,10 @@ namespace UNCAD.Cad.QuickLine
             => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Line));
         private static Autodesk.AutoCAD.Runtime.RXClass PolylineClass
             => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Polyline));
+        private static Autodesk.AutoCAD.Runtime.RXClass Polyline3dClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Polyline3d));
+        private static Autodesk.AutoCAD.Runtime.RXClass SplineClass
+            => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(Spline));
         private static Autodesk.AutoCAD.Runtime.RXClass DbTextClass
             => Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(DBText));
         private static Autodesk.AutoCAD.Runtime.RXClass MTextClass
@@ -109,6 +174,15 @@ namespace UNCAD.Cad.QuickLine
         /// </summary>
         public static IReadOnlyList<QuickLineCadSegment> Scan(CadContext ctx,
             QuickLineScanOptions options = null)
+            => ScanDetailed(ctx, options).Segments;
+
+        /// <summary>
+        /// D-059：与 <see cref="Scan(CadContext, QuickLineScanOptions)"/> 同一次扫描，
+        /// 另外带回没有归属到任何线段的毫米标（给了 FrameBoundaries 时只报框内的）。
+        /// 线段的归属规则完全不变。
+        /// </summary>
+        public static QuickLineScanResult ScanDetailed(CadContext ctx,
+            QuickLineScanOptions options = null)
         {
             if (ctx == null) throw new ArgumentNullException(nameof(ctx));
             options = options ?? new QuickLineScanOptions();
@@ -116,6 +190,8 @@ namespace UNCAD.Cad.QuickLine
 
             var lines = new List<LineSnapshot>();
             var labels = new List<LabelSnapshot>();
+            // 3.8.0.2：被按段拆开的带拐角多段线的句柄——它们的标注回到几何配对。
+            var splitHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             long scanStarted = Stopwatch.GetTimestamp();
             int order = 0;
             int candidateCount = 0;
@@ -126,7 +202,8 @@ namespace UNCAD.Cad.QuickLine
                 if (space == null)
                 {
                     tr.Commit();
-                    return Array.Empty<QuickLineCadSegment>();
+                    return new QuickLineScanResult(Array.Empty<QuickLineCadSegment>(),
+                        Array.Empty<QuickLineUnboundLabel>());
                 }
 
                 foreach (ObjectId id in space)
@@ -178,33 +255,67 @@ namespace UNCAD.Cad.QuickLine
 
                     // 3.3.0（D-054）：U1R/Xauto 开洞后的线是带 bulge 的开放
                     // LWPOLYLINE——作为一个段返回（起点=首顶点、终点=末顶点，
-                    // 弧段按弦长参与端点连接/交叉检测）。闭合 Polyline 不是
-                    // 电缆路由，跳过；毫米标经既有元数据关联照常取得。
+                    // 弧段按弦长参与端点连接/交叉检测）。闭合 Polyline 默认不是
+                    // 电缆路由；3.8.0.1 例外：所有顶点共线（视觉上就是一根线）
+                    // 时按首尾顶点取一段——旧图框里常见这种画法。
                     var polyline = entity as Polyline;
                     if (polyline != null)
                     {
                         try
                         {
-                            if (!polyline.Closed && polyline.NumberOfVertices >= 2)
+                            if (polyline.NumberOfVertices >= 2)
                             {
-                                Point3d start = polyline.GetPoint3dAt(0);
-                                Point3d end = polyline.GetPoint3dAt(
-                                    polyline.NumberOfVertices - 1);
-                                if (start.DistanceTo(end) > Epsilon)
+                                bool hasBulge = false;
+                                var vertices = new List<Point3d>(
+                                    polyline.NumberOfVertices);
+                                for (int vertex = 0;
+                                    vertex < polyline.NumberOfVertices; vertex++)
                                 {
-                                    bool hasBulge = false;
-                                    var vertices = new List<Point3d>(
-                                        polyline.NumberOfVertices);
-                                    for (int vertex = 0;
-                                        vertex < polyline.NumberOfVertices; vertex++)
+                                    vertices.Add(polyline.GetPoint3dAt(vertex));
+                                    if (Math.Abs(polyline.GetBulgeAt(vertex))
+                                        > Epsilon)
                                     {
-                                        vertices.Add(polyline.GetPoint3dAt(vertex));
-                                        if (Math.Abs(polyline.GetBulgeAt(vertex))
-                                            > Epsilon)
-                                        {
-                                            hasBulge = true;
-                                        }
+                                        hasBulge = true;
                                     }
+                                }
+                                Point3d start;
+                                Point3d end;
+                                if (!polyline.Closed)
+                                {
+                                    start = vertices[0];
+                                    end = vertices[vertices.Count - 1];
+                                }
+                                else if (!hasBulge
+                                    && TryGetCollinearChord(vertices,
+                                        out start, out end))
+                                {
+                                    // 闭合但退化为一根线：照常作为一段。
+                                }
+                                else
+                                {
+                                    start = end = Point3d.Origin;
+                                }
+                                // 3.8.0.2：带拐角的多段线＝一条画成一笔的路线（斜 3400 /
+                                // 竖 2000 / 平 3000）。每一段都落在等测轴或正交轴上时
+                                // 按段拆开，各段各有自己的毫米标；不拆的话它只是「首点
+                                // 到末点」的一条斜线，只挂得上一个标注，3D 里还会因为
+                                // 方向不是等测轴被整根丢掉。只在填充/U1U 的扫描里拆
+                                //（U1LX/Xauto/U1R 口径不变）；开洞绕行的多段线（腿不在
+                                // 轴上）不拆。
+                                List<Point3d[]> legs = null;
+                                if (options.SplitBentPolylines && !polyline.Closed
+                                    && !hasBulge
+                                    && TrySplitIntoRouteLegs(vertices, out legs))
+                                {
+                                    string polylineLayer = ReadLayer(polyline);
+                                    for (int leg = 0; leg < legs.Count; leg++)
+                                        lines.Add(new LineSnapshot(id, legs[leg][0],
+                                            legs[leg][1], entityOrder, polylineLayer,
+                                            true, false, legs[leg], false, leg + 1));
+                                    splitHandles.Add(ReadHandle(id));
+                                }
+                                else if (start.DistanceTo(end) > Epsilon)
+                                {
                                     lines.Add(new LineSnapshot(id, start, end,
                                         entityOrder, ReadLayer(polyline), true,
                                         hasBulge, vertices));
@@ -214,6 +325,64 @@ namespace UNCAD.Cad.QuickLine
                         catch
                         {
                             // Damaged polyline geometry is isolated to this entity.
+                        }
+                        continue;
+                    }
+
+                    // 3.8.0.1：三维多段线 / 样条曲线也可能是电缆路由（旧图框、
+                    // 导入图常见）。开口的取首尾点；闭合的三维多段线只在所有
+                    // 顶点共线时收（否则是轮廓，不是路由）。
+                    var polyline3d = entity as Polyline3d;
+                    if (polyline3d != null)
+                    {
+                        try
+                        {
+                            var vertices = new List<Point3d>();
+                            foreach (ObjectId vertexId in polyline3d)
+                            {
+                                var vertex = tr.GetObject(vertexId,
+                                    OpenMode.ForRead, false) as PolylineVertex3d;
+                                if (vertex != null) vertices.Add(vertex.Position);
+                            }
+                            if (vertices.Count >= 2)
+                            {
+                                Point3d start = vertices[0];
+                                Point3d end = vertices[vertices.Count - 1];
+                                if (polyline3d.Closed
+                                    && !TryGetCollinearChord(vertices,
+                                        out start, out end))
+                                    start = end = Point3d.Origin;
+                                if (start.DistanceTo(end) > Epsilon)
+                                    lines.Add(new LineSnapshot(id, start, end,
+                                        entityOrder, ReadLayer(polyline3d), true,
+                                        false, vertices));
+                            }
+                        }
+                        catch
+                        {
+                            // 损坏的三维多段线只跳过它自己。
+                        }
+                        continue;
+                    }
+
+                    var spline = entity as Spline;
+                    if (spline != null)
+                    {
+                        try
+                        {
+                            if (!spline.Closed)
+                            {
+                                Point3d start = spline.StartPoint;
+                                Point3d end = spline.EndPoint;
+                                if (start.DistanceTo(end) > Epsilon)
+                                    lines.Add(new LineSnapshot(id, start, end,
+                                        entityOrder, ReadLayer(spline), false,
+                                        false, new[] { start, end }));
+                            }
+                        }
+                        catch
+                        {
+                            // 样条曲线几何读不出来只跳过它自己。
                         }
                         continue;
                     }
@@ -261,7 +430,9 @@ namespace UNCAD.Cad.QuickLine
             if (!options.RootLineId.IsNull)
                 lines = ConnectedComponent(lines, options.RootLineId,
                     options.EndpointTolerance);
-            if (lines.Count == 0) return Array.Empty<QuickLineCadSegment>();
+            if (lines.Count == 0)
+                return new QuickLineScanResult(Array.Empty<QuickLineCadSegment>(),
+                    Array.Empty<QuickLineUnboundLabel>());
 
             // A native DIMENSION describes the measured geometry itself.  Keep
             // it separate from ordinary text labels so a dimension can enrich
@@ -271,16 +442,43 @@ namespace UNCAD.Cad.QuickLine
             var textLabels = labels.Where(item => !item.IsDimension).ToList();
             var dimensionLabels = labels.Where(item => item.IsDimension).ToList();
 
+            // 3.8.0.1：旧图框会用一根线性标注代替短线（两个尺寸界线原点就是
+            // 那段电缆的两端）。没有对应实线时，把尺寸界线之间的那段当成一个
+            // 线段，标注文字才能归属到它；有实线的话仍用实线。
+            if (options.IncludeDimensionSegments)
+            {
+                foreach (LabelSnapshot dimension in dimensionLabels)
+                {
+                    if (!dimension.WitnessStart.HasValue
+                        || !dimension.WitnessEnd.HasValue) continue;
+                    Point3d witnessStart = dimension.WitnessStart.Value;
+                    Point3d witnessEnd = dimension.WitnessEnd.Value;
+                    if (witnessStart.DistanceTo(witnessEnd) <= Epsilon) continue;
+                    // 有明确关联（哪怕关联的线已经删了）就不替它造线段——
+                    // 旧行为保持不变，避免把悬空关联的标注变成一段没有标签的线。
+                    if (!string.IsNullOrEmpty(dimension.AssociatedLineHandle))
+                        continue;
+                    if (lines.Any(line => SameEndpoints(line, witnessStart,
+                        witnessEnd, options.EndpointTolerance))) continue;
+                    lines.Add(new LineSnapshot(dimension.Id, witnessStart,
+                        witnessEnd, dimension.Order, dimension.Layer, false,
+                        false, new[] { witnessStart, witnessEnd }, true));
+                }
+            }
+
             // Claim explicit U1L associations first.  Older drawings do not
             // have metadata, so the deterministic geometry fallback below is
             // still required.
-            var assignedLines = new Dictionary<ObjectId, LabelSnapshot>();
+            // 3.8.0.2：扫描里认线段用「实体 + 多段线拆出的第几段」当身份——带拐角的
+            // 多段线拆出的各段共用一个实体句柄，各自要有自己的毫米标。
+            var assignedLines = new Dictionary<LineKey, LabelSnapshot>();
             var assignedLabels = new HashSet<ObjectId>();
             var linesByHandle = new Dictionary<string, LineSnapshot>(
                 StringComparer.OrdinalIgnoreCase);
             foreach (LineSnapshot line in lines)
             {
-                if (string.IsNullOrEmpty(line.Handle)
+                // 拆出的段不按句柄认领关联：它的标注回到几何配对，各归各段。
+                if (line.Key.Part > 0 || string.IsNullOrEmpty(line.Handle)
                     || linesByHandle.ContainsKey(line.Handle)) continue;
                 linesByHandle.Add(line.Handle, line);
             }
@@ -288,30 +486,45 @@ namespace UNCAD.Cad.QuickLine
                 .Where(item => !string.IsNullOrEmpty(item.AssociatedLineHandle)))
             {
                 if (!linesByHandle.TryGetValue(label.AssociatedLineHandle,
-                        out LineSnapshot line))
+                    out LineSnapshot line))
                     continue;
-                if (assignedLines.ContainsKey(line.Id)
+                if (assignedLines.ContainsKey(line.Key)
                     || assignedLabels.Contains(label.Id)) continue;
-                assignedLines[line.Id] = label;
+                assignedLines[line.Key] = label;
                 assignedLabels.Add(label.Id);
             }
 
             var unresolvedAssociationLabels = new HashSet<ObjectId>(textLabels
                 .Where(item => !string.IsNullOrEmpty(item.AssociatedLineHandle)
-                    && !linesByHandle.ContainsKey(item.AssociatedLineHandle))
+                    && !linesByHandle.ContainsKey(item.AssociatedLineHandle)
+                    // 关联指向被拆开的多段线：线就在，只是分成了几段——去几何配对。
+                    && !splitHandles.Contains(item.AssociatedLineHandle))
                 .Select(item => item.Id));
+            // 3.8.0.2：关联指向的实体已经不存在（句柄 0 或被删除）＝ 这段文字其实
+            // 没有归属。复制图框/标注时 AutoCAD 会把没一起复制的 XData 句柄置 0，
+            // 现场每个图框的「300mm」都是这样：文字就压在线的中点上，却因为
+            // 「带着关联」被排除出几何配对，线和标各报一次（识别不到）。这种
+            // 文字和从来没有元数据的旧图一样回到几何配对；关联还指向活实体的
+            // 照旧不猜（仍是未解析）。
+            HashSet<ObjectId> deadAssociationLabels =
+                unresolvedAssociationLabels.Count == 0
+                    ? new HashSet<ObjectId>()
+                    : FindDeletedAssociationLabels(ctx.Db, textLabels,
+                        linesByHandle);
             HashSet<ObjectId> staleAssociationLabels =
                 options.StaleAssociationMaximumDistance.HasValue
-                    ? FindDeletedAssociationLabels(ctx.Db, textLabels, linesByHandle)
+                    ? new HashSet<ObjectId>(deadAssociationLabels)
                     : new HashSet<ObjectId>();
-            var additionalLabels = new Dictionary<ObjectId, List<LabelSnapshot>>();
+            var additionalLabels = new Dictionary<LineKey, List<LabelSnapshot>>();
             AssociateStaleLabelsWithJoinedPolylines(lines, textLabels,
                 staleAssociationLabels,
                 options.StaleAssociationMaximumDistance,
                 unresolvedAssociationLabels, assignedLines, assignedLabels,
                 additionalLabels);
+            // 关联已死的文字（没被上面的合并线恢复认领的）回到几何配对。
             List<LabelSnapshot> matchableTextLabels = textLabels
-                .Where(item => !unresolvedAssociationLabels.Contains(item.Id))
+                .Where(item => !unresolvedAssociationLabels.Contains(item.Id)
+                    || deadAssociationLabels.Contains(item.Id))
                 .ToList();
 
             // U1L versions before metadata was introduced commonly append a
@@ -320,13 +533,15 @@ namespace UNCAD.Cad.QuickLine
             // runs before the broad geometry pass.  A valid geometric score
             // wins over a merely adjacent line; an immediate neighbour is a
             // last-resort fallback for labels that were moved far away.
-            var linesByOrder = lines.ToDictionary(line => line.Order);
+            // 相邻认领只看整个实体（拆出的段共用创建顺序，不参与）。
+            var linesByOrder = lines.Where(line => line.Key.Part == 0)
+                .ToDictionary(line => line.Order);
             foreach (LabelSnapshot label in matchableTextLabels.OrderBy(item => item.Order))
             {
                 if (assignedLabels.Contains(label.Id)) continue;
                 var localCandidates = new[] { label.Order - 2, label.Order - 1 }
                     .Where(linesByOrder.ContainsKey).Select(orderKey => linesByOrder[orderKey])
-                    .Where(line => !assignedLines.ContainsKey(line.Id)
+                    .Where(line => !assignedLines.ContainsKey(line.Key)
                         && IsLikelyAdjacentLabel(line, label,
                             options.AdjacentLabelAngleToleranceRadians))
                     .Select(line =>
@@ -349,7 +564,7 @@ namespace UNCAD.Cad.QuickLine
                 // from a preceding line that has a real midpoint match.
                 if (!chosen.Scored && localCandidates.Any(item => item.Scored))
                     chosen = localCandidates.First(item => item.Scored);
-                assignedLines[chosen.Line.Id] = label;
+                assignedLines[chosen.Line.Key] = label;
                 assignedLabels.Add(label.Id);
             }
 
@@ -359,7 +574,7 @@ namespace UNCAD.Cad.QuickLine
             // to a different nearby line, then retain the U1L target id while
             // exposing the observed value to the 3D editor.
             var observationLines = lines.Where(line =>
-                    assignedLines.TryGetValue(line.Id, out LabelSnapshot current)
+                    assignedLines.TryGetValue(line.Key, out LabelSnapshot current)
                     && QuickLineMillimeterText.IsPlaceholder(current.Text))
                 .ToList();
             var observationLabels = matchableTextLabels.Where(label =>
@@ -368,11 +583,11 @@ namespace UNCAD.Cad.QuickLine
                 .ToList();
             if (observationLines.Count > 0 && observationLabels.Count > 0)
             {
-                var observations = new Dictionary<ObjectId, LabelSnapshot>();
+                var observations = new Dictionary<LineKey, LabelSnapshot>();
                 var usedObservations = new HashSet<ObjectId>();
                 AssignRemainingLabels(observationLines, observationLabels,
                     options.LabelSearchDistance, observations, usedObservations);
-                foreach (KeyValuePair<ObjectId, LabelSnapshot> item in observations)
+                foreach (KeyValuePair<LineKey, LabelSnapshot> item in observations)
                 {
                     assignedLines[item.Key] = assignedLines[item.Key]
                         .WithObservation(item.Value);
@@ -393,7 +608,7 @@ namespace UNCAD.Cad.QuickLine
             // is copied onto the DBText/MTEXT/attribute snapshot while the
             // writable target id is retained.  This is what makes an ordinary
             // DIMALIGNED/DIMLINEAR annotation visible in U1LX immediately.
-            var assignedDimensions = new Dictionary<ObjectId, LabelSnapshot>();
+            var assignedDimensions = new Dictionary<LineKey, LabelSnapshot>();
             AssignRemainingLabels(lines, dimensionLabels,
                 options.LabelSearchDistance, assignedDimensions,
                 new HashSet<ObjectId>());
@@ -407,8 +622,8 @@ namespace UNCAD.Cad.QuickLine
             var result = new List<QuickLineCadSegment>(lines.Count);
             foreach (LineSnapshot line in lines)
             {
-                assignedLines.TryGetValue(line.Id, out LabelSnapshot label);
-                if (assignedDimensions.TryGetValue(line.Id,
+                assignedLines.TryGetValue(line.Key, out LabelSnapshot label);
+                if (assignedDimensions.TryGetValue(line.Key,
                         out LabelSnapshot dimension))
                 {
                     label = label == null
@@ -422,8 +637,9 @@ namespace UNCAD.Cad.QuickLine
                     label?.Millimetres,
                     label?.HasCompletionMarker ?? false,
                     label?.SourceKind ?? string.Empty,
-                    line.IsPolyline, line.IsBridgePolyline);
-                if (additionalLabels.TryGetValue(line.Id,
+                    line.IsPolyline, line.IsBridgePolyline, line.IsDimension,
+                    line.Key.Part);
+                if (additionalLabels.TryGetValue(line.Key,
                         out List<LabelSnapshot> related))
                     segment.RestoredLabelIds = related.Select(item => item.Id).ToArray();
                 result.Add(segment);
@@ -441,7 +657,22 @@ namespace UNCAD.Cad.QuickLine
                     + " match=" + (scanMilliseconds - readMilliseconds) + "ms"
                     + " segments=" + result.Count);
             }
-            return result;
+
+            // D-059：认得出是毫米标、却没归属到任何线段的文字。观察值（占位标旁
+            // 的实测值）与尺寸标注不算——它们本来就不是线段的归属标。
+            var unbound = new List<QuickLineUnboundLabel>();
+            foreach (LabelSnapshot label in textLabels)
+            {
+                if (assignedLabels.Contains(label.Id)) continue;
+                if (options.FrameBoundaries != null && !options.FrameBoundaries.Any(boundary =>
+                    boundary != null && boundary.Contains(
+                        label.InsertionPoint.X, label.InsertionPoint.Y))) continue;
+                unbound.Add(new QuickLineUnboundLabel(label.Id, label.Text,
+                    label.Millimetres, label.InsertionPoint, label.Rotation,
+                    label.Height, label.SourceKind,
+                    !string.IsNullOrEmpty(label.AssociatedLineHandle)));
+            }
+            return new QuickLineScanResult(result, unbound);
         }
 
         /// <summary>
@@ -457,6 +688,8 @@ namespace UNCAD.Cad.QuickLine
                 Autodesk.AutoCAD.Runtime.RXClass cls = id.ObjectClass;
                 return cls == LineClass
                     || cls == PolylineClass
+                    || cls == Polyline3dClass
+                    || cls == SplineClass
                     || cls == DbTextClass
                     || cls.IsDerivedFrom(DbTextClass)   // includes AttributeReference
                     || cls == MTextClass
@@ -519,13 +752,15 @@ namespace UNCAD.Cad.QuickLine
             ISet<ObjectId> staleAssociationLabels,
             double? maximumDistance,
             ISet<ObjectId> unresolvedAssociationLabels,
-            IDictionary<ObjectId, LabelSnapshot> assignedLines,
+            IDictionary<LineKey, LabelSnapshot> assignedLines,
             ISet<ObjectId> assignedLabels,
-            IDictionary<ObjectId, List<LabelSnapshot>> additionalLabels)
+            IDictionary<LineKey, List<LabelSnapshot>> additionalLabels)
         {
             if (!maximumDistance.HasValue) return;
+            // 只看整个多段线实体（合并线的整条路径）；按段拆开的不在这里恢复。
             List<LineSnapshot> candidates = lines
-                .Where(item => item.IsPolyline && !item.IsBridgePolyline).ToList();
+                .Where(item => item.IsPolyline && !item.IsBridgePolyline
+                    && item.PartIndex == 0).ToList();
             IReadOnlyList<QuickLinePoint>[] paths = candidates.Select(candidate =>
                 (IReadOnlyList<QuickLinePoint>)candidate.Points.Select(point =>
                     new QuickLinePoint(point.X, point.Y)).ToArray()).ToArray();
@@ -540,20 +775,20 @@ namespace UNCAD.Cad.QuickLine
                 if (bestIndex < 0) continue;
                 LineSnapshot best = candidates[bestIndex];
 
-                if (assignedLines.TryGetValue(best.Id, out LabelSnapshot primary))
+                if (assignedLines.TryGetValue(best.Key, out LabelSnapshot primary))
                 {
                     if (primary.Id == label.Id) continue;
-                    if (!additionalLabels.TryGetValue(best.Id,
+                    if (!additionalLabels.TryGetValue(best.Key,
                             out List<LabelSnapshot> related))
                     {
                         related = new List<LabelSnapshot>();
-                        additionalLabels.Add(best.Id, related);
+                        additionalLabels.Add(best.Key, related);
                     }
                     related.Add(label);
                 }
                 else
                 {
-                    assignedLines[best.Id] = label;
+                    assignedLines[best.Key] = label;
                 }
                 assignedLabels.Add(label.Id);
                 unresolvedAssociationLabels.Remove(label.Id);
@@ -584,6 +819,12 @@ namespace UNCAD.Cad.QuickLine
                             CultureInfo.InvariantCulture, out long raw))
                         continue;
                     ObjectId sourceId;
+                    if (raw == 0)
+                    {
+                        // 句柄 0 = AutoCAD 复制时置空的 XData 句柄，必然是死的。
+                        deletedHandles.Add(handle);
+                        continue;
+                    }
                     try
                     {
                         sourceId = database.GetObjectId(false, new Handle(raw), 0);
@@ -1080,6 +1321,13 @@ namespace UNCAD.Cad.QuickLine
         {
             try
             {
+                // 3.8.0.1：桥架/线管的标注文字（「桥架200*100 2500mm」、
+                // 「梯形桥架200Wx100H\P3500mm」等）里的毫米数是这一趟的总长，
+                // 不是电缆毫米标——不能让它绑到红线上，否则红线会被当成电缆。
+                // 3.8.0.2：软管长度文字同理。
+                if (IsHoseText(null, text.TextString)
+                    || RouteAnnotationTextPlanner.Classify(text.TextString)
+                    != RouteAnnotationTextKind.None) return;
                 string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(text);
                 bool parsed = TryParseTextValue(text.TextString, out double mm);
                 // A user may have edited a linked U1L label from "2000mm" to
@@ -1109,6 +1357,12 @@ namespace UNCAD.Cad.QuickLine
         {
             try
             {
+                // 3.8.0.2：Ruanguan 软管块的「软管长度」属性（「1500mm」「软管1500mm」）
+                // 是软管长度，不是电缆毫米标——收进来既会被报成「没有归属线段」，
+                // 又可能被就近的线抢走。
+                if (IsHoseText(attribute.Tag, attribute.TextString)) return;
+                if (RouteAnnotationTextPlanner.Classify(attribute.TextString)
+                    != RouteAnnotationTextKind.None) return;
                 string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(attribute);
                 bool parsed = TryParseTextValue(attribute.TextString,
                     out double mm);
@@ -1136,6 +1390,9 @@ namespace UNCAD.Cad.QuickLine
             {
                 string raw = text.Contents;
                 if (string.IsNullOrWhiteSpace(raw)) raw = text.Text;
+                if (IsHoseText(null, raw)
+                    || RouteAnnotationTextPlanner.Classify(raw)
+                    != RouteAnnotationTextKind.None) return;
                 string associatedLineHandle = QuickLineMetadataStore.ReadAssociatedLineHandle(text);
                 bool parsed = TryParseTextValue(raw, out double mm);
                 if (!parsed && !string.IsNullOrEmpty(associatedLineHandle))
@@ -1240,10 +1497,151 @@ namespace UNCAD.Cad.QuickLine
             return false;
         }
 
+        /// <summary>
+        /// 3.8.0.2：软管长度文字（Ruanguan 块的「软管长度」属性、自由文字
+        /// 「软管1500mm」）不是电缆毫米标——标签名或文字里带「软管」即排除。
+        /// U1B 的「100mm软管:2500mm」本身带两个 mm 词，另有元数据跳过，不在这里。
+        /// </summary>
+        internal static bool IsHoseText(string tag, string text)
+            => (tag ?? string.Empty).IndexOf("软管", StringComparison.Ordinal) >= 0
+                || (text ?? string.Empty).IndexOf("软管", StringComparison.Ordinal) >= 0;
+
         private static bool TryParseTextValue(string value, out double mm)
         {
             if (QuickLineMillimeterText.TryParseCad(value, out mm)) return true;
             return QuickLineMillimeterText.TryExtractSingleCad(value, out mm);
+        }
+
+        /// <summary>
+        /// 3.8.0.2：带拐角的多段线是不是「一条画成一笔的路线」——每一腿都落在
+        /// 制图轴上（水平 0°、等测 30°/90°/150°，容差 5°；现场路线会混用），而且
+        /// 顶点不是全共线。是就返回逐腿的端点。开洞绕行的多段线带弧或斜腿，不在
+        /// 这里拆；全共线的也不拆（本来就是一段）。
+        /// </summary>
+        private const double RouteLegAngleToleranceDegrees = 5.0;
+
+        internal static bool TrySplitIntoRouteLegs(IReadOnlyList<Point3d> vertices,
+            out List<Point3d[]> legs)
+        {
+            legs = null;
+            if (vertices == null || vertices.Count < 3) return false;
+            int legCount = vertices.Count - 1;
+            bool allCollinear = true;
+            Point3d first = vertices[0];
+            double chordX = vertices[legCount].X - first.X;
+            double chordY = vertices[legCount].Y - first.Y;
+            double chordLength = Math.Sqrt(chordX * chordX + chordY * chordY);
+            double tolerance = RouteLegAngleToleranceDegrees;
+            var result = new List<Point3d[]>(legCount);
+            for (int index = 0; index < legCount; index++)
+            {
+                Point3d start = vertices[index];
+                Point3d end = vertices[index + 1];
+                double deltaX = end.X - start.X;
+                double deltaY = end.Y - start.Y;
+                if (Math.Sqrt(deltaX * deltaX + deltaY * deltaY) <= Epsilon)
+                    return false;
+                double degrees = Math.Atan2(deltaY, deltaX) * 180.0 / Math.PI;
+                double axial = degrees < 0.0 ? degrees + 180.0 : degrees;
+                bool onAxis = axial <= tolerance
+                    || Math.Abs(axial - 30.0) <= tolerance
+                    || Math.Abs(axial - 90.0) <= tolerance
+                    || Math.Abs(axial - 150.0) <= tolerance
+                    || axial >= 180.0 - tolerance;
+                if (!onAxis) return false;
+                if (chordLength > Epsilon)
+                {
+                    double offset = Math.Abs((start.X - first.X) * chordY
+                        - (start.Y - first.Y) * chordX) / chordLength;
+                    if (offset > Math.Max(1.0, chordLength * 0.01)) allCollinear = false;
+                }
+                result.Add(new[] { start, end });
+            }
+            if (allCollinear) return false;
+            legs = result;
+            return true;
+        }
+
+        /// <summary>
+        /// 3.8.0.2：扫描里认线段的身份——实体 + 多段线拆出的第几段（整条线是 0）。
+        /// 带拐角的多段线拆出的各段共用一个实体句柄，各自的毫米标、观测值得分开记。
+        /// </summary>
+        private struct LineKey : IEquatable<LineKey>
+        {
+            internal LineKey(ObjectId id, int part)
+            {
+                Id = id;
+                Part = part;
+            }
+
+            internal ObjectId Id { get; }
+            internal int Part { get; }
+
+            public bool Equals(LineKey other)
+                => Part == other.Part && Id == other.Id;
+
+            public override bool Equals(object obj)
+                => obj is LineKey other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (Id.GetHashCode() * 397) ^ Part;
+                }
+            }
+        }
+
+        /// <summary>线段的两个端点是否就是这两个点（顺序不限）。</summary>
+        private static bool SameEndpoints(LineSnapshot line, Point3d start,
+            Point3d end, double tolerance)
+        {
+            double limit = Math.Max(tolerance, Epsilon);
+            return (line.Start.DistanceTo(start) <= limit
+                    && line.End.DistanceTo(end) <= limit)
+                || (line.Start.DistanceTo(end) <= limit
+                    && line.End.DistanceTo(start) <= limit);
+        }
+
+        /// <summary>
+        /// 顶点是否全部共线（闭合多段线退化为一根线的旧画法）。返回最远那对
+        /// 顶点作为弦；有任何一个顶点离线超过 max(1mm, 长度×0.1%) 就不算。
+        /// </summary>
+        private static bool TryGetCollinearChord(IReadOnlyList<Point3d> vertices,
+            out Point3d start, out Point3d end)
+        {
+            start = Point3d.Origin;
+            end = Point3d.Origin;
+            if (vertices == null || vertices.Count < 3) return false;
+            int first = 0;
+            int second = 1;
+            double best = 0.0;
+            for (int left = 0; left < vertices.Count; left++)
+                for (int right = left + 1; right < vertices.Count; right++)
+                {
+                    double distance = vertices[left].DistanceTo(vertices[right]);
+                    distance *= distance;
+                    if (distance <= best) continue;
+                    best = distance;
+                    first = left;
+                    second = right;
+                }
+            if (best <= Epsilon * Epsilon) return false;
+            Point3d a = vertices[first];
+            Point3d b = vertices[second];
+            double length = Math.Sqrt(best);
+            Vector3d direction = (b - a) / length;
+            double tolerance = Math.Max(1.0, length * 1e-3);
+            foreach (Point3d vertex in vertices)
+            {
+                Vector3d offset = vertex - a;
+                double along = offset.DotProduct(direction);
+                double perpendicular = (offset - direction * along).Length;
+                if (perpendicular > tolerance) return false;
+            }
+            start = a;
+            end = b;
+            return true;
         }
 
         private static bool IsMeasuredObservation(LabelSnapshot label)
@@ -1404,17 +1802,17 @@ namespace UNCAD.Cad.QuickLine
             IReadOnlyList<LineSnapshot> lines,
             IReadOnlyList<LabelSnapshot> labels,
             double configuredDistance,
-            IDictionary<ObjectId, LabelSnapshot> assignedLines,
+            IDictionary<LineKey, LabelSnapshot> assignedLines,
             ISet<ObjectId> assignedLabels)
         {
             var availableLabels = labels.Where(label => !assignedLabels.Contains(label.Id))
                 .ToList();
             if (availableLabels.Count == 0) return;
             var index = new LabelSpatialIndex(availableLabels);
-            var candidates = new Dictionary<ObjectId, List<LabelMatch>>();
+            var candidates = new Dictionary<LineKey, List<LabelMatch>>();
             foreach (LineSnapshot line in lines)
             {
-                if (assignedLines.ContainsKey(line.Id)) continue;
+                if (assignedLines.ContainsKey(line.Key)) continue;
                 var list = new List<LabelMatch>();
                 foreach (LabelSnapshot label in index.Near(line, configuredDistance))
                 {
@@ -1423,22 +1821,22 @@ namespace UNCAD.Cad.QuickLine
                         list.Add(new LabelMatch(line, label, score));
                 }
                 list.Sort(CompareLabelMatches);
-                candidates[line.Id] = list;
+                candidates[line.Key] = list;
             }
 
             var ownerByLabel = new Dictionary<ObjectId, LineSnapshot>();
-            var matchByLine = new Dictionary<ObjectId, LabelSnapshot>();
-            foreach (KeyValuePair<ObjectId, List<LabelMatch>> candidate in candidates
+            var matchByLine = new Dictionary<LineKey, LabelSnapshot>();
+            foreach (KeyValuePair<LineKey, List<LabelMatch>> candidate in candidates
                 .Where(item => item.Value.Count > 0)
                 .OrderBy(item => item.Value.Count)
                 .ThenBy(item => item.Value[0].Line.Order))
             {
                 LineSnapshot line = candidate.Value[0].Line;
                 TryAssignLine(line, candidates, ownerByLabel, matchByLine,
-                    new HashSet<ObjectId>(), new HashSet<ObjectId>());
+                    new HashSet<LineKey>(), new HashSet<ObjectId>());
             }
 
-            foreach (KeyValuePair<ObjectId, LabelSnapshot> match in matchByLine)
+            foreach (KeyValuePair<LineKey, LabelSnapshot> match in matchByLine)
             {
                 assignedLines[match.Key] = match.Value;
                 assignedLabels.Add(match.Value.Id);
@@ -1447,15 +1845,15 @@ namespace UNCAD.Cad.QuickLine
 
         private static bool TryAssignLine(
             LineSnapshot line,
-            IDictionary<ObjectId, List<LabelMatch>> candidates,
+            IDictionary<LineKey, List<LabelMatch>> candidates,
             IDictionary<ObjectId, LineSnapshot> ownerByLabel,
-            IDictionary<ObjectId, LabelSnapshot> matchByLine,
-            ISet<ObjectId> visitedLines,
+            IDictionary<LineKey, LabelSnapshot> matchByLine,
+            ISet<LineKey> visitedLines,
             ISet<ObjectId> visitedLabels)
         {
-            if (!visitedLines.Add(line.Id)) return false;
+            if (!visitedLines.Add(line.Key)) return false;
             List<LabelMatch> choices;
-            if (!candidates.TryGetValue(line.Id, out choices)) return false;
+            if (!candidates.TryGetValue(line.Key, out choices)) return false;
 
             foreach (LabelMatch choice in choices)
             {
@@ -1466,7 +1864,7 @@ namespace UNCAD.Cad.QuickLine
                         matchByLine, visitedLines, visitedLabels))
                 {
                     ownerByLabel[choice.Label.Id] = line;
-                    matchByLine[line.Id] = choice.Label;
+                    matchByLine[line.Key] = choice.Label;
                     return true;
                 }
             }
@@ -1642,7 +2040,8 @@ namespace UNCAD.Cad.QuickLine
         {
             public LineSnapshot(ObjectId id, Point3d start, Point3d end,
                 int order, string layer, bool isPolyline, bool isBridgePolyline,
-                IReadOnlyList<Point3d> points)
+                IReadOnlyList<Point3d> points, bool isDimension = false,
+                int partIndex = 0)
             {
                 Id = id;
                 Start = start;
@@ -1652,16 +2051,24 @@ namespace UNCAD.Cad.QuickLine
                 IsPolyline = isPolyline;
                 IsBridgePolyline = isBridgePolyline;
                 Points = points ?? Array.Empty<Point3d>();
+                IsDimension = isDimension;
+                PartIndex = Math.Max(0, partIndex);
                 Handle = ReadHandle(id);
+                Key = new LineKey(id, PartIndex);
             }
 
             public ObjectId Id { get; }
+            /// <summary>多段线拆出的第几段（从 1 起）；0 = 整个实体就是一段。</summary>
+            public int PartIndex { get; }
+            /// <summary>扫描里认这段线的身份（实体 + 段序号）。</summary>
+            public LineKey Key { get; }
             public Point3d Start { get; }
             public Point3d End { get; }
             public int Order { get; }
             public string Layer { get; }
             public bool IsPolyline { get; }
             public bool IsBridgePolyline { get; }
+            public bool IsDimension { get; }
             public IReadOnlyList<Point3d> Points { get; }
             public string Handle { get; }
         }

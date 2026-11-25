@@ -103,12 +103,23 @@ namespace UNCAD.Tests
         {
             QuickLineOrbitPreviewEnvelope envelope =
                 QuickLineOrbitPreviewEnvelope.Build(FullModel());
-            // 特性B：两条段毫米标，锚在段中点上方（Z 抬升 > 中点 Z）。
+            // 特性B：两条段毫米标。3.8.0.2 起文字贴在线上——锚点就是段中点，
+            // 并带上这一段的方向（叠加层沿线排字、固定在线旁，不再抬到管子上方）。
             Assert.Equal(2, envelope.SegmentLabels.Count);
             Assert.Equal("9600mm", envelope.SegmentLabels[0].Text);
             Assert.Equal("2500mm", envelope.SegmentLabels[1].Text);
-            Assert.True(envelope.SegmentLabels[0].Z > 0.0,
-                "水平段标签要抬到中点上方");
+            QuickLineOrbitPreviewEnvelope.EnvelopeLabel horizontal = envelope.SegmentLabels[0];
+            Assert.Equal(4800.0, horizontal.X, 6);
+            Assert.Equal(0.0, horizontal.Y, 6);
+            Assert.Equal(0.0, horizontal.Z, 6);
+            Assert.True(horizontal.HasDirection);
+            Assert.Equal(9600.0, horizontal.DirectionX, 6);
+            Assert.Equal(0.0, horizontal.DirectionY, 6);
+            QuickLineOrbitPreviewEnvelope.EnvelopeLabel riser = envelope.SegmentLabels[1];
+            Assert.Equal(1250.0, riser.Z, 6);
+            Assert.True(riser.HasDirection);
+            Assert.Equal(0.0, riser.DirectionX, 6);
+            Assert.Equal(2500.0, riser.DirectionZ, 6);
             // 轴位原文透传（首尾空白剥掉）。
             Assert.Equal("48/V", envelope.UpstreamAxisLabel);
             Assert.Equal("37/V", envelope.DownstreamAxisLabel);

@@ -145,11 +145,11 @@ function Get-PackageInfo {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
-        "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
-        "Web\Preview\index.html", "Web\Preview\app.js", "Web\Preview\styles.css",
-        "Web\Preview\vendor\three\LICENSE.txt", "Web\Preview\vendor\three\OrbitControls.js",
-        "Web\Preview\vendor\three\three.core.min.js", "Web\Preview\vendor\three\three.module.min.js",
-        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
+        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg",
+        "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\styles.css",
+        "Web\QuickLineOrbit\app.js", "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
+        "Web\QuickLineOrbit\vendor\three\OrbitControls.js", "Web\QuickLineOrbit\vendor\three\three.core.min.js",
+        "Web\QuickLineOrbit\vendor\three\three.module.min.js"
     )
     foreach ($file in $payloadFiles) {
         if (-not (Test-Path (Join-Path $BundlePath $file) -PathType Leaf)) { throw "Required file is missing: $file" }

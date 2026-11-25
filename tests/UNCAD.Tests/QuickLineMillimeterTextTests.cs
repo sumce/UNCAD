@@ -68,9 +68,26 @@ namespace UNCAD.Tests
         [Theory]
         [InlineData("no distance")]
         [InlineData("100mm + 200mm")]
+        // 3.8.0.2：mm² / mm2 / ㎡ 是截面，不是长度——清单属性文字不是毫米标，
+        // 哪怕它后面还跟着「=14800mm」。
+        [InlineData("4*10mm²: 3.4+0.5+3+5+1.5+24=52.5M")]
+        [InlineData("ZB-YJV-3*70+1*16mm2 2000")]
+        [InlineData("3*95+1*50㎡ cable")]
+        [InlineData("电缆ZB-YJV-3*(2*70)+1*70mm²: 1500+1000+500（箱内）+3000（预留）=14800mm")]
         public void TryExtractSingle_RejectsMissingOrAmbiguousTokens(string text)
         {
             Assert.False(QuickLineMillimeterText.TryExtractSingle(text, out _));
+        }
+
+        [Theory]
+        [InlineData("电缆 ZB-YJVR-3*2.5 14800mm", 14800.0)]
+        [InlineData(@"{\fSimSun|b0;i0;\C1;1500mm}", 1500.0)]
+        public void TryExtractSingle_StillReadsOrdinaryInfoTextWithOneLength(
+            string text, double expected)
+        {
+            Assert.True(QuickLineMillimeterText.TryExtractSingle(text,
+                out double actual));
+            Assert.Equal(expected, actual, 8);
         }
 
         [Theory]

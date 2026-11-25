@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>U1U 3D 路由预览</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="viewport">
+  <div id="canvasHost"></div>
+  <div id="labelLayer"></div>
+  <div id="actions">
+    <button id="gridButton" type="button" title="显示/隐藏柱网与轴位">轴位 开</button>
+    <button id="resetButton" type="button" title="复位视角（也可双击画布）">复位</button>
+  </div>
+  <div id="info">
+    <div id="issues"></div>
+    <div id="summary"></div>
+    <div id="legend"></div>
+  </div>
+  <div id="loading">正在载入 3D 预览…</div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

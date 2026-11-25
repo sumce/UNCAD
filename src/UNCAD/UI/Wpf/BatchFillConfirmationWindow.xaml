@@ -4,7 +4,8 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:local="clr-namespace:UNCAD.UI"
                  Title="U1U 批量确认"
-                 Width="1180" Height="680" MinWidth="900" MinHeight="520"
+                 Width="1440" Height="820" MinWidth="1200" MinHeight="640"
+                 WindowStartupLocation="CenterScreen"
                  FontFamily="Microsoft YaHei UI, Segoe UI"
                  WindowBackdropType="None"
                  ExtendsContentIntoTitleBar="True"
@@ -31,7 +32,7 @@
                      0、分隔条隐藏。3.3.0 的固定 320px 窄条已废弃。 -->
                 <ColumnDefinition x:Name="PreviewColumn" Width="0" MinWidth="0" />
                 <ColumnDefinition x:Name="PreviewSplitterColumn" Width="Auto" />
-                <ColumnDefinition x:Name="ReviewColumn" Width="*" MinWidth="250" />
+                <ColumnDefinition x:Name="ReviewColumn" Width="*" MinWidth="520" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Row="0" Grid.ColumnSpan="3" FontSize="22" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextFillColorPrimaryBrush}"
@@ -43,7 +44,7 @@
                     Visibility="Collapsed"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="6">
-                <local:QuickLineOrbitPreviewControl x:Name="OrbitPreview" />
+                <local:QuickLineOrbitWebHost x:Name="OrbitPreview" />
             </Border>
             <GridSplitter x:Name="PreviewSplitter" Grid.Row="2" Grid.Column="1" Width="6"
                           Visibility="Collapsed" Background="Transparent"

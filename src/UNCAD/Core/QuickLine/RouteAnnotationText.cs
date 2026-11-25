@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UNCAD.Core.Text;
@@ -23,21 +24,34 @@ namespace UNCAD.Core.QuickLine
     {
         public RouteAnnotationTextStamp(string entityId, string text,
             QuickLinePoint anchor, double? rotationRadians,
-            bool hasOwnershipMetadata, RouteAnnotationTextKind kind)
+            bool hasOwnershipMetadata, RouteAnnotationTextKind kind,
+            double height = 0.0, QuickLinePoint? center = null,
+            double extentRadiusMillimetres = 0.0)
         {
             EntityId = entityId ?? string.Empty;
             Text = text ?? string.Empty;
             Anchor = anchor;
+            Center = center ?? anchor;
+            ExtentRadiusMillimetres = double.IsNaN(extentRadiusMillimetres)
+                || double.IsInfinity(extentRadiusMillimetres)
+                || extentRadiusMillimetres < 0.0 ? 0.0 : extentRadiusMillimetres;
             RotationRadians = rotationRadians;
             HasOwnershipMetadata = hasOwnershipMetadata;
             Kind = kind;
+            Height = height;
         }
 
         public string EntityId { get; }
         public string Text { get; }
         public QuickLinePoint Anchor { get; }
+        /// <summary>文字外框中心；读不到外框时等于 Anchor。</summary>
+        public QuickLinePoint Center { get; }
+        /// <summary>文字外框半对角线（mm）；0 = 没读到外框。</summary>
+        public double ExtentRadiusMillimetres { get; }
         /// <summary>文字旋转角（弧度）；读不到时为空（绑定时不校验平行）。</summary>
         public double? RotationRadians { get; }
+        /// <summary>文字高度（图形单位）；读不到时为 0。</summary>
+        public double Height { get; }
         public bool HasOwnershipMetadata { get; }
         public RouteAnnotationTextKind Kind { get; }
     }
@@ -89,6 +103,22 @@ namespace UNCAD.Core.QuickLine
         private static readonly Regex BareConduitSpec = new Regex(
             @"^(?:[⌀ØΦ]\s*[0-9]+(?:\.[0-9]+)?\s*线管|线管\s*[0-9]+(?:\.[0-9]+)?)$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        /// <summary>
+        /// 3.8.0.3：单行、长度写在行尾的桥架/线管标注（旧图框、手写）——关键字
+        /// 后面跟规格，行尾是这一趟的总长：「梯形桥架200Wx100H-1300mm」。规格
+        /// 必须以数字或字母结尾；以数字结尾时和长度之间必须有分隔符
+        /// （「200*100 3000mm」），以字母结尾时可以紧挨着（「100H1300mm」）——
+        /// 否则长度会被拆成「250 + 0mm」；长度是 0 的也不算。mm 之后不能再有
+        /// 文字（「… 2500mm 预留」不算）。带「共用」字样的共用桥架明确不进来
+        /// （用户口径 2026-11-25「共用桥架不用管」）：它的长度照旧不读。
+        /// </summary>
+        private static readonly Regex SingleLineTrailingLength = new Regex(
+            @"^(?![^\r\n]*共用)(?:(?<head>[^\r\n]*?(?:桥架|线管)[^\r\n]*?[A-Za-z])[\s\-—_:：]*|(?<head>[^\r\n]*?(?:桥架|线管)[^\r\n]*?[0-9])[\s\-—_:：]+)(?!(?:0+(?:\.0+)?|\.0+)\s*mm$)(?<length>[0-9]+(?:\.[0-9]+)?)\s*mm$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        /// <summary>宽高规格的「200Wx100H」写法（用户 U1Q 的出标格式）。</summary>
+        private static readonly Regex WidthHeightSpec = new Regex(
+            @"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)\s*[Ww]\s*[*xX×]\s*[0-9]+(?:\.[0-9]+)?\s*[Hh]",
+            RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         /// <summary>判断一段文字是不是桥架/线管标注文字。</summary>
         public static RouteAnnotationTextKind Classify(string text)
@@ -180,14 +210,67 @@ namespace UNCAD.Core.QuickLine
                 bool assumed = false;
                 if (text.Kind == RouteAnnotationTextKind.Tray)
                 {
-                    if (BridgeLabelFormatter.TryParseTrayWidthMillimetres(
-                        text.Text, out double parsed)) width = parsed;
+                    if (TryParseTrayWidthMillimetres(text.Text, out double parsed))
+                        width = parsed;
                     else assumed = true;
                 }
                 result.Add(new RouteAnnotationTextBinding(best.Id, text.Kind,
                     FirstLine(text.Text), bestScore, width, assumed));
             }
             return result;
+        }
+
+        /// <summary>
+        /// D-059：标注文字里的整趟长度（mm）。两行标注（型号 + 长度）取裸长度行；
+        /// 单行按桥架/线管的统计语法读。读不出返回 null，不猜。
+        /// </summary>
+        public static double? ParseLengthMillimetres(string text)
+        {
+            List<string> lines = TextParser.SplitMTextLines(
+                TextParser.CleanMText(text ?? string.Empty));
+            if (lines.Count == 0) return null;
+            if (lines.Count > 1)
+            {
+                foreach (string line in lines)
+                    if (TextParser.ExtractCableLength(line).HasValue)
+                        return TextParser.ExtractCableLength(line);
+                return null;
+            }
+            string single = lines[0];
+            if (BridgeLabelFormatter.TryParseMillimetreLabel(single, out _,
+                out double millimetres)) return millimetres;
+            double? conduit = TextParser.ExtractConduitLength(single);
+            if (conduit.HasValue) return conduit;
+            // 3.8.0.3：单行、长度在行尾的旧写法（「梯形桥架200Wx100H-1300mm」）。
+            Match trailing = SingleLineTrailingLength.Match(single);
+            if (trailing.Success
+                && double.TryParse(trailing.Groups["length"].Value,
+                    NumberStyles.Float, CultureInfo.InvariantCulture,
+                    out double total)
+                && total > 0.0) return total;
+            return null;
+        }
+
+        /// <summary>
+        /// 3.8.0.3：桥架标注里的宽度（mm）。先按统计语法「桥架200*100」读，再按
+        /// U1Q 出标的「200Wx100H」读；都读不出返回 false（调用方用缺省并注明）。
+        /// </summary>
+        public static bool TryParseTrayWidthMillimetres(string text,
+            out double widthMillimetres)
+        {
+            if (BridgeLabelFormatter.TryParseTrayWidthMillimetres(text,
+                out widthMillimetres)) return true;
+            Match match = WidthHeightSpec.Match(TextParser.CleanMText(
+                text ?? string.Empty));
+            if (!match.Success
+                || !double.TryParse(match.Groups[1].Value, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out widthMillimetres)
+                || widthMillimetres <= 0.0)
+            {
+                widthMillimetres = 0.0;
+                return false;
+            }
+            return true;
         }
 
         private static RouteAnnotationTextKind ClassifySingleLine(string line)
@@ -203,6 +286,17 @@ namespace UNCAD.Core.QuickLine
                 return RouteAnnotationTextKind.Conduit;
             if (BareBridgeSpec.IsMatch(line))
                 return RouteAnnotationTextKind.Tray;
+            // 3.8.0.3：单行、长度在行尾的旧写法。既有规格语法都认不出时才走这里
+            // （「… 2500mm 预留」这类 mm 后面还有文字的仍然不算）。
+            Match trailing = SingleLineTrailingLength.Match(line);
+            if (trailing.Success)
+            {
+                string head = trailing.Groups["head"].Value;
+                bool tray = head.IndexOf("桥架", StringComparison.Ordinal) >= 0;
+                bool conduit = head.IndexOf("线管", StringComparison.Ordinal) >= 0;
+                if (tray && !conduit) return RouteAnnotationTextKind.Tray;
+                if (conduit && !tray) return RouteAnnotationTextKind.Conduit;
+            }
             return RouteAnnotationTextKind.None;
         }
 

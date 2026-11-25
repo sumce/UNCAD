@@ -145,6 +145,9 @@ namespace UNCAD.Cad
                 ?? Array.Empty<QuickLineCadSegment>())
             {
                 if (segment == null || segment.LineId.IsNull) continue;
+                // 3.8.0.1：线性标注代替短线时，标注实体不是电缆线——不把
+                // DIMENSION 挪到 U_CABLE 图层。
+                if (segment.IsDimension) continue;
                 if (scoped && !scopeEntityIds.Contains(segment.LineId)) continue;
                 if (TryPlanMove(ctx, transaction, segment.LineId,
                         UncadLayerStandard.CableLayerName, planned, moves))

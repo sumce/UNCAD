@@ -48,9 +48,13 @@ if (-not $SkipBundle) {
     New-Item (Split-Path -Parent $bundleWebViewLoader) -ItemType Directory -Force | Out-Null
     Copy-Item -LiteralPath $webViewLoader -Destination $bundleWebViewLoader -Force
 
-    Copy-Item -LiteralPath (Join-Path $outputDir "UNCAD.Preview.exe") -Destination $bundleDir -Force
-    Copy-Item -LiteralPath (Join-Path $outputDir "UNCAD.Preview.exe.config") -Destination $bundleDir -Force
-    Copy-Item -LiteralPath (Join-Path $outputDir "Web") -Destination $bundleDir -Recurse -Force
+    # 3.8.0（D-059）：WebV（独立 WebView2 预览进程 UNCAD.Preview.exe）已整体删除；
+    # 构建输出里残留的旧进程文件不进 bundle。3.8.0.5 起 Web 目录重新承载 U1U
+    # 预览页（本地虚拟主机，不是独立进程），由下面显式复制。
+    foreach ($stale in @("UNCAD.Preview.exe", "UNCAD.Preview.exe.config", "UNCAD.Preview.pdb")) {
+        $stalePath = Join-Path $bundleDir $stale
+        if (Test-Path -LiteralPath $stalePath) { Remove-Item -LiteralPath $stalePath -Recurse -Force }
+    }
 
     $template = Join-Path $root "BOQ_Template.xlsx"
     if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw "BOQ template is missing: $template" }
@@ -60,6 +64,14 @@ if (-not $SkipBundle) {
     $bundleResources = Join-Path $bundleDir "Resources"
     if (-not (Test-Path $bundleResources)) { New-Item -ItemType Directory -Path $bundleResources -Force | Out-Null }
     Copy-Item -LiteralPath $frameTemplate -Destination (Join-Path $bundleResources "XFrameTemplate.dwg") -Force
+    # 3.8.0.5：U1U 预览页（WebView2 + three.js，本地虚拟主机加载）。
+    $webSource = Join-Path $outputDir "Web"
+    if (-not (Test-Path (Join-Path $webSource "QuickLineOrbit\index.html") -PathType Leaf)) {
+        throw "U1U preview page is missing: $webSource"
+    }
+    $bundleWeb = Join-Path $bundleDir "Web"
+    if (Test-Path -LiteralPath $bundleWeb) { Remove-Item -LiteralPath $bundleWeb -Recurse -Force }
+    Copy-Item -LiteralPath $webSource -Destination $bundleDir -Recurse -Force
     $bundlePayloadFiles = @(
         "PackageContents.xml", "UNCAD.dll", "NPOI.dll", "NPOI.OOXML.dll",
         "NPOI.OpenXml4Net.dll", "NPOI.OpenXmlFormats.dll",
@@ -67,11 +79,11 @@ if (-not $SkipBundle) {
         "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll",
         "Microsoft.Web.WebView2.Wpf.dll", "runtimes\win-x64\native\WebView2Loader.dll",
         "Wpf.Ui.dll", "Wpf.Ui.Abstractions.dll",
-        "UNCAD.Preview.exe", "UNCAD.Preview.exe.config",
-        "Web\Preview\index.html", "Web\Preview\app.js", "Web\Preview\styles.css",
-        "Web\Preview\vendor\three\LICENSE.txt", "Web\Preview\vendor\three\OrbitControls.js",
-        "Web\Preview\vendor\three\three.core.min.js", "Web\Preview\vendor\three\three.module.min.js",
-        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg"
+        "BOQ_Template.xlsx", "Resources\XFrameTemplate.dwg",
+        "Web\QuickLineOrbit\index.html", "Web\QuickLineOrbit\styles.css",
+        "Web\QuickLineOrbit\app.js", "Web\QuickLineOrbit\vendor\three\LICENSE.txt",
+        "Web\QuickLineOrbit\vendor\three\OrbitControls.js", "Web\QuickLineOrbit\vendor\three\three.core.min.js",
+        "Web\QuickLineOrbit\vendor\three\three.module.min.js"
     )
     $checksumPath = Join-Path $bundleDir "checksums.sha256"
     $actualPayloadFiles = @(Get-ChildItem -LiteralPath $bundleDir -File -Recurse |

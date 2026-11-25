@@ -104,7 +104,7 @@ namespace UNCAD.CadIntegration
             Info("=== " + DiagName + " 图纸: " + document.Name + " ===");
 
             IReadOnlyList<QuickLineCadSegment> scanned =
-                FillRouteInspectionStage.Scan(ctx);
+                FillRouteInspectionStage.Scan(ctx).Segments;
             Info("[1] Scan 线段总数: " + scanned.Count
                 + "（带毫米标 " + scanned.Count(s => s.HasMillimetreLabel) + "）");
 
@@ -254,7 +254,7 @@ namespace UNCAD.CadIntegration
             }
 
             IReadOnlyList<QuickLineCadSegment> scanned =
-                FillRouteInspectionStage.Scan(ctx);
+                FillRouteInspectionStage.Scan(ctx).Segments;
             FillRouteInspection inspection;
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {

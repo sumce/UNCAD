@@ -48,7 +48,11 @@ namespace UNCAD.Core.QuickLine
             IReadOnlyList<string> directionDiagnostics,
             EnvelopeHose hose,
             string recognitionSummary,
-            IReadOnlyList<string> routeIssues)
+            IReadOnlyList<string> routeIssues,
+            IReadOnlyList<EnvelopeFloor> floors,
+            IReadOnlyList<EnvelopeLabel> axisEdgeLabels,
+            IReadOnlyList<EnvelopeLabel> runLabels,
+            EnvelopeCabinet cabinet)
         {
             Segments = segments;
             ColumnGridLines = columnGridLines;
@@ -72,7 +76,29 @@ namespace UNCAD.Core.QuickLine
             Hose = hose;
             RecognitionSummary = recognitionSummary ?? string.Empty;
             RouteIssues = routeIssues ?? Array.Empty<string>();
+            Floors = floors ?? Array.Empty<EnvelopeFloor>();
+            AxisEdgeLabels = axisEdgeLabels ?? Array.Empty<EnvelopeLabel>();
+            RunLabels = runLabels ?? Array.Empty<EnvelopeLabel>();
+            Cabinet = cabinet;
         }
+
+        /// <summary>
+        /// D-059：楼层平面（台账上下游楼层之间的各层，从低到高）。每块是一个矩形
+        /// 平面 + 该层地面上的柱网线。
+        /// </summary>
+        public IReadOnlyList<EnvelopeFloor> Floors { get; }
+
+        /// <summary>
+        /// D-059：图签式轴位边标——数字轴号、字母轴号分别贴在最高那层平面的
+        /// 两条相邻外边上（不再在每个柱位上挂完整组合）。
+        /// </summary>
+        public IReadOnlyList<EnvelopeLabel> AxisEdgeLabels { get; }
+
+        /// <summary>D-059：桥架/线管整趟标签（一趟一个：规格 + 整趟长度）。</summary>
+        public IReadOnlyList<EnvelopeLabel> RunLabels { get; }
+
+        /// <summary>D-059：上游柜（I-Line 盘 / 插座盘 / 母线插接口）；不画时为 null。</summary>
+        public EnvelopeCabinet Cabinet { get; }
 
         /// <summary>
         /// D-058：软管的示意几何（从设备端沿末段方向伸出，长度＝软管毫米）。
@@ -183,14 +209,17 @@ namespace UNCAD.Core.QuickLine
                     channel));
                 if (segment.LabelText.Length > 0)
                 {
-                    // 特性B：段中点上方 0.6×标签高。
+                    // 3.8.0.2：米数贴在线上——锚点就是段中点，带上段方向，由叠加层
+                    // 沿线排字、放在线的上侧（不再抬到管子上方参与防重叠）。
                     segmentLabels.Add(new EnvelopeLabel(
                         segment.LabelText,
                         (segment.Start.X + segment.End.X) / 2.0,
                         (segment.Start.Y + segment.End.Y) / 2.0,
-                        (segment.Start.Z + segment.End.Z) / 2.0
-                            + labelHeight * 0.6,
-                        labelHeight));
+                        (segment.Start.Z + segment.End.Z) / 2.0,
+                        labelHeight,
+                        segment.End.X - segment.Start.X,
+                        segment.End.Y - segment.Start.Y,
+                        segment.End.Z - segment.Start.Z));
                 }
             }
 
@@ -295,6 +324,99 @@ namespace UNCAD.Core.QuickLine
                     break;
                 }
             }
+            // ---- D-059：楼层平面、图签式轴位边标、整趟标签、上游柜 ----
+            // 楼层平面是一个盖住整条路线（外留半跨到两跨）的矩形，四边对齐柱网线。
+            double pitch = QuickLineColumnGridPlanner.DefaultSpacingMillimetres;
+            double anchorX = gridAnchor != null ? gridAnchor.X : bounds.MinX;
+            double anchorY = gridAnchor != null ? gridAnchor.Y : bounds.MinY;
+            double margin = Math.Max(pitch * 0.5, Math.Min(pitch * 2.0,
+                0.2 * Math.Max(bounds.MaxX - bounds.MinX, bounds.MaxY - bounds.MinY)));
+            double slabMinX = Snap(anchorX, bounds.MinX - margin, pitch, false);
+            double slabMaxX = Snap(anchorX, bounds.MaxX + margin, pitch, true);
+            double slabMinY = Snap(anchorY, bounds.MinY - margin, pitch, false);
+            double slabMaxY = Snap(anchorY, bounds.MaxY + margin, pitch, true);
+
+            var floors = new List<EnvelopeFloor>();
+            if (model.Floors != null)
+            {
+                foreach (PreviewFloorSlab slab in model.Floors.Floors)
+                {
+                    var floorGrid = new List<EnvelopePoint>();
+                    foreach (double x in QuickLineColumnGridPlanner.GridPositions(
+                        anchorX, slabMinX, slabMaxX, pitch))
+                    {
+                        floorGrid.Add(new EnvelopePoint(x, slabMinY, slab.SceneZ));
+                        floorGrid.Add(new EnvelopePoint(x, slabMaxY, slab.SceneZ));
+                    }
+                    foreach (double y in QuickLineColumnGridPlanner.GridPositions(
+                        anchorY, slabMinY, slabMaxY, pitch))
+                    {
+                        floorGrid.Add(new EnvelopePoint(slabMinX, y, slab.SceneZ));
+                        floorGrid.Add(new EnvelopePoint(slabMaxX, y, slab.SceneZ));
+                    }
+                    floors.Add(new EnvelopeFloor(slab.Label, ElevationText(slab.SceneZ),
+                        slab.SceneZ, slabMinX, slabMinY, slabMaxX, slabMaxY, floorGrid));
+                }
+            }
+
+            // 轴位边标：数字、字母分别贴在最高那层平面的两条相邻外边上。
+            var axisEdgeLabels = new List<EnvelopeLabel>();
+            if (floors.Count > 0 && grid != null)
+            {
+                double tickHeight = diagonal * TickHeightDiagonalRatio;
+                double offset = pitch * 0.3;
+                EnvelopeFloor top = floors[floors.Count - 1];
+                bool numericIsX = grid.NumericAxisIsX;
+                foreach (Tuple<double, int> mark in ExtendNumbers(grid.NumericTicks,
+                    numericIsX ? slabMinX : slabMinY, numericIsX ? slabMaxX : slabMaxY,
+                    pitch, numericIsX ? anchorX : anchorY,
+                    grid.NumbersIncreaseWithAxis))
+                {
+                    axisEdgeLabels.Add(numericIsX
+                        ? new EnvelopeLabel(mark.Item2.ToString(CultureInfo.InvariantCulture),
+                            mark.Item1, slabMinY - offset, top.Z, tickHeight)
+                        : new EnvelopeLabel(mark.Item2.ToString(CultureInfo.InvariantCulture),
+                            slabMinX - offset, mark.Item1, top.Z, tickHeight));
+                }
+                foreach (Tuple<double, string> mark in ExtendLetters(grid.LetterLabels,
+                    numericIsX ? slabMinY : slabMinX, numericIsX ? slabMaxY : slabMaxX,
+                    pitch, numericIsX ? anchorY : anchorX,
+                    grid.LettersIncreaseWithAxis))
+                {
+                    axisEdgeLabels.Add(numericIsX
+                        ? new EnvelopeLabel(mark.Item2, slabMinX - offset, mark.Item1, top.Z, tickHeight)
+                        : new EnvelopeLabel(mark.Item2, mark.Item1, slabMinY - offset, top.Z, tickHeight));
+                }
+            }
+
+            // 桥架/线管整趟标签：一趟一个，放在它盖住的中间那段电缆的上方。
+            var runLabels = new List<EnvelopeLabel>();
+            var segmentById = new Dictionary<string, EnvelopeSegment>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (EnvelopeSegment segment in segments)
+                if (!segmentById.ContainsKey(segment.Id)) segmentById[segment.Id] = segment;
+            foreach (QuickLineOrbitPreviewAnnotationRun run in model.AnnotationRuns)
+            {
+                if (run.HostSegmentIds.Count == 0) continue;
+                if (!segmentById.TryGetValue(run.HostSegmentIds[run.HostSegmentIds.Count / 2],
+                    out EnvelopeSegment host)) continue;
+                string length = run.LengthMillimetres.HasValue
+                    ? " · " + PreviewFloorPlan.Meters(run.LengthMillimetres.Value) + "m"
+                    : string.Empty;
+                string text = run.Kind == RouteAnnotationTextKind.Tray
+                    ? "桥架" + (run.TrayWidthMillimetres.HasValue
+                        ? " " + Math.Round(run.TrayWidthMillimetres.Value)
+                            .ToString(CultureInfo.InvariantCulture) : string.Empty) + length
+                    : "线管" + length;
+                // 3.8.0.2：整趟标签同样贴着它盖住的那段电缆（锚点＝段中点），叠加层
+                // 沿线排字、放在线的下侧（米数在上侧，互不打架）。
+                runLabels.Add(new EnvelopeLabel(text,
+                    (host.Start.X + host.End.X) / 2.0, (host.Start.Y + host.End.Y) / 2.0,
+                    (host.Start.Z + host.End.Z) / 2.0, labelHeight,
+                    host.End.X - host.Start.X, host.End.Y - host.Start.Y,
+                    host.End.Z - host.Start.Z));
+            }
+
             return new QuickLineOrbitPreviewEnvelope(
                 segments, gridLines, numericTicks, letterLabels,
                 segmentLabels, pins, diagonal,
@@ -307,7 +429,194 @@ namespace UNCAD.Core.QuickLine
                 grid?.Diagnostics ?? model.DirectionDiagnostics,
                 BuildHoseGeometry(model.Hose, downstreamEndpoint, segments),
                 model.RecognitionSummary ?? string.Empty,
-                model.RouteIssues ?? Array.Empty<string>());
+                model.RouteIssues ?? Array.Empty<string>(),
+                floors, axisEdgeLabels, runLabels,
+                PlanCabinet(model, segments, upstreamEndpoint,
+                    CabinetVisualScale(model.CabinetKind, bounds, floors)));
+        }
+
+        /// <summary>把一个坐标吸附到柱网线上（outward=true 向外、false 向内）。</summary>
+        private static double Snap(double anchor, double value, double pitch, bool outward)
+        {
+            double steps = (value - anchor) / pitch;
+            return anchor + (outward ? Math.Ceiling(steps - 1e-9)
+                : Math.Floor(steps + 1e-9)) * pitch;
+        }
+
+        private static string ElevationText(double sceneZ)
+        {
+            if (Math.Abs(sceneZ) < 0.5) return "±0.00";
+            return (sceneZ > 0 ? "+" : "-") + Math.Abs(sceneZ / 1000.0).ToString("0.00",
+                CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 数字轴号沿柱网铺满平面范围：已知刻度之间按同一间隔（号/毫米）线性
+        /// 外推。只有一个刻度时按网格给出的递增方向（数字沿 +坐标递增还是
+        /// 递减）外推；一个刻度都没有就不标（不猜）。
+        /// </summary>
+        private static IEnumerable<Tuple<double, int>> ExtendNumbers(
+            IReadOnlyList<QuickLineColumnGridTick> ticks, double minimum,
+            double maximum, double pitch, double anchor,
+            bool increasesWithAxis)
+        {
+            if (ticks == null || ticks.Count == 0) yield break;
+            List<QuickLineColumnGridTick> ordered = ticks
+                .OrderBy(tick => tick.Position).ToList();
+            QuickLineColumnGridTick first = ordered[0];
+            double perMillimetre = (increasesWithAxis ? 1.0 : -1.0) / pitch;
+            if (ordered.Count > 1)
+            {
+                QuickLineColumnGridTick last = ordered[ordered.Count - 1];
+                if (last.Position - first.Position > 1e-6)
+                    perMillimetre = (last.Number - first.Number)
+                        / (last.Position - first.Position);
+            }
+            int? previous = null;
+            foreach (double position in QuickLineColumnGridPlanner.GridPositions(
+                anchor, minimum, maximum, pitch))
+            {
+                double exact = first.Number + (position - first.Position) * perMillimetre;
+                if (double.IsNaN(exact) || double.IsInfinity(exact)) continue;
+                int number = (int)Math.Round(exact, MidpointRounding.AwayFromZero);
+                if (number < 1 || number == previous) continue;
+                previous = number;
+                yield return Tuple.Create(position, number);
+            }
+        }
+
+        /// <summary>字母轴号同理（字母按 26 进制折成序号后线性外推）。</summary>
+        private static IEnumerable<Tuple<double, string>> ExtendLetters(
+            IReadOnlyList<QuickLineColumnGridLetterLabel> labels, double minimum,
+            double maximum, double pitch, double anchor,
+            bool increasesWithAxis)
+        {
+            if (labels == null || labels.Count == 0) yield break;
+            List<QuickLineColumnGridLetterLabel> ordered = labels
+                .OrderBy(label => label.Position).ToList();
+            QuickLineColumnGridLetterLabel first = ordered[0];
+            long firstIndex = LetterIndex(first.Letter);
+            if (firstIndex < 1) yield break;
+            double perMillimetre = (increasesWithAxis ? 1.0 : -1.0) / pitch;
+            if (ordered.Count > 1)
+            {
+                QuickLineColumnGridLetterLabel last = ordered[ordered.Count - 1];
+                long lastIndex = LetterIndex(last.Letter);
+                if (lastIndex >= 1 && last.Position - first.Position > 1e-6)
+                    perMillimetre = (lastIndex - firstIndex)
+                        / (last.Position - first.Position);
+            }
+            string previous = null;
+            foreach (double position in QuickLineColumnGridPlanner.GridPositions(
+                anchor, minimum, maximum, pitch))
+            {
+                double exact = firstIndex + (position - first.Position) * perMillimetre;
+                if (double.IsNaN(exact) || double.IsInfinity(exact)) continue;
+                string letter = QuickLineColumnGridPlanner.LettersFromIndex(
+                    (long)Math.Round(exact, MidpointRounding.AwayFromZero));
+                if (letter == null || letter == previous) continue;
+                previous = letter;
+                yield return Tuple.Create(position, letter);
+            }
+        }
+
+        private static long LetterIndex(string letter)
+        {
+            long index = 0;
+            foreach (char character in (letter ?? string.Empty).ToUpperInvariant())
+            {
+                if (character < 'A' || character > 'Z') return -1;
+                index = index * 26 + (character - 'A' + 1);
+            }
+            return index;
+        }
+
+        /// <summary>
+        /// 上游柜。端点段是立管时，柜子的朝向取立管另一端上相接的第一根水平段
+        /// （柜子放在它的反方向）；基础点规则在 PreviewCabinet.Plan 里。
+        /// </summary>
+        private static EnvelopeCabinet PlanCabinet(QuickLineOrbitPreviewModel model,
+            IReadOnlyList<EnvelopeSegment> segments, EnvelopePoint upstreamEndpoint,
+            double visualScale)
+        {
+            if (model.CabinetKind == PreviewCabinetKind.None || upstreamEndpoint == null)
+                return null;
+            EnvelopeSegment incident = null;
+            bool endpointIsStart = false;
+            foreach (EnvelopeSegment segment in segments)
+            {
+                if (SamePoint(segment.Start, upstreamEndpoint))
+                {
+                    incident = segment;
+                    endpointIsStart = true;
+                    break;
+                }
+                if (SamePoint(segment.End, upstreamEndpoint))
+                {
+                    incident = segment;
+                    break;
+                }
+            }
+            EnvelopePoint other = incident == null ? upstreamEndpoint
+                : (endpointIsStart ? incident.End : incident.Start);
+            double directionX = other.X - upstreamEndpoint.X;
+            double directionY = other.Y - upstreamEndpoint.Y;
+            if (directionX * directionX + directionY * directionY <= 1e-6
+                && incident != null)
+            {
+                foreach (EnvelopeSegment segment in segments)
+                {
+                    if (string.Equals(segment.Id, incident.Id, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    EnvelopePoint far;
+                    if (SamePoint(segment.Start, other)) far = segment.End;
+                    else if (SamePoint(segment.End, other)) far = segment.Start;
+                    else continue;
+                    if ((far.X - other.X) * (far.X - other.X)
+                        + (far.Y - other.Y) * (far.Y - other.Y) <= 1e-6) continue;
+                    directionX = far.X - other.X;
+                    directionY = far.Y - other.Y;
+                    break;
+                }
+            }
+            PreviewFloorSlab upstreamSlab = model.Floors?.UpstreamSlab;
+            PreviewCabinet plan = PreviewCabinet.Plan(model.CabinetKind,
+                upstreamEndpoint.X, upstreamEndpoint.Y, upstreamEndpoint.Z,
+                other.X, other.Y, other.Z, directionX, directionY,
+                upstreamSlab == null ? (double?)null : upstreamSlab.SceneZ,
+                visualScale);
+            if (plan == null) return null;
+            return new EnvelopeCabinet(plan.Kind, plan.Label, plan.BaseX, plan.BaseY,
+                plan.BaseZ, plan.SizeX, plan.SizeY, plan.Height, upstreamEndpoint,
+                plan.MountingFloorZ);
+        }
+
+        /// <summary>
+        /// 3.8.0.2：占位方块的放大倍数——楼层平面 + 线路的包围盒对角线里，方块
+        /// 的宽度至少要占 <see cref="PreviewCabinet.MinimumWidthViewDiagonalFraction"/>
+        /// （真实尺寸在几十米的楼层里只有十来个像素）。高度不放大。
+        /// </summary>
+        private static double CabinetVisualScale(PreviewCabinetKind kind,
+            Bounds routeBounds, IReadOnlyList<EnvelopeFloor> floors)
+        {
+            if (kind == PreviewCabinetKind.None) return 1.0;
+            double minX = routeBounds.MinX, minY = routeBounds.MinY;
+            double maxX = routeBounds.MaxX, maxY = routeBounds.MaxY;
+            double minZ = routeBounds.MinZ, maxZ = routeBounds.MaxZ;
+            foreach (EnvelopeFloor floor in floors ?? Array.Empty<EnvelopeFloor>())
+            {
+                minX = Math.Min(minX, floor.MinX);
+                minY = Math.Min(minY, floor.MinY);
+                maxX = Math.Max(maxX, floor.MaxX);
+                maxY = Math.Max(maxY, floor.MaxY);
+                minZ = Math.Min(minZ, floor.Z);
+                maxZ = Math.Max(maxZ, floor.Z);
+            }
+            double width = Math.Max(maxX - minX, 0.0);
+            double depth = Math.Max(maxY - minY, 0.0);
+            double height = Math.Max(maxZ - minZ, 0.0);
+            return PreviewCabinet.VisualScale(kind, Math.Sqrt(
+                width * width + depth * depth + height * height));
         }
 
         /// <summary>
@@ -332,10 +641,9 @@ namespace UNCAD.Core.QuickLine
                 if (length < 1e-9) continue;
                 string label = hose.DiameterMillimetres.HasValue
                     ? "软管 ⌀" + Math.Round(hose.DiameterMillimetres.Value)
-                        .ToString(CultureInfo.InvariantCulture) + " "
-                    : "软管 ";
-                label += Math.Round(hose.LengthMillimetres)
-                    .ToString(CultureInfo.InvariantCulture) + "mm";
+                        .ToString(CultureInfo.InvariantCulture) + " · "
+                    : "软管 · ";
+                label += PreviewFloorPlan.Meters(hose.LengthMillimetres) + "m";
                 if (hose.ByLabelOnly) label += "（U1B 标注）";
                 return new EnvelopeHose(deviceEnd, new EnvelopePoint(
                     deviceEnd.X + dx / length * hose.LengthMillimetres,
@@ -468,8 +776,76 @@ namespace UNCAD.Core.QuickLine
             public EnvelopePoint Start { get; }
             public EnvelopePoint End { get; }
             public double LengthMillimetres { get; }
-            /// <summary>段旁标签文字（如「软管 ⌀100 2500mm」）。</summary>
+            /// <summary>段旁标签文字（如「软管 ⌀100 · 2.5m」）。</summary>
             public string Label { get; }
+        }
+
+        /// <summary>
+        /// D-059：一块楼层平面——矩形四角（场景 XY）、该层的高度、楼层名与
+        /// 相对高度文字，以及这一层地面上的柱网线（首尾成对）。
+        /// </summary>
+        public sealed class EnvelopeFloor
+        {
+            internal EnvelopeFloor(string label, string elevationText, double z,
+                double minX, double minY, double maxX, double maxY,
+                IReadOnlyList<EnvelopePoint> gridLines)
+            {
+                Label = label ?? string.Empty;
+                ElevationText = elevationText ?? string.Empty;
+                Z = z;
+                MinX = minX;
+                MinY = minY;
+                MaxX = maxX;
+                MaxY = maxY;
+                GridLines = gridLines ?? Array.Empty<EnvelopePoint>();
+            }
+
+            public string Label { get; }
+            /// <summary>相对最低那块平面的高度（如「+7.80」）。</summary>
+            public string ElevationText { get; }
+            public double Z { get; }
+            public double MinX { get; }
+            public double MinY { get; }
+            public double MaxX { get; }
+            public double MaxY { get; }
+            public IReadOnlyList<EnvelopePoint> GridLines { get; }
+        }
+
+        /// <summary>D-059：上游柜盒子（轴对齐：底面中心 + 三向尺寸）。</summary>
+        public sealed class EnvelopeCabinet
+        {
+            internal EnvelopeCabinet(PreviewCabinetKind kind, string label,
+                double centerX, double centerY, double baseZ, double sizeX,
+                double sizeY, double height, EnvelopePoint connection,
+                double? mountingFloorZ)
+            {
+                Kind = kind;
+                Label = label ?? string.Empty;
+                CenterX = centerX;
+                CenterY = centerY;
+                BaseZ = baseZ;
+                SizeX = sizeX;
+                SizeY = sizeY;
+                Height = height;
+                Connection = connection;
+                MountingFloorZ = mountingFloorZ;
+            }
+
+            public PreviewCabinetKind Kind { get; }
+            public string Label { get; }
+            public double CenterX { get; }
+            public double CenterY { get; }
+            /// <summary>底面高度（场景 Z）。</summary>
+            public double BaseZ { get; }
+            public double SizeX { get; }
+            public double SizeY { get; }
+            public double Height { get; }
+            /// <summary>柜子连着的路线端点（上游端）。</summary>
+            public EnvelopePoint Connection { get; }
+            /// <summary>柜子所站楼层的地面高度（母线插接口为空）。</summary>
+            public double? MountingFloorZ { get; }
+            /// <summary>盒顶中心高度：标签挂在这里。</summary>
+            public double TopZ => BaseZ + Height;
         }
 
         /// <summary>三维点（mm；世界 Z 向上）。</summary>
@@ -513,12 +889,26 @@ namespace UNCAD.Core.QuickLine
         {
             public EnvelopeLabel(string text, double x, double y, double z,
                 double worldHeight)
+                : this(text, x, y, z, worldHeight, 0.0, 0.0, 0.0)
+            {
+            }
+
+            /// <summary>
+            /// 3.8.0.2：贴着一条线的标签——锚点在线段中点，带上线段方向，叠加层
+            /// 沿线排字并固定贴在线旁。
+            /// </summary>
+            public EnvelopeLabel(string text, double x, double y, double z,
+                double worldHeight, double directionX, double directionY,
+                double directionZ)
             {
                 Text = text;
                 X = x;
                 Y = y;
                 Z = z;
                 WorldHeight = worldHeight;
+                DirectionX = directionX;
+                DirectionY = directionY;
+                DirectionZ = directionZ;
             }
 
             public string Text { get; }
@@ -526,6 +916,12 @@ namespace UNCAD.Core.QuickLine
             public double Y { get; }
             public double Z { get; }
             public double WorldHeight { get; }
+            /// <summary>所贴线段的方向（世界坐标）；三点全 0 = 不是线标签。</summary>
+            public double DirectionX { get; }
+            public double DirectionY { get; }
+            public double DirectionZ { get; }
+            public bool HasDirection => DirectionX != 0.0 || DirectionY != 0.0
+                || DirectionZ != 0.0;
         }
 
         /// <summary>端点轴位钉：竖直引线（Z→TipZ）+ 顶端标签。</summary>
@@ -566,12 +962,12 @@ namespace UNCAD.Core.QuickLine
                 MaxZ = maxZ;
             }
 
-            private double MinX { get; }
-            private double MinY { get; }
-            private double MinZ { get; }
-            private double MaxX { get; }
-            private double MaxY { get; }
-            private double MaxZ { get; }
+            public double MinX { get; }
+            public double MinY { get; }
+            public double MinZ { get; }
+            public double MaxX { get; }
+            public double MaxY { get; }
+            public double MaxZ { get; }
 
             public double Diagonal => Math.Sqrt(
                 (MaxX - MinX) * (MaxX - MinX)

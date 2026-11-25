@@ -120,17 +120,17 @@ namespace UNCAD.Features.Unl
             }
             ctx.Write("\n[U1UL] 已归位 " + result.Moved + " 个毫米标（离线距离、角度随线段，"
                 + "所在侧保持不变）；另有 " + result.Unchanged + " 个已在位未动。"
+                + (result.MovedByPosition > 0
+                    ? "其中 " + result.MovedByPosition
+                        + " 个没有关联元数据，是按位置认领的（贴在线段旁、角度相近）。" : "")
                 + "一次 U 可整体撤销。");
+            if (result.PositionRejected > 0)
+                ctx.Write("\n[U1UL] " + result.PositionRejected
+                    + " 个毫米标只靠位置匹配、而且离线段太远或角度差太多，未动"
+                    + "（沿线范围内、离线不超过 4 倍字高、夹角 10° 以内才算它的毫米标）。");
             if (result.SkippedHandles.Count > 0)
             {
-                string detail = result.WithoutAssociatedLabel > 0
-                    ? result.WithoutAssociatedLabel + " 段没有毫米标" : string.Empty;
-                if (result.WithoutMetadata > 0)
-                    detail += (detail.Length > 0 ? "，" : string.Empty)
-                        + result.WithoutMetadata + " 段的毫米标没有指向本线段的关联元数据"
-                        + "（旧图纸只按位置匹配，或线段被合并过；不猜）";
-                ctx.Write("\n[U1UL] " + result.SkippedHandles.Count + " 段线段未处理（"
-                    + detail + "）：句柄 "
+                ctx.Write("\n[U1UL] " + result.WithoutLabel + " 段线段没有毫米标，未处理：句柄 "
                     + string.Join("、", result.SkippedHandles.Take(HandlesShown))
                     + (result.SkippedHandles.Count > HandlesShown
                         ? " 等 " + result.SkippedHandles.Count + " 段" : string.Empty));

@@ -96,14 +96,20 @@ namespace UNCAD.Cad
             IReadOnlyList<ParallelAnnotationOwnershipEntry> entries,
             IReadOnlyList<QuickLineCadSegment> scanned)
         {
-            var segmentsByHandle = new Dictionary<string, QuickLineCadSegment>(
+            var segmentsByHandle = new Dictionary<string, List<QuickLineCadSegment>>(
                 StringComparer.OrdinalIgnoreCase);
             foreach (QuickLineCadSegment segment in scanned ?? Array.Empty<QuickLineCadSegment>())
             {
                 if (segment == null) continue;
                 string handle = segment.LineId.Handle.ToString();
-                if (!segmentsByHandle.ContainsKey(handle))
-                    segmentsByHandle.Add(handle, segment);
+                // 3.8.0.2：带拐角的多段线拆成的各段共用一个句柄，都是宿主。
+                if (!segmentsByHandle.TryGetValue(handle,
+                        out List<QuickLineCadSegment> parts))
+                {
+                    parts = new List<QuickLineCadSegment>();
+                    segmentsByHandle.Add(handle, parts);
+                }
+                parts.Add(segment);
             }
             var result = new Dictionary<string, List<QuickLineCadSegment>>(
                 StringComparer.OrdinalIgnoreCase);
@@ -113,8 +119,8 @@ namespace UNCAD.Cad
                 var hosts = new List<QuickLineCadSegment>();
                 foreach (string handle in entry.HostHandles)
                     if (segmentsByHandle.TryGetValue(handle,
-                            out QuickLineCadSegment segment))
-                        hosts.Add(segment);
+                            out List<QuickLineCadSegment> segments))
+                        hosts.AddRange(segments);
                 result[entry.EntityId.Handle.ToString()] = hosts;
             }
             return result;

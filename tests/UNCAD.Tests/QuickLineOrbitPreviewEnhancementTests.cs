@@ -97,13 +97,12 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ColumnGrid_SameLetterRoute_ExtendsLetterAxisAcrossEnvelope()
+        public void ColumnGrid_SameLetterRoute_LabelsLettersAtPitchFromTheUpstream()
         {
-            // 用户 3.3.1 现场反馈「轴位不应该这样显示」的修正场景：路由在 Y 向
-            // 跨 2 跨（0→9600）、两端字母同为 V → 字母轴按 4800 柱距沿坐标正向
-            // 递推邻居 V/W/X（任务书口径「字母轴 U/V/W…」：锚定字母来自台账
-            // 解析，邻居按柱距等差递推；台账没有信息能定字母递增的方位，约定
-            // +坐标=A→Z 递增并文档化）。
+            // 3.8.0.4（用户口径「一个轴位是 4.8 m；两端能被正确轴位保住」）：
+            // 柱网线每根一个轴号、相邻差 1，跨距恒为 4800——不再按两端跨度
+            // 线性插值。这个场景（X 2 跨 + Y 2 跨，台账却差 11 个号）本来就
+            // 对不上：网格锚在上游、按 4.8 m 铺，问题清单点名。
             var segments = new List<QuickLineOrbitPreviewSegment>
             {
                 new QuickLineOrbitPreviewSegment("s1",
@@ -118,18 +117,23 @@ namespace UNCAD.Tests
             QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 segments, "48/V", "37/V");
             Assert.True(grid.NumericAxisIsX);
-            // 字母轴锚在上游 Y=0（V）：包络 [0,9600] → 0(V)、4800(W)、9600(X)。
-            Assert.Equal(new[] { "V", "W", "X" },
+            // 数字沿 X：48、47、46（每根柱网线一号）。
+            Assert.Equal(new[] { 48, 47, 46 },
+                grid.NumericTicks.Select(tick => tick.Number).ToArray());
+            // 数字轴在 X → 字母轴在 Y（旋转约定：字母沿 −Y 递增）：V、U、T。
+            Assert.Equal(new[] { "V", "U", "T" },
                 grid.LetterLabels.Select(label => label.Letter).ToArray());
             Assert.Equal(0.0, grid.LetterLabels
                 .Single(label => label.Letter == "V").Position, 6);
+            Assert.Contains(grid.Diagnostics, text => text.IndexOf(
+                "轴位与图面距离对不上", StringComparison.Ordinal) >= 0);
         }
 
         [Fact]
-        public void ColumnGrid_DifferentLetters_InterpolateClampedBetweenEndpoints()
+        public void ColumnGrid_DifferentLetters_LabelAtPitchAndAnchorAtTheUpstream()
         {
-            // 两端字母不同（V→U）：按字母轴跨度线性插值，夹在两端之间，
-            // 与数字轴同口径（不做端点外推）。
+            // 3.8.0.4：字母轴同样每根柱网线一个字母、跨距 4.8 m——不再按两端
+            // 字母跨度插值（那会把一个字母压进几十毫米、跨距不再是 4.8 m）。
             var segments = new List<QuickLineOrbitPreviewSegment>
             {
                 new QuickLineOrbitPreviewSegment("s1",
@@ -137,16 +141,20 @@ namespace UNCAD.Tests
                     new QuickLineSpatialPoint(0, 9600, 0),
                     QuickLineSpatialAxis.Y, 9600, true)
             };
-            // 位移全在 Y → 数字轴=Y、字母轴=X；两端字母 V/U 但两端 X 重合
-            //（场景上无法定序）→ 字母不标（不猜）。
+            // 位移全在 Y → 数字轴=Y、字母轴=X；两端字母 V→U 但两端 X 重合
+            //（字母轴实际跨度 0，放不下一个字母的 4.8 m）：字母锚在上游 V，
+            // 数字轴对不上（11 个号对 2 跨）——两轴都在问题清单里点名。
             QuickLineColumnGrid degenerate = PlanForKnownTestEndpoints(
                 segments, "48/V", "37/U");
             Assert.False(degenerate.NumericAxisIsX);
-            Assert.Empty(degenerate.LetterLabels);
+            Assert.Equal("V", degenerate.LetterLabels.Single().Letter);
+            Assert.Equal(0.0, degenerate.LetterLabels.Single().Position, 6);
             Assert.NotEmpty(degenerate.NumericTicks);
+            Assert.Contains(degenerate.Diagnostics, text => text.IndexOf(
+                "轴位与图面距离对不上", StringComparison.Ordinal) >= 0);
 
-            // 字母位置有真实跨度：路由在 X 向 0→9600（数字轴=X），字母轴=Y，
-            // 两端 Y 错开 9600（V@0、U@9600）→ 插值出 V/U 夹在中间。
+            // 字母位置有真实跨度：路由在 X 向 0→9600（位移平手取 X），字母轴=Y，
+            // 两端 Y 错开 9600（V@0、U@4800、T@9600）。
             var diagonal = new List<QuickLineOrbitPreviewSegment>
             {
                 new QuickLineOrbitPreviewSegment("s1",
@@ -157,7 +165,7 @@ namespace UNCAD.Tests
             QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
                 diagonal, "48/V", "37/U");
             Assert.True(grid.NumericAxisIsX);
-            Assert.Equal(new[] { "V", "U" },
+            Assert.Equal(new[] { "V", "U", "T" },
                 grid.LetterLabels.Select(label => label.Letter).ToArray());
         }
 
@@ -177,13 +185,16 @@ namespace UNCAD.Tests
             Assert.Empty(bad.NumericTicks);
             Assert.Empty(bad.LetterLabels);
             Assert.NotEmpty(bad.Lines);
-            // 两端都能解析但都没有数字轴（纯字母 V→P）：数字刻度不画；字母
-            // 不同但两端字母轴坐标重合（路由纯 X 向、字母轴=X 两端同为 0）
-            //——场景上无法定序，不猜，字母也不标。
+            // 两端都能解析但都没有数字轴（纯字母 V→P）：数字刻度不画；字母轴
+            // 沿 X（位移在 X）、锚在上游 V，按 4.8 m 每根线一个字母（V/U/T）；
+            // 字母差 6 个号对不上 2 跨，问题清单点名。
             QuickLineColumnGrid letters = PlanForKnownTestEndpoints(
                 segments, "V", "P");
             Assert.Empty(letters.NumericTicks);
-            Assert.Empty(letters.LetterLabels);
+            Assert.Equal(new[] { "V", "U", "T" },
+                letters.LetterLabels.Select(label => label.Letter).ToArray());
+            Assert.Contains(letters.Diagnostics, text => text.IndexOf(
+                "轴位与图面距离对不上", StringComparison.Ordinal) >= 0);
             // 半边值（一端数字一端字母）：两向都不算。
             QuickLineColumnGrid mixed = PlanForKnownTestEndpoints(
                 segments, "48", "V");
@@ -214,8 +225,8 @@ namespace UNCAD.Tests
             Assert.Equal("V", grid.LetterLabels.Single().Letter);
             Assert.Equal(100.0, grid.LetterLabels.Single().Position, 6);
 
-            // 纯竖直路由（平面位移为零）：数字轴无跨度不标刻度；字母轴同字母
-            // 锚定仍可标（网格只有一条 X 线，恰是 V）；网格照画。
+            // 纯竖直路由（平面位移为零）：数字轴无位移可对齐，锚在上游（48 那根
+            // 线恰好过上游点）；台账 11 个号的差距对不上，问题清单点名；网格照画。
             var vertical = new List<QuickLineOrbitPreviewSegment>
             {
                 new QuickLineOrbitPreviewSegment("s1",
@@ -225,11 +236,15 @@ namespace UNCAD.Tests
             };
             QuickLineColumnGrid zOnly = PlanForKnownTestEndpoints(
                 vertical, "48/V", "37/V");
-            Assert.Empty(zOnly.NumericTicks);
+            Assert.Single(zOnly.NumericTicks);
+            Assert.Equal(48, zOnly.NumericTicks[0].Number);
+            Assert.Equal(100.0, zOnly.NumericTicks[0].Position, 6);
             Assert.Equal("V", zOnly.LetterLabels.Single().Letter);
             Assert.NotEmpty(zOnly.Lines);
             Assert.Equal(100.0, zOnly.UpstreamEndpoint.Value.X, 6);
             Assert.Equal(100.0, zOnly.DownstreamEndpoint.Value.X, 6);
+            Assert.Contains(zOnly.Diagnostics, text => text.IndexOf(
+                "轴位与图面距离对不上", StringComparison.Ordinal) >= 0);
         }
 
         [Fact]
@@ -269,14 +284,25 @@ namespace UNCAD.Tests
         [Fact]
         public void ColumnGrid_AnchorExtensionSkipsLettersBelowA()
         {
-            // 锚定递推越界（索引<1，如 A 的左邻）跳过，不猜负索引字母。
-            IReadOnlyList<QuickLineColumnGridLetterLabel> labels =
-                QuickLineColumnGridPlanner.InterpolateLetterLabels(
-                    0.0, 1, 0.0, 1, 0.0, -4800.0, 4800.0, 4800.0);
-            Assert.Equal(new[] { "A", "B" },
-                labels.Select(label => label.Letter).ToArray());
-            Assert.Equal(0.0, labels[0].Position, 6);
-            Assert.Equal(4800.0, labels[1].Position, 6);
+            // 3.8.0.4：偏差对半分摊后锚点会落到包络里；包络外那一根（索引 <1，
+            // 如 A 的左邻）跳过，不猜负索引字母。上游 0 / 下游 7200、A→B
+            //（应差 4800，实际多 2400 → 每端偏 1200）：A 线在 1200，
+            // 包络外那根（−3600）没有字母。
+            var segments = new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(7200, 0, 0),
+                    QuickLineSpatialAxis.X, 7200, true)
+            };
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
+                segments, "48/A", "48/B");
+            Assert.Equal(new[] { "A", "B", "C" },
+                grid.LetterLabels.Select(label => label.Letter).ToArray());
+            Assert.Equal(1200.0, grid.LetterLabels[0].Position, 6);
+            Assert.Equal(new[] { 1200.0, 6000.0, 10800.0 },
+                grid.LetterLabels.Select(label => label.Position).ToArray());
+            Assert.Empty(grid.Diagnostics);
         }
 
         [Fact]
@@ -303,29 +329,113 @@ namespace UNCAD.Tests
         }
 
         [Fact]
-        public void ColumnGrid_RoundsSkipsOutOfRangeAndDuplicateNumbers()
+        public void ColumnGrid_NumbersStayOneBayApartAndMismatchIsReported()
         {
-            // 刻度间距小于一号轴（span 9500、4 号差、柱距 1000）：相邻柱网线
-            // 四舍五入到同一号→去重；端点外推值越界→跳过。
-            IReadOnlyList<QuickLineColumnGridTick> ticks =
-                QuickLineColumnGridPlanner.InterpolateTicks(
-                    0.0, 48, 9500.0, 44, 0.0, 0.0, 9500.0, 1000.0);
-            Assert.Equal(new[]
+            // 3.8.0.4：跨距恒为 4.8 m——柱网线每根一个轴号、相邻差 1。图面比
+            // 台账短（9.5 m 对 4 跨 19.2 m）时不再把 4 个号压进 9.5 m、也不再
+            // 跳号；网格锚在上游、按 4.8 m 铺，问题清单点名。
+            var segments = new List<QuickLineOrbitPreviewSegment>
             {
-                Tuple.Create(0.0, 48),
-                Tuple.Create(2000.0, 47),
-                Tuple.Create(4000.0, 46),
-                Tuple.Create(6000.0, 45),
-                Tuple.Create(9000.0, 44)
-            }, ticks.Select(tick => Tuple.Create(tick.Position, tick.Number)).ToArray());
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(9500, 0, 0),
+                    QuickLineSpatialAxis.X, 9500, true)
+            };
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
+                segments, "48/V", "44/V");
+            Assert.True(grid.NumericAxisIsX);
+            Assert.Equal(new[] { 48, 47, 46 },
+                grid.NumericTicks.Select(tick => tick.Number).ToArray());
+            Assert.Equal(new[] { 0.0, 4800.0, 9600.0 },
+                grid.NumericTicks.Select(tick => tick.Position).ToArray());
+            Assert.Contains(grid.Diagnostics, text =>
+                text.IndexOf("轴位与图面距离对不上", StringComparison.Ordinal) >= 0
+                && text.IndexOf("48→44", StringComparison.Ordinal) >= 0
+                && text.IndexOf("19.2 m", StringComparison.Ordinal) >= 0);
+        }
 
-            // 超出两端轴号范围的取整值跳过：span 4000/Δ11，4800 处外推 35
-            // 越过下游 37 → 只剩上游端 48。
-            IReadOnlyList<QuickLineColumnGridTick> clipped =
-                QuickLineColumnGridPlanner.InterpolateTicks(
-                    0.0, 48, 4000.0, 37, 0.0, 0.0, 4000.0, 4800.0);
-            Assert.Single(clipped);
-            Assert.Equal(48, clipped[0].Number);
+        [Fact]
+        public void ColumnGrid_DeviceOffAxisCentre_BothEndsStayInsideTheirBays()
+        {
+            // 用户口径（3.8.0.4）：设备很大概率不在轴位中心——只要两端能被正确
+            // 轴位保住就行。上游 48/V、设备 37/V，图面南北 54000（11 跨 + 1200）、
+            // 东西 300：偏差对半分摊后两端各偏 600 / 150，各自落在自己的格子里；
+            // 跨距仍是 4800，不报警。
+            var segments = new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(300, 54000, 0),
+                    QuickLineSpatialAxis.Y, 54001, true)
+            };
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
+                segments, "48/V", "37/V");
+            Assert.False(grid.NumericAxisIsX);
+            Assert.Empty(grid.Diagnostics);
+            QuickLineColumnGridTick up = grid.NumericTicks
+                .Single(tick => tick.Number == 48);
+            QuickLineColumnGridTick down = grid.NumericTicks
+                .Single(tick => tick.Number == 37);
+            Assert.Equal(11 * 4800.0, down.Position - up.Position, 6);
+            // 两端离各自的轴都不超过半跨（2400）——被正确轴位保住。
+            Assert.InRange(Math.Abs(grid.UpstreamEndpoint.Value.Y - up.Position),
+                0.0, 2400.0);
+            Assert.InRange(Math.Abs(grid.DownstreamEndpoint.Value.Y - down.Position),
+                0.0, 2400.0);
+            Assert.Equal("V", grid.LetterLabels
+                .Single(label => label.Letter == "V").Letter);
+        }
+
+        [Fact]
+        public void ColumnGrid_RotatedConventionWhenTheDefaultCannotHoldBothEnds()
+        {
+            // 默认约定（字母沿 X、数字沿 −Y）放不下、旋转约定（数字沿 X）放得
+            // 下时用旋转约定：路由沿 X 11 跨、台账 48/V→37/V。两端各在自己的
+            // 格子里、跨距 4800、不报警。
+            var segments = new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(52800, 0, 0),
+                    QuickLineSpatialAxis.X, 52800, true)
+            };
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
+                segments, "48/V", "37/V");
+            Assert.True(grid.NumericAxisIsX);
+            Assert.Empty(grid.Diagnostics);
+            Assert.Equal(48, grid.NumericTicks[0].Number);
+            Assert.Equal(0.0, grid.NumericTicks[0].Position, 6);
+            Assert.Equal(37, grid.NumericTicks[grid.NumericTicks.Count - 1].Number);
+            Assert.Equal(52800.0,
+                grid.NumericTicks[grid.NumericTicks.Count - 1].Position, 6);
+            // 数字沿 +X 递减 → 字母轴=Y、沿 −Y 递增：V 在上游 Y=0。
+            Assert.True(grid.NumbersIncreaseWithAxis == false);
+            Assert.Equal("V", grid.LetterLabels.Single().Letter);
+        }
+
+        [Fact]
+        public void AxisMismatch_IsNamedWithExpectedAndActualDistances()
+        {
+            // 3.8.0.4：轴位与图面对不上时要能一句话说清（问题清单/命令行/批量
+            // 备注同源）：谁到谁、差几跨、应多长、实际多长、往哪个方向。
+            var upstream = new QuickLineSpatialPoint(0, 0, 0);
+            var downstream = new QuickLineSpatialPoint(0, 40000, 0);
+            string message = QuickLineColumnGridPlanner.DescribeAxisMismatch(
+                upstream, downstream, "48/V", "37/V");
+            Assert.NotNull(message);
+            Assert.Contains("上游 48/V ↔ 下游 37/V", message, StringComparison.Ordinal);
+            Assert.Contains("11 跨", message, StringComparison.Ordinal);
+            Assert.Contains("52.8 m", message, StringComparison.Ordinal);
+            Assert.Contains("40 m", message, StringComparison.Ordinal);
+            Assert.Contains("12.8 m", message, StringComparison.Ordinal);
+            Assert.Contains("每跨 4.8 m", message, StringComparison.Ordinal);
+            // 放得下时不报；轴位读不出来、方向未确认也不报。
+            Assert.Null(QuickLineColumnGridPlanner.DescribeAxisMismatch(
+                upstream, new QuickLineSpatialPoint(0, 54000, 0), "48/V", "37/V"));
+            Assert.Null(QuickLineColumnGridPlanner.DescribeAxisMismatch(
+                upstream, downstream, "轴A", "37/V"));
+            Assert.Null(QuickLineColumnGridPlanner.DescribeAxisMismatch(
+                upstream, downstream, null, null));
         }
 
         [Fact]
@@ -338,12 +448,18 @@ namespace UNCAD.Tests
             Assert.Null(QuickLineColumnGridPlanner.LettersFromIndex(0));
             Assert.Null(QuickLineColumnGridPlanner.LettersFromIndex(-3));
 
-            // 多字母值（ABC=731）：同字母锚定递推，邻居 ABB/ABD/ABE 照推。
-            IReadOnlyList<QuickLineColumnGridLetterLabel> labels =
-                QuickLineColumnGridPlanner.InterpolateLetterLabels(
-                    0.0, 731, 0.0, 731, 0.0, -4800.0, 9600.0, 4800.0);
+            // 多字母值（ABB=730 … ABE=733）：柱网线每根一个字母，按 4.8 m 递推。
+            var segments = new List<QuickLineOrbitPreviewSegment>
+            {
+                new QuickLineOrbitPreviewSegment("s1",
+                    new QuickLineSpatialPoint(0, 0, 0),
+                    new QuickLineSpatialPoint(14400, 0, 0),
+                    QuickLineSpatialAxis.X, 14400, true)
+            };
+            QuickLineColumnGrid grid = PlanForKnownTestEndpoints(
+                segments, "48/ABB", "48/ABE");
             Assert.Equal(new[] { "ABB", "ABC", "ABD", "ABE" },
-                labels.Select(label => label.Letter).ToArray());
+                grid.LetterLabels.Select(label => label.Letter).ToArray());
         }
 
         [Fact]

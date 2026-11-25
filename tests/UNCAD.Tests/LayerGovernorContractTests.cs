@@ -147,7 +147,7 @@ namespace UNCAD.Tests
             string batch = Source("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdateCoordinator.cs");
             Assert.Contains("LayerGovernorService.Apply", batch);
-            Assert.Contains("FillRouteInspectionStage.Scan(ctx, drawingStyle,", batch);
+            Assert.Contains("FillRouteInspectionStage.Scan(ctx,", batch);
             Assert.Contains("FillRouteInspectionStage.CorrectDrawingSettings",
                 fill);
             Assert.Contains("FillRouteInspectionStage.CorrectDrawingSettings",

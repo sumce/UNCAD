@@ -38,8 +38,6 @@
                         <Button x:Name="GridButton" Content="柱网 开" Click="OnGridToggle" />
                         <Button x:Name="LabelsButton" Content="隐藏路线标签" Click="OnRouteLabelsToggle" />
                         <Button x:Name="DirectionButton" Content="隐藏端点标签" Click="OnDirectionLabelsToggle" />
-                        <Button x:Name="WebButton" Content="WebV" Click="OnWebPreview"
-                                ToolTip="在独立窗口中用 WebView2 / Three.js 打开当前场景" />
                     </WrapPanel>
                     <TextBlock x:Name="StatusText" HorizontalAlignment="Left"
                                VerticalAlignment="Bottom" Margin="10,0,0,6"

@@ -48,6 +48,17 @@ namespace UNCAD.Cad
                     ?? Array.Empty<QuickLineCadSegment>())
                 {
                     string handle = segment.LineId.Handle.ToString();
+                    // 3.8.0.2：带拐角的多段线拆成的各段——毫米数累加成整根的长度；
+                    // 标注位置不按整根多段线的几何去矫正（那会把各段的标都摆到
+                    // 首末两点上去），所以拆出的段不进标位置矫正的清单。
+                    if (segment.PartIndex > 0)
+                    {
+                        if (segment.LabelMillimetres.HasValue)
+                            u1lMillimetres[handle] =
+                                (u1lMillimetres.TryGetValue(handle, out double known)
+                                    ? known : 0.0) + segment.LabelMillimetres.Value;
+                        continue;
+                    }
                     if (!segmentsByHandle.ContainsKey(handle))
                         segmentsByHandle.Add(handle, segment);
                     if (segment.LabelMillimetres.HasValue)

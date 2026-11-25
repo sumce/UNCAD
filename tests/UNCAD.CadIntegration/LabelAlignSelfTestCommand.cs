@@ -36,7 +36,7 @@ namespace UNCAD.CadIntegration
             const double height = 180;
             const double offset = 50;
             ObjectId lineA, labelA, lineB, labelB, lineC, labelC, lineD, lineE, labelE,
-                lineF, labelF;
+                lineG, labelG, lineF, labelF;
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
                 // A：水平线，毫米标在线上方。
@@ -59,9 +59,14 @@ namespace UNCAD.CadIntegration
                     "link label C");
                 // D：没有毫米标的线段。
                 lineD = AddLine(ctx, tr, o + 20000, o, o + 24000, o);
-                // E：毫米标只靠位置匹配，没有关联元数据（旧图纸）。
+                // E：毫米标只靠位置匹配，没有关联元数据（旧图纸）：贴在线旁，
+                // 3.8.0（D-059）起也归位（位置认领）。
                 lineE = AddLine(ctx, tr, o + 20000, o + 3000, o + 24000, o + 3000);
                 labelE = AddLabel(ctx, tr, "1500mm", height, o + 22000, o + 3100, 0.0,
+                    AttachmentPoint.BaseLeft);
+                // G：只靠位置匹配、但离线太远（>4 倍字高）——拿不准，不动。
+                lineG = AddLine(ctx, tr, o + 20000, o + 6000, o + 24000, o + 6000);
+                labelG = AddLabel(ctx, tr, "900mm", height, o + 22000, o + 6000 + 2000, 0.0,
                     AttachmentPoint.BaseLeft);
                 // F：从右往左画的线，毫米标倒着读（180°）放在线下方。
                 lineF = AddLine(ctx, tr, o + 4000, o + 8000, o, o + 8000);
@@ -72,22 +77,24 @@ namespace UNCAD.CadIntegration
                 tr.Commit();
             }
 
-            var boundary = new FrameRectangle("align", o - 5000, o - 5000, o + 30000, o + 12000);
+            var boundary = new FrameRectangle("align", o - 5000, o - 5000, o + 30000, o + 16000);
             var scanned = QuickLineCadService.Scan(ctx, new QuickLineScanOptions
             {
                 IncludeUnlabelled = true,
                 FrameBoundaries = new[] { boundary }
             });
-            Require(scanned.Count == 6, "six lines in scope, got " + scanned.Count);
+            Require(scanned.Count == 7, "seven lines in scope, got " + scanned.Count);
 
             QuickLineLabelAlignResult result = QuickLineLabelAlignService.Apply(
                 ctx, scanned, offset, false, true);
             Require(result != null, "apply returns a result");
-            Require(result.Moved == 4, "four labels moved, got " + result.Moved);
+            // A/B/C/F 有关联元数据；E 只靠位置（贴在线旁）也算一条，共 5 个。
+            Require(result.Moved == 5, "five labels moved, got " + result.Moved);
+            Require(result.MovedByPosition == 1, "one label claimed by position");
             Require(result.Unchanged == 0, "nothing unchanged on the first run");
-            Require(result.WithoutAssociatedLabel == 1, "one line without a label");
-            Require(result.WithoutMetadata == 1, "one line whose label has no metadata");
-            Require(result.SkippedHandles.Count == 2, "two lines skipped");
+            Require(result.WithoutLabel == 1, "one line without a label");
+            Require(result.PositionRejected == 1, "one too-far position match rejected");
+            Require(result.SkippedHandles.Count == 1, "one line skipped");
 
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())
             {
@@ -117,11 +124,21 @@ namespace UNCAD.CadIntegration
                 Near(c.Rotation, Math.PI / 2, "C keeps reading bottom-to-top");
                 Require(c.Justify == AttachmentPoint.BottomCenter, "C attachment");
 
-                // E：只靠位置匹配的毫米标原样不动。
+                // E：只靠位置匹配（贴在线旁）也归位：离线距离 50、角度归零。
+                // 对齐方式已改成底中，位置读 AlignmentPoint（Position 会被 AutoCAD
+                // 反算成文字框左侧点）。
                 DBText e = (DBText)tr.GetObject(labelE, OpenMode.ForRead);
-                Near(e.Position.X, o + 22000, "E position untouched (no metadata)");
-                Near(e.Position.Y, o + 3100, "E position untouched (no metadata)");
-                Require(e.Justify == AttachmentPoint.BaseLeft, "E justification untouched");
+                Require(e.Justify == AttachmentPoint.BottomCenter, "E attachment");
+                Near(e.AlignmentPoint.X, o + 22000, "E along-line position kept");
+                Near(e.AlignmentPoint.Y, o + 3000 + offset, "E aligned by position");
+                Near(e.Rotation, 0.0, "E angle follows the line");
+                Require(QuickLineMetadataStore.ReadAssociatedLineHandle(e).Length == 0,
+                    "E must not gain an association");
+                // G：离线太远，拿不准，原样不动。
+                DBText g = (DBText)tr.GetObject(labelG, OpenMode.ForRead);
+                Near(g.Position.X, o + 22000, "G untouched (too far)");
+                Near(g.Position.Y, o + 6000 + 2000, "G untouched (too far)");
+                Require(g.Justify == AttachmentPoint.BaseLeft, "G justification untouched");
 
                 // F：倒读的文字保持倒读，留在下方。倒读文字自身坐标系的「底边」
                 // 在世界里朝上，底中对齐才会让文字背离线段展开（顶中会压到线上）。
@@ -133,7 +150,7 @@ namespace UNCAD.CadIntegration
                 tr.Commit();
             }
 
-            // 重跑幂等：四个都已在位，不再改动。
+            // 重跑幂等：5 个都已在位，不再改动；G 仍然不动。
             scanned = QuickLineCadService.Scan(ctx, new QuickLineScanOptions
             {
                 IncludeUnlabelled = true,
@@ -141,7 +158,7 @@ namespace UNCAD.CadIntegration
             });
             QuickLineLabelAlignResult again = QuickLineLabelAlignService.Apply(
                 ctx, scanned, offset, false, true);
-            Require(again != null && again.Moved == 0 && again.Unchanged == 4,
+            Require(again != null && again.Moved == 0 && again.Unchanged == 5,
                 "second run moves nothing");
         }
 

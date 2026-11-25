@@ -181,7 +181,7 @@ namespace UNCAD.CadIntegration
 
             // ---- ④ Scan → Inspect：验证路由与桥架归属；U1U 内嵌预览已停用 ----
             IReadOnlyList<QuickLineCadSegment> scanned =
-                FillRouteInspectionStage.Scan(ctx);
+                FillRouteInspectionStage.Scan(ctx).Segments;
             Info("Scan 线段: " + scanned.Count);
             FillRouteInspection inspection;
             using (Transaction tr = ctx.Db.TransactionManager.StartTransaction())

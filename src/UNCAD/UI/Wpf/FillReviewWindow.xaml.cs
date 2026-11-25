@@ -28,9 +28,9 @@ namespace UNCAD.UI
     /// </summary>
     public sealed partial class FillReviewWindow : FluentWindow
     {
-        /// <summary>3.3.1（D-054 Amendment）：对半分列的最小宽度保护（窗口
-        /// MinWidth=900 的约 30%——GridSplitter 拖不穿，两侧内容始终可用）。</summary>
-        internal const double PreviewMinimumPixels = 250.0;
+        /// <summary>3.8.0.5：对半分列的最小宽度保护——窗口 MinWidth=1200 时
+        /// 拖分隔条也不能把 3D 预览拖成窄条（现场：3D 太小）。</summary>
+        internal const double PreviewMinimumPixels = 420.0;
 
         /// <summary>用户点了“确认填充”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
@@ -80,6 +80,11 @@ namespace UNCAD.UI
 
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
+            // 3.8.0.5：默认 1440×900，但不超过屏幕工作区（小屏/高缩放下不外溢）。
+            Width = Math.Min(Width, Math.Max(960.0,
+                SystemParameters.WorkArea.Width - 32.0));
+            Height = Math.Min(Height, Math.Max(640.0,
+                SystemParameters.WorkArea.Height - 32.0));
             DataContext = this;
             Title = ProductMetadata.ProductName + " · 清单确认";
             HeaderBar.Title = Title;
@@ -94,6 +99,9 @@ namespace UNCAD.UI
                 PreviewHost.Visibility = Visibility.Visible;
                 PreviewSplitter.Visibility = Visibility.Visible;
                 OrbitPreview.SetModel(preview);
+                // 3.8.0.5（用户口径「清单确认应该在那一半」）：有预览时右半
+                // 默认就是清单选择表格；身份/电缆校验失败时仍自动切回基础信息。
+                ReviewTabs.SelectedIndex = 1;
             }
             // 特性①：图层矫正报告（确认窗里列出，动作在写事务里执行）。
             if (!string.IsNullOrWhiteSpace(layerCorrectionText))
@@ -117,7 +125,10 @@ namespace UNCAD.UI
             }
             PopulateRows(Data.Items);
             UpdateDeleteState();
-            Loaded += (sender, args) => MachineBox.Focus();
+            Loaded += (sender, args) =>
+            {
+                if (ReviewTabs.SelectedIndex == 0) MachineBox.Focus();
+            };
         }
 
         // ---- 基础信息字段同步 -------------------------------------------------

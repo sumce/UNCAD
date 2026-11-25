@@ -453,68 +453,114 @@ namespace UNCAD.Tests
         // ---------------- 源码契约：3.3.6.2 现场反馈（3D 预览时效性/模态窗快关竞态） ----------------
 
         [Fact]
-        public void DualPreview3d_BrowserControllerStaysOutsideCadProcess()
+        public void Preview3d_WebView2PageIsLocalOnly_WpfRendererStaysTheFallback()
         {
-            // WPF remains the synchronous default; optional WebView2/Three.js
-            // must launch in its own process to keep browser stalls out of CAD.
+            // 3.8.0.5（用户指令「3D 预览换成 WebView2」）：U1U 预览主内核回到
+            // WebView2 + three.js（本地虚拟主机页面）；WPF Viewport3D 保留为
+            // **自动兜底**——WebView2 不可用时预览照常可用，绝不空白。
+            // 独立进程 WebV（UNCAD.Preview.exe）仍然退役，不在此列。
             string orbit = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLineOrbitPreviewControl.cs");
+            string host = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLineOrbitWebHost.cs");
+            string review = Read("src", "UNCAD", "UI", "Wpf",
+                "FillReviewWindow.xaml");
+            string batch = Read("src", "UNCAD", "UI", "Wpf",
+                "BatchFillConfirmationWindow.xaml");
             string u13d = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLine3dWindow.xaml.cs");
+            string u13dXaml = Read("src", "UNCAD", "UI", "Wpf",
+                "QuickLine3dWindow.xaml");
             string viewport = Read("src", "UNCAD", "UI", "Wpf",
                 "QuickLine3dViewportControl.cs");
-            string web = Read("src", "UNCAD", "UI", "Wpf",
-                "QuickLineWebPreview.cs");
-            string helper = Read("src", "UNCAD.Preview", "Program.cs");
             string bootstrap = Read("src", "UNCAD", "Bootstrap.cs");
             string csproj = Read("src", "UNCAD", "UNCAD.csproj");
-            // 断言代码标记而非注释文本——文件头的历史描述里可以提旧内核，
-            // 代码里不许再碰它（类型/共享环境入口/异步初始化三针全禁）。
+            string solution = Read("UNCAD.slnx");
+
+            // 兜底 WPF 渲染器保持纯 WPF、同步建场景（无浏览器依赖）。
             Assert.DoesNotContain("Microsoft.Web.WebView2", orbit,
                 StringComparison.Ordinal);
             Assert.DoesNotContain("CoreWebView2", orbit, StringComparison.Ordinal);
-            Assert.DoesNotContain("EnsureControllerAsync", orbit,
-                StringComparison.Ordinal);
-            Assert.DoesNotContain("Microsoft.Web.WebView2", u13d,
-                StringComparison.Ordinal);
-            Assert.DoesNotContain("CoreWebView2", u13d, StringComparison.Ordinal);
-            Assert.DoesNotContain("EnsureControllerAsync", u13d,
-                StringComparison.Ordinal);
-            Assert.DoesNotContain("CoreWebView2", viewport,
-                StringComparison.Ordinal);
-            // WPF scene construction stays synchronous; only the isolated viewer
-            // launch/export is asynchronous and cannot initialize WebView2 in CAD.
             Assert.Contains("QuickLineOrbitSceneBuilder.Build", orbit,
                 StringComparison.Ordinal);
-            Assert.Contains("LoadScene(scene);", u13d, StringComparison.Ordinal);
-            Assert.Contains("await QuickLineWebPreview.OpenAsync", orbit,
+            Assert.Contains("SetScene", orbit, StringComparison.Ordinal);
+
+            // 新宿主：共享环境 + 本地虚拟主机 + 导航/权限/下载全部锁死。
+            Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
+                host, StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2Environment.CreateAsync", host,
                 StringComparison.Ordinal);
-            Assert.Contains("await QuickLineWebPreview.OpenAsync", u13d,
+            Assert.Contains("SetVirtualHostNameToFolderMapping", host,
                 StringComparison.Ordinal);
-            Assert.Contains("Task.Run", web, StringComparison.Ordinal);
-            // 登录页是 WebView2 的唯一合法消费者（继续走共享环境）。
+            Assert.Contains("CoreWebView2HostResourceAccessKind.Deny", host,
+                StringComparison.Ordinal);
+            Assert.Contains("OnNavigationStarting", host,
+                StringComparison.Ordinal);
+            Assert.Contains("args.Cancel = true", host,
+                StringComparison.Ordinal);
+            Assert.Contains("AreHostObjectsAllowed = false", host,
+                StringComparison.Ordinal);
+            Assert.Contains("DownloadStarting", host, StringComparison.Ordinal);
+            Assert.Contains("PermissionRequested", host,
+                StringComparison.Ordinal);
+            Assert.Contains("ProcessFailed", host, StringComparison.Ordinal);
+            // 失败退回 WPF 兜底（收起浏览器、亮出原因）。
+            Assert.Contains("ShowFatalError", host, StringComparison.Ordinal);
+            Assert.Contains("Visibility.Collapsed", host,
+                StringComparison.Ordinal);
+
+            // 两个确认窗都挂新宿主（左右对半）。
+            Assert.Contains("local:QuickLineOrbitWebHost", review,
+                StringComparison.Ordinal);
+            Assert.Contains("local:QuickLineOrbitWebHost", batch,
+                StringComparison.Ordinal);
+
+            // 页面资产：本地 CSP、只回 ready / renderError，消息三件可处理。
+            string page = Read("src", "UNCAD", "Web", "QuickLineOrbit",
+                "index.html");
+            string app = Read("src", "UNCAD", "Web", "QuickLineOrbit", "app.js");
+            Assert.Contains("Content-Security-Policy", page,
+                StringComparison.Ordinal);
+            Assert.Contains("default-src 'self'", page, StringComparison.Ordinal);
+            Assert.Contains("type: 'ready'", app, StringComparison.Ordinal);
+            Assert.Contains("type: 'renderError'", app, StringComparison.Ordinal);
+            Assert.Contains("'initialize'", app, StringComparison.Ordinal);
+            Assert.Contains("=== 'resetCamera'", app, StringComparison.Ordinal);
+            Assert.Contains("=== 'setColumnGrid'", app, StringComparison.Ordinal);
+            Assert.True(File.Exists(Repo("src", "UNCAD", "Web", "QuickLineOrbit",
+                "vendor", "three", "three.module.min.js")),
+                "three.js vendor 必须随页面发布");
+
+            // U13D 仍是 WPF（本次只换 U1U 确认窗）。
+            Assert.DoesNotContain("CoreWebView2", u13d, StringComparison.Ordinal);
+            Assert.DoesNotContain("WebButton", u13dXaml, StringComparison.Ordinal);
+            Assert.DoesNotContain("CoreWebView2", viewport,
+                StringComparison.Ordinal);
+
+            // 独立进程 WebV 与它的预热器不得回魂。
+            foreach (string[] retired in new[]
+            {
+                new[] { "src", "UNCAD", "UI", "Wpf", "QuickLineWebPreview.cs" },
+                new[] { "src", "UNCAD", "UI", "Wpf", "QuickLineWebPreviewControl.cs" },
+                new[] { "src", "UNCAD", "UI", "Wpf", "OrbitPrewarmHost.cs" },
+                new[] { "src", "UNCAD.Preview", "Program.cs" },
+                new[] { "src", "UNCAD.Preview", "UNCAD.Preview.csproj" }
+            })
+                Assert.False(File.Exists(Repo(retired)),
+                    "WebV / 旧 3D 内核文件已退役：" + string.Join("/", retired));
+            Assert.DoesNotContain("UNCAD.Preview", solution,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("UNCAD.Preview", csproj,
+                StringComparison.Ordinal);
+            // 登录页继续走共享环境。
             string login = Read("src", "UNCAD", "UI", "Wpf",
                 "ClientLoginWindow.xaml.cs");
             Assert.Contains("SharedWebView2Environment.EnsureControllerAsync",
                 login, StringComparison.Ordinal);
-            // 3D 侧退役文件不得回魂；预热挂钩与孤儿清扫依赖一并退役。
-            Assert.False(File.Exists(Repo("src", "UNCAD", "UI", "Wpf",
-                "QuickLineWebPreviewControl.cs")),
-                "QuickLineWebPreviewControl 已随 WebView2 3D 内核退役");
-            Assert.False(File.Exists(Repo("src", "UNCAD", "UI", "Wpf",
-                "OrbitPrewarmHost.cs")),
-                "OrbitPrewarmHost 已随 WebView2 3D 内核退役");
-            Assert.Contains("Process.Start", web);
-            Assert.Contains("Guid.NewGuid()", web);
-            Assert.DoesNotContain("EnsureCoreWebView2Async", web);
-            Assert.Contains("QuickLineWebPreview.Open", orbit);
-            Assert.Contains("QuickLineWebPreview.Open", u13d);
-            Assert.Contains("DispatcherTimer", helper);
-            Assert.Contains("Loaded += OnLoaded", helper);
-            Assert.Contains("_web.Visibility = Visibility.Collapsed", helper);
-            Assert.Contains("e.State = CoreWebView2PermissionState.Deny", helper);
-            Assert.Contains("e.Cancel = true", helper);
-            Assert.Contains("WebResourceRequested", helper);
+            Assert.DoesNotContain("OrbitPrewarmHost", bootstrap,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("System.Management", csproj,
+                StringComparison.Ordinal);
             foreach (string source in new[]
             {
                 Read("src", "UNCAD", "Features", "Fill", "FillRouteInspectionStage.cs"),
@@ -524,12 +570,6 @@ namespace UNCAD.Tests
                 Assert.Contains("BuildMetricPreview", source);
                 Assert.DoesNotContain("IsPlaceholder", source);
             }
-            Assert.DoesNotContain("OrbitPrewarmHost", bootstrap,
-                StringComparison.Ordinal);
-            Assert.DoesNotContain("System.Management", csproj,
-                StringComparison.Ordinal);
-            // U13D 场景必须同步装载（无 Loaded 挂钩等异步时序）。
-            Assert.Contains("SetScene", orbit, StringComparison.Ordinal);
         }
 
         [Fact]

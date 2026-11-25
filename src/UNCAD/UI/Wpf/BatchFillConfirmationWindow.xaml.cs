@@ -50,7 +50,7 @@ namespace UNCAD.UI
     {
         /// <summary>3.3.1（D-054 Amendment）：对半分列的最小宽度保护（窗口
         /// MinWidth=900 的约 30%——GridSplitter 拖不穿，两侧内容始终可用）。</summary>
-        internal const double PreviewMinimumPixels = 250.0;
+        internal const double PreviewMinimumPixels = 420.0;
 
         /// <summary>用户点了“确认更新”为 true；关闭/取消/Esc 一律 false。</summary>
         public bool Confirmed { get; private set; }
@@ -68,6 +68,11 @@ namespace UNCAD.UI
             _rowCount = rows?.Count ?? 0;
             InitializeComponent();
             UiShell.ApplyFluentTheme(this);
+            // 3.8.0.5：默认 1440×820，但不超过屏幕工作区。
+            Width = Math.Min(Width, Math.Max(960.0,
+                SystemParameters.WorkArea.Width - 32.0));
+            Height = Math.Min(Height, Math.Max(600.0,
+                SystemParameters.WorkArea.Height - 32.0));
             DataContext = this;
             BatchGrid.ItemsSource = rows;
             _previews = new Dictionary<string, QuickLineOrbitPreviewModel>(
