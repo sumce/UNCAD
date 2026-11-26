@@ -26,8 +26,10 @@ shorter than the historical release notes.
   packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.10.zip` (6,580,956 bytes,
   SHA-256
   `5E8FC24B2CE89764BF430F04DE69F84D736B4E0E1CC17F4929C5BBB958AE0FB5`); tagged
-  as `v3.8.0.10` (GitHub Releases patch tag; the tag workflow produces the
-  GitHub Release). The previous tagged release is `v3.8.0.9`
+  as `v3.8.0.10` and published as GitHub Release `v3.8.0.10` (CI asset
+  `UNCAD-Pro-v3.8.0.10.zip`, 6,580,117 bytes, SHA-256
+  `384A79B0349F848E30BD4E8EB85058576A2DBCDF7BF5015112E01BFDF58B7C55`). The
+  previous tagged release is `v3.8.0.9`
   (structure/CI cleanup; GitHub Release published, CI asset SHA-256
   `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
   Package/bundle `UNCAD.dll` SHA-256 is
@@ -37,8 +39,9 @@ shorter than the historical release notes.
   local tagged release is `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup);
   before that `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview
   redesign), then `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`).
-  The latest GitHub Release is `3.8.0.10` (tag `v3.8.0.10`; CI asset
-  hash recorded after the workflow); the latest site release is `3.6.0.0`
+  The latest GitHub Release is `3.8.0.10` (tag `v3.8.0.10`; CI asset SHA-256
+  `384A79B0349F848E30BD4E8EB85058576A2DBCDF7BF5015112E01BFDF58B7C55`);
+  the latest site release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
   templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256

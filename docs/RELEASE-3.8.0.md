@@ -28,6 +28,10 @@
   `UNCAD.dll` SHA-256
   `C4BBD9451990AA3CB9BA6B74BC978645DFB18738CA624CE669653C7BA875B805`；
   `installer.ps1 -Mode VerifyPackage` 24 个文件全部通过。
+- GitHub Release `v3.8.0.10` 已由 tag 工作流发布：资产
+  `UNCAD-Pro-v3.8.0.10.zip`，6,580,117 字节，SHA-256
+  `384A79B0349F848E30BD4E8EB85058576A2DBCDF7BF5015112E01BFDF58B7C55`；
+  Releases 页 Latest 已指向 3.8.0.10。
 - 本机安装副本仍为 3.8.0.8（AutoCAD 正在运行，未重装）；关闭 AutoCAD 后运行
   `installer.ps1 -Mode InstallUser`，再对相关图框跑一次 U1U/U1F 即可把已有的
   真彩白归随层。急于出图时可先在图上全选 `U_CABLE` 图层实体，把颜色改成
@@ -35,7 +39,7 @@
 - 说明：本版按用户要求开 tag `v3.8.0.10`（GitHub Releases 渠道的补丁 tag；
   D-032 的"补丁不新开 tag"只适用于本地补丁）；不新建
   `RELEASE-3.8.0.10.md`，继续复用本文件。GitHub Release 由 tag 工作流生成，
-  CI 资产哈希发布后补记。
+  已发布（见上）。
 
 ## 3.8.0.9 清理（2026-11-26）
 
