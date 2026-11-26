@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Autodesk.AutoCAD.Colors;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Core.Dwg;
 using UNCAD.Cad.QuickLine;
@@ -9,15 +10,18 @@ namespace UNCAD.Cad
 {
     /// <summary>
     /// 3.3.0（D-054 特性①）：一次图层矫正的执行计划（预检/读事务里构建，
-    /// 写事务里执行）。只包含当前图层不对、需要移动的实体。
+    /// 写事务里执行）。只包含当前图层不对、需要移动的实体；3.8.0.10 起还包含
+    /// 法定图层上「真彩白」需要归随层的实体（白纸上出图不可见）。
     /// </summary>
     public sealed class LayerGovernorPlan
     {
         internal LayerGovernorPlan(List<KeyValuePair<ObjectId, string>> moves,
+            List<ObjectId> whiteColorFixes,
             UncadLayerCorrectionCounters counters,
             List<string> undeterminableHandles)
         {
             Moves = moves ?? new List<KeyValuePair<ObjectId, string>>();
+            WhiteColorFixes = whiteColorFixes ?? new List<ObjectId>();
             Counters = counters ?? new UncadLayerCorrectionCounters();
             UndeterminableHandles = undeterminableHandles
                 ?? new List<string>();
@@ -25,6 +29,9 @@ namespace UNCAD.Cad
 
         /// <summary>实体 → 法定图层名（仅真正需要移动的实体）。</summary>
         public IReadOnlyList<KeyValuePair<ObjectId, string>> Moves { get; }
+
+        /// <summary>3.8.0.10：法定图层上颜色是真彩白/255 号白的实体（归随层）。</summary>
+        public IReadOnlyList<ObjectId> WhiteColorFixes { get; }
         public UncadLayerCorrectionCounters Counters { get; }
         public IReadOnlyList<string> UndeterminableHandles { get; }
         public bool IsEmpty => Counters.IsEmpty;
@@ -106,9 +113,11 @@ namespace UNCAD.Cad
             var counters = new UncadLayerCorrectionCounters();
             var undeterminable = new List<string>();
             var moves = new List<KeyValuePair<ObjectId, string>>();
+            var whiteFixes = new List<ObjectId>();
             var planned = new HashSet<ObjectId>();
+            var plannedWhite = new HashSet<ObjectId>();
             if (ctx == null || transaction == null) 
-                return new LayerGovernorPlan(moves, counters, undeterminable);
+                return new LayerGovernorPlan(moves, whiteFixes, counters, undeterminable);
             bool scoped = scopeEntityIds != null;
 
             // ① 平行标注输出（先于电缆：输出实体与线段实体不重叠，但输出
@@ -138,6 +147,8 @@ namespace UNCAD.Cad
                     else
                         counters.ConduitEntities++;
                 }
+                PlanWhiteFix(transaction, entry.EntityId, plannedWhite,
+                    whiteFixes, counters);
             }
 
             // ② 电缆路由：扫描器认出的线段 + 关联/匹配到的毫米标。
@@ -152,31 +163,82 @@ namespace UNCAD.Cad
                 if (TryPlanMove(ctx, transaction, segment.LineId,
                         UncadLayerStandard.CableLayerName, planned, moves))
                     counters.CableEntities++;
+                PlanWhiteFix(transaction, segment.LineId, plannedWhite,
+                    whiteFixes, counters);
                 if (!segment.LabelId.IsNull && segment.LabelId.IsValid
-                    && (!scoped || scopeEntityIds.Contains(segment.LabelId))
-                    && TryPlanMove(ctx, transaction, segment.LabelId,
-                        UncadLayerStandard.CableLayerName, planned, moves))
-                    counters.CableEntities++;
+                    && (!scoped || scopeEntityIds.Contains(segment.LabelId)))
+                {
+                    if (TryPlanMove(ctx, transaction, segment.LabelId,
+                            UncadLayerStandard.CableLayerName, planned, moves))
+                        counters.CableEntities++;
+                    PlanWhiteFix(transaction, segment.LabelId, plannedWhite,
+                        whiteFixes, counters);
+                }
                 foreach (ObjectId labelId in segment.RestoredLabelIds
                     ?? Array.Empty<ObjectId>())
                     if (!labelId.IsNull && labelId.IsValid
-                        && (!scoped || scopeEntityIds.Contains(labelId))
-                        && TryPlanMove(ctx, transaction, labelId,
-                            UncadLayerStandard.CableLayerName, planned, moves))
-                        counters.CableEntities++;
+                        && (!scoped || scopeEntityIds.Contains(labelId)))
+                    {
+                        if (TryPlanMove(ctx, transaction, labelId,
+                                UncadLayerStandard.CableLayerName, planned, moves))
+                            counters.CableEntities++;
+                        PlanWhiteFix(transaction, labelId, plannedWhite,
+                            whiteFixes, counters);
+                    }
             }
-            return new LayerGovernorPlan(moves, counters, undeterminable);
+            return new LayerGovernorPlan(moves, whiteFixes, counters, undeterminable);
         }
 
         /// <summary>
-        /// 在既有写事务里执行矫正（先确保图层存在，再逐实体移层）。返回实际
-        /// 移动的实体数；单个实体失败不阻断整体写入。
+        /// 3.8.0.10（D-054 Amendment）：实体自身颜色是真彩白/255 号白时登记为
+        /// 「归随层」。只看法定图层上被本次矫正认领的实体（范围过滤已由调用方
+        /// 完成）；ByLayer/ByBlock 与其它显式颜色一律不动。
+        /// </summary>
+        private static void PlanWhiteFix(Transaction transaction, ObjectId entityId,
+            HashSet<ObjectId> planned, List<ObjectId> fixes,
+            UncadLayerCorrectionCounters counters)
+        {
+            if (entityId.IsNull || !entityId.IsValid || !planned.Add(entityId))
+                return;
+            try
+            {
+                Entity entity = transaction.GetObject(entityId,
+                    OpenMode.ForRead, false) as Entity;
+                if (entity == null || entity.IsErased || !IsPlotInvisibleWhite(entity))
+                    return;
+                fixes.Add(entityId);
+                counters.PlotWhiteEntities++;
+            }
+            catch
+            {
+                // 读不到颜色（外部参照/受限图纸）就不登记，不阻断其它矫正。
+            }
+        }
+
+        /// <summary>只认实体自身的真彩白/255 号白；ACI 7 是自适应色，不算。</summary>
+        private static bool IsPlotInvisibleWhite(Entity entity)
+        {
+            Color color = entity.Color;
+            if (color == null) return false;
+            if (color.ColorMethod == ColorMethod.ByAci)
+                return PlotColorSafety.IsWhiteAci(color.ColorIndex);
+            if (color.ColorMethod == ColorMethod.ByColor)
+                return PlotColorSafety.IsTrueWhite(
+                    (color.Red << 16) | (color.Green << 8) | color.Blue);
+            return false;
+        }
+
+        /// <summary>
+        /// 在既有写事务里执行矫正（先确保图层存在，再逐实体移层，最后把法定
+        /// 图层上的真彩白归随层）。返回实际移动的实体数；单个实体失败不阻断
+        /// 整体写入。
         /// </summary>
         public static int Apply(CadContext ctx, Transaction transaction,
             LayerGovernorPlan plan)
         {
             if (ctx == null || transaction == null || plan == null
-                || plan.Moves.Count == 0) return 0;
+                || (plan.Moves.Count == 0 && plan.WhiteColorFixes.Count == 0))
+                return 0;
             var layerIds = new Dictionary<string, ObjectId>(
                 StringComparer.OrdinalIgnoreCase);
             foreach (string name in UncadLayerStandard.GovernedLayerNames)
@@ -200,6 +262,21 @@ namespace UNCAD.Cad
                 catch
                 {
                     // 单个实体移层失败（被锁定的外部参照等）不阻断填充写入。
+                }
+            }
+            foreach (ObjectId entityId in plan.WhiteColorFixes)
+            {
+                try
+                {
+                    Entity entity = transaction.GetObject(entityId,
+                        OpenMode.ForWrite, false) as Entity;
+                    if (entity == null || entity.IsErased
+                        || !IsPlotInvisibleWhite(entity)) continue;
+                    entity.ColorIndex = 256;   // ByLayer：屏幕颜色不变，白纸出图变黑
+                }
+                catch
+                {
+                    // 单个实体改色失败不阻断填充写入。
                 }
             }
             return moved;

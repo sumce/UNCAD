@@ -5,8 +5,10 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.8.0.9` (2026-11-26; 3.8.0.9 is the
-  structural/CI cleanup with no command behavior change; D-059 + 3.8.0.1–3.8.0.8
+- Current local source version: `3.8.0.10` (2026-11-26; 3.8.0.10 is the
+  true-white plot-colour patch: U1L/U1LX new entities pin ByLayer and the
+  U1F/U1U governor normalises existing true-white/ACI-255 entities on governed
+  layers, so routes no longer print white on white; D-059 + 3.8.0.1–3.8.0.8
   field fixes: U1U preview runs the local WebView2 + three.js page with the
   WPF Viewport3D renderer as automatic fallback (never a blank pane); it draws
   only the workbook floors' wireframe planes, the edge axis band, the routes
@@ -21,20 +23,22 @@ shorter than the historical release notes.
   preview page camera fits the route, labels avoid each other, single bold cable,
   coordinate lattice at every grid intersection, endpoint axis chips at grid
   corners),
-  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.9.zip` (6,579,776 bytes,
+  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.10.zip` (6,580,956 bytes,
   SHA-256
-  `71D1254ADE7FBF5E18231A0F91A91A4F348115F4527BB2B24DD08DE5D59217CD`) and tagged
-  as `v3.8.0.9`; GitHub Release `v3.8.0.9` is published (CI asset SHA-256
+  `5E8FC24B2CE89764BF430F04DE69F84D736B4E0E1CC17F4929C5BBB958AE0FB5`); tagged
+  as `v3.8.0.10` (GitHub Releases patch tag; the tag workflow produces the
+  GitHub Release). The previous tagged release is `v3.8.0.9`
+  (structure/CI cleanup; GitHub Release published, CI asset SHA-256
   `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
-  Package/bundle
-  `UNCAD.dll` SHA-256 is
-  `99E57CF13C11A5C157CE280DE1B00FC2D244A40E60E93F60241A5C0D3D1BC4B3`; the
+  Package/bundle `UNCAD.dll` SHA-256 is
+  `C4BBD9451990AA3CB9BA6B74BC978645DFB18738CA624CE669653C7BA875B805`; the
   development machine's installed copy remains 3.8.0.8 until
-  `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The last local
-  release is `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup). The previous
-  local release is `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview
-  redesign); before that `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`).
-  The latest GitHub Release is `3.8.0.9`; the latest site release is `3.6.0.0`
+  `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The previous
+  local tagged release is `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup);
+  before that `3.8.0.0` (tag `v3.8.0`, commit `7157aa1`; D-059 preview
+  redesign), then `3.7.0.0` (tag `v3.7.0`, commit `5a9b81a`).
+  The latest GitHub Release is `3.8.0.10` (tag `v3.8.0.10`; CI asset
+  hash recorded after the workflow); the latest site release is `3.6.0.0`
   (2026-11-24, tag `v3.6.0`; D-057 same-name circuits, drawing-info table
   templates, BOQ title templates, XLAYOUT options),
   `UNCAD-Pro-v3.6.0.0.zip` (6,549,352 bytes, SHA-256
@@ -50,7 +54,7 @@ shorter than the historical release notes.
 
 This block is the single source of the version/tag/hash status. `AGENTS.md`,
 `README.md` and `CLAUDE.md` must link here instead of copying it — the previous
-copy in `AGENTS.md` still claimed `3.4.1` while the product was `3.8.0.9`.
+copy in `AGENTS.md` still claimed `3.4.1` while the product was `3.8.0.10`.
 
 
 ## Module Map

@@ -82,6 +82,14 @@ namespace UNCAD.Tests
             Assert.Equal("图层矫正：0 个实体移正（电缆 0/桥架 0/线管 0/软管 0/无法判定 1）；"
                 + "无法判定：2A5F", undeterminable.Describe());
             Assert.False(undeterminable.IsEmpty);
+
+            // 3.8.0.10：真彩白归随层是独立计数（不移层也要报）。
+            var white = new UncadLayerCorrectionCounters { PlotWhiteEntities = 196 };
+            Assert.Equal(0, white.TotalMoves);
+            Assert.False(white.IsEmpty);
+            Assert.Equal("图层矫正：0 个实体移正（电缆 0/桥架 0/线管 0/软管 0/无法判定 0）；"
+                + "真彩白归随层 196 个（白纸出图会丢线）", white.Describe());
+
             Assert.True(new UncadLayerCorrectionCounters().IsEmpty);
         }
 
@@ -206,6 +214,49 @@ namespace UNCAD.Tests
             Assert.Contains("segment.RestoredLabelIds", styleCorrector);
             Assert.Contains("BuildStyleStamp", styleCorrector);
             Assert.Contains("QuickLineStaleLabelMatcher", service);
+        }
+
+        /// <summary>
+        /// 3.8.0.10（D-054 Amendment）：U1L/U1LX 不锁色时新实体会继承当前颜色；
+        /// 当前颜色是真彩白时 U1PDF 保留原色出图会在白纸上整段消失（现场
+        /// 2026-11-26：一整段回路和米数在 PDF 里没了）。工厂必须锁 ByLayer。
+        /// </summary>
+        [Fact]
+        public void EntityFactory_PinsByLayer_SoNewEntitiesNeverInheritTrueWhite()
+        {
+            string factory = Source("src", "UNCAD", "Cad", "EntityFactory.cs");
+            Assert.Contains("ByLayerColorIndex = 256", factory);
+            Assert.Contains(
+                "l.ColorIndex = colorIndex != 0 ? colorIndex : ByLayerColorIndex;",
+                factory);
+            Assert.Contains(
+                "t.ColorIndex = colorIndex != 0 ? colorIndex : ByLayerColorIndex;",
+                factory);
+            Assert.DoesNotContain("if (colorIndex != 0) l.ColorIndex = colorIndex;",
+                factory);
+            Assert.DoesNotContain("if (colorIndex != 0) t.ColorIndex = colorIndex;",
+                factory);
+        }
+
+        /// <summary>
+        /// 3.8.0.10（D-054 Amendment）：法定图层上已有的真彩白（ByColor #FFFFFF
+        /// 或 ACI 255）在 U1F/U1U 图层矫正里归随层；ACI 7 与其它显式颜色不动。
+        /// </summary>
+        [Fact]
+        public void LayerGovernor_NormalizesTrueWhiteOnGovernedLayers()
+        {
+            string governor = Source("src", "UNCAD", "Cad",
+                "LayerGovernorService.cs");
+            Assert.Contains("WhiteColorFixes", governor);
+            Assert.Contains("PlotColorSafety.IsWhiteAci(color.ColorIndex)", governor);
+            Assert.Contains("PlotColorSafety.IsTrueWhite(", governor);
+            Assert.Contains("entity.ColorIndex = 256;", governor);
+            Assert.Contains("counters.PlotWhiteEntities++", governor);
+
+            string counters = Source("src", "UNCAD", "Core", "Dwg",
+                "UncadLayerStandard.cs");
+            Assert.Contains("public int PlotWhiteEntities", counters);
+            Assert.Contains("真彩白归随层", counters);
         }
 
         private static string Source(params string[] parts)

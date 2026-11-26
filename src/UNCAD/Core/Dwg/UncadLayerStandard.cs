@@ -79,10 +79,15 @@ namespace UNCAD.Core.Dwg
         public int UndeterminableEntities { get; set; }
         public List<string> UndeterminableHandles { get; } = new List<string>();
 
+        /// <summary>3.8.0.10（D-054 Amendment）：法定图层上真彩白/255 号白
+        /// 归随层的实体数——这些实体在白纸上出图不可见。</summary>
+        public int PlotWhiteEntities { get; set; }
+
         public int TotalMoves
             => CableEntities + TrayEntities + ConduitEntities + HoseEntities;
 
-        public bool IsEmpty => TotalMoves == 0 && UndeterminableEntities == 0;
+        public bool IsEmpty => TotalMoves == 0 && UndeterminableEntities == 0
+            && PlotWhiteEntities == 0;
 
         /// <summary>确认窗/预检报告文案：「图层矫正：N 个实体移正（电缆 x/桥架 y/线管 z/软管 h/无法判定 w）」。</summary>
         public string Describe()
@@ -98,6 +103,9 @@ namespace UNCAD.Core.Dwg
                     UndeterminableHandles.Take(6)))
                     .Append(UndeterminableHandles.Count > 6
                         ? " 等" : string.Empty);
+            if (PlotWhiteEntities > 0)
+                text.Append("；真彩白归随层 ").Append(PlotWhiteEntities)
+                    .Append(" 个（白纸出图会丢线）");
             return text.ToString();
         }
     }

@@ -52,7 +52,11 @@ their version numbers or counts are stale.
   no spaces. Layer correction runs inside the U1U/U1F write transaction
   (`UNC_FILL_LAYER_GOVERNOR`, default on); outputs are classified by the
   parallel-annotation KIND only (`U1Q`/`U1C`/`U1B`). Unknown or metadata-less
-  outputs are never moved and never guessed from colour/text. U1B label text
+  outputs are never moved and never guessed from colour/text. True-white
+  entity colours (`ByColor #FFFFFF` / ACI 255) on governed entities are
+  normalised to ByLayer by the U1F/U1U governor (3.8.0.10): they are
+  invisible on white paper while ACI 7 prints black; all other explicit
+  colours stay untouched. U1B label text
   follows the Ruanguan hose format and never joins a statistics sum. U1B hose
   outlines/leaders are never scanned as cable routes (metadata hit skips).
   Connectivity reporting

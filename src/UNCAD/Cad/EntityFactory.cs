@@ -17,10 +17,18 @@ namespace UNCAD.Cad
         /// </summary>
         public const double LabelLineSpacingFactor = 0.65;
 
+        /// <summary>
+        /// 256 = ByLayer。3.8.0.10（D-054 Amendment）：此前 colorIndex=0 时不设颜色，
+        /// 新实体按当前颜色（CECOLOR）落库；当前颜色是真彩白时 U1L/U1LX 会产出
+        /// 真彩白的线/标注，U1PDF 保留原色出图在白纸上整段消失。这里像 entmake
+        /// 不带 62 组一样锁 ByLayer：落在 U_CABLE（ACI 7）屏幕上仍是白色，出图变黑。
+        /// </summary>
+        private const short ByLayerColorIndex = 256;
+
         public static Line Line(CadContext ctx, Point3d p1, Point3d p2, short colorIndex = 0)
         {
             var l = new Line(p1, p2) { LayerId = ctx.CurrentLayerId };
-            if (colorIndex != 0) l.ColorIndex = colorIndex;
+            l.ColorIndex = colorIndex != 0 ? colorIndex : ByLayerColorIndex;
             return l;
         }
 
@@ -39,7 +47,7 @@ namespace UNCAD.Cad
                 Rotation = rotation,
                 LayerId = ctx.CurrentLayerId
             };
-            if (colorIndex != 0) t.ColorIndex = colorIndex;
+            t.ColorIndex = colorIndex != 0 ? colorIndex : ByLayerColorIndex;
             if (textStyleId.HasValue) t.TextStyleId = textStyleId.Value;
 
             if (justify == AttachmentPoint.BaseLeft)
@@ -79,7 +87,7 @@ namespace UNCAD.Cad
                 LineSpacingFactor = LabelLineSpacingFactor,
                 LayerId = ctx.CurrentLayerId
             };
-            if (colorIndex != 0) t.ColorIndex = colorIndex;
+            t.ColorIndex = colorIndex != 0 ? colorIndex : ByLayerColorIndex;
             if (textStyleId.HasValue) t.TextStyleId = textStyleId.Value;
             return t;
         }

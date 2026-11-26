@@ -2088,3 +2088,23 @@ rewrite an existing entry.
   U1R's retargeted label metadata and unique stale-label recovery for deleted
   straight-line joins remain the only supported ownership paths; ambiguous
   labels are not guessed.
+- Amendment (2026-11-26, 3.8.0.10 — true-white plot colours; field: a
+  third-party batch printer's PDF lost a whole route while CAD showed it):
+  1. `EntityFactory` pins every entity it creates to **ByLayer** when the
+     caller passes no explicit colour (`colorIndex = 0`). Previously the
+     colour was left unset, so the entity inherited the drawing's current
+     colour (CECOLOR) when inserted; a true-white CECOLOR made U1L/U1LX
+     lines and millimetre labels true white. This is the entmake-equivalent
+     behaviour and does not change the on-screen colour on U_CABLE (ACI 7).
+  2. On a colour-preserving plot (U1PDF, or a batch printer using object
+     colours) true white (`ByColor #FFFFFF`) and ACI 255 are invisible on
+     white paper; ACI 7 self-adapts and prints black. The layer governor
+     now normalises **entity-level** true white / ACI 255 on the entities it
+     claims (cable segments, labels and U1Q/U1C/U1B outputs) to ByLayer and
+     counts them (`PlotWhiteEntities` → "真彩白归随层 N 个（白纸出图会丢
+     线）"). ACI 7, ByLayer, ByBlock and every other explicit colour stay
+     untouched; layer colours are never changed. The correction runs inside
+     the same fill write transaction as the layer move.
+  3. This is the only exception to the earlier "entity colours are
+     untouched" sentence: plot-invisible white only. It is not a licence to
+     recolour any other entity.
