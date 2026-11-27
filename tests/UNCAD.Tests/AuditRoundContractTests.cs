@@ -431,7 +431,7 @@ namespace UNCAD.Tests
             // 图框内容整体空转。实现挂在选集展开路径（ExpandSingleFrame 已
             // Collect 过分区，顺带设 Region，编排器零增长）；机会式：分区
             // 失败/空分区/部分显式选集不设 Region 回退既有语义。
-            string collector = Read("src", "UNCAD", "Features", "Fill",
+            string collector = Read("src", "UNCAD", "Cad", "Frame",
                 "FillSelectionCollector.cs");
             int expand = collector.IndexOf(
                 "private static FillSelection ExpandSingleFrame", StringComparison.Ordinal);

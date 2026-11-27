@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 
 namespace UNCAD.Features.Fill
 {

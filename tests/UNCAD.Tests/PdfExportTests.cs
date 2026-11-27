@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
+using UNCAD.Core.Submission;
 using UNCAD.Features.PdfExport;
 using UNCAD.Infra;
 using Xunit;
@@ -349,7 +350,11 @@ namespace UNCAD.Tests
 
             string pdf = File.ReadAllText(Repo("src", "UNCAD", "Features", "PdfExport",
                 "PdfExportFeature.cs"));
-            Assert.Contains("FillFeature.TryResolveFrameCircuit(", pdf);
+            Assert.Contains("FrameCircuitResolver.TryResolveFrameCircuit(", pdf);
+            string resolver = File.ReadAllText(Repo("src", "UNCAD", "Features", "Shared",
+                "FrameCircuitResolver.cs"));
+            Assert.Contains("FrameIdentityReader.ReadIdentity(", resolver);
+            Assert.Contains("ExistingFillIdentityResolver.MatchMachine(", resolver);
             // PDF 功能不得自己另写一套回路名推导。
             Assert.DoesNotContain("ExistingFillIdentityResolver.MatchMachine(", pdf);
             Assert.DoesNotContain("DeviceName =", pdf);

@@ -5,12 +5,10 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
-using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Text;
-using UNCAD.Infra;
 
-namespace UNCAD.Features.Fill
+namespace UNCAD.Cad.Frame
 {
     internal static class FillSelectionCollector
     {
@@ -45,18 +43,6 @@ namespace UNCAD.Features.Fill
             return picked == null ? selection : ExpandSingleFrame(ctx, Split(ctx, picked));
         }
 
-        /// <summary>
-        /// A frame is the natural U1F/U1U selection target. Selecting only that block must
-        /// still include the table, statistics, Device and Ruanguan objects in the same
-        /// frame; otherwise U1U sees zero measurements and cannot read identity.
-        /// 3.3.4（图层收口，审计 B-5）：展开时顺带带上图框边界（Region）——
-        /// 严格分区 EntityIds 从来不含电缆线（TryAnchor 只收表格/文字/块），
-        /// 无边界时路由体检按 EntityIds 包含判归属、对图框内容整体空转
-        ///（连通性无段、图层矫正无目标）。U1F 图框块选集此前正是这种空转
-        ///（U1U 靠自己的分区赋值拿到 Boundary，U1F 没有）。机会式：只在
-        /// "恰好一个图框块"的展开路径设置；分区失败/空分区/部分显式选集不设
-        /// Region，回退既有语义。U1U 后续分区的 Groups==1 赋值是同值覆写。
-        /// </summary>
         private static FillSelection ExpandSingleFrame(CadContext ctx, FillSelection selection)
         {
             if (ctx == null || selection == null || selection.FrameBlockIds.Length != 1)
@@ -138,7 +124,7 @@ namespace UNCAD.Features.Fill
                 {
                     var attribute = transaction.GetObject(attributeId, OpenMode.ForRead, true)
                         as AttributeReference;
-                    if (RuanguanBlockWriter.TryReadLength(attribute?.TextString ?? "",
+                    if (RuanguanLengthParser.TryReadLength(attribute?.TextString ?? "",
                         attribute?.Tag, out double millimetres))
                         blockLengths.Add(millimetres);
                 }
@@ -147,10 +133,7 @@ namespace UNCAD.Features.Fill
                     foreach (DynamicBlockReferenceProperty property
                         in block.DynamicBlockReferencePropertyCollection)
                     {
-                        // Dynamic blocks expose many numeric coordinates. Only a
-                        // property explicitly named as a hose length may use a bare
-                        // number; all other values require an mm/m unit or prefix.
-                        if (RuanguanBlockWriter.TryReadLength(
+                        if (RuanguanLengthParser.TryReadLength(
                             Convert.ToString(property.Value), property.PropertyName,
                             out double millimetres))
                             blockLengths.Add(millimetres);
@@ -170,9 +153,7 @@ namespace UNCAD.Features.Fill
         {
             using (var transaction = ctx.Db.TransactionManager.StartTransaction())
             {
-                // 2026-11-04：身份读取同样带句柄校验——复制图框的源框 JSON
-                // 在这里被拒，身份回退到物理标注，防止幽灵机台。
-                string ownHandle = FrameInfoJsonBlockWriter.OwnFrameHandle(
+                string ownHandle = FrameInfoJsonBlockReader.OwnFrameHandle(
                     transaction, selection?.FrameBlockIds);
                 bool result = TryReadExistingIdentity(transaction, selection,
                     ownHandle, out identity, out error, out _);
@@ -184,17 +165,10 @@ namespace UNCAD.Features.Fill
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, out ExistingFillIdentity identity, out string error)
             => TryReadExistingIdentity(transaction, selection,
-                FrameInfoJsonBlockWriter.OwnFrameHandle(transaction,
+                FrameInfoJsonBlockReader.OwnFrameHandle(transaction,
                     selection?.FrameBlockIds),
                 out identity, out error, out _);
 
-        /// <summary>
-        /// 带图框句柄校验的身份读取：归属不符的外来 frameinfo_json 会被忽略
-        /// （foreignJsonNote 说明来源），身份回退到设备块/标签推断——防止图框
-        /// 移动后遗留 JSON 被几何错误认领成幽灵机台（2026-11-02）。
-        /// 第二轮加固：JSON 与图框物理标注分歧时信物理标注（复制图框的旧 JSON
-        /// 不再压过用户已改新的机台号），分歧信息并入 foreignJsonNote。
-        /// </summary>
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, string expectedFrameHandle,
             out ExistingFillIdentity identity, out string error, out string foreignJsonNote)
@@ -202,37 +176,17 @@ namespace UNCAD.Features.Fill
                 out identity, out error, out foreignJsonNote, true);
 
         /// <summary>
-        /// 带设备块开关的身份读取。includeDeviceBlocks=false 供 XLAYOUT 使用
-        /// （D-045 修订，2026-11-22）：设备块按插入点归属分区，全图与单机选择的
-        /// 边界集不同会把外来块归进区域——同一图框在不同选择下可能读出不同的
-        /// DEVICENAME，布局身份必须只认图框自身属性才与选择集无关。
+        /// 带设备块开关与搬场重绑校验的身份读取。
+        /// 先读图框物理身份（includeDeviceBlocks=false 时跳过设备块 DEVICENAME，
+        /// 但仍读取上游块 UPSTREAM_INFO 以支持 XLAYOUT 检测同名回路复制框），
+        /// 再将该物理身份传入 JSON 句柄校验以支持 D-052-C 跨文件搬场保留 CircuitKey，
+        /// 最后由 FrameIdentityArbiter 仲裁分歧。
         /// </summary>
         internal static bool TryReadExistingIdentity(Transaction transaction,
             FillSelection selection, string expectedFrameHandle,
             out ExistingFillIdentity identity, out string error,
             out string foreignJsonNote, bool includeDeviceBlocks)
         {
-            // D-040 后 JSON 主存储 = 图框块 FRAMEINFO 属性，独立块仅遗留读源：
-            // 读身份必须用 ReadSources（含图框块），只传独立块会漏读新模板。
-            FrameInfoJsonRecord json = FrameInfoJsonBlockWriter.Read(transaction,
-                FrameInfoJsonBlockWriter.ReadSources(selection), expectedFrameHandle,
-                out foreignJsonNote);
-            ExistingFillIdentity jsonIdentity = null;
-            if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
-                && !string.IsNullOrWhiteSpace(json.DeviceName))
-            {
-                jsonIdentity = new ExistingFillIdentity
-                {
-                    MachineId = json.MachineId.Trim(),
-                    DeviceName = json.DeviceName.Trim(),
-                    // D-056：键只在 JSON 身份胜出时生效（物理标注胜出=旧键
-                    // 属于他机回路，必须丢弃，走按名匹配+歧义弹窗）。
-                    CircuitKey = (json.CircuitKey ?? "").Trim(),
-                    // D-057：上游编号明文随 JSON 身份带出，供统计/排版区分同名回路。
-                    UpstreamId = (json.Fr ?? "").Trim()
-                };
-            }
-
             ExistingFillIdentity physicalIdentity = null;
             string physicalError = "";
             if (!TryReadPhysicalIdentity(transaction, selection,
@@ -241,7 +195,23 @@ namespace UNCAD.Features.Fill
                 physicalIdentity = null;
             }
 
-            ExistingFillIdentity decided = UNCAD.Core.Fill.FrameIdentityArbiter.Decide(
+            FrameInfoJsonRecord json = FrameInfoJsonBlockReader.Read(transaction,
+                FrameInfoJsonBlockReader.ReadSources(selection), expectedFrameHandle,
+                physicalIdentity, out foreignJsonNote, out _);
+            ExistingFillIdentity jsonIdentity = null;
+            if (json != null && !string.IsNullOrWhiteSpace(json.MachineId)
+                && !string.IsNullOrWhiteSpace(json.DeviceName))
+            {
+                jsonIdentity = new ExistingFillIdentity
+                {
+                    MachineId = json.MachineId.Trim(),
+                    DeviceName = json.DeviceName.Trim(),
+                    CircuitKey = (json.CircuitKey ?? "").Trim(),
+                    UpstreamId = (json.Fr ?? "").Trim()
+                };
+            }
+
+            ExistingFillIdentity decided = FrameIdentityArbiter.Decide(
                 jsonIdentity, physicalIdentity,
                 out bool physicalWins, out string divergenceNote);
             if (physicalWins)
@@ -260,12 +230,6 @@ namespace UNCAD.Features.Fill
             return false;
         }
 
-        /// <summary>
-        /// 从图框/设备块的 MACHINEID 属性与标注推断物理身份。includeDeviceBlocks=false
-        /// 时设备块完全缺席：只读图框自身的 MACHINEID-POWER/MACHINEID-DEVICE，
-        /// DEVICENAME 一律不收集（连图框块自带的同名属性也不读）——XLAYOUT 布局
-        /// 身份与选择集边界无关（D-045 修订，2026-11-22）。
-        /// </summary>
         private static bool TryReadPhysicalIdentity(Transaction transaction,
             FillSelection selection, out ExistingFillIdentity identity,
             out string error, bool includeDeviceBlocks)
@@ -298,6 +262,14 @@ namespace UNCAD.Features.Fill
             }
             bool resolved = ExistingFillIdentityResolver.TryResolve(
                 powers, composites, devices, out identity, out error);
+            if (resolved)
+            {
+                // 3.8.0.11（D-056 Amendment）：上游信息块（UPSTREAM_INFO 首行）
+                // 属于图框区上游标注而非设备块；XLAYOUT 在 includeDeviceBlocks=false
+                // 时也必须读取，避免同名回路复制框沿用旧 CircuitKey。
+                identity.UpstreamId = ReadPhysicalUpstream(transaction,
+                    selection.UpstreamInfoBlockIds);
+            }
             if (!resolved && error.IndexOf("DEVICENAME",
                 StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -310,6 +282,38 @@ namespace UNCAD.Features.Fill
                         + Environment.NewLine + string.Join(Environment.NewLine, candidates);
             }
             return resolved;
+        }
+
+        private static string ReadPhysicalUpstream(Transaction transaction,
+            ObjectId[] blockIds)
+        {
+            var values = new List<string>();
+            foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
+            {
+                BlockReference block;
+                try
+                {
+                    block = transaction.GetObject(id, OpenMode.ForRead, true)
+                        as BlockReference;
+                }
+                catch { continue; }
+                if (block == null) continue;
+                if (!TryGetBlockValue(transaction, block,
+                        ConnectionBlockFiller.TagUpstreamInfo, out string info))
+                    continue;
+                string first = TextParser.SplitMTextLines(
+                        TextParser.CleanMText(info ?? ""))
+                    .Select(TextParser.CleanMText)
+                    .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line));
+                if (!string.IsNullOrWhiteSpace(first))
+                    values.Add(NormalizeIdentityValue(first));
+            }
+            List<string> distinct = values
+                .Where(value => value.Length > 0)
+                .GroupBy(value => value, IdentityTextNormalizer.Comparer)
+                .Select(group => group.First())
+                .ToList();
+            return distinct.Count == 1 ? distinct[0] : "";
         }
 
         private static string DescribeDeviceNameCandidate(Transaction transaction,
@@ -403,59 +407,57 @@ namespace UNCAD.Features.Fill
             var definitionCache = new Dictionary<ObjectId, BlockDefinitionFlags>();
             var tr = transaction;
             foreach (ObjectId id in ids ?? Array.Empty<ObjectId>())
+            {
+                var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
+                if (entity is Table table)
                 {
-                    var entity = tr.GetObject(id, OpenMode.ForRead, true) as Entity;
-                    if (entity is Table table)
+                    if (CadTableLayoutClassifier.IsDrawingInfoTable(table))
+                        drawingInfoTables.Add(id);
+                    else tables.Add(id);
+                }
+                else if (entity is DBText || entity is MText
+                    || entity is AlignedDimension || entity is RotatedDimension)
+                    texts.Add(id);
+                else if (entity is BlockReference block)
+                {
+                    BlockDefinitionFlags flags = GetDefinitionFlags(tr, block,
+                        definitionCache, definitions);
+                    foreach (ObjectId attributeId in block.AttributeCollection)
                     {
-                        if (CadDrawingInfoTableWriter.IsDrawingInfoTable(table))
-                            drawingInfoTables.Add(id);
-                        else tables.Add(id);
+                        var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
+                            as AttributeReference;
+                        if (attribute == null) continue;
+                        string tag = attribute.Tag ?? "";
+                        flags.IsFrame |= FrameBlockFiller.IsKnownTag(tag);
+                        flags.IsJson |= string.Equals(tag, "JSON", StringComparison.OrdinalIgnoreCase);
+                        flags.IsUpstreamColor |= IsUpstreamTag(tag);
+                        flags.IsDeviceColor |= IsDownstreamTag(tag);
+                        ApplyValueTag(flags, tag);
                     }
-                    else if (entity is DBText || entity is MText
-                        || entity is AlignedDimension || entity is RotatedDimension)
-                        texts.Add(id);
-                    else if (entity is BlockReference block)
-                    {
-                        BlockDefinitionFlags flags = GetDefinitionFlags(tr, block,
-                            definitionCache, definitions);
-                        // Classify each insert once. Definition flags are copied above so one
-                        // insert's extra attributes cannot contaminate another insert.
-                        foreach (ObjectId attributeId in block.AttributeCollection)
-                        {
-                            var attribute = tr.GetObject(attributeId, OpenMode.ForRead, true)
-                                as AttributeReference;
-                            if (attribute == null) continue;
-                            string tag = attribute.Tag ?? "";
-                            flags.IsFrame |= FrameBlockFiller.IsKnownTag(tag);
-                            flags.IsJson |= string.Equals(tag, "JSON", StringComparison.OrdinalIgnoreCase);
-                            flags.IsUpstreamColor |= IsUpstreamTag(tag);
-                            flags.IsDeviceColor |= IsDownstreamTag(tag);
-                            ApplyValueTag(flags, tag);
-                        }
-                        if (block.IsDynamicBlock)
-                            foreach (DynamicBlockReferenceProperty property
-                                in block.DynamicBlockReferencePropertyCollection)
-                                ApplyValueTag(flags, property.PropertyName);
-                        if (flags.IsFrame) frames.Add(id);
-                        if (flags.IsDevice) devices.Add(id);
-                        if (flags.IsRuanguan)
-                            ruanguan.Add(id);
-                        if (flags.IsJson)
-                            frameInfoJson.Add(id);
-                        if (flags.IsUpstreamInfo)
-                            upstreamInfo.Add(id);
-                        if (flags.IsUpstream)
-                            upstreamState.Add(id);
-                        if (flags.HasUpstreamAxis)
-                            upstreamAxis.Add(id);
-                        if (flags.HasDownstreamAxis)
-                            downstreamAxis.Add(id);
-                        if (flags.IsDeviceColor || flags.IsDevice || flags.HasDownstreamAxis)
-                            deviceColor.Add(id);
-                        if (flags.IsUpstreamColor || flags.IsUpstream || flags.IsUpstreamInfo
-                            || flags.HasUpstreamAxis)
-                            upstreamColor.Add(id);
-                    }
+                    if (block.IsDynamicBlock)
+                        foreach (DynamicBlockReferenceProperty property
+                            in block.DynamicBlockReferencePropertyCollection)
+                            ApplyValueTag(flags, property.PropertyName);
+                    if (flags.IsFrame) frames.Add(id);
+                    if (flags.IsDevice) devices.Add(id);
+                    if (flags.IsRuanguan)
+                        ruanguan.Add(id);
+                    if (flags.IsJson)
+                        frameInfoJson.Add(id);
+                    if (flags.IsUpstreamInfo)
+                        upstreamInfo.Add(id);
+                    if (flags.IsUpstream)
+                        upstreamState.Add(id);
+                    if (flags.HasUpstreamAxis)
+                        upstreamAxis.Add(id);
+                    if (flags.HasDownstreamAxis)
+                        downstreamAxis.Add(id);
+                    if (flags.IsDeviceColor || flags.IsDevice || flags.HasDownstreamAxis)
+                        deviceColor.Add(id);
+                    if (flags.IsUpstreamColor || flags.IsUpstream || flags.IsUpstreamInfo
+                        || flags.HasUpstreamAxis)
+                        upstreamColor.Add(id);
+                }
             }
 
             return new FillSelection
@@ -478,12 +480,6 @@ namespace UNCAD.Features.Fill
             };
         }
 
-        /// <summary>
-        /// Returns every model-space upstream insert that should render in the configured
-        /// upstream color. Several drawing templates use separate axis/number blocks without
-        /// a writable US/UPSTREAM_INFO attribute, so color discovery must also use the effective
-        /// block name and attribute-definition tags.
-        /// </summary>
         private sealed class BlockDefinitionFlags
         {
             public bool IsFrame;

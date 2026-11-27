@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;

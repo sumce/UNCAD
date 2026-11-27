@@ -481,6 +481,31 @@ rewrite an existing entry.
   adds an opaque, non-reversible field that duplicates data already stored in
   plaintext. Deriving the key from the persisted plaintext at comparison time
   keeps the JSON unchanged and readable while making the comparison stable.
+- Amendment (2026-11-27, 3.8.0.11 — copied frames with same-name circuits;
+  user report: "从这个 CAD 文件的图框复制到另一个 CAD 文件内，同一个机台俩
+  相同回路（实际是俩、信息不一样的）都判定成第一个了"):
+  1. A cross-file copied frame keeps the source frame's `frameinfo_json`
+     until the next write. The old arbitration compared only the machine ID,
+     so two same-name circuits on the same machine (different upstream
+     feeders) both kept the source's identity key and matched the first
+     workbook row; the moved-frame rebind accepted the record because
+     machine + device name matched.
+  2. The physical identity now also reads the first line of the upstream
+     block's `UPSTREAM_INFO` (U1F/U1U write `Fr` there) as the frame's
+     upstream. `FrameIdentityArbiter` compares machine, circuit name and
+     upstream (normalized with `CircuitIdentityKey.UpstreamKey`, so slot/axis
+     annotations do not count); any divergence makes the physical side win
+     and **drops the stale `CircuitKey`**. Matching then falls back to the
+     name rule: unique name matches, same-name rows go to the ambiguity
+     picker (batch) or the pending path (single-frame), never to row one.
+  3. `FrameMetadataRebindPolicy.IsMovedFrame` only rebinds a foreign-handle
+     record when the recorded `Fr` and the physical upstream agree (when
+     both are known), so a copied same-name frame does not inherit the
+     source frame's reserve/substitute history.
+  4. If the upstream block is absent from the selection, the previous
+     JSON-first behaviour is kept (no unverifiable guess); the frame then
+     still needs its upstream block for the plugin to tell two same-name
+     circuits apart.
 
 ## D-055: XLAYOUT Filter-List Import And Result Export (2026-11-22)
 

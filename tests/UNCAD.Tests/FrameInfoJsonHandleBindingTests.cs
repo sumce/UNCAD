@@ -121,11 +121,11 @@ namespace UNCAD.Tests
         {
             // 源码契约：统计身份链必须把图框句柄传进 JSON 校验，否则幽灵机台修复失效。
             string reader = File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Submit", "FrameIdentityReader.cs"));
+                "src", "UNCAD", "Cad", "Frame", "FrameIdentityReader.cs"));
             string collector = File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Fill", "FillSelectionCollector.cs"));
+                "src", "UNCAD", "Cad", "Frame", "FillSelectionCollector.cs"));
             string writer = File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Fill", "FrameInfoJsonBlockWriter.cs"));
+                "src", "UNCAD", "Cad", "Frame", "FrameInfoJsonBlockReader.cs"));
 
             Assert.Contains("region.Handle, out ExistingFillIdentity", reader);
             Assert.Contains("string expectedFrameHandle", collector);

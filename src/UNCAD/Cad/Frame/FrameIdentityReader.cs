@@ -3,27 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
-using UNCAD.Cad;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
-using UNCAD.Features.Fill;
-using UNCAD.Cad.Frame;
 
-namespace UNCAD.Features.Submit
+namespace UNCAD.Cad.Frame
 {
     /// <summary>Shared adapter that reads one frame's current identity and BOQ state.</summary>
     internal static class FrameIdentityReader
     {
-        /// <summary>
-        /// Reads only the durable frame identity. Layout and statistics commands do not
-        /// need the full BOQ/material extraction path; keeping this path lightweight also
-        /// prevents an unrelated malformed table from hiding a valid machine ID.
-        /// </summary>
         internal static ExistingFillIdentity ReadIdentity(Transaction transaction,
             FrameRegionGroup region, CadBlockDefinitionReader definitions = null)
         {
-            string foreignJsonNote;
-            return ReadIdentity(transaction, region, definitions, out foreignJsonNote);
+            return ReadIdentity(transaction, region, definitions, out _);
         }
 
         /// <summary>带外来 JSON 检测的轻量身份读取（XSTS/排版等统计入口用）。</summary>
@@ -44,10 +35,8 @@ namespace UNCAD.Features.Submit
 
         /// <summary>
         /// XLAYOUT 专用身份读取（D-045 修订，2026-11-22）：物理身份只读图框自身
-        /// 的 MACHINEID-POWER/MACHINEID-DEVICE 属性，设备块 DEVICENAME 不参与，
-        /// 也就不存在「图框属性与设备块不一致」的布局中止。设备块按插入点归属
-        /// 分区，全图与单机选择的边界集不同会把外来块归进区域——布局身份必须
-        /// 与选择集无关。JSON 读取与仲裁语义与 ReadIdentity 完全一致。
+        /// 的 MACHINEID-POWER/MACHINEID-DEVICE 属性（及上游块 UPSTREAM_INFO），
+        /// 设备块 DEVICENAME 不参与。JSON 读取与仲裁语义与 ReadIdentity 一致。
         /// </summary>
         internal static ExistingFillIdentity ReadLayoutIdentity(Transaction transaction,
             FrameRegionGroup region, CadBlockDefinitionReader definitions)
@@ -92,10 +81,6 @@ namespace UNCAD.Features.Submit
             return Read(transaction, region.EntityIds.ToArray(), true, definitions);
         }
 
-        /// <summary>
-        /// Reads one already-collected entity group with the same identity precedence used by
-        /// XLAYOUT, U1S, and automatic U1F/U1U submission. The caller owns the transaction.
-        /// </summary>
         public static SubmissionRecord Read(CadContext ctx, Transaction transaction,
             ObjectId[] ids, bool inferLegacySocketPanels, CadBlockDefinitionReader definitions = null)
         {
@@ -108,16 +93,43 @@ namespace UNCAD.Features.Submit
         {
             if (transaction == null) throw new ArgumentNullException(nameof(transaction));
             SubmissionSourceData source = CadSubmissionReader.Read(transaction, ids, definitions);
-            FrameInfoJsonRecord persistedIdentity = FrameInfoJsonBlockWriter.Read(transaction, ids);
-            return SubmissionRecordExtractor.Extract(source, inferLegacySocketPanels,
-                persistedIdentity);
+            FrameInfoJsonRecord persistedIdentity = ReadArbitratedIdentity(transaction,
+                ids, definitions, out ExistingFillIdentity arbitrated);
+            SubmissionRecord record = SubmissionRecordExtractor.Extract(source,
+                inferLegacySocketPanels, persistedIdentity);
+            if (arbitrated != null)
+                record.CircuitKey = (arbitrated.CircuitKey ?? "").Trim();
+            return record;
         }
 
         /// <summary>
-        /// Reads several frame identities with one read-only CAD transaction.
-        /// The result is index-aligned with <paramref name="regions"/>: a null
-        /// region yields a null entry instead of shifting later records.
+        /// 统一 U1S / U1DWG / Xmerge / BOQ 后置读取与 U1U/XSTS 的身份仲裁口径：
+        /// 对同图复制或物理属性/UPSTREAM_INFO 已改新的图框，丢弃源框 JSON 里的
+        /// 过期机台/回路/CircuitKey；物理属性不完整时才回退到带句柄校验的 JSON 读取。
         /// </summary>
+        private static FrameInfoJsonRecord ReadArbitratedIdentity(
+            Transaction transaction, ObjectId[] ids, CadBlockDefinitionReader definitions,
+            out ExistingFillIdentity arbitrated)
+        {
+            FillSelection selection = FillSelectionCollector.Split(transaction,
+                ids, false, definitions);
+            string ownHandle = FrameInfoJsonBlockReader.OwnFrameHandle(transaction,
+                selection.FrameBlockIds);
+            if (FillSelectionCollector.TryReadExistingIdentity(transaction, selection,
+                    ownHandle, out arbitrated, out _, out _))
+            {
+                return new FrameInfoJsonRecord
+                {
+                    MachineId = arbitrated.MachineId ?? "",
+                    DeviceName = arbitrated.DeviceName ?? "",
+                    Fr = arbitrated.UpstreamId ?? ""
+                };
+            }
+            arbitrated = null;
+            return FrameInfoJsonBlockReader.Read(transaction,
+                FrameInfoJsonBlockReader.ReadSources(selection), ownHandle);
+        }
+
         internal static IReadOnlyList<SubmissionRecord> ReadAll(CadContext ctx,
             IEnumerable<FrameRegionGroup> regions)
         {

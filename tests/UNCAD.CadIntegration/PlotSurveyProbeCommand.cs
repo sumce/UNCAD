@@ -52,6 +52,7 @@ namespace UNCAD.CadIntegration
             var nonPlotCounts = new Dictionary<string, int>(StringComparer.Ordinal);
             var nonPlotSamples = new List<string>();
             var wipeouts = new List<string>();
+            var upstreamSamples = new List<string>();
             int entities = 0;
             int blocks = 0;
             int blockWhite = 0;
@@ -130,6 +131,21 @@ namespace UNCAD.CadIntegration
                     if (block != null)
                     {
                         blocks++;
+                        foreach (ObjectId attributeId in block.AttributeCollection)
+                        {
+                            var attribute = tr.GetObject(attributeId,
+                                OpenMode.ForRead, false) as AttributeReference;
+                            if (attribute == null
+                                || !string.Equals(attribute.Tag, "UPSTREAM_INFO",
+                                    StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            string first = (attribute.TextString ?? "")
+                                .Split(new[] { "\\P" }, StringSplitOptions.None)
+                                .Select(line => line.Trim())
+                                .FirstOrDefault(line => line.Length > 0) ?? "";
+                            if (upstreamSamples.Count < 40)
+                                upstreamSamples.Add(block.Handle + "\t" + first);
+                        }
                         var definition = tr.GetObject(block.BlockTableRecord,
                             OpenMode.ForRead, false) as BlockTableRecord;
                         if (definition != null && !definition.IsAnonymous
@@ -184,6 +200,10 @@ namespace UNCAD.CadIntegration
             builder.AppendLine();
             builder.AppendLine("== Non-plot samples (max 200) ==");
             foreach (string row in nonPlotSamples) builder.AppendLine(row);
+            builder.AppendLine();
+            builder.AppendLine("== UPSTREAM_INFO samples (first line, max 40): "
+                + upstreamSamples.Count + " ==");
+            foreach (string row in upstreamSamples) builder.AppendLine(row);
             builder.AppendLine();
             builder.AppendLine("== Wipeouts: " + wipeouts.Count + " ==");
             foreach (string row in wipeouts) builder.AppendLine(row);

@@ -16,6 +16,8 @@ namespace UNCAD.Tests
         {
             string writer = Source("src", "UNCAD", "Features", "Fill",
                 "FrameInfoJsonBlockWriter.cs");
+            string reader = Source("src", "UNCAD", "Cad", "Frame",
+                "FrameInfoJsonBlockReader.cs");
             string batchPreflight = Source("src", "UNCAD", "Features", "Fill",
                 "BatchFillUpdatePreflight.cs");
             string batch = Source("src", "UNCAD", "Features", "Fill",
@@ -23,7 +25,7 @@ namespace UNCAD.Tests
             string fill = Source("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
 
             // 读取范围必须包含图框块（旧内嵌 JSON 在帧块上）。
-            Assert.Contains("FrameBlockIds", writer);
+            Assert.Contains("FrameBlockIds", reader);
             Assert.Contains("ReadSources(", writer);
 
             // 批量：预检（2026-11-09 拆到 BatchFillUpdatePreflight.Build，早于写事务
@@ -57,7 +59,7 @@ namespace UNCAD.Tests
             // 设备内预留/替代型号/更新历史（用户报告）。
             string[] files =
             {
-                "src/UNCAD/Features/Fill/FillSelectionCollector.cs",
+                "src/UNCAD/Cad/Frame/FillSelectionCollector.cs",
                 "src/UNCAD/Features/Fill/FillFeature.cs",
                 "src/UNCAD/Features/Fill/FillMachinePickStage.cs",
                 "src/UNCAD/Features/Fill/FillPlanningStage.cs",
@@ -70,19 +72,23 @@ namespace UNCAD.Tests
                 // ReadSources + 句柄校验）。
                 Assert.True(
                     source.Contains("FrameInfoJsonBlockWriter.ReadSources(")
-                    || source.Contains("FrameInfoJsonBlockWriter.ReadOwn("),
+                    || source.Contains("FrameInfoJsonBlockReader.ReadSources(")
+                    || source.Contains("FrameInfoJsonBlockWriter.ReadOwn(")
+                    || source.Contains("FrameInfoJsonBlockReader.ReadOwn("),
                     file + " 必须经 ReadSources/ReadOwn 读取 JSON（含图框块）");
                 // 且必须带本图框句柄校验（复制图框防继承）；ReadOwn 内部已带。
                 Assert.True(
                     source.Contains("FrameInfoJsonBlockWriter.OwnFrameHandle(")
-                    || source.Contains("FrameInfoJsonBlockWriter.ReadOwn("),
+                    || source.Contains("FrameInfoJsonBlockReader.OwnFrameHandle(")
+                    || source.Contains("FrameInfoJsonBlockWriter.ReadOwn(")
+                    || source.Contains("FrameInfoJsonBlockReader.ReadOwn("),
                     file + " 的 JSON 读取必须带本图框句柄校验（复制图框防继承）");
                 Assert.DoesNotMatch(
-                    @"FrameInfoJsonBlockWriter\.Read\(\w+,\s*(?:[\w\.]+\??\.)?FrameInfoJsonBlockIds\b",
+                    @"FrameInfoJsonBlock(?:Writer|Reader)\.Read\(\w+,\s*(?:[\w\.]+\??\.)?FrameInfoJsonBlockIds\b",
                     source);
                 // 裸 ctx 两参读取（不带句柄）不得回流。
                 Assert.DoesNotMatch(
-                    @"FrameInfoJsonBlockWriter\.Read\(ctx,\s*FrameInfoJsonBlockWriter\.ReadSources",
+                    @"FrameInfoJsonBlock(?:Writer|Reader)\.Read\(ctx,\s*FrameInfoJsonBlock(?:Writer|Reader)\.ReadSources",
                     source);
             }
         }

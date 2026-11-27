@@ -16,6 +16,64 @@ namespace UNCAD.Core.Text
         private static readonly Regex LeadingDiameter = new Regex(
             @"^\s*([0-9]+(?:[.,][0-9]+)?)\s*mm\s*软管",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BareUnitValue = new Regex(
+            @"^\s*[0-9]+(?:[.,][0-9]+)?\s*(?:mm|m)\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        private static readonly string[] LengthTagTokens =
+        {
+            "LENGTH", "DISTANCE", "HOSE", "软管", "长度"
+        };
+        private static readonly string[] ModelPropertyTokens =
+        {
+            "MODEL", "型号", "DIA", "DIAMETER", "直径", "SPEC", "规格"
+        };
+
+        /// <summary>Reads a Ruanguan length attribute/property while rejecting bare model diameters.</summary>
+        public static bool TryReadLength(string value, string tag, out double millimetres)
+        {
+            if (TryParseMillimetres(value, out millimetres))
+            {
+                if (IsModelProperty(tag) && BareUnitValue.IsMatch(value ?? ""))
+                {
+                    millimetres = 0;
+                    return false;
+                }
+                return true;
+            }
+            if (!IsLengthProperty(tag) || !TryParseNumber(value, out millimetres))
+                return false;
+            return millimetres > 0;
+        }
+
+        public static bool IsLengthProperty(string name)
+        {
+            string value = (name ?? "").Trim();
+            foreach (string token in LengthTagTokens)
+            {
+                if (value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IsModelProperty(string name)
+        {
+            string value = (name ?? "").Trim();
+            foreach (string token in ModelPropertyTokens)
+            {
+                if (value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool TryParseNumber(string value, out double number)
+        {
+            string text = (value ?? "").Trim().Replace(',', '.');
+            return double.TryParse(text, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out number)
+                && !double.IsNaN(number) && !double.IsInfinity(number);
+        }
 
         /// <summary>
         /// D-058：从软管标注文字（「100mm软管:2500mm」，RuanguanLabelFormatter

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
@@ -787,12 +788,8 @@ namespace UNCAD.Features.Fill
         }
 
         private static WindowWrapper Owner()
-        {
-            // AcCoreConsole has no main window; full AutoCAD still receives a modal owner.
-            IntPtr handle = AcApplication.MainWindow == null
-                ? IntPtr.Zero : AcApplication.MainWindow.Handle;
-            return new WindowWrapper(handle);
-        }
+            => new WindowWrapper(AcApplication.MainWindow == null
+                ? IntPtr.Zero : AcApplication.MainWindow.Handle);
 
         private static string PromptValue(string value)
             => string.IsNullOrWhiteSpace(value) ? "（空）" : value.Trim();

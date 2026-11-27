@@ -112,7 +112,7 @@ namespace UNCAD.Tests
             // 默认 0”）：句柄失配不再一律拒绝——身份一致且原句柄已不在本图
             // （= 整机台跨文件搬场）时收下记录；单框与批量两条读取路径都带身份。
             string writer = File.ReadAllText(RepoFile(
-                "src", "UNCAD", "Features", "Fill", "FrameInfoJsonBlockWriter.cs"));
+                "src", "UNCAD", "Cad", "Frame", "FrameInfoJsonBlockReader.cs"));
             Assert.Contains("FrameMetadataRebindPolicy.IsMovedFrame", writer);
             Assert.Contains("movedJsonNote", writer);
             Assert.Contains("HandleAliveInDatabase", writer);

@@ -6,13 +6,13 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Contracts;
 using UNCAD.UI;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Core.Submission;
-using UNCAD.Features.Fill;
-using UNCAD.Features.Submit;
+using UNCAD.Features.Shared;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.PdfExport
@@ -242,7 +242,8 @@ namespace UNCAD.Features.PdfExport
             error = "";
 
             FillRuntimeOptions options = FillSettings.Current();
-            string path = FillFeature.ResolveMachineWorkbookPath(ctx, options.MachineWorkbookPath);
+            string path = FrameCircuitResolver.ResolveMachineWorkbookPath(ctx,
+                options.MachineWorkbookPath);
             if (path == null)
             {
                 error = "未配置机台数据源，无法确定回路名；请先在 U1SET 选择并刷新机台 Excel。";
@@ -266,7 +267,7 @@ namespace UNCAD.Features.PdfExport
                 var definitions = new CadBlockDefinitionReader(transaction);
                 foreach (FrameRegionGroup region in regions)
                 {
-                    if (!FillFeature.TryResolveFrameCircuit(transaction, region, workbook,
+                    if (!FrameCircuitResolver.TryResolveFrameCircuit(transaction, region, workbook,
                         definitions, out string machineId, out string circuitName,
                         out string upstreamId, out string frameError))
                     {

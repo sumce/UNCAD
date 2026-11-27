@@ -7,6 +7,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Text;
 using UNCAD.Features.Fill;

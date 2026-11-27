@@ -16,24 +16,10 @@ namespace UNCAD.Features.Fill
     /// </summary>
     internal static class RuanguanBlockWriter
     {
-        private static readonly string[] LengthTagTokens =
-        {
-            "LENGTH", "DISTANCE", "HOSE", "软管", "长度"
-        };
-
         private static readonly string[] LabelPropertyTokens =
         {
             "LABEL", "TEXT", "MODEL", "型号", "标注", "说明"
         };
-
-        private static readonly string[] ModelPropertyTokens =
-        {
-            "MODEL", "型号", "DIA", "DIAMETER", "直径", "SPEC", "规格"
-        };
-
-        private static readonly Regex BareUnitValue = new Regex(
-            @"^\s*[0-9]+(?:[.,][0-9]+)?\s*(?:mm|m)\s*$",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
         public static FillWriteResult FillModelAndLength(CadContext ctx,
             ObjectId[] blockIds, string diameter)
@@ -146,47 +132,14 @@ namespace UNCAD.Features.Fill
         /// <summary>Reads a length while rejecting unqualified geometry numbers.</summary>
         internal static bool TryReadLength(string value, string tag,
             out double millimetres)
-        {
-            if (RuanguanLengthParser.TryParseMillimetres(value, out millimetres))
-            {
-                // A bare diameter such as MODEL=20mm is not a hose length.
-                if (IsModelProperty(tag) && BareUnitValue.IsMatch(value ?? ""))
-                {
-                    millimetres = 0;
-                    return false;
-                }
-                return true;
-            }
-            if (!IsLengthProperty(tag)
-                || !TryParseNumber(value, out millimetres)) return false;
-            return millimetres > 0;
-        }
+            => RuanguanLengthParser.TryReadLength(value, tag, out millimetres);
 
         private static bool IsStrongLengthCandidate(string value, string tag)
             => IsLengthProperty(tag)
                 || (value ?? "").IndexOf("软管", StringComparison.OrdinalIgnoreCase) >= 0;
 
-        private static bool IsModelProperty(string name)
-        {
-            string value = (name ?? "").Trim();
-            foreach (string token in ModelPropertyTokens)
-            {
-                if (value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
-            }
-            return false;
-        }
-
         internal static bool IsLengthProperty(string name)
-        {
-            string value = (name ?? "").Trim();
-            foreach (string token in LengthTagTokens)
-            {
-                if (value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
-                    return true;
-            }
-            return false;
-        }
+            => RuanguanLengthParser.IsLengthProperty(name);
 
         private static bool IsLabelProperty(string name)
         {
@@ -197,14 +150,6 @@ namespace UNCAD.Features.Fill
                     return true;
             }
             return false;
-        }
-
-        private static bool TryParseNumber(string value, out double number)
-        {
-            string text = (value ?? "").Trim().Replace(',', '.');
-            return double.TryParse(text, NumberStyles.Float,
-                CultureInfo.InvariantCulture, out number)
-                && !double.IsNaN(number) && !double.IsInfinity(number);
         }
 
         private static IEnumerable<DynamicBlockReferenceProperty> GetDynamicProperties(

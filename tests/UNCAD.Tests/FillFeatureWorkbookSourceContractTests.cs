@@ -10,8 +10,11 @@ namespace UNCAD.Tests
         [Fact]
         public void RemoteWorkbookResolution_UsesManualCacheOnly()
         {
-            string source = File.ReadAllText(PathOf("src", "UNCAD", "Features",
+            string fill = File.ReadAllText(PathOf("src", "UNCAD", "Features",
                 "Fill", "FillFeature.cs"));
+            Assert.Contains("FrameCircuitResolver.ResolveMachineWorkbookPath(", fill);
+            string source = File.ReadAllText(PathOf("src", "UNCAD", "Features",
+                "Shared", "FrameCircuitResolver.cs"));
 
             Assert.Contains("TryGetSnapshot(path", source);
             Assert.Contains("SQLite", source);

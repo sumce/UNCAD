@@ -48,6 +48,41 @@ namespace UNCAD.Tests
         }
 
         [Fact]
+        public void SameMachineDevice_DifferentUpstream_NotMoved()
+        {
+            // 3.8.0.11：同机台同名回路、上游不同 = 另一条回路；复制框不能
+            // 按「整机台搬场」收下源框记录（否则会沿用源框的身份键）。
+            var record = Record("MMPTC10", "注塑机L3", "1A2B");
+            record.Fr = "3N-11B1A-PP-02";
+            Assert.False(FrameMetadataRebindPolicy.IsMovedFrame(
+                record, "MMPTC10", "注塑机L3", "2U-UPS5D1-PP-02",
+                handle => false));
+        }
+
+        [Fact]
+        public void SameUpstream_IsMoved()
+        {
+            var record = Record("MMPTC10", "注塑机L3", "1A2B");
+            record.Fr = "3N-11B1A-PP-02";
+            Assert.True(FrameMetadataRebindPolicy.IsMovedFrame(
+                record, "MMPTC10", "注塑机L3", "3n-11b1a-pp-02 ",
+                handle => false));
+        }
+
+        [Theory]
+        [InlineData("", "2U-UPS5D1-PP-02")]   // 记录没有上游
+        [InlineData("3N-11B1A-PP-02", "")]    // 本框没有物理上游（上游块未选中）
+        public void MissingUpstream_KeepsLegacyMovedSemantics(string recorded,
+            string expected)
+        {
+            // 任一侧上游未知时维持旧口径：只比机台+回路名，不阻断搬场。
+            var record = Record("MMPTC10", "注塑机L3", "1A2B");
+            record.Fr = recorded;
+            Assert.True(FrameMetadataRebindPolicy.IsMovedFrame(
+                record, "MMPTC10", "注塑机L3", expected, handle => false));
+        }
+
+        [Fact]
         public void SourceFrameStillInDrawing_NotMoved()
         {
             // 原句柄仍在本图 = 源框还在，这是同文件复制出的新图框，不是搬场。

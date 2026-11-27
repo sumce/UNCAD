@@ -10,7 +10,7 @@ using UNCAD.Core.Fill;
 using UNCAD.Core.Stat;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
-using UNCAD.Features.Submit;
+using UNCAD.Features.Shared;
 using UNCAD.Infra;
 using UNCAD.UI;
 using UNCAD.Cad.Frame;
@@ -55,49 +55,8 @@ namespace UNCAD.Features.Fill
             CadBlockDefinitionReader definitions,
             out string machineId, out string circuitName, out string upstreamId,
             out string error)
-        {
-            machineId = "";
-            circuitName = "";
-            upstreamId = "";
-            error = "";
-            if (transaction == null || region == null || workbook == null)
-            {
-                error = "缺少图框或机台数据。";
-                return false;
-            }
-            ExistingFillIdentity identity;
-            try
-            {
-                identity = FrameIdentityReader.ReadIdentity(transaction, region, definitions);
-            }
-            catch (System.Exception ex)
-            {
-                error = ex.Message;
-                return false;
-            }
-            MachineRow machine = ExistingFillIdentityResolver.MatchMachine(identity,
-                workbook.FindRows(identity.MachineId), out string matchError);
-            if (machine == null)
-            {
-                error = matchError;
-                return false;
-            }
-            machineId = (machine.MachineId ?? "").Trim();
-            circuitName = (machine.CircuitName ?? "").Trim();
-            if (machineId.Length == 0 || circuitName.Length == 0)
-            {
-                error = "图框缺少机台ID或回路名。";
-                return false;
-            }
-            // D-057：机台内有同名回路（上游编号不同）时带出上游编号——PDF 文件名
-            // 靠它区分两条回路，且取自台账（不取本批），先后两次各出一条时文件名稳定。
-            // 名字唯一时为空，文件名保持 <机台>_<回路>.pdf。
-            int sameName = workbook.FindRows(machineId).Count(row =>
-                IdentityTextNormalizer.Equals(row.CircuitName, machine.CircuitName));
-            if (sameName > 1)
-                upstreamId = CircuitIdentityKey.UpstreamDisplay(machine.Fr);
-            return true;
-        }
+            => FrameCircuitResolver.TryResolveFrameCircuit(transaction, region, workbook,
+                definitions, out machineId, out circuitName, out upstreamId, out error);
 
         internal static void ResolveUpdateCableFromExistingTable(CadContext ctx,
             FillSelection selection, MachineRow picked, BoqCatalogIndex catalog,

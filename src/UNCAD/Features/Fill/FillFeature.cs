@@ -634,51 +634,7 @@ namespace UNCAD.Features.Fill
 
         internal static string ResolveMachineWorkbookPath(
             CadContext ctx, string configuredPath)
-        {
-            string path = (configuredPath ?? "").Trim();
-            try
-            {
-                if (!string.IsNullOrEmpty(path)
-                    && MachineWorkbookSource.TryGetSnapshot(path,
-                        out MachineWorkbookSnapshotInfo snapshot))
-                {
-                    ctx.Write("\n[U1F/U1U] 使用上次成功刷新的 SQLite 机台快照: "
-                        + (snapshot?.SourceDisplay ?? path)
-                        + "（本命令不会读取源 Excel）");
-                    return path;
-                }
-            }
-            catch (System.Exception ex)
-            {
-                ctx.Write("\n[U1F/U1U] SQLite 机台快照不可用，请执行 U1DATA 或在 U1SET 重新刷新: "
-                    + ex.Message);
-                Log.Warn("U1F/U1U machine SQLite snapshot check failed: " + ex.Message);
-                return null;
-            }
-
-            if (!string.IsNullOrEmpty(path))
-            {
-                ctx.Write("\n[U1F/U1U] 机台数据尚未导入 SQLite，请执行 U1DATA 或在 U1SET 点击“刷新”。");
-                Log.Warn("机台数据 SQLite 快照不存在，U1F/U1U 未读取源 Excel。源: " + path);
-                return null;
-            }
-
-            using (var dialog = new OpenFileDialog
-            {
-                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                Title = "选择机台数据 Excel"
-            })
-            {
-                if (dialog.ShowDialog(new WindowWrapper(
-                        Autodesk.AutoCAD.ApplicationServices.Application.MainWindow.Handle))
-                    != DialogResult.OK) return null;
-                path = dialog.FileName;
-            }
-            Settings.Set(ConfigKeys.FillExcelPath, path);
-            ctx.Write("\n[U1F/U1U] 已记住 Excel: " + path
-                + "；请执行 U1DATA，或在 U1SET 点击“刷新”导入 SQLite。");
-            return null;
-        }
+            => FrameCircuitResolver.ResolveMachineWorkbookPath(ctx, configuredPath);
 
         // ---- 以下为兼容薄壳：签名被 BatchFillUpdateCoordinator / CircuitCoverageGuard /
         // PdfExportFeature / 测试引用，实现已按阶段拆到对应服务。----

@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Cad.QuickLine;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.Excel;

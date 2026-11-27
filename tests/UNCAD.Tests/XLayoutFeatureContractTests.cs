@@ -60,8 +60,8 @@ namespace UNCAD.Tests
         [Fact]
         public void IdentityConflictDiagnosticsIncludeDeviceBlockProvenance()
         {
-            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Fill", "FillSelectionCollector.cs"));
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "Frame", "FillSelectionCollector.cs"));
 
             Assert.Contains("DEVICENAME 候选块诊断", collector);
             Assert.Contains("block.Handle", collector);
@@ -79,10 +79,10 @@ namespace UNCAD.Tests
             // 「图框属性与设备块不一致」在布局路径结构性不可能发生。
             string feature = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
                 "XLayout", "XLayoutFeature.cs"));
-            string reader = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Submit", "FrameIdentityReader.cs"));
-            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Features",
-                "Fill", "FillSelectionCollector.cs"));
+            string reader = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "Frame", "FrameIdentityReader.cs"));
+            string collector = File.ReadAllText(RepoFile("src", "UNCAD", "Cad",
+                "Frame", "FillSelectionCollector.cs"));
 
             Assert.Contains("FrameIdentityReader.ReadLayoutIdentity(readTransaction", feature);
             Assert.DoesNotContain("FrameIdentityReader.ReadIdentity(", feature);

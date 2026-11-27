@@ -10,7 +10,7 @@ namespace UNCAD.Tests
         public void XframeAndDrawingInfoTable_AreConnectedToBothFillCommands()
         {
             string collector = Read("src", "UNCAD", "Cad", "FrameRegionCollector.cs");
-            string selection = Read("src", "UNCAD", "Features", "Fill",
+            string selection = Read("src", "UNCAD", "Cad", "Frame",
                 "FillSelectionCollector.cs");
             string fill = Read("src", "UNCAD", "Features", "Fill", "FillFeature.cs");
             string update = Read("src", "UNCAD", "Features", "Fill",
@@ -19,7 +19,7 @@ namespace UNCAD.Tests
                 "XFrameMigrationService.cs");
 
             Assert.Contains("XFrameName = \"xframe\"", collector);
-            Assert.Contains("CadDrawingInfoTableWriter.IsDrawingInfoTable", selection);
+            Assert.Contains("CadTableLayoutClassifier.IsDrawingInfoTable", selection);
             Assert.Contains("selection.DrawingInfoTableIds", fill);
             Assert.Contains("plan.Selection.DrawingInfoTableIds", update);
             Assert.Contains("XFrameMigrationService.Migrate", fill);

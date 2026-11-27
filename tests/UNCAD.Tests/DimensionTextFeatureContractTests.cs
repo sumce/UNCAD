@@ -16,7 +16,7 @@ namespace UNCAD.Tests
             string converter = File.ReadAllText(Path.Combine(root, "src", "UNCAD",
                 "Cad", "AlignedDimensionTextConverter.cs"));
             string fillSelection = File.ReadAllText(Path.Combine(root, "src", "UNCAD",
-                "Features", "Fill", "FillSelectionCollector.cs"));
+                "Cad", "Frame", "FillSelectionCollector.cs"));
             string statisticsReader = File.ReadAllText(Path.Combine(root, "src",
                 "UNCAD", "Cad", "StatisticsTextReader.cs"));
 

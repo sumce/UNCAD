@@ -78,9 +78,9 @@ namespace UNCAD.Tests
             Assert.True(prepare > coverage, "整机回路校验必须在 BOQ 写入之前");
             Assert.Contains("提交已中止", submit);
 
-            string guard = File.ReadAllText(Repo("src", "UNCAD", "Features", "Submit",
+            string guard = File.ReadAllText(Repo("src", "UNCAD", "Features", "Shared",
                 "CircuitCoverageGuard.cs"));
-            Assert.Contains("FillFeature.EnsureCircuitCoverage(", guard);
+            Assert.Contains("FillCoverageGate.EnsureCircuitCoverage(", guard);
             Assert.Contains("MachineWorkbookSource.TryGetSnapshot(", guard);
             Assert.Contains("FillWorkbookSnapshot.Load(source)", guard);
             // 只读快照，绝不刷新/下载源 Excel。

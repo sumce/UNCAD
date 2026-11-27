@@ -1,7 +1,6 @@
 using Autodesk.AutoCAD.DatabaseServices;
-using UNCAD.Cad;
 
-namespace UNCAD.Features.Fill
+namespace UNCAD.Cad.Frame
 {
     internal sealed class FillSelection
     {

@@ -100,7 +100,12 @@ their version numbers or counts are stale.
   pairing first, name pairing only for a name unique in the machine, and a
   same-name frame without a usable key is reported as pending (待确认), never
   guessed and never counted as covered. Do not reintroduce grouping by circuit
-  name alone.
+  name alone. A copied frame's stale identity key is dropped when its physical
+  circuit name or upstream (the first line of the upstream block's
+  `UPSTREAM_INFO`, compared by `CircuitIdentityKey.UpstreamKey`) differs
+  (3.8.0.11); matching then takes the name/ambiguity path instead of silently
+  using the first same-name row. Without an upstream block the JSON stays
+  authoritative (no unverifiable guess).
 - The drawing-info table's six columns (专业 / 楼层 / 制图 / 审核 / 日期 / 版本)
   come from the U1SET templates (`UNC_FILL_INFO_*`); an empty template leaves
   the cell untouched. `(U1F创建时间)` reads `meta.filledUtc`, which U1F

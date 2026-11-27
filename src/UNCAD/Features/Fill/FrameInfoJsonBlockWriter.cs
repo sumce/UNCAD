@@ -6,6 +6,7 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;
 using UNCAD.Infra;
@@ -13,235 +14,47 @@ using UNCAD.Infra;
 namespace UNCAD.Features.Fill
 {
     /// <summary>
-    /// Reads and writes the optional frameinfo_json block. It is deliberately an ordinary
-    /// attribute-backed block so existing drawings can add it without a plugin migration.
+    /// Reads and writes the optional frameinfo_json block. Read helpers delegate to
+    /// <see cref="FrameInfoJsonBlockReader"/> in Cad/Frame while write/migration
+    /// logic stays here.
     /// </summary>
     internal static class FrameInfoJsonBlockWriter
     {
-        private const string DefinitionName = "frameinfo_json";
+        private const string DefinitionName = FrameInfoJsonBlockReader.DefinitionName;
+        internal const string FrameInfoTag = FrameInfoJsonBlockReader.FrameInfoTag;
 
         public static FrameInfoJsonRecord Read(CadContext ctx, ObjectId[] blockIds)
-        {
-            if (ctx == null || blockIds == null || blockIds.Length == 0) return null;
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
-            {
-                FrameInfoJsonRecord record = Read(transaction, blockIds);
-                transaction.Commit();
-                return record;
-            }
-        }
+            => FrameInfoJsonBlockReader.Read(ctx, blockIds);
 
-        /// <summary>
-        /// 读取 frameinfo_json 时要一起看的块：独立 JSON 块 + 图框块本身（旧图框内嵌
-        /// FRAMEINFO_JSON）。XFrameMigrationService 在写入事务里会把这些旧属性从图框块上
-        /// 移除，所以调用方**必须在迁移前**用本方法读出 previous 记录，否则旧图框的
-        /// 身份/替代型号/预留/历史会在首次 U1F/U1U 时丢失。
-        /// </summary>
         internal static ObjectId[] ReadSources(FillSelection selection)
-        {
-            if (selection == null) return Array.Empty<ObjectId>();
-            return (selection.FrameInfoJsonBlockIds ?? Array.Empty<ObjectId>())
-                .Concat(selection.FrameBlockIds ?? Array.Empty<ObjectId>())
-                .Where(id => !id.IsNull)
-                .Distinct()
-                .ToArray();
-        }
+            => FrameInfoJsonBlockReader.ReadSources(selection);
 
-        /// <summary>
-        /// 单框语义的“本图框句柄”（与写入盖戳 frame.Handle.ToString() 同源）：
-        /// 恰好一个非空图框块时返回其句柄；0 个或多个返回空串——IsForeignTo
-        /// 对空期望句柄放行（老 JSON 兼容路径），因此多框场景不会误拒。
-        /// 2026-11-04 用户报告：复制图框会把源框的 JSON 一起带过来，所有
-        /// 决策读取（身份、设备内预留、替代型号、母线箱选择、更新历史）
-        /// 必须带句柄校验，否则复制框会静默继承源框的用户选择。
-        /// </summary>
         internal static string OwnFrameHandle(Transaction transaction,
             ObjectId[] frameBlockIds)
-        {
-            ObjectId only = ObjectId.Null;
-            int count = 0;
-            foreach (ObjectId id in frameBlockIds ?? Array.Empty<ObjectId>())
-            {
-                if (id.IsNull) continue;
-                count++;
-                if (count == 1) only = id;
-            }
-            if (count != 1) return "";
-            BlockReference frame = transaction.GetObject(only,
-                OpenMode.ForRead, true) as BlockReference;
-            return frame?.Handle.ToString() ?? "";
-        }
+            => FrameInfoJsonBlockReader.OwnFrameHandle(transaction, frameBlockIds);
 
-        /// <summary>
-        /// ctx 版“只读本图框自己的记录”（自动开短读事务 + 句柄校验）：
-        /// 复制图框带来的源框 JSON 被拒绝后返回 null，调用方走各自的
-        /// 物理兜底（现有表格/标签），绝不用别的图框的用户选择。
-        /// </summary>
         internal static FrameInfoJsonRecord ReadOwn(CadContext ctx, FillSelection selection)
-        {
-            using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
-            {
-                FrameInfoJsonRecord record = Read(transaction,
-                    ReadSources(selection),
-                    OwnFrameHandle(transaction, selection?.FrameBlockIds));
-                transaction.Commit();
-                return record;
-            }
-        }
+            => FrameInfoJsonBlockReader.ReadOwn(ctx, selection);
 
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds)
-            => Read(transaction, blockIds, null, out _);
+            => FrameInfoJsonBlockReader.Read(transaction, blockIds);
 
-        /// <summary>带句柄校验、不需要外来说明的读取（决策读取点用）。</summary>
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds, string expectedFrameHandle)
-            => Read(transaction, blockIds, expectedFrameHandle, out _);
+            => FrameInfoJsonBlockReader.Read(transaction, blockIds, expectedFrameHandle);
 
-        /// <summary>
-        /// 带图框句柄校验的读取：JSON 记录里带 frameHandle 且与当前图框不符时
-        /// 视为外块（图框移动后遗留/几何归属认错），跳过并在 foreignJsonNote 里
-        /// 说明，调用方可提示用户清理。老 JSON 无句柄 → 不校验（兼容旧图）。
-        /// </summary>
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds, string expectedFrameHandle, out string foreignJsonNote)
-            => Read(transaction, blockIds, expectedFrameHandle, null,
-                out foreignJsonNote, out _);
+            => FrameInfoJsonBlockReader.Read(transaction, blockIds, expectedFrameHandle,
+                out foreignJsonNote);
 
-        /// <summary>
-        /// D-052（2026-11-10）身份判别版读取：句柄失配时先走搬场重绑判定——
-        /// 记录身份与本框当前身份一致且原句柄已不在本图（跨文件复制/移动整图框）
-        /// → 判定整机台搬场，收下记录并在 movedJsonNote 说明（不算外来，不触发
-        /// 复制框清理）；否则维持外来拒绝（foreignJsonNote）。老 JSON 无句柄 →
-        /// 不校验（兼容旧图）。
-        /// </summary>
         internal static FrameInfoJsonRecord Read(Transaction transaction,
             ObjectId[] blockIds, string expectedFrameHandle,
             ExistingFillIdentity expectedIdentity,
             out string foreignJsonNote, out string movedJsonNote)
-        {
-            foreignJsonNote = "";
-            movedJsonNote = "";
-            FrameInfoJsonRecord result = null;
-            foreach (ObjectId id in blockIds ?? Array.Empty<ObjectId>())
-            {
-                BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
-                    as BlockReference;
-                if (block == null) continue;
-                if (!IsJsonHostBlock(transaction, block)) continue;
-                List<AttributeReference> attributes = Attributes(transaction, block).ToList();
-                foreach (AttributeReference attribute in attributes)
-                {
-                    if (!IsJsonTag(attribute.Tag) && attributes.Count != 1) continue;
-                    FrameInfoJsonRecord record = ParsePayload(AttributeText(attribute), id);
-                    if (record == null) continue;
-                    if (!AcceptRecord(transaction, record, expectedFrameHandle,
-                        expectedIdentity, id, ref foreignJsonNote, ref movedJsonNote))
-                        continue;
-                    result = Merge(result, record, id);
-                }
-                if (block.IsDynamicBlock)
-                {
-                    DynamicBlockReferenceProperty[] dynamicProperties = block
-                        .DynamicBlockReferencePropertyCollection.Cast<DynamicBlockReferenceProperty>()
-                        .ToArray();
-                    foreach (DynamicBlockReferenceProperty property
-                        in dynamicProperties.Where(property => IsJsonTag(property.PropertyName)
-                            || (dynamicProperties.Length == 1 && property.Value is string)))
-                    {
-                        FrameInfoJsonRecord record = ParsePayload(
-                            Convert.ToString(property.Value), id);
-                        if (record == null) continue;
-                        if (!AcceptRecord(transaction, record, expectedFrameHandle,
-                            expectedIdentity, id, ref foreignJsonNote, ref movedJsonNote))
-                            continue;
-                        result = Merge(result, record, id);
-                    }
-                }
-            }
-            return result;
-        }
-
-        /// <summary>
-        /// 句柄校验 + 搬场重绑的统一闸门：句柄一致（或老记录无句柄）→ 收下；
-        /// 句柄失配 → 先判搬场（身份一致且原句柄已不在本图 → 收下并记
-        /// movedJsonNote），否则外来拒绝（foreignJsonNote，语义与 3.0.0.6 相同）。
-        /// </summary>
-        private static bool AcceptRecord(Transaction transaction,
-            FrameInfoJsonRecord record, string expectedFrameHandle,
-            ExistingFillIdentity expectedIdentity, ObjectId id,
-            ref string foreignJsonNote, ref string movedJsonNote)
-        {
-            if (!record.IsForeignTo(expectedFrameHandle)) return true;
-            if (FrameMetadataRebindPolicy.IsMovedFrame(record,
-                    expectedIdentity?.MachineId ?? "", expectedIdentity?.DeviceName ?? "",
-                    handle => HandleAliveInDatabase(transaction, id, handle)))
-            {
-                movedJsonNote = "图框 " + expectedFrameHandle
-                    + " 携带的 frameinfo_json 记录属于同一机台（"
-                    + record.MachineId + " / " + record.DeviceName
-                    + "）且原句柄已不在本图——判定为整机台搬场（跨文件复制/移动），"
-                    + "已收下其设备内预留/替代型号/更新历史；本次写入时将盖成本框句柄。";
-                return true;
-            }
-            foreignJsonNote = "图框 " + expectedFrameHandle
-                + " 范围内发现归属不符的 frameinfo_json 块（块 "
-                + id.Handle + "，机台 " + record.MachineId
-                + "），已忽略——多为图框移动后遗留，建议删除该块。";
-            return false;
-        }
-
-        /// <summary>句柄字符串是否仍指向本图一个未删除的**图框块**（解析失败按存在处理）。
-        /// 3.0.0.14 收紧：句柄号回答的是“本图还有没有源框”，不能拿“任意同号实体”
-        /// 当源框还在——跨文件复制后，记录里的原句柄极易与目标图的无关实体（图层/
-        /// 线型等表记录、直线、文字）撞号，撞号会被误判成同文件复制，搬场记录被拒、
-        /// 图框被当复制框清理。只有句柄仍指向携带图框属性（FRAMEINFO/CABLE_INFO/
-        /// CONDUIT_INFO/MACHINEID-*）的块参照才算源框还在。</summary>
-        private static bool HandleAliveInDatabase(Transaction transaction,
-            ObjectId sourceId, string handleText)
-        {
-            if (!long.TryParse((handleText ?? "").Trim(), NumberStyles.HexNumber,
-                    CultureInfo.InvariantCulture, out long value) || value <= 0)
-                return true; // 解析不出来宁可保守：不判搬场，交回外来语义。
-            try
-            {
-                if (!sourceId.Database.TryGetObjectId(new Handle(value),
-                        out ObjectId found))
-                    return true;
-                if (found == ObjectId.Null || found.IsErased) return false;
-                return transaction.GetObject(found, OpenMode.ForRead, true)
-                    is BlockReference candidate && LooksLikeFrame(transaction, candidate);
-            }
-            catch
-            {
-                return true;
-            }
-        }
-
-        /// <summary>块参照是否仍带着图框身份属性（句柄撞号防御用）。
-        /// 同文件复制出的复制框与源框都带这些属性；无关块参照（设备块/图签等）
-        /// 不带——撞上它们不代表源框还在。</summary>
-        private static bool LooksLikeFrame(Transaction transaction, BlockReference block)
-        {
-            if (block.AttributeCollection == null) return false;
-            foreach (ObjectId attributeId in block.AttributeCollection)
-            {
-                if (!(transaction.GetObject(attributeId, OpenMode.ForRead, true)
-                        is AttributeReference attribute)) continue;
-                string tag = attribute.Tag ?? "";
-                if (IsJsonTagName(tag)
-                    || string.Equals(tag, FrameBlockFiller.TagCable,
-                        StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, FrameBlockFiller.TagConduit,
-                        StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, FrameBlockFiller.TagDevice,
-                        StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, FrameBlockFiller.TagPower,
-                        StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
+            => FrameInfoJsonBlockReader.Read(transaction, blockIds, expectedFrameHandle,
+                expectedIdentity, out foreignJsonNote, out movedJsonNote);
 
 
 
@@ -419,9 +232,6 @@ namespace UNCAD.Features.Fill
 
             return new FillWriteResult(blocks, values);
         }
-
-        /// <summary>图框块内 JSON 的首选属性名（当前模板 FRAME_20261119）。</summary>
-        internal const string FrameInfoTag = "FRAMEINFO";
 
         /// <summary>写 JSON 到图框块的 FRAMEINFO 属性；缺失时从块定义补建属性引用。
         /// 返回 1=写入/已一致，0=失败。</summary>

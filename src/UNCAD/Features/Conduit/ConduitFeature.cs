@@ -2,6 +2,7 @@ using System.Linq;
 using Autodesk.AutoCAD.Runtime;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Excel;
 using UNCAD.Core.Fill;

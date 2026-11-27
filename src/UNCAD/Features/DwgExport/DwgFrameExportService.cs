@@ -5,11 +5,11 @@ using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Dwg;
 using UNCAD.Core.IO;
 using UNCAD.Core.Submission;
 using UNCAD.Core.Text;
-using UNCAD.Features.Submit;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.DwgExport
@@ -22,16 +22,6 @@ namespace UNCAD.Features.DwgExport
         public int FrameCount { get; set; }
         /// <summary>按机台拆分的导出明细：操作记录需要"每个机台的文件 + 覆盖的回路"。</summary>
         public List<DwgExportMachine> Machines { get; set; } = new List<DwgExportMachine>();
-    }
-
-    /// <summary>一个机台的导出结果：DWG 文件路径 + 覆盖的回路（回路 = 一个图框的设备名）。</summary>
-    public sealed class DwgExportMachine
-    {
-        public string MachineId { get; set; }
-        public string FilePath { get; set; }
-        public List<string> Circuits { get; set; } = new List<string>();
-        /// <summary>该机台本次导出的图框数量（结果窗展示用）。</summary>
-        public int Frames { get; set; }
     }
 
     /// <summary>Source frame with the recognized machine and device identity.</summary>

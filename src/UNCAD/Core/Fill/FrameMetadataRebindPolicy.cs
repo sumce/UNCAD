@@ -12,6 +12,11 @@ namespace UNCAD.Core.Fill
     /// 框是另一台设备）或身份不符（= 幽灵记录/复制后已改号）→ 维持 3.0.0.6/3.0.0.8
     /// 的外来拒绝语义。判定保持纯逻辑（句柄是否存在由调用方注入），Core 不依赖
     /// AutoCAD。
+    ///
+    /// 3.8.0.11（D-056 Amendment）：同一机台的同名回路（上游编号不同）也是不同
+    /// 回路——记录的上游编号与本框物理标注（UPSTREAM_INFO 首行）不同时，不能按
+    /// 「整机台搬场」收下源框记录，否则复制框会继承源框的身份键，被静默判成台账
+    /// 第一条。任一侧上游为空时维持原口径（不阻断，兼容无上游块的老图）。
     /// </summary>
     public static class FrameMetadataRebindPolicy
     {
@@ -19,10 +24,21 @@ namespace UNCAD.Core.Fill
         /// 句柄失配的记录是否属于「整机台搬场」：记录身份与本框身份完全一致，
         /// 且记录的原句柄已不存在于本图（原框不在 = 不是同文件复制）。
         /// handleStillInDrawing 返回 false 表示句柄在本图中不存在（或已删除）。
+        /// 上游编号未知时退回旧口径（只比机台+回路名）。
         /// </summary>
         public static bool IsMovedFrame(FrameInfoJsonRecord record,
             string expectedMachineId, string expectedDeviceName,
             Func<string, bool> handleStillInDrawing)
+            => IsMovedFrame(record, expectedMachineId, expectedDeviceName, "",
+                handleStillInDrawing);
+
+        /// <summary>
+        /// 带上游编号的搬场判定：记录 Fr 与本框物理上游都存在且不同 → 不是
+        /// 搬场（复制出来的是同名另一条回路），交回外来拒绝语义。
+        /// </summary>
+        public static bool IsMovedFrame(FrameInfoJsonRecord record,
+            string expectedMachineId, string expectedDeviceName,
+            string expectedUpstream, Func<string, bool> handleStillInDrawing)
         {
             if (record == null || handleStillInDrawing == null) return false;
             string machine = (record.MachineId ?? "").Trim();
@@ -40,6 +56,13 @@ namespace UNCAD.Core.Fill
             // 这里做防御：空句柄无从证明“原框已不在”，保持拒绝语义）。
             string recordedHandle = (record.FrameHandle ?? "").Trim();
             if (recordedHandle.Length == 0) return false;
+            string recordedUpstream = CircuitIdentityKey.UpstreamDisplay(record.Fr);
+            string expected = CircuitIdentityKey.UpstreamDisplay(expectedUpstream);
+            if (recordedUpstream.Length > 0 && expected.Length > 0
+                && !string.Equals(CircuitIdentityKey.UpstreamKey(record.Fr),
+                    CircuitIdentityKey.UpstreamKey(expectedUpstream),
+                    StringComparison.Ordinal))
+                return false;
             // 原句柄仍在本图 = 源框还在，这是同文件复制出的新图框 → 不是搬场。
             return !handleStillInDrawing(recordedHandle);
         }

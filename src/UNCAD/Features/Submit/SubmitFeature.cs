@@ -5,8 +5,10 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Contracts;
 using UNCAD.Core.Submission;
+using UNCAD.Features.Shared;
 using UNCAD.Infra;
 
 namespace UNCAD.Features.Submit

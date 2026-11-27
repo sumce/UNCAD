@@ -32,33 +32,16 @@ namespace UNCAD.Tests
         private static readonly HashSet<string> CrossFeatureWhitelist =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "src/UNCAD/Features/DwgExport/DwgExportFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/DwgExport/DwgFrameExportService.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Fill/BatchFillUpdateCoordinator.cs -> UNCAD.Features.Submit",
                 "src/UNCAD/Features/Fill/FillFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Fill/FillMachinePickStage.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/PdfExport/PdfExportFeature.cs -> UNCAD.Features.Fill",
-                "src/UNCAD/Features/Stat/XstsFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Unl/QuickLine3dPreviewFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Unl/QuickLine3dPreviewFeature.cs -> UNCAD.Features.Fill",
-                "src/UNCAD/Features/XAuto/XAutoFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/XLayout/XLayoutFeature.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/XLayout/XmergeService.cs -> UNCAD.Features.Submit",
-                "src/UNCAD/Features/Conduit/ConduitFeature.cs -> UNCAD.Features.Fill",
-                "src/UNCAD/Features/Submit/FrameIdentityReader.cs -> UNCAD.Features.Fill"
+                "src/UNCAD/Features/Conduit/ConduitFeature.cs -> UNCAD.Features.Fill"
             };
 
         /// <summary>
-        /// UI 反向引用 Features 的存量（结果 DTO 放错层）。目标是把 DTO 下沉 Core，
-        /// 然后清空这张表；新引用立即失败。
+        /// UI 反向引用 Features 的存量（已清零；新引用立即失败）。
         /// </summary>
         private static readonly HashSet<string> UiFeatureWhitelist =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "src/UNCAD/UI/Wpf/DwgExportResultWindow.xaml.cs -> UNCAD.Features.DwgExport",
-                "src/UNCAD/UI/Wpf/PdfExportResultWindow.xaml.cs -> UNCAD.Features.PdfExport"
-            };
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         [Fact]
         public void Core_StaysFreeOfAutoCadAndWinFormsAndWpf()

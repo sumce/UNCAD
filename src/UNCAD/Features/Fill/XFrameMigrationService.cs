@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Autodesk.AutoCAD.DatabaseServices;
 using UNCAD.Cad;
+using UNCAD.Cad.Frame;
 using UNCAD.Core.Fill;
 
 namespace UNCAD.Features.Fill

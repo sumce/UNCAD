@@ -3,28 +3,27 @@ using Xunit;
 
 namespace UNCAD.Tests
 {
-    public class RuanguanLengthParserTests
+    public sealed class RuanguanLengthParserTests
     {
         [Theory]
-        [InlineData("2000mm", "2")]
-        [InlineData("软管: 2000mm", "2")]
-        [InlineData("软管 2000mm", "2")]
-        [InlineData("软管长度=2,500mm", "2.5")]
-        public void ParseMeters_AcceptsSupportedLengthForms(string value, string expected)
+        [InlineData("LENGTH", "2500", 2500)]
+        [InlineData("长度", "2.5m", 2500)]
+        [InlineData("LABEL", "100mm软管:1800mm", 1800)]
+        public void TryReadLength_AcceptsQualifiedLengths(string tag, string value,
+            double expectedMillimetres)
         {
-            Assert.Equal(expected, RuanguanLengthParser.ParseMeters(value));
+            Assert.True(RuanguanLengthParser.TryReadLength(value, tag, out double mm));
+            Assert.Equal(expectedMillimetres, mm);
         }
 
         [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("直径 32mm")]
-        [InlineData("软管型号 DN32")]
-        [InlineData("0mm")]
-        [InlineData("Infinitymm")]
-        public void ParseMeters_RejectsMissingOrNonLengthValues(string value)
+        [InlineData("MODEL", "20mm")]
+        [InlineData("DIA", "25mm")]
+        [InlineData("OTHER", "2500")]
+        [InlineData("LENGTH", "0")]
+        public void TryReadLength_RejectsDiametersAndUnqualifiedNumbers(string tag, string value)
         {
-            Assert.Equal("", RuanguanLengthParser.ParseMeters(value));
+            Assert.False(RuanguanLengthParser.TryReadLength(value, tag, out _));
         }
     }
 }
