@@ -107,7 +107,27 @@ jobs:
             throw "Release note missing: $notes"
           }
           $bodyFile = Join-Path $env:RUNNER_TEMP "release-notes-$label.md"
-          Copy-Item -LiteralPath $notes -Destination $bodyFile
+          $allLines = [IO.File]::ReadAllLines((Resolve-Path -LiteralPath $notes), [Text.Encoding]::UTF8)
+          $sectionRegex = '^##\s+' + [regex]::Escape($label) + '(?=$|[^\d.])'
+          $startIndex = -1
+          for ($i = 0; $i -lt $allLines.Length; $i++) {
+            if ($allLines[$i] -match $sectionRegex) {
+              $startIndex = $i
+              break
+            }
+          }
+          if ($startIndex -ge 0) {
+            $sectionLines = New-Object System.Collections.Generic.List[string]
+            $sectionLines.Add("# UNCAD Pro $label")
+            $sectionLines.Add("")
+            for ($i = $startIndex + 1; $i -lt $allLines.Length; $i++) {
+              if ($allLines[$i] -match '^##\s+') { break }
+              $sectionLines.Add($allLines[$i])
+            }
+            [IO.File]::WriteAllLines($bodyFile, $sectionLines, (New-Object Text.UTF8Encoding($false)))
+          } else {
+            Copy-Item -LiteralPath $notes -Destination $bodyFile
+          }
           $footer = "`n---`n`n## GitHub Actions artifact`n`n" +
             "Asset: " + $name + "`n" +
             "SHA-256: " + $sha + "`n" +
