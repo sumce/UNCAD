@@ -2,6 +2,30 @@
 
 发布日期：2026-11-25
 
+## 3.8.0.12 修补（2026-11-27）
+
+潜伏隐患定向清理与一致性加固：
+
+- **多行属性清理与读取统一**：`CadBlockAttributeWriter.ClearStaleInfo` 与
+  `FrameInfoJsonBlockWriter.ClearStandaloneJson` 统一复用 `ClearAttributeValue`
+  同步清空多行属性（`IsMTextAttribute`）`MTextAttribute.Contents` 并刷新，同时
+  `ClearStaleInfo` 补齐动态块 JSON 属性清理，消除模板含多行属性时复制框/U1F
+  清空残留；`FillSelectionCollector.TryGetBlockValue` 改用
+  `FrameInfoJsonBlockReader.AttributeText` 统一读取多行属性文本。
+- **写入继承防回流**：`FrameInfoJsonBlockWriter.FillOrMigrate` 在 `U1U` 继承内嵌
+  或遗留独立 `frameinfo_json` 块时追加 `!IsForeignTo(owningFrameHandle)` 校验，
+  防止被读取门禁拒绝的外框遗留 JSON 在写入阶段重新 `Merge` 回流。
+- **Xmerge 异步关闭守卫**：`XmergeWindow` 增加 `_closed` 标记并在目录扫描完成、
+  异常和 `finally` 恢复状态前拦截，避免关窗后后台扫描回调继续操作界面集合。
+- 验证：Release 全量单测 1,899/1,899、`UNCAD_PERF_SMOKE`、
+  `UNCAD_MIGRATION_SELFTEST` 全通过；`installer.ps1 -Mode VerifyPackage` 24 个
+  文件全部通过。
+- 安装包：`artifacts/Pro/UNCAD-Pro-v3.8.0.12.zip`（6,583,571 字节，SHA-256
+  `728A864E631C8018263513F1C4A341C796F0236301C85CD3FE73B291192C3338`）；包内
+  `UNCAD.dll` SHA-256
+  `B4659DA1353D7DC29C4E8BD07336075B37238AE200358299F083A70008B373DB`；已打 tag
+  `v3.8.0.12`。
+
 ## 3.8.0.11 修补（2026-11-27）
 
 现场口径（从这个 CAD 文件的图框复制到另一个 CAD 文件内，同一个机台两条同名

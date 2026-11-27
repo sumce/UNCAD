@@ -5,7 +5,11 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.8.0.11` (2026-11-27; 3.8.0.11 is the
+- Current local source version: `3.8.0.12` (2026-11-27; 3.8.0.12 fixes MText
+  attribute clearing in `ClearStaleInfo`/`ClearStandaloneJson` + dynamic JSON
+  property clearing, `IsForeignTo` inheritance guard in `FillOrMigrate`, MText
+  attribute reading in `FillSelectionCollector.TryGetBlockValue`, and closed-window
+  guards in `XmergeWindow`; 3.8.0.11 was the
   copied-frame same-name-circuit patch: the physical identity reads the
   upstream block's UPSTREAM_INFO and arbitration compares machine/circuit/
   upstream, dropping a copied frame's stale identity key; 3.8.0.10 was the
@@ -26,21 +30,24 @@ shorter than the historical release notes.
   preview page camera fits the route, labels avoid each other, single bold cable,
   coordinate lattice at every grid intersection, endpoint axis chips at grid
   corners),
-  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.11.zip` (6,583,251 bytes,
+  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.12.zip` (6,583,571 bytes,
   SHA-256
-  `F2E3282E69C040045D76B60432A520497DF1217609903260AA746F44A845440B`), tagged
-  as `v3.8.0.11`. The previous tagged release is
+  `728A864E631C8018263513F1C4A341C796F0236301C85CD3FE73B291192C3338`), tagged
+  as `v3.8.0.12`. The previous tagged release is
+  `v3.8.0.11` (commit `e11c7f0`; copied-frame same-name-circuit patch; SHA-256
+  `F2E3282E69C040045D76B60432A520497DF1217609903260AA746F44A845440B`),
   `v3.8.0.10` (GitHub Release, CI asset `UNCAD-Pro-v3.8.0.10.zip`, 6,580,117
   bytes, SHA-256
   `384A79B0349F848E30BD4E8EB85058576A2DBCDF7BF5015112E01BFDF58B7C55`);
   before that `v3.8.0.9` (structure/CI cleanup; CI asset SHA-256
   `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
   Package/bundle `UNCAD.dll` SHA-256 is
-  `F743F7AD3AA03E92841C6D70E6CD05C041471FF9600243623DEF09907D48EDB9`; the
+  `B4659DA1353D7DC29C4E8BD07336075B37238AE200358299F083A70008B373DB`; the
   development machine's installed copy remains 3.8.0.8 until
   `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The previous
-  local tagged release is `3.8.0.10` (tag `v3.8.0.10`; true-white plot fix);
-  before that `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup), `3.8.0.0`
+  local tagged release is `3.8.0.11` (tag `v3.8.0.11`; copied-frame
+  same-name-circuit patch); before that `3.8.0.10` (tag `v3.8.0.10`; true-white
+  plot fix), `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup), `3.8.0.0`
   (tag `v3.8.0`, commit `7157aa1`; D-059 preview redesign), then `3.7.0.0`
   (tag `v3.7.0`, commit `5a9b81a`).
   The latest GitHub Release is `3.8.0.10` (tag `v3.8.0.10`; CI asset SHA-256

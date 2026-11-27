@@ -257,15 +257,44 @@ namespace UNCAD.Features.Fill
                             StringComparison.OrdinalIgnoreCase)
                         || FrameInfoJsonBlockWriter.IsJsonTagName(tag);
                     if (!stale) continue;
-                    attribute.UpgradeOpen();
-                    attribute.TextString = "";
-                    cleared++;
+                    if (ClearAttributeValue(attribute)) cleared++;
                 }
+                cleared += FrameInfoJsonBlockWriter.ClearDynamicJsonProperties(block);
             }
             if (cleared > 0)
                 UNCAD.Infra.Log.Info("复制图框清理：已清空 " + cleared + " 个旧信息属性"
                     + "（CABLE_INFO/CONDUIT_INFO/FRAMEINFO），随后写入新机台数据。");
             return cleared;
+        }
+
+        /// <summary>清空块属性文本，同步清掉多行属性（IsMTextAttribute）的 MText 内容。</summary>
+        internal static bool ClearAttributeValue(AttributeReference attribute)
+        {
+            if (attribute == null) return false;
+            bool hasText = !string.IsNullOrEmpty(attribute.TextString);
+            bool hasMText = false;
+            if (attribute.IsMTextAttribute)
+            {
+                using (MText existing = attribute.MTextAttribute)
+                    hasMText = existing != null && !string.IsNullOrEmpty(existing.Contents);
+            }
+            if (!hasText && !hasMText) return false;
+
+            attribute.UpgradeOpen();
+            attribute.TextString = "";
+            if (attribute.IsMTextAttribute)
+            {
+                using (MText mtext = attribute.MTextAttribute)
+                {
+                    if (mtext != null)
+                    {
+                        mtext.Contents = "";
+                        attribute.MTextAttribute = mtext;
+                    }
+                }
+                attribute.UpdateMTextAttribute();
+            }
+            return true;
         }
 
         private static void SetAttributeValue(CadContext ctx, AttributeReference attribute,

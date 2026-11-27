@@ -92,17 +92,39 @@ namespace UNCAD.Tests
         public void Writer_InheritanceGuard_IsWired()
         {
             // 源码契约：继承路径（块内嵌入属性、遗留独立块）都必须走
-            // BelongsToMachine 守卫，否则他机遗留数据仍会污染新记录。
+            // BelongsToMachine + IsForeignTo(owningFrameHandle) 守卫，否则
+            // 他机或同机异框的遗留数据仍会污染新记录。
             string writer = File.ReadAllText(RepoFile(
                 "src", "UNCAD", "Features", "Fill", "FrameInfoJsonBlockWriter.cs"));
             Assert.Contains("丢弃他机遗留 frameinfo_json", writer);
-            // 三处守卫：入参 previousRecord、块内嵌入属性读取、遗留独立块读取。
+            // 三处守卫：入参 previousRecord、块内嵌入属性读取、遗留独立块读取；
+            // 且两条继承读源与 ClearStandaloneJson 共三处校验 IsForeignTo(owningFrameHandle)。
             Assert.Equal(3, CountOccurrences(writer, "BelongsToMachine(machine.MachineId)"));
+            Assert.Equal(3, CountOccurrences(writer, "IsForeignTo(owningFrameHandle)"));
             // D-040：JSON 主存储 = 图框块内 FRAMEINFO 属性；不再新建独立块。
             Assert.Contains("\"FRAMEINFO\"", writer);
             Assert.Contains("WriteFrameJsonAttribute", writer);
             Assert.Contains("HasLegacyJsonAttribute", writer);
             Assert.DoesNotContain("CreateMetadataBlock", writer);
+        }
+
+        [Fact]
+        public void MTextAttributeClearAndReadGuards_AreWired()
+        {
+            // 3.8.0.12：多行属性（IsMTextAttribute）在清空与物理读取两侧必须口径一致；
+            // 复制框清理也必须覆盖动态块 JSON 属性。
+            string attrWriter = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "CadBlockAttributeWriter.cs"));
+            string jsonWriter = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Features", "Fill", "FrameInfoJsonBlockWriter.cs"));
+            string collector = File.ReadAllText(RepoFile(
+                "src", "UNCAD", "Cad", "Frame", "FillSelectionCollector.cs"));
+
+            Assert.Contains("ClearAttributeValue(", attrWriter);
+            Assert.Contains("IsMTextAttribute", attrWriter);
+            Assert.Contains("ClearDynamicJsonProperties(", attrWriter);
+            Assert.Contains("ClearAttributeValue(", jsonWriter);
+            Assert.Contains("FrameInfoJsonBlockReader.AttributeText(", collector);
         }
 
         private static int CountOccurrences(string text, string token)

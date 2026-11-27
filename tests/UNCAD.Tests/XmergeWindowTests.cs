@@ -117,6 +117,30 @@ namespace UNCAD.Tests
             if (failure != null) throw failure;
         }
 
+        [Fact]
+        public void ClosingDuringInitialScan_IgnoresLateDiscoveryCleanly()
+        {
+            Exception failure = null;
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    WriteDwg("queued.dwg");
+                    var window = new XmergeWindow(new[] { _root });
+                    window.Show();
+                    // Close immediately while Loaded async scan may still be running.
+                    window.Close();
+                    Pump(5);
+                    Assert.False(window.Confirmed);
+                }
+                catch (Exception ex) { failure = ex; }
+            });
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            if (failure != null) throw failure;
+        }
+
         private string WriteDwg(string relative)
         {
             string path = Path.Combine(_root, relative);

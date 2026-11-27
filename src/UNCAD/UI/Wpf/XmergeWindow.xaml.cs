@@ -23,6 +23,7 @@ namespace UNCAD.UI
             new ObservableCollection<string>();
         private readonly List<string> _pendingInputs = new List<string>();
         private bool _scanning;
+        private bool _closed;
 
         public XmergeWindow(IEnumerable<string> initial = null)
         {
@@ -30,6 +31,7 @@ namespace UNCAD.UI
             UiShell.ApplyFluentTheme(this);
             DataContext = this;
             FileList.ItemsSource = _files;
+            Closed += (sender, args) => _closed = true;
             // 契约测试断言拖放支持：文件/文件夹可拖入整个窗口。
             AllowDrop = true;
             DragOver += OnDragOver;
@@ -132,6 +134,7 @@ namespace UNCAD.UI
         /// </summary>
         private async Task AddPathsAsync(IEnumerable<string> paths)
         {
+            if (_closed) return;
             string[] input = (paths ?? Enumerable.Empty<string>()).ToArray();
             if (input.Length == 0) return;
             if (_scanning)
@@ -146,7 +149,7 @@ namespace UNCAD.UI
             try
             {
                 var pending = new Queue<string>(input);
-                while (pending.Count > 0)
+                while (pending.Count > 0 && !_closed)
                 {
                     string[] batch = pending.ToArray();
                     pending.Clear();
@@ -158,8 +161,10 @@ namespace UNCAD.UI
                     }
                     catch (Exception ex)
                     {
+                        if (_closed) return;
                         ShowWarning("扫描 DWG 失败：" + ex.Message);
                     }
+                    if (_closed) return;
                     if (discovered != null) ApplyDiscovery(discovered);
 
                     if (_pendingInputs.Count == 0) continue;
@@ -170,8 +175,11 @@ namespace UNCAD.UI
             finally
             {
                 _scanning = false;
-                SetBusy(false);
-                UpdateHint();
+                if (!_closed)
+                {
+                    SetBusy(false);
+                    UpdateHint();
+                }
             }
         }
 

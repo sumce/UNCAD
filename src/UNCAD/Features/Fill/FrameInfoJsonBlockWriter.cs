@@ -159,7 +159,8 @@ namespace UNCAD.Features.Fill
                     FrameInfoJsonRecord embedded = ReadBlock(transaction, frame);
                     // 继承担卫：不得是他机遗留；3.2.0.6：U1F(inherit=false)不合并内嵌旧记录
                     //(无时间戳会话记录在 Merge 恒败给旧记录，旧预留从写侧暗道复活)。
-                    if (embedded != null && embedded.BelongsToMachine(machine.MachineId) && inheritLegacyStandaloneRecord) previous = Merge(previous, embedded, frameId);
+                    if (embedded != null && embedded.BelongsToMachine(machine.MachineId) && inheritLegacyStandaloneRecord && !embedded.IsForeignTo(owningFrameHandle))
+                        previous = Merge(previous, embedded, frameId);
                     // 只有旧式 FRAMEINFO_JSON 属性需要迁移后清空；FRAMEINFO 是主存储。
                     if (HasLegacyJsonAttribute(transaction, frame))
                         legacyFrames.Add(frameId);
@@ -184,8 +185,10 @@ namespace UNCAD.Features.Fill
                     BlockReference block = transaction.GetObject(id, OpenMode.ForRead, true)
                         as BlockReference;
                     FrameInfoJsonRecord record = block == null ? null : ReadBlock(transaction, block);
-                    // 继承担卫：遗留独立块上的既有 JSON 不得是他机遗留（见 Fill 内注释）。
-                    if (record != null && record.BelongsToMachine(machine.MachineId))
+                    // 继承担卫：遗留独立块上的既有 JSON 不得是他机或他框遗留（见 Fill 内注释）。
+                    if (record != null
+                        && record.BelongsToMachine(machine.MachineId)
+                        && !record.IsForeignTo(owningFrameHandle))
                         previous = Merge(previous, record, id);
                 }
             }
@@ -329,10 +332,7 @@ namespace UNCAD.Features.Fill
                 foreach (AttributeReference attribute in Attributes(transaction, block))
                 {
                     if (!IsJsonTag(attribute.Tag)) continue;
-                    if (attribute.TextString.Length == 0) continue;
-                    attribute.UpgradeOpen();
-                    attribute.TextString = "";
-                    cleared++;
+                    if (CadBlockAttributeWriter.ClearAttributeValue(attribute)) cleared++;
                 }
             }
             return cleared;
@@ -432,35 +432,26 @@ namespace UNCAD.Features.Fill
                     // 只清旧式（含 JSON 字样）内嵌属性；FRAMEINFO 是 D-040 主存储。
                     if ((attribute.Tag ?? "").IndexOf("JSON",
                             StringComparison.OrdinalIgnoreCase) < 0) continue;
-                    if (string.IsNullOrEmpty(attribute.TextString)
-                        && !attribute.IsMTextAttribute) continue;
-                    attribute.UpgradeOpen();
-                    attribute.TextString = "";
-                    if (attribute.IsMTextAttribute)
-                    {
-                        using (MText mtext = attribute.MTextAttribute)
-                        {
-                            if (mtext != null)
-                            {
-                                mtext.Contents = "";
-                                attribute.MTextAttribute = mtext;
-                            }
-                        }
-                        attribute.UpdateMTextAttribute();
-                    }
-                    cleared++;
+                    if (CadBlockAttributeWriter.ClearAttributeValue(attribute)) cleared++;
                 }
-                if (!block.IsDynamicBlock) continue;
-                foreach (DynamicBlockReferenceProperty property
-                    in block.DynamicBlockReferencePropertyCollection)
-                {
-                    if (property.ReadOnly || !IsJsonTag(property.PropertyName)
-                        || !(property.Value is string)) continue;
-                    if (string.IsNullOrEmpty(Convert.ToString(property.Value))) continue;
-                    block.UpgradeOpen();
-                    property.Value = "";
-                    cleared++;
-                }
+                cleared += ClearDynamicJsonProperties(block);
+            }
+            return cleared;
+        }
+
+        internal static int ClearDynamicJsonProperties(BlockReference block)
+        {
+            if (block == null || !block.IsDynamicBlock) return 0;
+            int cleared = 0;
+            foreach (DynamicBlockReferenceProperty property
+                in block.DynamicBlockReferencePropertyCollection)
+            {
+                if (property.ReadOnly || !IsJsonTag(property.PropertyName)
+                    || !(property.Value is string)) continue;
+                if (string.IsNullOrEmpty(Convert.ToString(property.Value))) continue;
+                block.UpgradeOpen();
+                property.Value = "";
+                cleared++;
             }
             return cleared;
         }

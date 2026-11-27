@@ -642,7 +642,7 @@ namespace UNCAD.Cad.Frame
                 if (attribute != null && string.Equals(attribute.Tag, name,
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    value = attribute.TextString ?? "";
+                    value = FrameInfoJsonBlockReader.AttributeText(attribute);
                     valueSource = "实例 AttributeReference";
                     try { valuePosition = attribute.Position; }
                     catch { }
