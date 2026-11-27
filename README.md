@@ -1,7 +1,7 @@
 ﻿<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/uncad-brand-dark.svg" />
-    <img src="docs/assets/uncad-brand.svg" alt="UNSIAO UNCAD" height="64" />
+    <img src="docs/assets/uncad-brand.svg" alt="UNSIAO UNCAD" height="56" />
   </picture>
 </p>
 
