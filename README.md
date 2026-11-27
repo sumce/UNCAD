@@ -1,13 +1,11 @@
 ﻿<p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/unsiao-logo-dark.svg" />
-    <img src="docs/assets/unsiao-logo.svg" alt="UNSIAO" width="84" />
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/uncad-brand-dark.svg" />
+    <img src="docs/assets/uncad-brand.svg" alt="UNSIAO UNCAD" height="64" />
   </picture>
 </p>
 
-<h1 align="center">UNCAD Pro</h1>
-
-<p align="center"><strong>UNSIAO</strong> · 面向 <strong>AutoCAD 2022</strong>（Windows x64 / .NET Framework 4.8）的电气线路算量、图框清单填充、BOQ 汇总导出与批量排版插件。</p>
+<p align="center"><strong>UNCAD Pro</strong> · 面向 <strong>AutoCAD 2022</strong>（Windows x64 / .NET Framework 4.8）的电气线路算量、图框清单填充、BOQ 汇总导出与批量排版插件。</p>
 
 > 维护与开发约定请以 [AGENTS.md](AGENTS.md)、[项目状态地图](docs/PROJECT_CONTEXT.md)、[架构决策记录](docs/DECISIONS.md) 和 [开发规范](docs/DEVELOPMENT.md) 为准。
 
