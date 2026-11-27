@@ -230,7 +230,7 @@ namespace UNCAD.Cad.Frame
             return false;
         }
 
-        private static bool TryReadPhysicalIdentity(Transaction transaction,
+        internal static bool TryReadPhysicalIdentity(Transaction transaction,
             FillSelection selection, out ExistingFillIdentity identity,
             out string error, bool includeDeviceBlocks)
         {
@@ -239,9 +239,9 @@ namespace UNCAD.Cad.Frame
             var devices = new List<string>();
             var deviceBlocks = new List<ObjectId>();
             var ids = new HashSet<ObjectId>();
-            foreach (ObjectId id in selection.FrameBlockIds) ids.Add(id);
+            foreach (ObjectId id in selection?.FrameBlockIds ?? Array.Empty<ObjectId>()) ids.Add(id);
             if (includeDeviceBlocks)
-                foreach (ObjectId id in selection.DeviceBlockIds) ids.Add(id);
+                foreach (ObjectId id in selection?.DeviceBlockIds ?? Array.Empty<ObjectId>()) ids.Add(id);
             foreach (ObjectId id in ids)
             {
                 var block = transaction.GetObject(id, OpenMode.ForRead, true) as BlockReference;

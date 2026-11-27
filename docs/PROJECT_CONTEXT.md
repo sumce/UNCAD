@@ -5,7 +5,13 @@ shorter than the historical release notes.
 
 ## Status
 
-- Current local source version: `3.8.0.12` (2026-11-27; 3.8.0.12 fixes MText
+- Current local source version: `3.8.0.13` (2026-11-27; 3.8.0.13 fixes
+  cross-file copied-frame JSON rebind: `HandleAliveInDatabase` now returns
+  false when `TryGetObjectId` finds no handle or when an identically numbered
+  frame handle in another drawing clearly belongs to a different machine/
+  circuit/upstream, while `ResolveUpdateCableFromExistingTable` and `ReadOwn`
+  pass frame identity so copied cross-file frames retain `CircuitKey`, device
+  reserve, BOQ cable substitutes, and bus-plug choices; 3.8.0.12 fixes MText
   attribute clearing in `ClearStaleInfo`/`ClearStandaloneJson` + dynamic JSON
   property clearing, `IsForeignTo` inheritance guard in `FillOrMigrate`, MText
   attribute reading in `FillSelectionCollector.TryGetBlockValue`, and closed-window
@@ -30,10 +36,12 @@ shorter than the historical release notes.
   preview page camera fits the route, labels avoid each other, single bold cable,
   coordinate lattice at every grid intersection, endpoint axis chips at grid
   corners),
-  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.12.zip` (6,583,571 bytes,
+  packaged locally as `artifacts/Pro/UNCAD-Pro-v3.8.0.13.zip` (6,584,019 bytes,
   SHA-256
-  `728A864E631C8018263513F1C4A341C796F0236301C85CD3FE73B291192C3338`), tagged
-  as `v3.8.0.12`. The previous tagged release is
+  `4A277B43B25567107B84EC9DABFF067445F9C2A70DAA85E071F40B05D9F59681`), tagged
+  as `v3.8.0.13`. The previous tagged release is
+  `v3.8.0.12` (commit `2d399fe`; MText/inheritance/Xmerge fixes; SHA-256
+  `728A864E631C8018263513F1C4A341C796F0236301C85CD3FE73B291192C3338`),
   `v3.8.0.11` (commit `e11c7f0`; copied-frame same-name-circuit patch; SHA-256
   `F2E3282E69C040045D76B60432A520497DF1217609903260AA746F44A845440B`),
   `v3.8.0.10` (GitHub Release, CI asset `UNCAD-Pro-v3.8.0.10.zip`, 6,580,117
@@ -42,11 +50,11 @@ shorter than the historical release notes.
   before that `v3.8.0.9` (structure/CI cleanup; CI asset SHA-256
   `6852A16D28A03C7F353DC405B5068E641317B72CD63E3D6F39C924B01C00226B`).
   Package/bundle `UNCAD.dll` SHA-256 is
-  `B4659DA1353D7DC29C4E8BD07336075B37238AE200358299F083A70008B373DB`; the
+  `C1A42AB2E5890E4AC2F252AD1EC2E4D5873B545B027F3E50D5889302C4A59517`; the
   development machine's installed copy remains 3.8.0.8 until
   `installer.ps1 -Mode InstallUser` (AutoCAD must be closed). The previous
-  local tagged release is `3.8.0.11` (tag `v3.8.0.11`; copied-frame
-  same-name-circuit patch); before that `3.8.0.10` (tag `v3.8.0.10`; true-white
+  local tagged release is `3.8.0.12` (tag `v3.8.0.12`); before that
+  `3.8.0.11` (tag `v3.8.0.11`), `3.8.0.10` (tag `v3.8.0.10`; true-white
   plot fix), `3.8.0.9` (tag `v3.8.0.9`; structure/CI cleanup), `3.8.0.0`
   (tag `v3.8.0`, commit `7157aa1`; D-059 preview redesign), then `3.7.0.0`
   (tag `v3.7.0`, commit `5a9b81a`).

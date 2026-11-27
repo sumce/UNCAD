@@ -2,6 +2,34 @@
 
 发布日期：2026-11-25
 
+## 3.8.0.13 修补（2026-11-27）
+
+跨 DWG 文件复制整只已填图框（D-052-C 搬场重绑）全链路打通：
+
+- **根因 ①（`TryGetObjectId` 布尔反转）**：`FrameInfoJsonBlockReader.HandleAliveInDatabase`
+  此前在 `sourceId.Database.TryGetObjectId(new Handle(value), out ObjectId found)`
+  返回 `false`（目标 DWG 根本不存在该原句柄）时反手 `return true`——几乎所有跨图
+  搬场都被误判为“原框还在本图（同文件复制）”而拒收整份 `frameinfo_json`，导致
+  `CircuitKey`、设备内预留、电缆替代型号与插接箱选择全丢并重弹全套选择窗。
+- **根因 ②（同底图衍生图句柄撞车误杀）**：目标 DWG 若恰好把同一十六进制句柄
+  分配给了另一台无关设备/回路的图框，`LooksLikeFrame` 原来直接判活；现通过
+  `FrameMetadataRebindPolicy.IsDifferentFrameIdentity` 核对撞号图框的 JSON 与物理
+  `MACHINEID-*` 属性，撞到别机/别回路不再误判为同文件复制（同一机台同回路仍在原
+  句柄时继续保持同文件复制保护）。
+- **根因 ③（替代型号与对比窗身份漏传）**：
+  `FillMachinePickStage.ResolveUpdateCableFromExistingTable` 传入所选机台/回路/上游
+  身份，`FrameInfoJsonBlockReader.ReadOwn` 传入 `FillSelectionCollector.TryReadPhysicalIdentity`
+  读出的物理身份，保证跨文件搬场图框的历史 BOQ 电缆替代型号、插接箱选择与对比历史
+  一并保留。
+- 验证：Release 全量单测 1,901/1,901、`UNCAD_PERF_SMOKE`、
+  `UNCAD_MIGRATION_SELFTEST` 全通过；`installer.ps1 -Mode VerifyPackage` 24 个
+  文件全部通过。
+- 安装包：`artifacts/Pro/UNCAD-Pro-v3.8.0.13.zip`（6,584,019 字节，SHA-256
+  `4A277B43B25567107B84EC9DABFF067445F9C2A70DAA85E071F40B05D9F59681`）；包内
+  `UNCAD.dll` SHA-256
+  `C1A42AB2E5890E4AC2F252AD1EC2E4D5873B545B027F3E50D5889302C4A59517`；已打 tag
+  `v3.8.0.13`。
+
 ## 3.8.0.12 修补（2026-11-27）
 
 潜伏隐患定向清理与一致性加固：

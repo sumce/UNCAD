@@ -115,5 +115,26 @@ namespace UNCAD.Tests
                 Record("MMPTC10", "注塑机L3", "1A2B"),
                 "MMPTC10", "", _ => false));
         }
+
+        [Fact]
+        public void IsDifferentFrameIdentity_DetectsCollidingDifferentFramesAcrossFiles()
+        {
+            var record = Record("MMPTC10", "注塑机L3", "1A2B");
+            record.Fr = "3N-11B1A-PP-02";
+
+            // 目标文件同一十六进制句柄恰巧属于另一机台/回路/上游 → 撞车不算原框仍在。
+            Assert.True(FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                record, "MMPTC99", "注塑机L3", ""));
+            Assert.True(FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                record, "MMPTC10", "注塑机L4", ""));
+            Assert.True(FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                record, "MMPTC10", "注塑机L3", "2U-UPS5D1-PP-02"));
+
+            // 同机台同回路同上游（或缺省空标签）→ 保守判定为原框仍在（同文件复制仍拦）。
+            Assert.False(FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                record, "mmptc10", "注塑机 L3", "3n-11b1a-pp-02(1/A)"));
+            Assert.False(FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                record, "", "", ""));
+        }
     }
 }

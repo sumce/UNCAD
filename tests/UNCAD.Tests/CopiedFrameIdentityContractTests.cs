@@ -56,6 +56,28 @@ namespace UNCAD.Tests
             Assert.Contains("CircuitIdentityKey.UpstreamKey", arbiter);
         }
 
+        [Fact]
+        public void CrossFileCopyRebind_FixesMissingHandleAndCollisionAndCableStage()
+        {
+            string reader = Source("src", "UNCAD", "Cad", "Frame",
+                "FrameInfoJsonBlockReader.cs");
+            int tryGet = reader.IndexOf("TryGetObjectId(new Handle(value)",
+                StringComparison.Ordinal);
+            Assert.True(tryGet >= 0);
+            int notFoundReturn = reader.IndexOf("return false;", tryGet,
+                StringComparison.Ordinal);
+            int foundCheck = reader.IndexOf("found == ObjectId.Null",
+                StringComparison.Ordinal);
+            Assert.True(notFoundReturn > tryGet && notFoundReturn < foundCheck,
+                "目标 DWG 不存在原句柄时 TryGetObjectId 返回 false，必须直接判为已不在本图（false）");
+            Assert.Contains("ClearlyDifferentFrameIdentity(", reader);
+            Assert.Contains("TryReadPhysicalIdentity(transaction, selection", reader);
+
+            string pickStage = Source("src", "UNCAD", "Features", "Fill",
+                "FillMachinePickStage.cs");
+            Assert.Contains("expectedIdentity, out _, out _);", pickStage);
+        }
+
         private static string Source(params string[] parts)
             => File.ReadAllText(Path.Combine(RepoRoot(), Path.Combine(parts)));
 

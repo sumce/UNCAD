@@ -60,9 +60,12 @@ namespace UNCAD.Cad.Frame
         {
             using (Transaction transaction = ctx.Db.TransactionManager.StartTransaction())
             {
+                FillSelectionCollector.TryReadPhysicalIdentity(transaction, selection,
+                    out ExistingFillIdentity physicalIdentity, out _, true);
                 FrameInfoJsonRecord record = Read(transaction,
                     ReadSources(selection),
-                    OwnFrameHandle(transaction, selection?.FrameBlockIds));
+                    OwnFrameHandle(transaction, selection?.FrameBlockIds),
+                    physicalIdentity, out _, out _);
                 transaction.Commit();
                 return record;
             }
@@ -137,7 +140,7 @@ namespace UNCAD.Cad.Frame
             if (FrameMetadataRebindPolicy.IsMovedFrame(record,
                     expectedIdentity?.MachineId ?? "", expectedIdentity?.DeviceName ?? "",
                     expectedIdentity?.UpstreamId ?? "",
-                    handle => HandleAliveInDatabase(transaction, id, handle)))
+                    handle => HandleAliveInDatabase(transaction, id, handle, record)))
             {
                 movedJsonNote = "图框 " + expectedFrameHandle
                     + " 携带的 frameinfo_json 记录属于同一机台（"
@@ -154,7 +157,7 @@ namespace UNCAD.Cad.Frame
         }
 
         private static bool HandleAliveInDatabase(Transaction transaction,
-            ObjectId sourceId, string handleText)
+            ObjectId sourceId, string handleText, FrameInfoJsonRecord record)
         {
             if (!long.TryParse((handleText ?? "").Trim(), NumberStyles.HexNumber,
                     CultureInfo.InvariantCulture, out long value) || value <= 0)
@@ -163,15 +166,35 @@ namespace UNCAD.Cad.Frame
             {
                 if (!sourceId.Database.TryGetObjectId(new Handle(value),
                         out ObjectId found))
-                    return true;
+                    return false;
                 if (found == ObjectId.Null || found.IsErased) return false;
-                return transaction.GetObject(found, OpenMode.ForRead, true)
-                    is BlockReference candidate && LooksLikeFrame(transaction, candidate);
+                if (!(transaction.GetObject(found, OpenMode.ForRead, true)
+                        is BlockReference candidate))
+                    return false;
+                if (!LooksLikeFrame(transaction, candidate)) return false;
+                return !ClearlyDifferentFrameIdentity(transaction, candidate, record);
             }
             catch
             {
                 return true;
             }
+        }
+
+        private static bool ClearlyDifferentFrameIdentity(Transaction transaction,
+            BlockReference candidate, FrameInfoJsonRecord record)
+        {
+            if (candidate == null || record == null) return false;
+            FrameInfoJsonRecord candidateJson = ReadBlock(transaction, candidate);
+            if (candidateJson != null && FrameMetadataRebindPolicy.IsDifferentFrameIdentity(
+                    record, candidateJson.MachineId, candidateJson.DeviceName, candidateJson.Fr))
+                return true;
+            if (FillSelectionCollector.TryReadPhysicalIdentity(transaction,
+                    new FillSelection { FrameBlockIds = new[] { candidate.ObjectId } },
+                    out ExistingFillIdentity physical, out _, false)
+                && FrameMetadataRebindPolicy.IsDifferentFrameIdentity(record,
+                    physical.MachineId, physical.DeviceName, physical.UpstreamId))
+                return true;
+            return false;
         }
 
         private static bool LooksLikeFrame(Transaction transaction, BlockReference block)

@@ -75,11 +75,19 @@ namespace UNCAD.Features.Fill
             }
             catalog = catalog ?? new BoqCatalogIndex(null);
             string originalModel = (picked.Cable ?? "").Trim();
-            // 句柄校验（2026-11-04）：复制图框的源框 JSON 不得恢复替代型号。
+            // 句柄校验（2026-11-04 + D-052-C）：跨文件搬场图框带入所选身份，保留历史电缆替代型号；
+            // 同文件复制图框仍拦截，不继承源框替代型号。
+            var expectedIdentity = new ExistingFillIdentity
+            {
+                MachineId = picked.MachineId ?? "",
+                DeviceName = picked.CircuitName ?? "",
+                UpstreamId = picked.Fr ?? ""
+            };
             FrameInfoJsonRecord frameInfo = FrameInfoJsonBlockWriter.Read(transaction,
                 FrameInfoJsonBlockWriter.ReadSources(selection),
                 FrameInfoJsonBlockWriter.OwnFrameHandle(transaction,
-                    selection?.FrameBlockIds));
+                    selection?.FrameBlockIds),
+                expectedIdentity, out _, out _);
             var sourceIds = new List<ObjectId>();
             sourceIds.AddRange(selection?.FrameBlockIds ?? Array.Empty<ObjectId>());
             sourceIds.AddRange(selection?.TableIds ?? Array.Empty<ObjectId>());

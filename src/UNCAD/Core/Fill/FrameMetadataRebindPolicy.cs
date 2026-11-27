@@ -66,5 +66,34 @@ namespace UNCAD.Core.Fill
             // 原句柄仍在本图 = 源框还在，这是同文件复制出的新图框 → 不是搬场。
             return !handleStillInDrawing(recordedHandle);
         }
+
+        /// <summary>
+        /// 目标图中恰好占用同一句柄的图框块是否明显是另一台设备/回路
+        /// （两份 DWG 由同一底图派生时十六进制句柄容易撞号；只有同一身份的原框
+        /// 仍在本图才算同文件复制，撞到别的机台/回路不得把跨文件搬场误判为同图复制）。
+        /// </summary>
+        public static bool IsDifferentFrameIdentity(FrameInfoJsonRecord record,
+            string candidateMachine, string candidateDevice, string candidateUpstream = "")
+        {
+            if (record == null) return false;
+            string recMachine = (record.MachineId ?? "").Trim();
+            string candMachine = (candidateMachine ?? "").Trim();
+            if (recMachine.Length > 0 && candMachine.Length > 0
+                && !IdentityTextNormalizer.Equals(recMachine, candMachine))
+                return true;
+            string recDevice = (record.DeviceName ?? "").Trim();
+            string candDevice = (candidateDevice ?? "").Trim();
+            if (recDevice.Length > 0 && candDevice.Length > 0
+                && !IdentityTextNormalizer.Equals(recDevice, candDevice))
+                return true;
+            string recUpstream = CircuitIdentityKey.UpstreamDisplay(record.Fr);
+            string candUpstream = CircuitIdentityKey.UpstreamDisplay(candidateUpstream);
+            if (recUpstream.Length > 0 && candUpstream.Length > 0
+                && !string.Equals(CircuitIdentityKey.UpstreamKey(record.Fr),
+                    CircuitIdentityKey.UpstreamKey(candidateUpstream),
+                    StringComparison.Ordinal))
+                return true;
+            return false;
+        }
     }
 }
